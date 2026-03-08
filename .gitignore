@@ -1,3 +1,4 @@
 space_breakers
 *.exe
 build/
+save.dat
