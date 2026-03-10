@@ -12,7 +12,7 @@
 namespace {
     constexpr float radius = 15.f;
     const char* saveDir = "saves";
-    const char* savePath = "saves/save_v2.dat";
+    const char* savePath = "saves/save.dat";
 
     enum class GameState { MainMenu, PlayMenu, Options, Playing, Shop, PauseMenu };
 
@@ -191,7 +191,7 @@ int main() {
 
     sf::Text titleMain = makeCenteredText("Space-Breakers", 44, titleY);
     sf::Text playItem = makeCenteredText("Play", 34, menuY1);
-    sf::Text optionsItem = makeCenteredText("Options", 34, menuY1 + menuGap);
+    sf::Text optionsItem = makeCenteredText("How to play", 34, menuY1 + menuGap);
     sf::Text exitItem = makeCenteredText("Quit", 34, menuY1 + menuGap * 2.f);
 
     sf::Text titlePlay = makeCenteredText("Play", 42, titleY);
@@ -199,7 +199,7 @@ int main() {
     sf::Text continueItem = makeCenteredText("Continue", 34, menuY1 + menuGap);
     sf::Text backPlayItem = makeCenteredText("Back", 30, windowHeight * 0.73f);
 
-    sf::Text titleOpt = makeCenteredText("Options", 42, windowHeight * 0.15f);
+    sf::Text titleOpt = makeCenteredText("How to play", 42, windowHeight * 0.15f);
     sf::Text opt1 = makeCenteredText("- Click anywhere to grab every ball and drag them", 22, windowHeight * 0.32f);
     sf::Text opt2 = makeCenteredText("- Each bounce gives points", 22, windowHeight * 0.37f);
     sf::Text opt3 = makeCenteredText("- Press TAB to open upgrades", 22, windowHeight * 0.42f);
@@ -208,7 +208,7 @@ int main() {
 
     sf::Text pauseTitle = makeCenteredText("Paused", 44, windowHeight * 0.17f);
     sf::Text resumeItem = makeCenteredText("Resume", 34, menuY1);
-    sf::Text pauseOptionsItem = makeCenteredText("Options", 34, menuY1 + menuGap);
+    sf::Text pauseOptionsItem = makeCenteredText("How to play", 34, menuY1 + menuGap);
     sf::Text saveGameItem = makeCenteredText("Save Game", 34, menuY1 + menuGap * 2.f);
     sf::Text backToMenuItem = makeCenteredText("Back to Main Menu", 34, menuY1 + menuGap * 3.f);
     sf::Text quitFromPauseItem = makeCenteredText("Quit Game", 34, menuY1 + menuGap * 4.f);
