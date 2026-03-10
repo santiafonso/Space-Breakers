@@ -10,13 +10,11 @@
 #include <vector>
 
 namespace {
-    const int windowWidth = 1920;
-    const int windowHeight = 1080;
-    const float radius = 15.f;
+    constexpr float radius = 15.f;
     const char* saveDir = "saves";
     const char* savePath = "saves/save_v2.dat";
 
-    enum class GameState { MainMenu, PlayMenu, Options, Playing, Shop };
+    enum class GameState { MainMenu, PlayMenu, Options, Playing, Shop, PauseMenu };
 
     struct BallData {
         float x;
@@ -52,23 +50,18 @@ namespace {
         bool hasLastDragMousePos = false;
 
         Ball() : shape(radius) {
-            shape.setFillColor(sf::Color::Transparent);
             shape.setOutlineThickness(2.f);
-            shape.setOutlineColor(sf::Color::Red);
+            shape.setFillColor(sf::Color(80, 170, 255));
+            shape.setOutlineColor(sf::Color::White);
         }
     };
-
-    bool isMouseOver(const sf::Text& text, const sf::RenderWindow& window) {
-        sf::Vector2f mouse = window.mapPixelToCoords(sf::Mouse::getPosition(window));
-        return text.getGlobalBounds().contains(mouse);
-    }
 
     float magnitude(const sf::Vector2f& v) {
         return std::sqrt(v.x * v.x + v.y * v.y);
     }
 
     sf::Vector2f normalizeOrDefault(const sf::Vector2f& v, const sf::Vector2f& fallback) {
-        float len = magnitude(v);
+        const float len = magnitude(v);
         if (len < 0.0001f) return fallback;
         return v / len;
     }
@@ -103,8 +96,8 @@ namespace {
 
         f.write(reinterpret_cast<const char*>(&header), sizeof(header));
         for (const Ball& ball : balls) {
-            sf::Vector2f pos = ball.shape.getPosition();
-            BallData bd{pos.x, pos.y, ball.velocity.x, ball.velocity.y};
+            const sf::Vector2f pos = ball.shape.getPosition();
+            const BallData bd{pos.x, pos.y, ball.velocity.x, ball.velocity.y};
             f.write(reinterpret_cast<const char*>(&bd), sizeof(bd));
         }
 
@@ -141,13 +134,28 @@ namespace {
             b.velocity = {bd.vx, bd.vy};
             balls.push_back(b);
         }
-
         return true;
+    }
+
+    void centerText(sf::Text& text, float x, float y) {
+        const sf::FloatRect bounds = text.getLocalBounds();
+        text.setOrigin(bounds.left + bounds.width / 2.f,
+                       bounds.top + bounds.height / 2.f);
+        text.setPosition(x, y);
+    }
+
+    bool isMouseOver(const sf::Text& text, const sf::RenderWindow& window) {
+        const sf::Vector2f mouse = window.mapPixelToCoords(sf::Mouse::getPosition(window));
+        return text.getGlobalBounds().contains(mouse);
     }
 }
 
 int main() {
-    sf::RenderWindow window(sf::VideoMode(windowWidth, windowHeight), "Space-Breakers v2");
+    const sf::VideoMode desktop = sf::VideoMode::getDesktopMode();
+    const unsigned windowWidth = std::max(960u, std::min(1280u, desktop.width > 80 ? desktop.width - 80 : desktop.width));
+    const unsigned windowHeight = std::max(540u, std::min(720u, desktop.height > 120 ? desktop.height - 120 : desktop.height));
+
+    sf::RenderWindow window(sf::VideoMode(windowWidth, windowHeight), "Space-Breakers v2", sf::Style::Titlebar | sf::Style::Close);
     window.setFramerateLimit(60);
 
     std::random_device rd;
@@ -161,58 +169,69 @@ int main() {
         return 1;
     }
 
-    auto makeMenuText = [&](const std::string& str, unsigned size, float y) {
+    auto makeCenteredText = [&](const std::string& str, unsigned size, float y) {
         sf::Text t(str, font, size);
         t.setFillColor(sf::Color::White);
-        sf::FloatRect bounds = t.getLocalBounds();
-        t.setPosition(windowWidth / 2.f - bounds.width / 2.f, y);
+        centerText(t, windowWidth / 2.f, y);
         return t;
     };
 
-    auto makeButtonText = [&](const std::string& str, unsigned size, float x, float y) {
-        sf::Text t(str, font, size);
-        t.setFillColor(sf::Color::White);
-        t.setPosition(x, y);
-        return t;
+    auto recenterMenu = [&](std::vector<sf::Text*> texts) {
+        for (sf::Text* text : texts) {
+            centerText(*text, windowWidth / 2.f, text->getPosition().y);
+        }
     };
 
     GameState state = GameState::MainMenu;
+    GameState optionsReturnState = GameState::MainMenu;
 
-    sf::Text titleMain = makeMenuText("Space-Breakers", 54, 120.f);
-    sf::Text playItem = makeMenuText("Play", 36, 260.f);
-    sf::Text optionsItem = makeMenuText("Options", 36, 320.f);
-    sf::Text exitItem = makeMenuText("Quit", 36, 380.f);
+    const float titleY = windowHeight * 0.17f;
+    const float menuY1 = windowHeight * 0.38f;
+    const float menuGap = windowHeight * 0.08f;
 
-    sf::Text titlePlay = makeMenuText("Play", 48, 120.f);
-    sf::Text newGameItem = makeMenuText("New Game", 36, 260.f);
-    sf::Text continueItem = makeMenuText("Continue", 36, 320.f);
-    sf::Text backPlayItem = makeMenuText("Back", 28, 450.f);
+    sf::Text titleMain = makeCenteredText("Space-Breakers", 44, titleY);
+    sf::Text playItem = makeCenteredText("Play", 34, menuY1);
+    sf::Text optionsItem = makeCenteredText("Options", 34, menuY1 + menuGap);
+    sf::Text exitItem = makeCenteredText("Quit", 34, menuY1 + menuGap * 2.f);
 
-    sf::Text titleOpt = makeMenuText("Options", 48, 110.f);
-    sf::Text opt1 = makeMenuText("- Click anywhere to grab every ball and drag them", 24, 230.f);
-    sf::Text opt2 = makeMenuText("- Each bounce gives points", 24, 270.f);
-    sf::Text opt3 = makeMenuText("- Press ESC to open the upgrade screen", 24, 310.f);
-    sf::Text opt4 = makeMenuText("- Buy upgrades to increase speed, score, and ball count", 24, 350.f);
-    sf::Text backOptItem = makeMenuText("Back", 32, 470.f);
+    sf::Text titlePlay = makeCenteredText("Play", 42, titleY);
+    sf::Text newGameItem = makeCenteredText("New Game", 34, menuY1);
+    sf::Text continueItem = makeCenteredText("Continue", 34, menuY1 + menuGap);
+    sf::Text backPlayItem = makeCenteredText("Back", 30, windowHeight * 0.73f);
 
-    sf::Text shopTitle = makeMenuText("Upgrades", 42, 60.f);
-    sf::Text shopBack = makeButtonText("Back to Game", 30, 60.f, 610.f);
-    sf::Text upgradeSpeed = makeButtonText("", 28, 80.f, 180.f);
-    sf::Text upgradePoints = makeButtonText("", 28, 80.f, 290.f);
-    sf::Text upgradeMultiball = makeButtonText("", 28, 80.f, 400.f);
-    sf::Text shopInfo = makeButtonText("Click to buy  |  ESC or Back to Game returns to play", 20, 80.f, 520.f);
+    sf::Text titleOpt = makeCenteredText("Options", 42, windowHeight * 0.15f);
+    sf::Text opt1 = makeCenteredText("- Click anywhere to grab every ball and drag them", 22, windowHeight * 0.32f);
+    sf::Text opt2 = makeCenteredText("- Each bounce gives points", 22, windowHeight * 0.37f);
+    sf::Text opt3 = makeCenteredText("- Press TAB to open upgrades", 22, windowHeight * 0.42f);
+    sf::Text opt4 = makeCenteredText("- Press ESC to open pause menu", 22, windowHeight * 0.47f);
+    sf::Text backOptItem = makeCenteredText("Back", 30, windowHeight * 0.68f);
+
+    sf::Text pauseTitle = makeCenteredText("Paused", 44, windowHeight * 0.17f);
+    sf::Text resumeItem = makeCenteredText("Resume", 34, menuY1);
+    sf::Text pauseOptionsItem = makeCenteredText("Options", 34, menuY1 + menuGap);
+    sf::Text saveGameItem = makeCenteredText("Save Game", 34, menuY1 + menuGap * 2.f);
+    sf::Text backToMenuItem = makeCenteredText("Back to Main Menu", 34, menuY1 + menuGap * 3.f);
+    sf::Text quitFromPauseItem = makeCenteredText("Quit Game", 34, menuY1 + menuGap * 4.f);
+
+    sf::Text shopTitle = makeCenteredText("Upgrades", 42, windowHeight * 0.13f);
+    sf::Text shopBack = makeCenteredText("Back to Game", 30, windowHeight * 0.83f);
+    sf::Text upgradeSpeed("", font, 26);
+    sf::Text upgradePoints("", font, 26);
+    sf::Text upgradeMultiball("", font, 26);
+    sf::Text shopInfo("Click to buy  |  TAB returns to play", font, 18);
     shopInfo.setFillColor(sf::Color(180, 180, 180));
+    centerText(upgradeSpeed, windowWidth / 2.f, windowHeight * 0.36f);
+    centerText(upgradePoints, windowWidth / 2.f, windowHeight * 0.52f);
+    centerText(upgradeMultiball, windowWidth / 2.f, windowHeight * 0.68f);
+    centerText(shopInfo, windowWidth / 2.f, windowHeight * 0.92f);
 
-    sf::Text hudTopLeft("", font, 22);
-    hudTopLeft.setPosition(12.f, 8.f);
-    sf::Text hudSecondLine("", font, 22);
-    hudSecondLine.setPosition(12.f, 36.f);
-    sf::Text hudThirdLine("", font, 22);
-    hudThirdLine.setPosition(12.f, 64.f);
+    sf::Text hudPoints("", font, 22);
+    sf::Text hudBounces("", font, 22);
+    hudPoints.setPosition(12.f, 8.f);
+    hudBounces.setPosition(12.f, 36.f);
 
-    sf::Text shopButton("Upgrades", font, 22);
-    shopButton.setPosition(windowWidth - 120.f, 10.f);
-    shopButton.setFillColor(sf::Color(200, 200, 255));
+    sf::RectangleShape overlayDim(sf::Vector2f(static_cast<float>(windowWidth), static_cast<float>(windowHeight)));
+    overlayDim.setFillColor(sf::Color(0, 0, 0, 160));
 
     std::vector<Ball> balls;
     std::vector<FloatingText> floatingTexts;
@@ -222,9 +241,9 @@ int main() {
     uint32_t pointsLevel = 0;
     uint32_t multiballLevel = 0;
 
-    const float baseCruiseSpeed = 300.f;
-    const float cruiseAdjustRate = 2.2f;
-    const float throwBoostFactor = 1.75f;
+    constexpr float baseCruiseSpeed = 300.f;
+    constexpr float cruiseAdjustRate = 2.2f;
+    constexpr float throwBoostFactor = 1.75f;
 
     auto currentCruiseSpeed = [&]() {
         return baseCruiseSpeed * std::pow(1.18f, static_cast<float>(speedLevel));
@@ -234,23 +253,50 @@ int main() {
         return 1u + pointsLevel;
     };
 
-    auto spawnFloatingText = [&](const std::string& value, sf::Vector2f pos) {
-        FloatingText ft;
-        ft.text.setFont(font);
-        ft.text.setCharacterSize(20);
-        ft.text.setString(value);
-        ft.text.setFillColor(sf::Color::Yellow);
-        ft.text.setPosition(pos);
-        ft.lifetime = 0.9f;
-        ft.velocity = {0.f, -40.f};
-        floatingTexts.push_back(ft);
+    auto lerpColor = [](const sf::Color& a, const sf::Color& b, float t) {
+        t = std::clamp(t, 0.f, 1.f);
+        auto lerp = [&](sf::Uint8 x, sf::Uint8 y) -> sf::Uint8 {
+            return static_cast<sf::Uint8>(x + (y - x) * t);
+        };
+        return sf::Color(lerp(a.r, b.r), lerp(a.g, b.g), lerp(a.b, b.b), lerp(a.a, b.a));
     };
 
     auto recolorBall = [&](Ball& ball) {
-        float speed = magnitude(ball.velocity);
-        if (speed < 260.f) ball.shape.setOutlineColor(sf::Color::Green);
-        else if (speed < 420.f) ball.shape.setOutlineColor(sf::Color::Yellow);
-        else ball.shape.setOutlineColor(sf::Color::Red);
+        const float speed = magnitude(ball.velocity);
+        const sf::Color slowFill(80, 170, 255);
+        const sf::Color midFill(120, 255, 170);
+        const sf::Color fastFill(255, 220, 90);
+        const sf::Color ultraFill(255, 90, 90);
+
+        sf::Color fill;
+        sf::Color outline;
+        if (speed < 220.f) {
+            const float t = speed / 220.f;
+            fill = lerpColor(slowFill, midFill, t);
+            outline = lerpColor(sf::Color::White, sf::Color(180, 255, 220), t);
+        } else if (speed < 420.f) {
+            const float t = (speed - 220.f) / 200.f;
+            fill = lerpColor(midFill, fastFill, t);
+            outline = lerpColor(sf::Color(180, 255, 220), sf::Color::Yellow, t);
+        } else {
+            const float t = std::min(1.f, (speed - 420.f) / 300.f);
+            fill = lerpColor(fastFill, ultraFill, t);
+            outline = lerpColor(sf::Color::Yellow, sf::Color::Red, t);
+        }
+        ball.shape.setFillColor(fill);
+        ball.shape.setOutlineColor(outline);
+    };
+
+    auto spawnFloatingText = [&](const std::string& value, sf::Vector2f pos) {
+        FloatingText ft;
+        ft.text.setFont(font);
+        ft.text.setCharacterSize(18);
+        ft.text.setString(value);
+        ft.text.setFillColor(sf::Color::Yellow);
+        centerText(ft.text, pos.x, pos.y);
+        ft.lifetime = 0.8f;
+        ft.velocity = {0.f, -38.f};
+        floatingTexts.push_back(ft);
     };
 
     auto createBall = [&](sf::Vector2f center, sf::Vector2f vel) {
@@ -261,25 +307,34 @@ int main() {
         balls.push_back(b);
     };
 
+    auto clampBallInside = [&](Ball& ball) {
+        sf::Vector2f pos = ball.shape.getPosition();
+        pos.x = std::clamp(pos.x, 0.f, static_cast<float>(windowWidth) - 2.f * radius);
+        pos.y = std::clamp(pos.y, 0.f, static_cast<float>(windowHeight) - 2.f * radius);
+        ball.shape.setPosition(pos);
+    };
+
+    auto syncBallCountWithUpgrade = [&]() {
+        const std::size_t targetCount = 1u + multiballLevel;
+        while (balls.size() < targetCount) {
+            const sf::Vector2f basePos(
+                windowWidth / 2.f + 28.f * static_cast<float>(balls.size()),
+                windowHeight / 2.f + 18.f * static_cast<float>(balls.size())
+            );
+            const sf::Vector2f dir = normalizeOrDefault({sideDist(rng), sideDist(rng)}, {1.f, 0.3f});
+            createBall(basePos, dir * currentCruiseSpeed());
+        }
+    };
+
     auto resetGame = [&]() {
         points = 0;
         totalBounces = 0;
         speedLevel = 0;
         pointsLevel = 0;
         multiballLevel = 0;
-        floatingTexts.clear();
         balls.clear();
+        floatingTexts.clear();
         createBall({windowWidth / 2.f, windowHeight / 2.f}, {250.f, 180.f});
-    };
-
-    auto syncBallCountWithUpgrade = [&]() {
-        const std::size_t targetCount = 1u + multiballLevel;
-        while (balls.size() < targetCount) {
-            sf::Vector2f basePos(windowWidth / 2.f + 30.f * static_cast<float>(balls.size()),
-                                 windowHeight / 2.f + 20.f * static_cast<float>(balls.size()));
-            sf::Vector2f dir(normalizeOrDefault({sideDist(rng), sideDist(rng)}, {1.f, 0.3f}));
-            createBall(basePos, dir * currentCruiseSpeed());
-        }
     };
 
     auto tryLoadGame = [&]() {
@@ -289,7 +344,110 @@ int main() {
         }
         floatingTexts.clear();
         syncBallCountWithUpgrade();
-        for (Ball& b : balls) recolorBall(b);
+        for (Ball& ball : balls) {
+            clampBallInside(ball);
+            recolorBall(ball);
+        }
+    };
+
+    auto updateGameplay = [&](float dt) {
+        for (Ball& ball : balls) {
+            if (ball.isDragging) {
+                const sf::Vector2f mousePos = window.mapPixelToCoords(sf::Mouse::getPosition(window));
+                if (ball.hasLastDragMousePos && dt > 0.f) {
+                    const sf::Vector2f delta = mousePos - ball.lastDragMousePos;
+                    ball.lastDragVelocity = delta / dt;
+                }
+                ball.lastDragMousePos = mousePos;
+                ball.hasLastDragMousePos = true;
+
+                sf::Vector2f desiredPos = mousePos + ball.dragOffset;
+                desiredPos.x = std::clamp(desiredPos.x, 0.f, static_cast<float>(windowWidth) - 2.f * radius);
+                desiredPos.y = std::clamp(desiredPos.y, 0.f, static_cast<float>(windowHeight) - 2.f * radius);
+                ball.shape.setPosition(desiredPos);
+                recolorBall(ball);
+                continue;
+            }
+
+            ball.shape.move(ball.velocity * dt);
+            clampBallInside(ball);
+
+            sf::Vector2f pos = ball.shape.getPosition();
+            bool bounced = false;
+
+            if (pos.x <= 0.f) {
+                pos.x = 0.f;
+                ball.velocity.x = std::abs(ball.velocity.x);
+                bounced = true;
+            } else if (pos.x + 2.f * radius >= static_cast<float>(windowWidth)) {
+                pos.x = static_cast<float>(windowWidth) - 2.f * radius;
+                ball.velocity.x = -std::abs(ball.velocity.x);
+                bounced = true;
+            }
+
+            if (pos.y <= 0.f) {
+                pos.y = 0.f;
+                ball.velocity.y = std::abs(ball.velocity.y);
+                bounced = true;
+            } else if (pos.y + 2.f * radius >= static_cast<float>(windowHeight)) {
+                pos.y = static_cast<float>(windowHeight) - 2.f * radius;
+                ball.velocity.y = -std::abs(ball.velocity.y);
+                bounced = true;
+            }
+
+            ball.shape.setPosition(pos);
+
+            if (bounced) {
+                ++totalBounces;
+                points += pointsPerBounce();
+                spawnFloatingText("+" + std::to_string(pointsPerBounce()), pos + sf::Vector2f(radius, 0.f));
+
+                const float speed = magnitude(ball.velocity);
+                const float angle = std::atan2(ball.velocity.y, ball.velocity.x) + angleDist(rng);
+                ball.velocity.x = speed * std::cos(angle);
+                ball.velocity.y = speed * std::sin(angle);
+            }
+
+            const float speed = magnitude(ball.velocity);
+            if (speed > 0.001f) {
+                const float factor = std::min(1.f, cruiseAdjustRate * dt);
+                const float newSpeed = speed + (currentCruiseSpeed() - speed) * factor;
+                ball.velocity *= newSpeed / speed;
+            } else {
+                const sf::Vector2f dir = normalizeOrDefault({sideDist(rng), sideDist(rng)}, {1.f, 0.2f});
+                ball.velocity = dir * currentCruiseSpeed();
+            }
+            recolorBall(ball);
+        }
+
+        for (std::size_t i = 0; i < balls.size(); ++i) {
+            for (std::size_t j = i + 1; j < balls.size(); ++j) {
+                const sf::Vector2f a = balls[i].shape.getPosition() + sf::Vector2f(radius, radius);
+                const sf::Vector2f b = balls[j].shape.getPosition() + sf::Vector2f(radius, radius);
+                const sf::Vector2f delta = b - a;
+                const float dist = magnitude(delta);
+                const float minDist = 2.f * radius;
+                if (dist > 0.f && dist < minDist) {
+                    const sf::Vector2f normal = delta / dist;
+                    const float overlap = minDist - dist;
+                    balls[i].shape.move(-normal * overlap * 0.5f);
+                    balls[j].shape.move(normal * overlap * 0.5f);
+                    clampBallInside(balls[i]);
+                    clampBallInside(balls[j]);
+                    std::swap(balls[i].velocity, balls[j].velocity);
+                }
+            }
+        }
+
+        for (auto it = floatingTexts.begin(); it != floatingTexts.end();) {
+            it->lifetime -= dt;
+            it->text.move(it->velocity * dt);
+            sf::Color c = it->text.getFillColor();
+            c.a = static_cast<sf::Uint8>(255.f * std::max(0.f, it->lifetime / 0.8f));
+            it->text.setFillColor(c);
+            if (it->lifetime <= 0.f) it = floatingTexts.erase(it);
+            else ++it;
+        }
     };
 
     resetGame();
@@ -307,7 +465,7 @@ int main() {
             if (state == GameState::MainMenu) {
                 if (event.type == sf::Event::MouseButtonPressed && event.mouseButton.button == sf::Mouse::Left) {
                     if (isMouseOver(playItem, window)) state = GameState::PlayMenu;
-                    else if (isMouseOver(optionsItem, window)) state = GameState::Options;
+                    else if (isMouseOver(optionsItem, window)) { optionsReturnState = GameState::MainMenu; state = GameState::Options; }
                     else if (isMouseOver(exitItem, window)) window.close();
                 }
             } else if (state == GameState::PlayMenu) {
@@ -316,7 +474,7 @@ int main() {
                         resetGame();
                         saveGame(points, totalBounces, speedLevel, pointsLevel, multiballLevel, balls);
                         state = GameState::Playing;
-                    } else if (isMouseOver(continueItem, window)) {
+                    } else if (isMouseOver(continueItem, window) && hasSavedGame()) {
                         tryLoadGame();
                         state = GameState::Playing;
                     } else if (isMouseOver(backPlayItem, window)) {
@@ -325,61 +483,52 @@ int main() {
                 }
             } else if (state == GameState::Options) {
                 if (event.type == sf::Event::MouseButtonPressed && event.mouseButton.button == sf::Mouse::Left) {
-                    if (isMouseOver(backOptItem, window)) state = GameState::MainMenu;
+                    if (isMouseOver(backOptItem, window)) state = optionsReturnState;
                 }
             } else if (state == GameState::Shop) {
-                if (event.type == sf::Event::KeyPressed && event.key.code == sf::Keyboard::Escape) {
-                    saveGame(points, totalBounces, speedLevel, pointsLevel, multiballLevel, balls);
-                    state = GameState::Playing;
-                }
-
+                if (event.type == sf::Event::KeyPressed && event.key.code == sf::Keyboard::Tab) state = GameState::Playing;
                 if (event.type == sf::Event::MouseButtonPressed && event.mouseButton.button == sf::Mouse::Left) {
-                    uint32_t speedCost = upgradeCost(15, speedLevel, 1.55f);
-                    uint32_t pointsCost = upgradeCost(25, pointsLevel, 1.70f);
-                    uint32_t multiballCost = upgradeCost(80, multiballLevel, 2.30f);
-
-                    if (isMouseOver(shopBack, window)) {
+                    const uint32_t speedCost = upgradeCost(15, speedLevel, 1.55f);
+                    const uint32_t pointsCost = upgradeCost(25, pointsLevel, 1.70f);
+                    const uint32_t multiballCost = upgradeCost(80, multiballLevel, 2.30f);
+                    if (isMouseOver(shopBack, window)) state = GameState::Playing;
+                    else if (isMouseOver(upgradeSpeed, window) && points >= speedCost) { points -= speedCost; ++speedLevel; }
+                    else if (isMouseOver(upgradePoints, window) && points >= pointsCost) { points -= pointsCost; ++pointsLevel; }
+                    else if (isMouseOver(upgradeMultiball, window) && points >= multiballCost) { points -= multiballCost; ++multiballLevel; syncBallCountWithUpgrade(); }
+                }
+            } else if (state == GameState::PauseMenu) {
+                if (event.type == sf::Event::KeyPressed && event.key.code == sf::Keyboard::Escape) state = GameState::Playing;
+                if (event.type == sf::Event::MouseButtonPressed && event.mouseButton.button == sf::Mouse::Left) {
+                    if (isMouseOver(resumeItem, window)) state = GameState::Playing;
+                    else if (isMouseOver(pauseOptionsItem, window)) { optionsReturnState = GameState::PauseMenu; state = GameState::Options; }
+                    else if (isMouseOver(saveGameItem, window)) {
                         saveGame(points, totalBounces, speedLevel, pointsLevel, multiballLevel, balls);
-                        state = GameState::Playing;
-                    } else if (isMouseOver(upgradeSpeed, window) && points >= speedCost) {
-                        points -= speedCost;
-                        ++speedLevel;
-                    } else if (isMouseOver(upgradePoints, window) && points >= pointsCost) {
-                        points -= pointsCost;
-                        ++pointsLevel;
-                    } else if (isMouseOver(upgradeMultiball, window) && points >= multiballCost) {
-                        points -= multiballCost;
-                        ++multiballLevel;
-                        syncBallCountWithUpgrade();
                     }
+                    else if (isMouseOver(backToMenuItem, window)) {
+                        saveGame(points, totalBounces, speedLevel, pointsLevel, multiballLevel, balls);
+                        state = GameState::MainMenu;
+                    }
+                    else if (isMouseOver(quitFromPauseItem, window)) window.close();
                 }
             } else if (state == GameState::Playing) {
-                if (event.type == sf::Event::KeyPressed && event.key.code == sf::Keyboard::Escape) {
-                    saveGame(points, totalBounces, speedLevel, pointsLevel, multiballLevel, balls);
-                    state = GameState::Shop;
-                }
+                if (event.type == sf::Event::KeyPressed && event.key.code == sf::Keyboard::Tab) state = GameState::Shop;
+                else if (event.type == sf::Event::KeyPressed && event.key.code == sf::Keyboard::Escape) state = GameState::PauseMenu;
 
                 if (event.type == sf::Event::MouseButtonPressed && event.mouseButton.button == sf::Mouse::Left) {
-                    if (isMouseOver(shopButton, window)) {
-                        saveGame(points, totalBounces, speedLevel, pointsLevel, multiballLevel, balls);
-                        state = GameState::Shop;
-                    } else {
-                        sf::Vector2f mousePos = window.mapPixelToCoords(sf::Mouse::getPosition(window));
-                        float clampedX = std::clamp(mousePos.x, radius, windowWidth - radius);
-                        float clampedY = std::clamp(mousePos.y, radius, windowHeight - radius);
-                        sf::Vector2f snappedTopLeft{clampedX - radius, clampedY - radius};
-
-                        for (Ball& ball : balls) {
-                            ball.shape.setPosition(snappedTopLeft);
-                            ball.isDragging = true;
-                            ball.storedVelocity = ball.velocity;
-                            ball.velocity = {0.f, 0.f};
-                            ball.dragOffset = ball.shape.getPosition() - mousePos;
-                            ball.lastDragVelocity = {0.f, 0.f};
-                            ball.lastDragMousePos = mousePos;
-                            ball.hasLastDragMousePos = false;
-                            recolorBall(ball);
-                        }
+                    const sf::Vector2f mousePos = window.mapPixelToCoords(sf::Mouse::getPosition(window));
+                    const float clampedX = std::clamp(mousePos.x, radius, static_cast<float>(windowWidth) - radius);
+                    const float clampedY = std::clamp(mousePos.y, radius, static_cast<float>(windowHeight) - radius);
+                    const sf::Vector2f snappedTopLeft{clampedX - radius, clampedY - radius};
+                    for (Ball& ball : balls) {
+                        ball.shape.setPosition(snappedTopLeft);
+                        ball.isDragging = true;
+                        ball.storedVelocity = ball.velocity;
+                        ball.velocity = {0.f, 0.f};
+                        ball.dragOffset = ball.shape.getPosition() - mousePos;
+                        ball.lastDragVelocity = {0.f, 0.f};
+                        ball.lastDragMousePos = mousePos;
+                        ball.hasLastDragMousePos = false;
+                        recolorBall(ball);
                     }
                 }
 
@@ -387,9 +536,8 @@ int main() {
                     for (Ball& ball : balls) {
                         if (!ball.isDragging) continue;
                         ball.isDragging = false;
-                        float speed = magnitude(ball.lastDragVelocity);
-                        if (speed > 10.f) ball.velocity = ball.lastDragVelocity * throwBoostFactor;
-                        else ball.velocity = ball.storedVelocity;
+                        const float speed = magnitude(ball.lastDragVelocity);
+                        ball.velocity = (speed > 10.f) ? ball.lastDragVelocity * throwBoostFactor : ball.storedVelocity;
                         ball.hasLastDragMousePos = false;
                         recolorBall(ball);
                     }
@@ -397,142 +545,35 @@ int main() {
             }
         }
 
-        float dt = clock.restart().asSeconds();
-        dt = std::min(dt, 0.03f);
-
-        if (state == GameState::Playing) {
-            for (Ball& ball : balls) {
-                if (ball.isDragging) {
-                    sf::Vector2f mousePos = window.mapPixelToCoords(sf::Mouse::getPosition(window));
-                    if (ball.hasLastDragMousePos && dt > 0.f) {
-                        sf::Vector2f delta = mousePos - ball.lastDragMousePos;
-                        ball.lastDragVelocity = delta / dt;
-                    }
-                    ball.lastDragMousePos = mousePos;
-                    ball.hasLastDragMousePos = true;
-
-                    sf::Vector2f desiredPos = mousePos + ball.dragOffset;
-                    desiredPos.x = std::clamp(desiredPos.x, 0.f, windowWidth - 2.f * radius);
-                    desiredPos.y = std::clamp(desiredPos.y, 0.f, windowHeight - 2.f * radius);
-                    ball.shape.setPosition(desiredPos);
-                    recolorBall(ball);
-                    continue;
-                }
-
-                ball.shape.move(ball.velocity * dt);
-
-                sf::Vector2f pos = ball.shape.getPosition();
-                bool bounced = false;
-
-                if (pos.x <= 0.f) {
-                    pos.x = 0.f;
-                    ball.velocity.x = -ball.velocity.x;
-                    bounced = true;
-                } else if (pos.x + 2.f * radius >= windowWidth) {
-                    pos.x = windowWidth - 2.f * radius;
-                    ball.velocity.x = -ball.velocity.x;
-                    bounced = true;
-                }
-
-                if (pos.y <= 0.f) {
-                    pos.y = 0.f;
-                    ball.velocity.y = -ball.velocity.y;
-                    bounced = true;
-                } else if (pos.y + 2.f * radius >= windowHeight) {
-                    pos.y = windowHeight - 2.f * radius;
-                    ball.velocity.y = -ball.velocity.y;
-                    bounced = true;
-                }
-
-                ball.shape.setPosition(pos);
-
-                if (bounced) {
-                    ++totalBounces;
-                    points += pointsPerBounce();
-                    spawnFloatingText("+" + std::to_string(pointsPerBounce()), pos + sf::Vector2f(radius, 0.f));
-
-                    float speed = magnitude(ball.velocity);
-                    float angle = std::atan2(ball.velocity.y, ball.velocity.x) + angleDist(rng);
-                    ball.velocity.x = speed * std::cos(angle);
-                    ball.velocity.y = speed * std::sin(angle);
-                }
-
-                float speed = magnitude(ball.velocity);
-                if (speed > 0.001f) {
-                    float target = currentCruiseSpeed();
-                    float factor = std::min(1.f, cruiseAdjustRate * dt);
-                    float newSpeed = speed + (target - speed) * factor;
-                    ball.velocity *= newSpeed / speed;
-                } else {
-                    sf::Vector2f dir = normalizeOrDefault({sideDist(rng), sideDist(rng)}, {1.f, 0.2f});
-                    ball.velocity = dir * currentCruiseSpeed();
-                }
-
-                recolorBall(ball);
-            }
-
-            for (std::size_t i = 0; i < balls.size(); ++i) {
-                for (std::size_t j = i + 1; j < balls.size(); ++j) {
-                    sf::Vector2f a = balls[i].shape.getPosition() + sf::Vector2f(radius, radius);
-                    sf::Vector2f b = balls[j].shape.getPosition() + sf::Vector2f(radius, radius);
-                    sf::Vector2f delta = b - a;
-                    float dist = magnitude(delta);
-                    float minDist = 2.f * radius;
-
-                    if (dist > 0.f && dist < minDist) {
-                        sf::Vector2f normal = delta / dist;
-                        float overlap = minDist - dist;
-                        balls[i].shape.move(-normal * (overlap * 0.5f));
-                        balls[j].shape.move(normal * (overlap * 0.5f));
-                        std::swap(balls[i].velocity, balls[j].velocity);
-                    }
-                }
-            }
-
-            for (auto it = floatingTexts.begin(); it != floatingTexts.end();) {
-                it->lifetime -= dt;
-                it->text.move(it->velocity * dt);
-                sf::Color c = it->text.getFillColor();
-                c.a = static_cast<sf::Uint8>(255.f * std::max(0.f, it->lifetime / 0.9f));
-                it->text.setFillColor(c);
-                if (it->lifetime <= 0.f) it = floatingTexts.erase(it);
-                else ++it;
-            }
-
-            hudTopLeft.setString("Points: " + std::to_string(points) + "   |   Total bounces: " + std::to_string(totalBounces));
-            hudSecondLine.setString("Balls: " + std::to_string(balls.size()) + "   |   Points/bounce: " + std::to_string(pointsPerBounce()));
-            hudThirdLine.setString("Base speed: " + std::to_string(static_cast<int>(currentCruiseSpeed())) +
-                                   "   |   ESC = upgrades");
+        float dt = std::min(clock.restart().asSeconds(), 0.03f);
+        if (state == GameState::Playing || state == GameState::Shop || state == GameState::PauseMenu) {
+            updateGameplay(dt);
+            hudPoints.setString("Points: " + std::to_string(points));
+            hudBounces.setString("Total bounces: " + std::to_string(totalBounces));
         }
 
-        if (state == GameState::Shop) {
-            uint32_t speedCost = upgradeCost(15, speedLevel, 1.55f);
-            uint32_t pointsCost = upgradeCost(25, pointsLevel, 1.70f);
-            uint32_t multiballCost = upgradeCost(80, multiballLevel, 2.30f);
+        const uint32_t speedCost = upgradeCost(15, speedLevel, 1.55f);
+        const uint32_t pointsCost = upgradeCost(25, pointsLevel, 1.70f);
+        const uint32_t multiballCost = upgradeCost(80, multiballLevel, 2.30f);
 
-            upgradeSpeed.setString(
-                "[1] Speed level " + std::to_string(speedLevel) +
-                "  ->  +18% velocidad base\nCosto: " + std::to_string(speedCost) +
-                " pts");
+        upgradeSpeed.setString("[1] Speed level " + std::to_string(speedLevel) +
+                               "  ->  +18% base speed\nCost: " + std::to_string(speedCost) + " pts");
+        upgradePoints.setString("[2] Points per bounce level " + std::to_string(pointsLevel) +
+                                "  ->  gain +1 extra point per bounce\nCost: " + std::to_string(pointsCost) + " pts");
+        upgradeMultiball.setString("[3] Multiball level " + std::to_string(multiballLevel) +
+                                   "  ->  add one new ball\nCost: " + std::to_string(multiballCost) + " pts");
+        upgradeSpeed.setFillColor(points >= speedCost ? sf::Color::White : sf::Color(120, 120, 120));
+        upgradePoints.setFillColor(points >= pointsCost ? sf::Color::White : sf::Color(120, 120, 120));
+        upgradeMultiball.setFillColor(points >= multiballCost ? sf::Color::White : sf::Color(120, 120, 120));
+        centerText(upgradeSpeed, windowWidth / 2.f, windowHeight * 0.36f);
+        centerText(upgradePoints, windowWidth / 2.f, windowHeight * 0.52f);
+        centerText(upgradeMultiball, windowWidth / 2.f, windowHeight * 0.68f);
 
-            upgradePoints.setString(
-                "[2] Points per bounce level " + std::to_string(pointsLevel) +
-                "  ->  ganas +1 punto extra por rebote\nCosto: " + std::to_string(pointsCost) +
-                " pts");
-
-            upgradeMultiball.setString(
-                "[3] Multiball level " + std::to_string(multiballLevel) +
-                "  ->  agrega una pelota nueva\nCosto: " + std::to_string(multiballCost) +
-                " pts");
-
-            auto paintAffordable = [&](sf::Text& t, uint32_t cost) {
-                t.setFillColor(points >= cost ? sf::Color::White : sf::Color(120, 120, 120));
-            };
-
-            paintAffordable(upgradeSpeed, speedCost);
-            paintAffordable(upgradePoints, pointsCost);
-            paintAffordable(upgradeMultiball, multiballCost);
-        }
+        recenterMenu({&titleMain, &playItem, &optionsItem, &exitItem,
+                      &titlePlay, &newGameItem, &continueItem, &backPlayItem,
+                      &titleOpt, &opt1, &opt2, &opt3, &opt4, &backOptItem,
+                      &pauseTitle, &resumeItem, &pauseOptionsItem, &saveGameItem, &backToMenuItem,
+                      &quitFromPauseItem, &shopTitle, &shopBack, &shopInfo});
 
         window.clear(sf::Color(12, 12, 22));
 
@@ -542,9 +583,9 @@ int main() {
             window.draw(optionsItem);
             window.draw(exitItem);
         } else if (state == GameState::PlayMenu) {
+            continueItem.setFillColor(hasSavedGame() ? sf::Color::White : sf::Color(120, 120, 120));
             window.draw(titlePlay);
             window.draw(newGameItem);
-            continueItem.setFillColor(hasSavedGame() ? sf::Color::White : sf::Color(120, 120, 120));
             window.draw(continueItem);
             window.draw(backPlayItem);
         } else if (state == GameState::Options) {
@@ -554,29 +595,38 @@ int main() {
             window.draw(opt3);
             window.draw(opt4);
             window.draw(backOptItem);
-        } else if (state == GameState::Playing) {
+        } else {
             for (const Ball& ball : balls) window.draw(ball.shape);
             for (const FloatingText& ft : floatingTexts) window.draw(ft.text);
-            window.draw(hudTopLeft);
-            window.draw(hudSecondLine);
-            window.draw(hudThirdLine);
-            window.draw(shopButton);
-        } else if (state == GameState::Shop) {
-            sf::Text shopPoints("Available points: " + std::to_string(points), font, 28);
-            shopPoints.setPosition(80.f, 110.f);
-            shopPoints.setFillColor(sf::Color::Yellow);
+            window.draw(hudPoints);
+            window.draw(hudBounces);
 
-            window.draw(shopTitle);
-            window.draw(shopPoints);
-            window.draw(upgradeSpeed);
-            window.draw(upgradePoints);
-            window.draw(upgradeMultiball);
-            window.draw(shopInfo);
-            window.draw(shopBack);
+            if (state == GameState::Shop) {
+                sf::Text shopPoints("Available points: " + std::to_string(points), font, 28);
+                shopPoints.setFillColor(sf::Color::Yellow);
+                centerText(shopPoints, windowWidth / 2.f, windowHeight * 0.23f);
+                window.draw(overlayDim);
+                window.draw(shopTitle);
+                window.draw(shopPoints);
+                window.draw(upgradeSpeed);
+                window.draw(upgradePoints);
+                window.draw(upgradeMultiball);
+                window.draw(shopBack);
+                window.draw(shopInfo);
+            } else if (state == GameState::PauseMenu) {
+                window.draw(overlayDim);
+                window.draw(pauseTitle);
+                window.draw(resumeItem);
+                window.draw(pauseOptionsItem);
+                window.draw(saveGameItem);
+                window.draw(backToMenuItem);
+                window.draw(quitFromPauseItem);
+            }
         }
 
         window.display();
     }
 
+    saveGame(points, totalBounces, speedLevel, pointsLevel, multiballLevel, balls);
     return 0;
 }
