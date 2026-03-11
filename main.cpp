@@ -486,7 +486,7 @@ int main() {
                     if (isMouseOver(backOptItem, window)) state = optionsReturnState;
                 }
             } else if (state == GameState::Shop) {
-                if (event.type == sf::Event::KeyPressed && event.key.code == sf::Keyboard::Tab) state = GameState::Playing;
+                if (event.type == sf::Event::KeyPressed && event.key.code == sf::Keyboard::Tab || event.type == sf::Event::KeyPressed && event.key.code == sf::Keyboard::Escape) state = GameState::Playing;
                 if (event.type == sf::Event::MouseButtonPressed && event.mouseButton.button == sf::Mouse::Left) {
                     const uint32_t speedCost = upgradeCost(15, speedLevel, 1.55f);
                     const uint32_t pointsCost = upgradeCost(25, pointsLevel, 1.70f);
