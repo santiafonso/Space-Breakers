@@ -263,26 +263,35 @@ int main() {
 
     auto recolorBall = [&](Ball& ball) {
         const float speed = magnitude(ball.velocity);
-        const sf::Color slowFill(80, 170, 255);
-        const sf::Color midFill(120, 255, 170);
-        const sf::Color fastFill(255, 220, 90);
-        const sf::Color ultraFill(255, 90, 90);
-
+    
+        const float cruise = currentCruiseSpeed();
+    
+        const sf::Color slowFill(80, 170, 255);    // blue
+        const sf::Color midFill(120, 255, 170);    // green
+        const sf::Color fastFill(255, 220, 90);    // yellow
+        const sf::Color ultraFill(255, 90, 90);    // red
+    
+        const float ratio = (cruise > 0.f) ? speed / cruise : 1.f;
+    
         sf::Color fill;
         sf::Color outline;
-        if (speed < 220.f) {
-            const float t = speed / 220.f;
+    
+        if (ratio < 0.75f) {
+            const float t = ratio / 0.75f;
             fill = lerpColor(slowFill, midFill, t);
             outline = lerpColor(sf::Color::White, sf::Color(180, 255, 220), t);
-        } else if (speed < 420.f) {
-            const float t = (speed - 220.f) / 200.f;
+        }
+        else if (ratio < 1.15f) {
+            const float t = (ratio - 0.75f) / (1.15f - 0.75f);
             fill = lerpColor(midFill, fastFill, t);
             outline = lerpColor(sf::Color(180, 255, 220), sf::Color::Yellow, t);
-        } else {
-            const float t = std::min(1.f, (speed - 420.f) / 300.f);
+        }
+        else {
+            const float t = std::min(1.f, (ratio - 1.15f) / 0.85f);
             fill = lerpColor(fastFill, ultraFill, t);
             outline = lerpColor(sf::Color::Yellow, sf::Color::Red, t);
         }
+    
         ball.shape.setFillColor(fill);
         ball.shape.setOutlineColor(outline);
     };
