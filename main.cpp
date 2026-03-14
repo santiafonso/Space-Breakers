@@ -30,6 +30,7 @@ namespace {
         uint32_t speedLevel;
         uint32_t pointsLevel;
         uint32_t multiballLevel;
+        uint32_t wallLevel;
         uint32_t ballCount;
     };
 
@@ -80,18 +81,20 @@ namespace {
                   uint32_t speedLevel,
                   uint32_t pointsLevel,
                   uint32_t multiballLevel,
+                  uint32_t wallLevel,
                   const std::vector<Ball>& balls) {
         std::filesystem::create_directories(saveDir);
         std::ofstream f(savePath, std::ios::binary);
         if (!f) return false;
 
         SaveHeader header{};
-        header.version = 2;
+        header.version = 3;
         header.points = points;
         header.totalBounces = totalBounces;
         header.speedLevel = speedLevel;
         header.pointsLevel = pointsLevel;
         header.multiballLevel = multiballLevel;
+        header.wallLevel = wallLevel;
         header.ballCount = static_cast<uint32_t>(balls.size());
 
         f.write(reinterpret_cast<const char*>(&header), sizeof(header));
@@ -109,19 +112,50 @@ namespace {
                   uint32_t& speedLevel,
                   uint32_t& pointsLevel,
                   uint32_t& multiballLevel,
+                  uint32_t& wallLevel,
                   std::vector<Ball>& balls) {
         std::ifstream f(savePath, std::ios::binary);
         if (!f) return false;
 
+        uint32_t version = 0;
+        f.read(reinterpret_cast<char*>(&version), sizeof(version));
+        if (!f || version < 2 || version > 3) return false;
+
+        if (version == 2) {
+            f.read(reinterpret_cast<char*>(&points), sizeof(points));
+            f.read(reinterpret_cast<char*>(&totalBounces), sizeof(totalBounces));
+            f.read(reinterpret_cast<char*>(&speedLevel), sizeof(speedLevel));
+            f.read(reinterpret_cast<char*>(&pointsLevel), sizeof(pointsLevel));
+            f.read(reinterpret_cast<char*>(&multiballLevel), sizeof(multiballLevel));
+            uint32_t ballCount = 0;
+            f.read(reinterpret_cast<char*>(&ballCount), sizeof(ballCount));
+            if (!f || ballCount == 0 || ballCount > 32) return false;
+            wallLevel = 0u;
+            balls.clear();
+            balls.reserve(ballCount);
+            for (uint32_t i = 0; i < ballCount; ++i) {
+                BallData bd{};
+                f.read(reinterpret_cast<char*>(&bd), sizeof(bd));
+                if (!f) return false;
+                Ball b;
+                b.shape.setPosition(bd.x, bd.y);
+                b.velocity = {bd.vx, bd.vy};
+                balls.push_back(b);
+            }
+            return true;
+        }
+
         SaveHeader header{};
-        f.read(reinterpret_cast<char*>(&header), sizeof(header));
-        if (!f || header.version != 2 || header.ballCount == 0 || header.ballCount > 32) return false;
+        header.version = version;
+        f.read(reinterpret_cast<char*>(&header.points), sizeof(header) - sizeof(header.version));
+        if (!f || header.ballCount == 0 || header.ballCount > 32) return false;
 
         points = header.points;
         totalBounces = header.totalBounces;
         speedLevel = header.speedLevel;
         pointsLevel = header.pointsLevel;
         multiballLevel = header.multiballLevel;
+        wallLevel = header.wallLevel;
 
         balls.clear();
         balls.reserve(header.ballCount);
@@ -218,11 +252,13 @@ int main() {
     sf::Text upgradeSpeed("", font, 26);
     sf::Text upgradePoints("", font, 26);
     sf::Text upgradeMultiball("", font, 26);
+    sf::Text upgradeWallUnlock("", font, 26);
     sf::Text shopInfo("Click to buy  |  TAB returns to play", font, 18);
     shopInfo.setFillColor(sf::Color(180, 180, 180));
     centerText(upgradeSpeed, windowWidth / 2.f, windowHeight * 0.36f);
     centerText(upgradePoints, windowWidth / 2.f, windowHeight * 0.52f);
     centerText(upgradeMultiball, windowWidth / 2.f, windowHeight * 0.68f);
+    centerText(upgradeWallUnlock, windowWidth / 2.f, windowHeight * 0.78f);
     centerText(shopInfo, windowWidth / 2.f, windowHeight * 0.92f);
 
     sf::Text hudPoints("", font, 22);
@@ -240,6 +276,7 @@ int main() {
     uint32_t speedLevel = 0;
     uint32_t pointsLevel = 0;
     uint32_t multiballLevel = 0;
+    uint32_t wallLevel = 0;
 
     constexpr float baseCruiseSpeed = 300.f;
     constexpr float cruiseAdjustRate = 2.2f;
@@ -341,13 +378,14 @@ int main() {
         speedLevel = 0;
         pointsLevel = 0;
         multiballLevel = 0;
+        wallLevel = 0;
         balls.clear();
         floatingTexts.clear();
         createBall({windowWidth / 2.f, windowHeight / 2.f}, {250.f, 180.f});
     };
 
     auto tryLoadGame = [&]() {
-        if (!loadGame(points, totalBounces, speedLevel, pointsLevel, multiballLevel, balls)) {
+        if (!loadGame(points, totalBounces, speedLevel, pointsLevel, multiballLevel, wallLevel, balls)) {
             resetGame();
             return;
         }
@@ -382,31 +420,34 @@ int main() {
             clampBallInside(ball);
 
             sf::Vector2f pos = ball.shape.getPosition();
-            bool bounced = false;
+            bool bouncedBottom = false;
+            bool bouncedLeft = false;
+            bool bouncedRight = false;
+            bool bouncedTop = false;
 
             if (pos.x <= 0.f) {
                 pos.x = 0.f;
                 ball.velocity.x = std::abs(ball.velocity.x);
-                bounced = true;
+                bouncedLeft = true;
             } else if (pos.x + 2.f * radius >= static_cast<float>(windowWidth)) {
                 pos.x = static_cast<float>(windowWidth) - 2.f * radius;
                 ball.velocity.x = -std::abs(ball.velocity.x);
-                bounced = true;
+                bouncedRight = true;
             }
 
             if (pos.y <= 0.f) {
                 pos.y = 0.f;
                 ball.velocity.y = std::abs(ball.velocity.y);
-                bounced = true;
+                bouncedTop = true;
             } else if (pos.y + 2.f * radius >= static_cast<float>(windowHeight)) {
                 pos.y = static_cast<float>(windowHeight) - 2.f * radius;
                 ball.velocity.y = -std::abs(ball.velocity.y);
-                bounced = true;
+                bouncedBottom = true;
             }
 
             ball.shape.setPosition(pos);
 
-            if (bounced) {
+            if (bouncedBottom) {
                 ++totalBounces;
                 points += pointsPerBounce();
                 spawnFloatingText("+" + std::to_string(pointsPerBounce()), pos + sf::Vector2f(radius, 0.f));
@@ -416,7 +457,7 @@ int main() {
                 ball.velocity.x = speed * std::cos(angle);
                 ball.velocity.y = speed * std::sin(angle);
             }
-
+            
             const float speed = magnitude(ball.velocity);
             if (speed > 0.001f) {
                 const float factor = std::min(1.f, cruiseAdjustRate * dt);
@@ -466,7 +507,7 @@ int main() {
         sf::Event event;
         while (window.pollEvent(event)) {
             if (event.type == sf::Event::Closed) {
-                saveGame(points, totalBounces, speedLevel, pointsLevel, multiballLevel, balls);
+                saveGame(points, totalBounces, speedLevel, pointsLevel, multiballLevel, wallLevel, balls);
                 window.close();
                 break;
             }
@@ -481,7 +522,7 @@ int main() {
                 if (event.type == sf::Event::MouseButtonPressed && event.mouseButton.button == sf::Mouse::Left) {
                     if (isMouseOver(newGameItem, window)) {
                         resetGame();
-                        saveGame(points, totalBounces, speedLevel, pointsLevel, multiballLevel, balls);
+                        saveGame(points, totalBounces, speedLevel, pointsLevel, multiballLevel, wallLevel, balls);
                         state = GameState::Playing;
                     } else if (isMouseOver(continueItem, window) && hasSavedGame()) {
                         tryLoadGame();
@@ -500,10 +541,12 @@ int main() {
                     const uint32_t speedCost = upgradeCost(15, speedLevel, 1.55f);
                     const uint32_t pointsCost = upgradeCost(25, pointsLevel, 1.70f);
                     const uint32_t multiballCost = upgradeCost(80, multiballLevel, 2.30f);
+                    constexpr uint32_t wallUnlockCost = 500u;
                     if (isMouseOver(shopBack, window)) state = GameState::Playing;
                     else if (isMouseOver(upgradeSpeed, window) && points >= speedCost) { points -= speedCost; ++speedLevel; }
                     else if (isMouseOver(upgradePoints, window) && points >= pointsCost) { points -= pointsCost; ++pointsLevel; }
                     else if (isMouseOver(upgradeMultiball, window) && points >= multiballCost) { points -= multiballCost; ++multiballLevel; syncBallCountWithUpgrade(); }
+                    else if (wallLevel < 3 && isMouseOver(upgradeWallUnlock, window) && points >= wallUnlockCost) { points -= wallUnlockCost; ++wallLevel; }
                 }
             } else if (state == GameState::PauseMenu) {
                 if (event.type == sf::Event::KeyPressed && event.key.code == sf::Keyboard::Escape) state = GameState::Playing;
@@ -511,10 +554,10 @@ int main() {
                     if (isMouseOver(resumeItem, window)) state = GameState::Playing;
                     else if (isMouseOver(pauseOptionsItem, window)) { optionsReturnState = GameState::PauseMenu; state = GameState::Options; }
                     else if (isMouseOver(saveGameItem, window)) {
-                        saveGame(points, totalBounces, speedLevel, pointsLevel, multiballLevel, balls);
+                        saveGame(points, totalBounces, speedLevel, pointsLevel, multiballLevel, wallLevel, balls);
                     }
                     else if (isMouseOver(backToMenuItem, window)) {
-                        saveGame(points, totalBounces, speedLevel, pointsLevel, multiballLevel, balls);
+                        saveGame(points, totalBounces, speedLevel, pointsLevel, multiballLevel, wallLevel, balls);
                         state = GameState::MainMenu;
                     }
                     else if (isMouseOver(quitFromPauseItem, window)) window.close();
@@ -571,18 +614,24 @@ int main() {
                                 "  ->  gain +1 extra point per bounce\nCost: " + std::to_string(pointsCost) + " pts");
         upgradeMultiball.setString("[3] Multiball level " + std::to_string(multiballLevel) +
                                    "  ->  add one new ball\nCost: " + std::to_string(multiballCost) + " pts");
+        const uint32_t wallUnlockCost = upgradeCost(500, wallLevel, 3.0f);
+        upgradeWallUnlock.setString(wallLevel < 3u
+            ? "[4] Wall Unlock (level " + std::to_string(wallLevel) + ")\nCost: " + std::to_string(wallUnlockCost) + " pts"
+            : "[4] Wall Unlock (owned)");
         upgradeSpeed.setFillColor(points >= speedCost ? sf::Color::White : sf::Color(120, 120, 120));
         upgradePoints.setFillColor(points >= pointsCost ? sf::Color::White : sf::Color(120, 120, 120));
         upgradeMultiball.setFillColor(points >= multiballCost ? sf::Color::White : sf::Color(120, 120, 120));
+        upgradeWallUnlock.setFillColor(wallLevel >= 1u ? sf::Color(120, 120, 120) : (points >= wallUnlockCost ? sf::Color::White : sf::Color(120, 120, 120)));
         centerText(upgradeSpeed, windowWidth / 2.f, windowHeight * 0.36f);
         centerText(upgradePoints, windowWidth / 2.f, windowHeight * 0.52f);
         centerText(upgradeMultiball, windowWidth / 2.f, windowHeight * 0.68f);
+        centerText(upgradeWallUnlock, windowWidth / 2.f, windowHeight * 0.78f);
 
         recenterMenu({&titleMain, &playItem, &optionsItem, &exitItem,
                       &titlePlay, &newGameItem, &continueItem, &backPlayItem,
                       &titleOpt, &opt1, &opt2, &opt3, &opt4, &backOptItem,
                       &pauseTitle, &resumeItem, &pauseOptionsItem, &saveGameItem, &backToMenuItem,
-                      &quitFromPauseItem, &shopTitle, &shopBack, &shopInfo});
+                      &quitFromPauseItem, &shopTitle, &shopBack, &upgradeWallUnlock, &shopInfo});
 
         window.clear(sf::Color(12, 12, 22));
 
@@ -620,6 +669,7 @@ int main() {
                 window.draw(upgradeSpeed);
                 window.draw(upgradePoints);
                 window.draw(upgradeMultiball);
+                window.draw(upgradeWallUnlock);
                 window.draw(shopBack);
                 window.draw(shopInfo);
             } else if (state == GameState::PauseMenu) {
@@ -636,6 +686,6 @@ int main() {
         window.display();
     }
 
-    saveGame(points, totalBounces, speedLevel, pointsLevel, multiballLevel, balls);
+    saveGame(points, totalBounces, speedLevel, pointsLevel, multiballLevel, wallLevel, balls);
     return 0;
 }
