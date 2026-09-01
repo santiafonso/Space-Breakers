@@ -1,4 +1,4 @@
-# Space-Breakers — rework de combate
+# Space-Breakers — rework de combate (roguelite)
 
 Documento vivo. Recoge el cambio de concepto y el plan por fases.
 Rama: `combat-rework`.
@@ -10,14 +10,18 @@ Rama: `combat-rework`.
 **Antes:** una pelota rebota, cada rebote da puntos, la agarras y la lanzas para
 que vaya más rápido. El objetivo es la puntuación.
 
-**Ahora:** las pelotas son agentes autónomos que **derrotan enemigos**. Tú no las
-pilotas segundo a segundo: las **lanzas** al empezar la oleada y **das forma al
-campo de batalla** colocando objetos que desvían su trayectoria (agujeros negros,
-rampas, imanes…). Referencia mental: Peggle + un sandbox de físicas + defensa de
-núcleo.
+**Ahora:** un **roguelite de defensa de núcleo**. Las pelotas son agentes
+autónomos que **derrotan enemigos**. Tú no las pilotas segundo a segundo: las
+**lanzas** y **das forma al campo de batalla** con estructuras que desvían su
+trayectoria (agujeros negros, rampas, imanes…).
 
-El núcleo emocional que se mantiene: lanzar la pelota se siente genial, verla
-rebotar y encadenar cosas engancha. Lo que cambia es **para qué** rebota.
+Una **partida (run)** empieza en la arena 1 y avanza por oleadas y arenas cada vez
+más difíciles. Entre oleadas eliges mejoras: **añadir pelotas, modificarlas y
+cambiar el escenario**. Cuando el **núcleo muere, la run termina**: vuelves al
+principio, pero con **cosas nuevas desbloqueadas** de forma permanente.
+
+Referencia mental: Peggle + Vampire Survivors + defensa de núcleo, con la
+meta-progresión de un roguelite.
 
 ---
 
@@ -25,122 +29,122 @@ rebotar y encadenar cosas engancha. Lo que cambia es **para qué** rebota.
 
 | Tema | Decisión |
 |------|----------|
-| **Derrota** | Hay un **núcleo** en el centro de la arena. Los enemigos avanzan hacia él. Si su vida llega a 0, pierdes la arena (reintentas). |
-| **Control en combate** | Lanzas la pelota una vez por oleada y es autónoma. Durante el combate solo **colocas / mueves / activas objetos de campo**. |
-| **Economía** | Doble capa: los enemigos sueltan **chatarra** (moneda de progreso permanente) **y** el combo actual se reconvierte en **multiplicador de daño** dentro de la oleada. |
-| **Primer jugable** | MVP completo: 1 arena, daño por contacto, 1 tipo de enemigo, oleadas con victoria/derrota, 1 objeto de campo (agujero negro atractor), sin paredes móviles, pantalla de *loadout* entre oleadas. |
+| **Estructura** | Roguelite. Run = arena 1 → oleadas/arenas hasta que cae el núcleo. Al morir: desbloqueos permanentes y vuelta a empezar. |
+| **Derrota** | Núcleo en el centro de la arena. Los enemigos avanzan hacia él. Vida del núcleo a 0 → fin de la run. |
+| **Control en combate** | Lanzas la pelota al empezar la oleada y es autónoma. Durante el combate solo **colocas / mueves / activas estructuras de campo**. |
+| **Economía** | Dos capas: **chatarra** (moneda de la run, se reinicia) para mejoras entre oleadas, y **combo** reconvertido en **multiplicador de daño** dentro de la oleada. Más una **meta-moneda** que persiste (§4). |
+| **Progresión de la run** | Entre oleadas, pantalla de **elección**: escoges 1 de 3 ofertas (pelota nueva, modificador de pelota, estructura de campo, mejora de núcleo, chatarra). |
+| **Meta-progresión** | Al terminar la run ganas meta-moneda según lo lejos que llegaste + hitos. Se gasta en un **hub** para desbloquear qué *puede aparecer* en futuras runs y bonus de inicio. |
+| **Primer jugable** | MVP: 1 arena que escala, daño por contacto, 1 tipo de enemigo, oleadas, núcleo, elección 1-de-3 entre oleadas, muerte → resumen → meta mínima → nueva run. 1 estructura de campo (agujero negro). Sin paredes móviles. |
 | **Paredes móviles** | **Se eliminan.** Todo su código sale. |
 
 ---
 
-## 3. Bucle de juego
+## 3. Los tres bucles
 
-### Segundo a segundo (dentro de una oleada)
-1. **Preparación:** la pelota está aparcada. Colocas / recolocas tus objetos de
-   campo dentro del presupuesto de la arena.
-2. **Lanzamiento:** agarras y lanzas la pelota (mismo feel de siempre). Empieza
-   la oleada.
-3. **Combate:** la pelota rebota en los bordes y su trayectoria se curva por los
-   objetos de campo. Al tocar un enemigo le hace daño y rebota. Los enemigos
-   caminan hacia el núcleo. Puedes seguir moviendo/activando objetos de campo.
-4. **Fin de oleada:** limpias a todos los enemigos → siguiente oleada. O el
-   núcleo cae → arena perdida.
+### 3.1 Oleada (segundo a segundo)
+1. **Preparación:** las pelotas aparcadas. Colocas / recolocas estructuras de
+   campo dentro del presupuesto de ranuras.
+2. **Lanzamiento:** agarras y lanzas (mismo feel de siempre). Empieza la oleada.
+   Con varias pelotas: todas salen al lanzar (o en ráfaga rápida).
+3. **Combate:** las pelotas rebotan en los bordes, su trayectoria se curva por
+   las estructuras. Al tocar un enemigo le hacen daño y rebotan. Los enemigos
+   caminan hacia el núcleo. Puedes seguir moviendo/activando estructuras.
+4. **Fin de oleada:** sin enemigos → pantalla de elección → siguiente oleada.
+   Núcleo a 0 → fin de la run.
 
-### Meta (entre oleadas / arenas)
-- Gastas **chatarra** en: subir daño, más ranuras de objeto de campo,
-  desbloquear objetos nuevos, y (más adelante) **clases de pelola** y más pelotas.
-- Superas la arena → siguiente arena (layout, enemigos y presupuesto distintos).
-- Cada X arenas: un **jefe**.
+### 3.2 Run (una partida)
+- Arena 1 → oleadas 1..N → arena limpiada → arena 2 (layout, enemigos y
+  presupuesto distintos) → … Escalada continua, sin final fijo. Cada X arenas,
+  un **jefe**.
+- Moneda de la run: **chatarra**, cae de enemigos, se gasta en las elecciones y
+  en un pequeño mercado entre arenas. **Se pierde al morir.**
+- "Puntuación" de la run = arena/oleada alcanzada + enemigos derrotados. Va a
+  records (Stats).
+
+### 3.3 Meta (entre runs)
+- Al morir: **resumen de la run** → ganas **meta-moneda** (p. ej. *Núcleos*)
+  según arenas superadas, jefes, y **hitos de primera vez**.
+- **Hub / meta-tienda:** gastas Núcleos en desbloqueos **permanentes**:
+  - nuevos **arquetipos de pelota** en la reserva de ofertas,
+  - nuevos **modificadores** en la reserva,
+  - nuevas **estructuras de campo**,
+  - nuevos enemigos/modificadores de dificultad (más riesgo, más recompensa),
+  - **bonus de inicio**: empezar con +1 pelota, +vida de núcleo, +1 ranura de
+    campo, fichas de *reroll*, chatarra inicial…
+- Empiezas la siguiente run desde la arena 1 con esos desbloqueos ya en la
+  reserva / aplicados.
 
 ---
 
-## 4. Qué se quita / se mantiene / se añade
+## 4. Economía y monedas
 
-### Se quita
-- `struct Wall` y todo el sistema de paredes móviles (grab de pared, drift,
-  `configureWalls`, `syncWallCount`, `WallSnapshot`, colisión bola-pared).
-- La idea de "puntos por rebote" como objetivo. El rebote en el borde ya no
-  puntúa por sí solo (o puntúa simbólico); el valor está en golpear enemigos.
+| Moneda | Ámbito | Se gana | Se gasta en |
+|--------|--------|---------|-------------|
+| **Chatarra** | Una run (se reinicia) | Matar enemigos | Elecciones entre oleadas, mercado entre arenas |
+| **Combo de daño** | Una oleada (decae) | Golpes seguidos a enemigos | Multiplica el daño en el momento |
+| **Núcleos** (meta) | Permanente | Terminar runs (arenas superadas, jefes, hitos) | Hub: desbloqueos permanentes y bonus de inicio |
 
-### Se mantiene
-- Agarrar y lanzar la pelota (ahora es "lanzamiento de oleada").
-- Física de rebote, sub-stepping, regulación de velocidad crucero, squash, trail.
-- Orbes de power-up (se re-tematizan como buffs de combate: ver §7).
-- Arena con `sf::View` letterbox, audio procedural, efectos (anillos, glow, tint).
-- Guardado en texto plano (se amplía el formato).
-- Combo streak: se reusa como **combo de daño** (sube al golpear enemigos sin
-  fallar durante X segundos; multiplica el daño).
-- Prestigio / offline / hitos: siguen en la lista de futuro (§9), encajan igual.
-
-### Se añade
-- `struct Enemy`, `struct FieldObject`, `struct Core`, (fase 2) `struct Projectile`.
-- Sistema de **oleadas** (spawner + estado de arena: activa / limpiada / perdida).
-- **Objetos de campo** que aplican fuerzas a la pelota cada paso.
-- Pantalla de **Loadout** (sustituye a la tienda): comprar mejoras + colocar
-  objetos de campo con presupuesto.
-- HUD de combate: vida del núcleo, oleada, enemigos restantes, chatarra.
+`daño = base(velocidad_pelota) * (1 + comboTier*k) * mods_de_pelota`
 
 ---
 
 ## 5. Sistemas
 
-### 5.1 Pelotas y clases
-- MVP: una sola pelota, "clase" genérica. Daño por contacto = `f(velocidad, combo)`.
-  Más rápida = más daño (mantiene el sentido de lanzarla fuerte).
-- Fase 3: **clases**. Empiezas con una y le "das clases" (subes de nivel una
-  especialización). Ideas:
-  - **Ariete** — daño de contacto alto, mucho knockback.
-  - **Artillero** — dispara proyectiles en la dirección de su velocidad mientras
-    se mueve.
-  - **Divisor** — al matar, probabilidad de soltar una mini-pelota temporal.
-  - **Guardián** — ralentiza a los enemigos cercanos.
-- Fase 4: **equipo / roster**. Varias pelotas a la vez, cada una con su clase.
-  Se lanzan en secuencia o todas al empezar la oleada.
+### 5.1 Pelotas, modificadores y clases
+- La run **empieza con 1 pelota** de arquetipo básico. Daño por contacto =
+  `f(velocidad, combo)`. Más rápida = más daño (mantiene el sentido de lanzarla
+  fuerte).
+- **Añadir pelotas:** una de las ofertas entre oleadas. Todas se lanzan al
+  empezar la oleada.
+- **Modificadores** (estilo roguelite, apilables, temporales a la run):
+  - `+X% daño`, `+X% velocidad crucero`, `+tamaño`,
+  - **Perforante** (atraviesa un enemigo sin frenar),
+  - **Esquirla** (al golpear, suelta un fragmento corto),
+  - **Cadena** (el golpe salta a un enemigo cercano),
+  - **Órbita** (tiende a orbitar el núcleo),
+  - **Imán** (leve auto-guiado hacia el enemigo más cercano).
+- **Clases** (fase 3): un modificador "grande" que define un build — Ariete,
+  Artillero (dispara), Divisor, Guardián. Se desbloquean en el hub y luego
+  aparecen como oferta.
+- **Equipo** (fase 4): varias pelotas, cada una con sus propios modificadores.
 
-### 5.2 Objetos de campo (lo que más te gusta)
+### 5.2 Estructuras de campo (lo que más te gusta)
 Se colocan en preparación y se pueden mover/activar en combate. Presupuesto de
-ranuras por arena (mejorable con chatarra).
+**ranuras por run**, ampliable como oferta o en el hub.
 
-| Objeto | Efecto sobre la pelota |
-|--------|------------------------|
+| Estructura | Efecto sobre la pelota |
+|------------|------------------------|
 | **Agujero negro** (MVP) | Atrae: aceleración hacia el objeto ∝ 1/dist², con radio de influencia y tope. |
-| **Agujero blanco / repulsor** | Empuja hacia fuera. |
-| **Bumper** | Rebote de alta restitución: al chocar, la pelota sale más rápido. |
+| **Repulsor** | Empuja hacia fuera. |
+| **Bumper** | Rebote de alta restitución: la pelota sale más rápido. |
 | **Rampa / booster** | Zona direccional que añade velocidad en un sentido. |
 | **Prisma** | Al atravesarlo, divide la trayectoria / duplica la pelota un instante. |
-| **Nodo torreta** (fase 2) | Objeto que dispara cuando la pelota pasa cerca. |
+| **Nodo torreta** (fase 2) | Dispara cuando la pelota pasa cerca. |
 
-Nota de diseño: por ahora los objetos afectan **solo a la pelota** (mantiene el
-foco y es legible). "También curvan a los enemigos" queda como opción a probar.
+Por ahora afectan **solo a las pelotas** (foco y legibilidad). "También curvan a
+los enemigos" queda como opción a probar.
 
 ### 5.3 Enemigos
 - MVP: **Errante** — flota hacia el núcleo despacio, poca vida.
-- Después:
-  - **Corredor** — rápido, va directo al núcleo.
-  - **Tanque** — mucha vida, lento.
-  - **Escindido** — al morir se parte en dos pequeños.
-  - **Jefe** — barra de vida grande, patrón de movimiento simple.
-- Los enemigos **no atacan a la pelota**: su amenaza es llegar al núcleo. (Si en
-  el futuro las pelotas tienen vida, se revisa.)
-- Al morir sueltan chatarra (y un anillo de impacto + sonido).
+- Después: **Corredor** (rápido, directo), **Tanque** (mucha vida, lento),
+  **Escindido** (se parte al morir), **Jefe** (barra grande, patrón simple).
+- Los enemigos **no atacan a las pelotas**: su amenaza es llegar al núcleo.
+- Al morir sueltan chatarra + anillo de impacto + sonido.
+- Escalado: cada oleada/arena sube número, vida y velocidad. La meta puede
+  añadir variantes con élite/afijos (más recompensa).
 
 ### 5.4 Núcleo
-- Círculo en el centro con vida y barra/anillo. Un enemigo que lo alcanza le
-  quita vida y desaparece. Vida 0 → arena perdida.
-- Mejorable con chatarra (vida máx, quizá un pulso que repele) — futuro.
+- Círculo en el centro con vida y anillo. Un enemigo que lo alcanza le quita vida
+  y desaparece. Vida 0 → fin de la run.
+- Mejoras (oferta / hub): vida máx, pulso que repele, regeneración lenta.
 
-### 5.5 Oleadas y arena
-- Una arena = layout fijo + lista de oleadas + presupuesto de objetos de campo.
-- Spawner: mete `N` enemigos por oleada desde los bordes, escalonados en el
-  tiempo. Oleada limpiada cuando no quedan enemigos y no hay más por aparecer.
-- Arena limpiada al superar todas sus oleadas → pantalla de resultados → siguiente.
-
-### 5.6 Economía
-- **Chatarra**: moneda de progreso. Cae de enemigos. Se gasta en el Loadout.
-- **Combo de daño**: `daño = base(velocidad) * (1 + tier*k)`. El tier sube al
-  golpear enemigos seguidos; decae por tiempo sin golpear. Es el `comboStreak_`
-  actual, realimentado desde impactos en vez de rebotes.
-- **Puntuación**: se conserva como marcador/records (Stats), no como objetivo.
+### 5.5 Oleadas y arenas
+- Arena = layout fijo + generador de oleadas + presupuesto de estructuras.
+- Spawner: mete `N` enemigos escalonados desde los bordes. Oleada limpiada cuando
+  no quedan y no hay más por aparecer.
+- Todas las oleadas superadas → arena limpiada → (mini-mercado) → siguiente arena,
+  más difícil.
 
 ---
 
@@ -150,55 +154,61 @@ La arquitectura modular tras el refactor lo hace abordable:
 
 | Módulo | Cambios |
 |--------|---------|
-| `sim/Entities.hpp` | quitar `Wall`; añadir `Enemy`, `FieldObject`, `Core`, `FieldKind`; ampliar `FrameEvents` (chatarra, muertes, golpe al núcleo, oleada limpiada, arena perdida/limpiada). |
-| `sim/World.*` | quitar todo lo de paredes; añadir `enemies_`, `field_`, `core_`, estado de oleada; en `step()`: integrar fuerzas de campo sobre la pelota, IA de enemigos, colisión bola↔enemigo con daño, spawner, condición de derrota. `grabAt` reusa la lógica de agarre para **objetos de campo** (prioridad) o la pelota. `toggleDriftAt` → `toggleFieldAt`. |
-| `sim/Collision.*` | `circleVsWall` se recicla para bola↔enemigo y bola↔núcleo (misma resolución círculo-círculo/AABB). Nueva `applyFieldForce`. |
-| `progression/Upgrades.hpp` | re-scope: `UpgDamage` nuevo; el hueco de "Walls" pasa a "Ranuras de campo"; mantener Speed y Multiball; Combo/Luck se revisan. |
-| `progression/GameData.hpp` | `walls` → `field` (vector de `FieldSnapshot{x,y,kind,strength}`); `scrap`; `arena` (índice). |
-| `platform/Save.*` | versión 3: líneas `field i x y kind strength`; `scrap`; `arena`. Parser sigue tolerante. |
-| `render/WorldRenderer.*` | quitar dibujo de paredes; dibujar núcleo (anillo de vida), enemigos (círculo + arco de vida), objetos de campo (agujero negro: disco oscuro + remolino + radio de influencia tenue). |
-| `ui/` | `ShopScreen` → `LoadoutScreen` (comprar + colocar objetos de campo). `Hud` de combate (vida núcleo, oleada, enemigos, chatarra). `Screens` gana un sub-estado de "preparación" antes de lanzar. Reescribir `HowToScreen`. |
-| `core/Config.hpp` | nueva sección `cfg::combat` (daño base, knockback, radios), `cfg::field` (fuerza, radio, tope), `cfg::wave` (nº enemigos, cadencia), `cfg::core` (vida). |
+| `sim/Entities.hpp` | quitar `Wall`; añadir `Enemy`, `FieldObject` + `FieldKind`, `Core`; ampliar `FrameEvents` (chatarra, muertes, golpe al núcleo, oleada limpiada, run terminada). |
+| `sim/World.*` | quitar todo lo de paredes; añadir `enemies_`, `field_`, `core_`, estado de oleada/arena; en `step()`: fuerzas de campo sobre las pelotas, IA de enemigos, colisión bola↔enemigo con daño, spawner, derrota. `grabAt` reusa el agarre para **estructuras** (prioridad) o pelota. `toggleDriftAt` → `toggleFieldAt`. Nuevo: aplicar `mods` de pelota. |
+| `sim/Collision.*` | `circleVsWall` se recicla para bola↔enemigo y bola↔núcleo. Nueva `applyFieldForce`. |
+| `progression/` | `Upgrades.hpp` → catálogos: `BallMod`, `FieldKind`, `CoreUpgrade`, y `MetaUnlock`. `GameData` se parte en: **`RunState`** (pelotas+mods, estructuras colocadas, chatarra, arena/oleada) y **`MetaState`** (Núcleos, unlocks, records) — solo `MetaState` se guarda entre sesiones; `RunState` se guarda para reanudar una run en curso. |
+| `platform/Save.*` | versión 3: bloque `meta.*` (núcleos, unlocks) + bloque `run.*` opcional (run en curso). Parser sigue tolerante. |
+| `render/WorldRenderer.*` | quitar paredes; dibujar núcleo (anillo de vida), enemigos (círculo + arco de vida), estructuras (agujero negro: disco + remolino + radio tenue). |
+| `ui/` | nuevas pantallas: **Preparación** (colocar estructuras, lanzar), **Elección** (1 de 3 entre oleadas), **Resumen de run** (al morir), **Hub** (meta-tienda). `ShopScreen` desaparece. `Hud` de combate: vida núcleo, oleada/arena, enemigos restantes, chatarra. |
+| `core/Config.hpp` | secciones nuevas: `cfg::combat` (daño, knockback), `cfg::field` (fuerza, radio, tope), `cfg::wave` (nº, cadencia, escalado), `cfg::core` (vida), `cfg::meta` (recompensa por arena). |
+| `core/App.*` | el stack de pantallas ya soporta esto. Nuevo flujo: Hub → Preparación → Play(oleada) → Elección → Play → … → ResumenRun → Hub. |
 
 ---
 
 ## 7. Power-ups re-tematizados (cuando toque)
 
-- Doble Puntos → **Doble Daño**.
-- Cámara lenta → igual (útil para "leer" el campo).
-- Oleada de velocidad → **Sobrecarga** (daño y velocidad).
-- Rebote dorado → **Perforante** (atraviesa un enemigo sin frenar).
-- Fase → **Fantasma** (atraviesa objetos de campo — se re-evalúa).
-- Frenesí x3 → **Frenesí** (x3 daño, corto).
+Doble Puntos → **Doble Daño** · Cámara lenta → igual (para leer el campo) ·
+Oleada de velocidad → **Sobrecarga** · Rebote dorado → **Perforante** ·
+Fase → **Fantasma** (atraviesa estructuras, a revisar) · Frenesí x3 → **Frenesí**.
 
 ---
 
 ## 8. Roadmap por fases
 
-- **Fase 0 — MVP (esta rama, ahora).**
-  Quitar paredes. Núcleo + 1 enemigo + oleadas + derrota. Daño por contacto
-  `f(velocidad, combo)`. 1 objeto de campo: agujero negro (colocar hasta 2,
-  mover/activar en combate). Loadout mínimo: subir daño, +1 ranura. HUD de
-  combate. Guardado v3. Debe compilar y ser jugable de principio a fin de una
-  arena.
-- **Fase 1 — Disparos.**
-  Clase Artillero y/o nodo torreta. `struct Projectile`. Proyectil↔enemigo.
-- **Fase 2 — Variedad de campo y enemigos.**
-  Repulsor, bumper, rampa. Corredor, tanque, escindido. Primer jefe.
-- **Fase 3 — Clases de pelota.**
-  Árbol de clase con niveles. Power-ups re-tematizados.
-- **Fase 4 — Equipo y arenas.**
-  Roster de varias pelotas. Secuencia de arenas con tutorial guiado. Progresión
-  meta (prestigio, offline, hitos).
+- **Fase 0 — MVP roguelite (esta rama, ahora).**
+  - Quitar paredes.
+  - Núcleo + 1 tipo de enemigo + spawner de oleadas con escalado + derrota.
+  - Daño por contacto `f(velocidad, combo)`; combo realimentado por impactos.
+  - 1 estructura de campo: **agujero negro** (colocar hasta N, mover/activar en
+    combate).
+  - Pantalla de **Preparación** (colocar + lanzar) y de **Elección 1-de-3** entre
+    oleadas (ofertas MVP: +1 pelota / +daño / +1 agujero negro / chatarra).
+  - **Muerte → Resumen** (arenas/oleadas, enemigos) → **meta mínima**: ganas
+    Núcleos = f(progreso); un hub con 2-3 unlocks (p. ej. "empieza con 2
+    pelotas", "vida de núcleo +50%", "repulsor en la reserva").
+  - **Nueva run** desde arena 1 con los unlocks aplicados.
+  - Guardado v3 (solo meta entre sesiones; run en curso reanudable).
+  - Debe compilar y ser jugable en bucle completo.
+- **Fase 1 — Disparos.** Clase Artillero / nodo torreta. `Projectile`.
+- **Fase 2 — Variedad.** Repulsor, bumper, rampa. Corredor, tanque, escindido.
+  Primer jefe. Afijos de élite.
+- **Fase 3 — Clases y modificadores profundos.** Árbol de clases. Power-ups
+  re-tematizados. Más modificadores (cadena, esquirla, órbita).
+- **Fase 4 — Equipo y meta grande.** Roster de varias pelotas. Hub ampliado,
+  hitos, ramas de meta-progresión, tutorial guiado por arenas.
 
 ---
 
-## 9. Preguntas abiertas (para más adelante)
+## 9. Preguntas abiertas
 
+- ¿La run es **infinita con escalado** o tiene **actos** con jefe final?
+  (De momento: infinita, "hasta dónde llegas".)
+- ¿Las estructuras de campo colocadas **persisten dentro de la run** al cambiar
+  de arena, o se recolocan cada arena con el presupuesto?
 - ¿La pelota **atraviesa** enemigos débiles y **rebota** en los duros, o rebota
-  siempre? (MVP: rebota siempre, es lo más legible.)
-- ¿Los objetos de campo también curvan a los enemigos?
-- ¿Se lanza una pelota por oleada o se puede relanzar si se "muere"/pierde
-  energía? (De momento: una por oleada, autónoma.)
-- ¿Cómo entra el equipo: todas las pelotas a la vez o por turnos?
-- ¿La puntuación clásica se enseña o se guarda solo como record interno?
+  siempre? (MVP: rebota siempre.)
+- ¿Las estructuras también curvan a los enemigos?
+- ¿La meta-moneda se gana solo al morir, o también por hitos a mitad de run?
+- ¿Cuántas ofertas por elección (3) y hay *reroll*? ¿Se puede saltar y coger
+  chatarra?
