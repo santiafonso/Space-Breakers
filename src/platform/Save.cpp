@@ -5,13 +5,13 @@
 #include <sstream>
 
 // Plain-text "key value" save file. Trivial to inspect, forward compatible
-// (unknown keys ignored, missing keys keep defaults). Two blocks: `meta.*` and
-// `stat.*` always persist; `run.*` + `field` only when a run is in progress.
+// (unknown keys ignored, missing keys keep defaults). `meta.*` / `stat.*` always
+// persist; `run.*` + `ball` lines only while a run is in progress.
 namespace sb {
 
 namespace {
-constexpr int kSaveVersion = 3;
-constexpr std::size_t kMaxField = 16;
+constexpr int kSaveVersion = 4;
+constexpr std::size_t kMaxBalls = 8;
 }  // namespace
 
 bool hasSavedGame(const std::string& path) {
@@ -49,15 +49,11 @@ bool saveGame(const std::string& path, const GameData& d) {
     if (r.active) {
         f << "run.scrap " << r.scrap << '\n';
         f << "run.wave " << r.wave << '\n';
-        f << "run.ballCount " << r.ballCount << '\n';
         f << "run.damageMult " << r.damageMult << '\n';
         f << "run.coreHp " << r.coreHp << '\n';
         f << "run.coreMaxHp " << r.coreMaxHp << '\n';
-        for (std::size_t i = 0; i < r.field.size() && i < kMaxField; ++i) {
-            const FieldSnapshot& s = r.field[i];
-            f << "field " << i << ' ' << s.x << ' ' << s.y << ' ' << s.strength << ' ' << s.kind
-              << '\n';
-        }
+        for (std::size_t i = 0; i < r.balls.size() && i < kMaxBalls; ++i)
+            f << "ball " << i << ' ' << r.balls[i] << '\n';
     }
     return f.good();
 }
@@ -91,16 +87,15 @@ bool loadGame(const std::string& path, GameData& d) {
         else if (key == "run.active") { int v = 0; ls >> v; r.active = v != 0; }
         else if (key == "run.scrap") ls >> r.scrap;
         else if (key == "run.wave") ls >> r.wave;
-        else if (key == "run.ballCount") ls >> r.ballCount;
         else if (key == "run.damageMult") ls >> r.damageMult;
         else if (key == "run.coreHp") ls >> r.coreHp;
         else if (key == "run.coreMaxHp") ls >> r.coreMaxHp;
-        else if (key == "field") {
+        else if (key == "ball") {
             std::size_t idx = 0;
-            if (ls >> idx && idx < kMaxField) {
-                if (r.field.size() <= idx) r.field.resize(idx + 1);
-                FieldSnapshot& s = r.field[idx];
-                ls >> s.x >> s.y >> s.strength >> s.kind;
+            int elem = 0;
+            if (ls >> idx >> elem && idx < kMaxBalls) {
+                if (r.balls.size() <= idx) r.balls.resize(idx + 1, 0);
+                r.balls[idx] = elem;
             }
         }
         // "version" and anything unrecognised: ignored on purpose.
@@ -108,7 +103,6 @@ bool loadGame(const std::string& path, GameData& d) {
 
     for (int i = 0; i < MetaUnlockCount; ++i)
         if (m.unlock[i] < 0) m.unlock[i] = 0;
-    if (r.ballCount < 1) r.ballCount = 1;
     if (r.damageMult <= 0.f) r.damageMult = 1.f;
 
     return sawAnything;

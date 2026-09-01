@@ -43,7 +43,7 @@ App::App() : window_(kLogical()), world_(kLogical()) {
     autosaveTimer_ = cfg::app::autosaveInterval;
 
     // Idle world so the renderer always has a valid core to draw.
-    world_.startRun(params(), 1, cfg::core::baseHp, cfg::core::baseHp, {});
+    world_.startRun(params(), {}, cfg::core::baseHp, cfg::core::baseHp);
     replaceStack(ScreenId::Hub);
 }
 
@@ -99,14 +99,15 @@ void App::newRun() {
     RunState& r = data_.run;
     r = RunState{};
     r.active = true;
-    r.ballCount = 1 + data_.meta.unlock[MetaStartBalls];
     r.damageMult = 1.f;
     r.wave = 0;
     r.coreMaxHp = startCoreHp();
     r.coreHp = r.coreMaxHp;
+    r.scrap = 25;  // seed so the first offer is reachable
+    r.balls.assign(2 + data_.meta.unlock[MetaStartBalls], static_cast<int>(Element::Plain));
     ++data_.meta.stats.runs;
 
-    world_.startRun(params(), r.ballCount, r.coreHp, r.coreMaxHp, r.field);
+    world_.startRun(params(), r.balls, r.coreHp, r.coreMaxHp);
     effects_.clear();
     startNextWave();
     replaceStack(ScreenId::Play);
@@ -117,7 +118,8 @@ void App::continueRun() {
     RunState& r = data_.run;
     if (!r.active) { newRun(); return; }
     if (r.wave < 1) r.wave = 1;
-    world_.startRun(params(), r.ballCount, r.coreHp, r.coreMaxHp, r.field);
+    if (r.balls.empty()) r.balls.push_back(static_cast<int>(Element::Plain));
+    world_.startRun(params(), r.balls, r.coreHp, r.coreMaxHp);
     world_.startWave(r.wave, params());
     effects_.clear();
     replaceStack(ScreenId::Play);
@@ -125,52 +127,32 @@ void App::continueRun() {
 
 void App::startNextWave() {
     data_.run.wave += 1;
+    world_.repairCore(cfg::core::waveHeal);
     world_.startWave(data_.run.wave, params());
     data_.meta.stats.bestWave =
         std::max(data_.meta.stats.bestWave, static_cast<std::uint32_t>(data_.run.wave));
     save();
 }
 
-void App::openChoice() {
-    int all[kOfferKindCount];
-    for (int i = 0; i < kOfferKindCount; ++i) all[i] = i;
-    for (int i = kOfferKindCount - 1; i > 0; --i) std::swap(all[i], all[rng_.irange(0, i)]);
-    for (int i = 0; i < 3; ++i) offers_[i] = static_cast<OfferKind>(all[i]);
-    push(ScreenId::Choice);
-}
+void App::openChoice() { push(ScreenId::Choice); }
 
 void App::applyOffer(OfferKind k) {
     RunState& r = data_.run;
-    switch (k) {
-        case OfferKind::AddBall:
-            r.ballCount = std::min(cfg::ball::maxBalls, r.ballCount + 1);
-            world_.setBallCount(r.ballCount, params());
-            break;
-        case OfferKind::MoreDamage:
-            r.damageMult *= 1.25f;
-            break;
-        case OfferKind::AddBlackHole: {
-            const sf::Vector2f at = world_.core().pos +
-                                    sf::Vector2f{rng_.range(-170.f, 170.f), rng_.range(-170.f, 170.f)};
-            world_.addField(FieldKind::BlackHole, at, 1.f);
-            break;
-        }
-        case OfferKind::CoreRepair:
-            world_.repairCore(35.f);
-            break;
-        case OfferKind::Scrap:
-            r.scrap += 40;
-            break;
-    }
+    if (runBallCount() >= cfg::ball::maxBalls) return;
+    const std::uint32_t cost = offerCost(k, runBallCount());
+    if (r.scrap < cost) return;
+
+    r.scrap -= cost;
+    const Element e = offerInfo(k).element;
+    world_.addBall(e, params());
+    r.balls.push_back(static_cast<int>(e));
     audio_.purchase();
-    effects_.flash(theme::accent, 0.4f);
+    effects_.flash(elementColor(e), 0.45f);
     back();
     startNextWave();
 }
 
 void App::skipChoice() {
-    data_.run.scrap += 20;
-    audio_.thrown(0.2f);
     back();
     startNextWave();
 }
@@ -235,7 +217,6 @@ void App::toggleFullscreen() {
 
 void App::save() {
     if (data_.run.active) {
-        data_.run.field = world_.fieldSnapshot();
         data_.run.coreHp = world_.core().hp;
         data_.run.coreMaxHp = world_.core().maxHp;
         if (world_.wave() > 0) data_.run.wave = world_.wave();

@@ -1,10 +1,11 @@
 # Space-Breakers
 
-A roguelite about defending a core. Autonomous balls clear waves of enemies that
-march on the core at the centre of the arena; you fling the balls and drag field
-structures (black holes) to bend their paths through the crowd. Clear a wave to
-pick an upgrade. When the core falls the run ends — and leaves you *cores* to
-spend on permanent unlocks before the next run.
+A roguelite about defending a core. Your balls orbit the core and curve into the
+enemies that march on it; you fling a ball to redirect it and it spirals back.
+Clear a wave, then spend scrap on an elemental ball — fire (burns), wind (fires
+bolts), water (damaging trail) or stone (drops blocking rubble). When the core
+falls the run ends and leaves you *cores* to spend on permanent unlocks before
+the next run.
 
 Work in progress on the `combat-rework` branch. See `DESIGN.md` for the full
 design and roadmap.
@@ -32,11 +33,11 @@ Set `SPACE_BREAKERS_NO_AUDIO=1` to run without sound (headless / SSH).
 
 | Input | Action |
 |-------|--------|
-| Left mouse | drag a black hole to place it, or grab a ball to re-fling it |
+| Left mouse | grab a ball and fling it to redirect it |
 | `ESC` | pause (and back out of any screen) |
 | `F` / `F11` | toggle fullscreen |
 | `M` | toggle sound |
-| `1`-`3` | choice screen: take an offer &nbsp;&nbsp; `S` skip it for scrap |
+| `1`-`4` | choice screen: buy an elemental ball &nbsp;&nbsp; `S` next wave |
 | `1`-`2` | hub: spend cores on a permanent unlock |
 
 ## Layout
@@ -51,11 +52,11 @@ src/
     Math.hpp      vector maths, colour helpers, RNG
     Theme.hpp     palette, type sizes, ball speed->colour ramp
   sim/
-    World.*       the simulation: balls, enemies, field structures, the core, waves
-    Entities.hpp  Ball / Enemy / FieldObject / Core / Pickup / FrameEvents
+    World.*       the simulation: orbiting balls, enemies, the core, waves, elements
+    Entities.hpp  Ball(+Element) / Enemy / Projectile / Puddle / Obstacle / Core
     Collision.*   circle-vs-bounds, circle-vs-circle, ball-vs-ball resolution
   render/
-    WorldRenderer.*  draws field structures, the core, enemies, pickups and balls
+    WorldRenderer.*  draws puddles, obstacles, the core, enemies, bolts and balls
     Effects.*        impact rings, edge glow, floating labels, screen tint
   ui/
     Screen.hpp    screen interface (input / update / draw, stackable)
@@ -64,9 +65,9 @@ src/
   platform/
     Window.*      video mode, letterboxed view, fullscreen
     Audio.*       procedural sound effects (no audio assets)
-    Save.*        plain-text save file (v3: meta.* always, run.* when resuming)
+    Save.*        plain-text save file (v4: meta.* always, run.* when resuming)
   progression/
-    Offers.hpp    between-wave offers + permanent meta-unlock table
+    Offers.hpp    the four elemental-ball offers + permanent meta-unlock table
     GameData.hpp  MetaState (persists) + RunState (resumable)
 ```
 

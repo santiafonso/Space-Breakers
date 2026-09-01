@@ -18,6 +18,14 @@ const char* powerUpName(PowerUp p);
 sf::Color powerUpColor(PowerUp p);
 float powerUpDuration(PowerUp p);
 
+// ---------------------------------------------------------------- ball elements
+
+enum class Element { Plain, Fire, Wind, Water, Stone };
+inline constexpr int kElementCount = 5;
+
+const char* elementName(Element e);
+sf::Color elementColor(Element e);
+
 // ---------------------------------------------------------------- entities
 
 struct Ball {
@@ -25,7 +33,10 @@ struct Ball {
     sf::Vector2f vel;
     float radius = cfg::ball::radius;
     bool held = false;
-    float squash = 0.f;  // 0..1, decays; drives squash-and-stretch
+    Element element = Element::Plain;
+    float cooldown = 0.f;   // wind bolt / stone drop / water drip timer
+    float orbitRadius = cfg::orbit::radiusPx;
+    float squash = 0.f;
     sf::Vector2f squashAxis{1.f, 0.f};
     sf::Color color = theme::ballSlow;
     std::deque<sf::Vector2f> trail;
@@ -39,23 +50,36 @@ struct Enemy {
     float hp = 3.f;
     float maxHp = 3.f;
     float speed = 55.f;
-    float hitFlash = 0.f;  // 0..1, decays; white flash on taking damage
+    float hitFlash = 0.f;
+    float burn = 0.f;       // seconds of burn remaining
+    float burnDps = 0.f;
 };
 
-// A placed structure that bends the balls' trajectories. MVP: a single kind,
-// the black hole (an attractor). Draggable; nothing else moves it.
-enum class FieldKind { BlackHole };
-
-struct FieldObject {
+// A wind ball's bolt.
+struct Projectile {
     sf::Vector2f pos;
-    FieldKind kind = FieldKind::BlackHole;
-    float strength = 1.f;  // multiplier on the kind's base strength
-    float radius = cfg::field::blackHoleRadius;  // influence radius
-    bool held = false;
+    sf::Vector2f vel;
+    float life = cfg::element::windLife;
+    float damage = cfg::element::windDamage;
 };
 
-// The thing you defend. Enemies that reach it chip its health; at zero the run
-// ends.
+// A water ball's trail: a short-lived damaging puddle.
+struct Puddle {
+    sf::Vector2f pos;
+    float radius = cfg::element::puddleRadius;
+    float life = cfg::element::puddleLife;
+    float maxLife = cfg::element::puddleLife;
+};
+
+// A stone ball's rubble: enemies are pushed out of it.
+struct Obstacle {
+    sf::Vector2f pos;
+    float radius = cfg::element::obstacleRadius;
+    float life = cfg::element::obstacleLife;
+    float maxLife = cfg::element::obstacleLife;
+};
+
+// The thing you defend.
 struct Core {
     sf::Vector2f pos;
     float radius = cfg::core::radius;
@@ -81,7 +105,6 @@ struct ActiveEffect {
 
 // ---------------------------------------------------------------- frame I/O
 
-// One impact (arena edge or enemy), for the presentation layer.
 struct BounceFx {
     sf::Vector2f pos;
     sf::Vector2f normal;
@@ -89,10 +112,9 @@ struct BounceFx {
     sf::Color color;
 };
 
-// Everything the simulation produced in one step, consumed by the app layer.
 struct FrameEvents {
-    std::vector<BounceFx> bounces;   // edge + enemy impacts, for rings / sound
-    std::vector<sf::Vector2f> kills; // enemy death positions, for fx
+    std::vector<BounceFx> bounces;
+    std::vector<sf::Vector2f> kills;
     int scrapGained = 0;
     int comboTier = 0;
     bool comboTierUp = false;
@@ -103,7 +125,6 @@ struct FrameEvents {
     bool runOver = false;
 };
 
-// What the simulation needs from progression each step; World owns no run state.
 struct WorldParams {
     float damageMult = 1.f;
     float cruiseMult = 1.f;

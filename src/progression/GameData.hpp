@@ -4,7 +4,6 @@
 #include <vector>
 
 #include "core/Config.hpp"
-#include "core/Math.hpp"  // FieldSnapshot
 #include "progression/Offers.hpp"
 
 namespace sb {
@@ -36,11 +35,10 @@ struct RunState {
     bool active = false;
     std::uint32_t scrap = 0;
     int wave = 0;
-    int ballCount = 1;
     float damageMult = 1.f;
     float coreHp = cfg::core::baseHp;
     float coreMaxHp = cfg::core::baseHp;
-    std::vector<FieldSnapshot> field;
+    std::vector<int> balls;  // Element per ball; empty => one Plain ball
 };
 
 struct GameData {

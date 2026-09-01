@@ -4,34 +4,6 @@
 
 namespace sb {
 
-namespace {
-constexpr float kFieldVisualRadius = 22.f;  // matches World::grabAt
-}
-
-void WorldRenderer::drawField(sf::RenderWindow& window, const FieldObject& f) const {
-    // Faint influence radius.
-    sf::CircleShape halo(f.radius, 40);
-    halo.setOrigin(f.radius, f.radius);
-    halo.setPosition(f.pos);
-    halo.setFillColor(withAlpha(theme::field, f.held ? 0.10f : 0.05f));
-    window.draw(halo);
-
-    // Swirl ring + dark core.
-    sf::CircleShape ring(kFieldVisualRadius, 32);
-    ring.setOrigin(kFieldVisualRadius, kFieldVisualRadius);
-    ring.setPosition(f.pos);
-    ring.setFillColor(sf::Color::Transparent);
-    ring.setOutlineThickness(2.f);
-    ring.setOutlineColor(withAlpha(theme::field, f.held ? 0.95f : 0.7f));
-    window.draw(ring);
-
-    sf::CircleShape hole(kFieldVisualRadius * 0.55f, 24);
-    hole.setOrigin(hole.getRadius(), hole.getRadius());
-    hole.setPosition(f.pos);
-    hole.setFillColor(withAlpha(theme::bg, 0.95f));
-    window.draw(hole);
-}
-
 void WorldRenderer::drawCore(sf::RenderWindow& window, const Core& c) const {
     const float frac = c.maxHp > 0.f ? clampf(c.hp / c.maxHp, 0.f, 1.f) : 0.f;
     const sf::Color tint = lerpColor(theme::coreLow, theme::core, frac);
@@ -44,8 +16,6 @@ void WorldRenderer::drawCore(sf::RenderWindow& window, const Core& c) const {
     body.setOutlineColor(withAlpha(tint, 0.85f));
     window.draw(body);
 
-    // Health arc as a shrinking ring segment approximated by a thick outline
-    // circle scaled by frac (simple + readable).
     sf::CircleShape hp(c.radius - 6.f, 40);
     hp.setOrigin(hp.getRadius(), hp.getRadius());
     hp.setPosition(c.pos);
@@ -54,9 +24,39 @@ void WorldRenderer::drawCore(sf::RenderWindow& window, const Core& c) const {
     window.draw(hp);
 }
 
+void WorldRenderer::drawPuddle(sf::RenderWindow& window, const Puddle& p) const {
+    const float f = p.maxLife > 0.f ? clampf(p.life / p.maxLife, 0.f, 1.f) : 0.f;
+    sf::CircleShape s(p.radius, 20);
+    s.setOrigin(p.radius, p.radius);
+    s.setPosition(p.pos);
+    s.setFillColor(withAlpha(theme::elemWater, 0.10f + 0.16f * f));
+    window.draw(s);
+}
+
+void WorldRenderer::drawObstacle(sf::RenderWindow& window, const Obstacle& o) const {
+    const float f = o.maxLife > 0.f ? clampf(o.life / o.maxLife, 0.f, 1.f) : 0.f;
+    sf::CircleShape s(o.radius, 6);  // hexagon-ish "rock"
+    s.setOrigin(o.radius, o.radius);
+    s.setPosition(o.pos);
+    s.setRotation(20.f);
+    s.setFillColor(withAlpha(theme::elemStone, 0.35f + 0.4f * f));
+    s.setOutlineThickness(1.5f);
+    s.setOutlineColor(withAlpha(theme::elemStone, 0.6f * f));
+    window.draw(s);
+}
+
+void WorldRenderer::drawProjectile(sf::RenderWindow& window, const Projectile& pr) const {
+    sf::CircleShape s(3.5f, 10);
+    s.setOrigin(s.getRadius(), s.getRadius());
+    s.setPosition(pr.pos);
+    s.setFillColor(theme::elemWind);
+    window.draw(s);
+}
+
 void WorldRenderer::drawEnemy(sf::RenderWindow& window, const Enemy& e) const {
     const float frac = e.maxHp > 0.f ? clampf(e.hp / e.maxHp, 0.f, 1.f) : 0.f;
     sf::Color fill = lerpColor(theme::enemy, sf::Color::White, e.hitFlash);
+    if (e.burn > 0.f) fill = lerpColor(fill, theme::elemFire, 0.5f);
 
     sf::CircleShape body(e.radius, 24);
     body.setOrigin(e.radius, e.radius);
@@ -66,7 +66,6 @@ void WorldRenderer::drawEnemy(sf::RenderWindow& window, const Enemy& e) const {
     body.setOutlineColor(withAlpha(sf::Color::White, 0.15f + 0.5f * e.hitFlash));
     window.draw(body);
 
-    // Inner dot shrinks as hp drops.
     sf::CircleShape hpDot(e.radius * 0.5f * frac + 1.f, 16);
     hpDot.setOrigin(hpDot.getRadius(), hpDot.getRadius());
     hpDot.setPosition(e.pos);
@@ -103,10 +102,11 @@ void WorldRenderer::drawPickup(sf::RenderWindow& window, const Pickup& pu) const
 
 void WorldRenderer::drawBall(sf::RenderWindow& window, const Ball& b,
                              const std::optional<ActiveEffect>& effect) const {
-    sf::Color col = b.color;
+    sf::Color col = b.element == Element::Plain ? b.color
+                                               : lerpColor(b.color, elementColor(b.element), 0.7f);
     float alpha = 1.f;
     if (effect) {
-        if (effect->kind == PowerUp::Golden) col = lerpColor(b.color, theme::puGolden, 0.85f);
+        if (effect->kind == PowerUp::Golden) col = lerpColor(col, theme::puGolden, 0.85f);
         else if (effect->kind == PowerUp::Ghost) alpha = 0.4f;
     }
 
@@ -125,12 +125,12 @@ void WorldRenderer::drawBall(sf::RenderWindow& window, const Ball& b,
     const float ax = std::fabs(b.squashAxis.x);
     const float ay = std::fabs(b.squashAxis.y);
     const float along = 1.f - 0.32f * b.squash;
-    const float perp = 1.f + 0.22f * b.squash;
+    const float perpS = 1.f + 0.22f * b.squash;
 
     sf::CircleShape c(b.radius, 40);
     c.setOrigin(b.radius, b.radius);
     c.setPosition(b.pos);
-    c.setScale(lerpf(perp, along, ax), lerpf(perp, along, ay));
+    c.setScale(lerpf(perpS, along, ax), lerpf(perpS, along, ay));
     c.setFillColor(withAlpha(col, alpha));
     c.setOutlineThickness(2.f);
     c.setOutlineColor(withAlpha(sf::Color::White, (b.held ? 0.85f : 0.16f) * alpha));
@@ -148,9 +148,11 @@ void WorldRenderer::drawBall(sf::RenderWindow& window, const Ball& b,
 }
 
 void WorldRenderer::draw(sf::RenderWindow& window, const World& world) const {
-    for (const FieldObject& f : world.field()) drawField(window, f);
+    for (const Puddle& p : world.puddles()) drawPuddle(window, p);
+    for (const Obstacle& o : world.obstacles()) drawObstacle(window, o);
     drawCore(window, world.core());
     for (const Enemy& e : world.enemies()) drawEnemy(window, e);
+    for (const Projectile& pr : world.projectiles()) drawProjectile(window, pr);
     for (const Pickup& pu : world.pickups()) drawPickup(window, pu);
     for (const Ball& b : world.balls()) drawBall(window, b, world.effect());
 }

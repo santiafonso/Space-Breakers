@@ -27,7 +27,12 @@ inline const sf::Color ballUltra{240, 96, 104};
 inline const sf::Color core{120, 230, 200};
 inline const sf::Color coreLow{240, 110, 90};
 inline const sf::Color enemy{232, 120, 120};
-inline const sf::Color field{150, 120, 235};
+
+// Ball elements
+inline const sf::Color elemFire{255, 148, 66};
+inline const sf::Color elemWind{184, 240, 232};
+inline const sf::Color elemWater{92, 152, 255};
+inline const sf::Color elemStone{176, 156, 132};
 
 // Power-ups
 inline const sf::Color puPoints{245, 200, 90};

@@ -8,27 +8,25 @@
 
 namespace sb {
 
-enum class Grabbed { None, Ball, Field };
+enum class Grabbed { None, Ball };
 
-// The simulation: balls clearing enemies that march on a central core, their
-// paths bent by placed field structures. Knows nothing about rendering, input
-// devices, menus or progression storage.
+// The simulation: elemental balls orbiting a central core, clearing waves of
+// enemies that march on it. Knows nothing about rendering, input or progression
+// storage.
 class World {
 public:
     explicit World(sf::Vector2f size);
 
-    // ---- run / wave lifecycle --------------------------------------------
-    void startRun(const WorldParams& p, int ballCount, float coreHp, float coreMaxHp,
-                  const std::vector<FieldSnapshot>& field);
+    // ---- run / wave lifecycle -----------------------------------------
+    void startRun(const WorldParams& p, const std::vector<int>& ballElements,
+                  float coreHp, float coreMaxHp);
     void startWave(int wave, const WorldParams& p);
-    void setBallCount(int n, const WorldParams& p);
-    void addField(FieldKind kind, sf::Vector2f pos, float strength);
+    void addBall(Element e, const WorldParams& p);
     void repairCore(float amount);
-    std::vector<FieldSnapshot> fieldSnapshot() const;
 
     FrameEvents step(float dt, const WorldParams& p);
 
-    // ---- grab / throw: a field structure (priority) or the nearest ball --
+    // ---- grab / throw: knock a ball off its orbit -------------------
     bool grabAt(sf::Vector2f point, float catchRadius);
     bool hasHeld() const { return grabbed_ != Grabbed::None; }
     Grabbed grabbedKind() const { return grabbed_; }
@@ -36,10 +34,12 @@ public:
     void releaseHeld(sf::Vector2f throwVel);
     void forceRelease();
 
-    // ---- read-only views -----------------------------------------------
+    // ---- read-only views --------------------------------------------
     const std::vector<Ball>& balls() const { return balls_; }
     const std::vector<Enemy>& enemies() const { return enemies_; }
-    const std::vector<FieldObject>& field() const { return field_; }
+    const std::vector<Projectile>& projectiles() const { return projectiles_; }
+    const std::vector<Puddle>& puddles() const { return puddles_; }
+    const std::vector<Obstacle>& obstacles() const { return obstacles_; }
     const std::vector<Pickup>& pickups() const { return pickups_; }
     const Core& core() const { return core_; }
     const std::optional<ActiveEffect>& effect() const { return effect_; }
@@ -63,16 +63,18 @@ public:
     float fastestBall() const;
 
 private:
-    void configureField(const std::vector<FieldSnapshot>& snap);
-    void spawnBallAtCore(const WorldParams& p);
+    void spawnBall(Element e, const WorldParams& p);
     void spawnEnemy();
     void advanceCombo(float dt);
     void advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev);
-    void applyFieldForce(Ball& b, float dt) const;
-    void applyHoming(Ball& b, float dt) const;
+    void orbitAssist(Ball& b, float dt, const WorldParams& p) const;
+    void emitElement(Ball& b, float dt, const WorldParams& p);
     void resolveBallPairs();
-    void sweepDeadEnemies(const WorldParams& p, FrameEvents& ev);
+    void updateProjectiles(float dt);
+    void updatePuddles(float dt);
+    void updateObstacles(float dt);
     void updateEnemies(float dt, FrameEvents& ev);
+    void sweepDeadEnemies(const WorldParams& p, FrameEvents& ev);
     void updateWaveSpawner(float dt, FrameEvents& ev);
     void updatePickups(float dt, FrameEvents& ev);
     void advanceEffect(float dt);
@@ -80,12 +82,13 @@ private:
     void regulateSpeed(Ball& b, float dt, const WorldParams& p);
     void updateTrail(Ball& b);
     float ballDamage(const Ball& b, const WorldParams& p) const;
-    bool fieldHit(const FieldObject& f, sf::Vector2f point) const;
 
     sf::Vector2f size_;
     std::vector<Ball> balls_;
     std::vector<Enemy> enemies_;
-    std::vector<FieldObject> field_;
+    std::vector<Projectile> projectiles_;
+    std::vector<Puddle> puddles_;
+    std::vector<Obstacle> obstacles_;
     std::vector<Pickup> pickups_;
     Core core_;
     std::optional<ActiveEffect> effect_;

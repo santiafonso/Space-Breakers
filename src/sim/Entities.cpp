@@ -38,4 +38,26 @@ float powerUpDuration(PowerUp p) {
     return 6.f;
 }
 
+const char* elementName(Element e) {
+    switch (e) {
+        case Element::Plain: return "Plain";
+        case Element::Fire:  return "Fire";
+        case Element::Wind:  return "Wind";
+        case Element::Water: return "Water";
+        case Element::Stone: return "Stone";
+    }
+    return "Plain";
+}
+
+sf::Color elementColor(Element e) {
+    switch (e) {
+        case Element::Plain: return theme::ballMid;
+        case Element::Fire:  return theme::elemFire;
+        case Element::Wind:  return theme::elemWind;
+        case Element::Water: return theme::elemWater;
+        case Element::Stone: return theme::elemStone;
+    }
+    return theme::ballMid;
+}
+
 }  // namespace sb

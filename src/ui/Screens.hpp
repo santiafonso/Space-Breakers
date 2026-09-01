@@ -51,9 +51,9 @@ public:
     bool opaque() const override { return false; }
 
 private:
-    int cardAt(App& app, sf::Vector2f mouse) const;  // 0..2, -1 none
+    int cardAt(App& app, sf::Vector2f mouse) const;  // 0..3, -1 none
     bool skipAt(App& app, sf::Vector2f mouse) const;
-    float hover_[3] = {};
+    float hover_[4] = {};
     float skipHover_ = 0.f;
 };
 

@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <string>
 
@@ -25,18 +26,18 @@ bool isDismiss(const sf::Event& e) {
            isKey(e, sf::Keyboard::Space);
 }
 
-constexpr float kCardW = 300.f;
-constexpr float kCardH = 172.f;
-constexpr float kCardGap = 34.f;
+constexpr float kCardW = 248.f;
+constexpr float kCardH = 180.f;
+constexpr float kCardGap = 22.f;
 
 sf::Vector2f cardCenter(sf::Vector2f size, int i) {
-    const float total = 3.f * kCardW + 2.f * kCardGap;
+    const float total = kOfferKindCount * kCardW + (kOfferKindCount - 1) * kCardGap;
     const float startX = size.x * 0.5f - total * 0.5f;
     return {startX + kCardW * 0.5f + static_cast<float>(i) * (kCardW + kCardGap), size.y * 0.5f};
 }
 
 sf::Vector2f skipCenter(sf::Vector2f size) {
-    return {size.x * 0.5f, size.y * 0.5f + kCardH * 0.5f + 56.f};
+    return {size.x * 0.5f, size.y * 0.5f + kCardH * 0.5f + 54.f};
 }
 
 }  // namespace
@@ -165,9 +166,13 @@ void PlayScreen::draw(App& app, sf::RenderWindow& w) {
 
 // ================================================================ Choice
 
+namespace {
+OfferKind offerKindAt(int i) { return static_cast<OfferKind>(i); }
+}
+
 int ChoiceScreen::cardAt(App& app, sf::Vector2f mouse) const {
     const sf::Vector2f s = app.size();
-    for (int i = 0; i < 3; ++i) {
+    for (int i = 0; i < kOfferKindCount; ++i) {
         const sf::Vector2f c = cardCenter(s, i);
         if (std::fabs(mouse.x - c.x) < kCardW * 0.5f && std::fabs(mouse.y - c.y) < kCardH * 0.5f)
             return i;
@@ -182,52 +187,68 @@ bool ChoiceScreen::skipAt(App& app, sf::Vector2f mouse) const {
 
 void ChoiceScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
     if (e.type == sf::Event::KeyPressed) {
-        if (e.key.code >= sf::Keyboard::Num1 && e.key.code <= sf::Keyboard::Num3) {
-            app.applyOffer(app.offers()[e.key.code - sf::Keyboard::Num1]);
+        if (e.key.code >= sf::Keyboard::Num1 &&
+            e.key.code < sf::Keyboard::Num1 + kOfferKindCount) {
+            app.applyOffer(offerKindAt(e.key.code - sf::Keyboard::Num1));
             return;
         }
         if (e.key.code == sf::Keyboard::S) { app.skipChoice(); return; }
     }
     if (!isLeftClick(e)) return;
     const int c = cardAt(app, mouse);
-    if (c >= 0) { app.applyOffer(app.offers()[c]); return; }
+    if (c >= 0) { app.applyOffer(offerKindAt(c)); return; }
     if (skipAt(app, mouse)) app.skipChoice();
 }
 
 void ChoiceScreen::update(App& app, float dt, sf::Vector2f mouse) {
     const float k = 1.f - std::exp(-16.f * dt);
     const int c = cardAt(app, mouse);
-    for (int i = 0; i < 3; ++i) hover_[i] = lerpf(hover_[i], c == i ? 1.f : 0.f, k);
+    for (int i = 0; i < kOfferKindCount && i < 4; ++i)
+        hover_[i] = lerpf(hover_[i], c == i ? 1.f : 0.f, k);
     skipHover_ = lerpf(skipHover_, skipAt(app, mouse) ? 1.f : 0.f, k);
 }
 
 void ChoiceScreen::draw(App& app, sf::RenderWindow& w) {
     const sf::Vector2f s = app.size();
-    drawDim(w, s, 0.78f);
-    drawCentered(w, app.font(), "Choose an upgrade", theme::fsTitle, {s.x * 0.5f, s.y * 0.22f},
-                 theme::textHi);
+    const int ballCount = app.runBallCount();
+    const std::uint32_t scrap = app.data().run.scrap;
+    const bool full = ballCount >= cfg::ball::maxBalls;
 
-    for (int i = 0; i < 3; ++i) {
+    drawDim(w, s, 0.80f);
+    drawCentered(w, app.font(), "Wave cleared - add a ball", theme::fsTitle,
+                 {s.x * 0.5f, s.y * 0.22f}, theme::textHi);
+    drawCentered(w, app.font(), std::to_string(scrap) + " scrap", theme::fsHeading,
+                 {s.x * 0.5f, s.y * 0.22f + 38.f}, theme::accent);
+
+    for (int i = 0; i < kOfferKindCount; ++i) {
+        const OfferKind k = offerKindAt(i);
+        const OfferInfo info = offerInfo(k);
+        const std::uint32_t cost = offerCost(k, ballCount);
+        const bool afford = !full && scrap >= cost;
         const sf::Vector2f c = cardCenter(s, i);
         const float h = hover_[i];
-        const OfferInfo info = offerInfo(app.offers()[i]);
+        const sf::Color eco = elementColor(info.element);
 
         sf::RectangleShape card({kCardW, kCardH});
         card.setOrigin(kCardW * 0.5f, kCardH * 0.5f);
         card.setPosition(c);
-        card.setFillColor(withAlpha(theme::arenaEdge, 0.28f + 0.22f * h));
+        card.setFillColor(withAlpha(eco, (afford ? 0.14f : 0.05f) + 0.14f * h));
         card.setOutlineThickness(2.f);
-        card.setOutlineColor(withAlpha(theme::accent, 0.3f + 0.6f * h));
+        card.setOutlineColor(withAlpha(eco, afford ? 0.4f + 0.5f * h : 0.2f));
         w.draw(card);
 
         drawCentered(w, app.font(), std::to_string(i + 1), theme::fsSmall,
-                     {c.x, c.y - kCardH * 0.5f + 16.f}, theme::textDim);
-        drawCentered(w, app.font(), info.title, theme::fsItem, {c.x, c.y - 18.f}, theme::textHi);
-        drawCentered(w, app.font(), info.desc, theme::fsSmall, {c.x, c.y + 24.f}, theme::textLo);
+                     {c.x, c.y - kCardH * 0.5f + 15.f}, theme::textDim);
+        drawCentered(w, app.font(), info.title, theme::fsItem, {c.x, c.y - 34.f},
+                     afford ? theme::textHi : theme::textLo);
+        drawCentered(w, app.font(), info.desc, theme::fsSmall, {c.x, c.y + 6.f}, theme::textLo);
+        drawCentered(w, app.font(), full ? "team full" : (std::to_string(cost) + " scrap"),
+                     theme::fsBody, {c.x, c.y + kCardH * 0.5f - 22.f},
+                     afford ? theme::accent : theme::textDim);
     }
 
     const sf::Vector2f sk = skipCenter(s);
-    drawCentered(w, app.font(), "S  skip  (+20 scrap)", theme::fsBody, sk,
+    drawCentered(w, app.font(), "S  next wave", theme::fsBody, sk,
                  lerpColor(theme::textLo, theme::accent, skipHover_));
 }
 
@@ -323,11 +344,11 @@ void HowToScreen::draw(App& app, sf::RenderWindow& w) {
 
     const std::array<const char*, 6> lines = {{
         "Enemies march on the core at the centre. Defend it.",
-        "Grab a ball and fling it. Faster balls deal more damage on contact.",
+        "Your balls orbit the core on their own, hitting enemies that cross them.",
+        "Grab a ball and fling it to redirect it; it spirals back to its orbit.",
+        "Clear a wave, then buy an elemental ball with scrap: fire / wind / water / stone.",
         "Hit enemies in quick succession to build a damage combo.",
-        "Drag your black holes to bend the balls' paths through the enemies.",
-        "Clear a wave to pick an upgrade. When the core falls, the run ends.",
-        "Each run leaves you cores: spend them in the hub for permanent unlocks.",
+        "When the core falls the run ends - you keep cores for permanent unlocks.",
     }};
     const float y0 = s.y * 0.30f;
     for (std::size_t i = 0; i < lines.size(); ++i)

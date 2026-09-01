@@ -39,12 +39,6 @@ inline sf::Color withAlpha(sf::Color c, float alpha01) {
     return c;
 }
 
-// Serialisable snapshot of one placed field structure: position, kind, strength.
-struct FieldSnapshot {
-    float x = 0.f, y = 0.f, strength = 1.f;
-    int kind = 0;  // FieldKind
-};
-
 // Thin wrapper so call sites read as intent ("a random angle jitter") rather
 // than distribution boilerplate.
 struct Rng {

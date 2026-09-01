@@ -1,6 +1,5 @@
 #pragma once
 
-#include <array>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -39,7 +38,7 @@ public:
     WorldParams params() const;
 
     bool hasRunInProgress() const { return data_.run.active; }
-    const std::array<OfferKind, 3>& offers() const { return offers_; }
+    int runBallCount() const { return static_cast<int>(data_.run.balls.size()); }
     int lastRunWave() const { return lastRunWave_; }
     int lastRunCores() const { return lastRunCores_; }
 
@@ -88,7 +87,6 @@ private:
     const std::string savePath_ = "saves/save.txt";
 
     std::vector<std::unique_ptr<Screen>> stack_;
-    std::array<OfferKind, 3> offers_{};
     int lastRunWave_ = 0;
     int lastRunCores_ = 0;
 

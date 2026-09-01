@@ -33,10 +33,14 @@ meta-progresión de un roguelite.
 | **Derrota** | Núcleo en el centro de la arena. Los enemigos avanzan hacia él. Vida del núcleo a 0 → fin de la run. |
 | **Control en combate** | Lanzas la pelota al empezar la oleada y es autónoma. Durante el combate solo **colocas / mueves / activas estructuras de campo**. |
 | **Economía** | Dos capas: **chatarra** (moneda de la run, se reinicia) para mejoras entre oleadas, y **combo** reconvertido en **multiplicador de daño** dentro de la oleada. Más una **meta-moneda** que persiste (§4). |
-| **Progresión de la run** | Entre oleadas, pantalla de **elección**: escoges 1 de 3 ofertas (pelota nueva, modificador de pelota, estructura de campo, mejora de núcleo, chatarra). |
+| **Progresión de la run** | Entre oleadas, pantalla de **elección**: compras una **pelota elemental** (fuego / viento / agua / piedra) con chatarra, o pasas a la siguiente oleada. |
 | **Meta-progresión** | Al terminar la run ganas meta-moneda según lo lejos que llegaste + hitos. Se gasta en un **hub** para desbloquear qué *puede aparecer* en futuras runs y bonus de inicio. |
-| **Primer jugable** | MVP: 1 arena que escala, daño por contacto, 1 tipo de enemigo, oleadas, núcleo, elección 1-de-3 entre oleadas, muerte → resumen → meta mínima → nueva run. 1 estructura de campo (agujero negro). Sin paredes móviles. |
-| **Paredes móviles** | **Se eliminan.** Todo su código sale. |
+| **Primer jugable** | MVP: 1 arena que escala, daño por contacto, 1 tipo de enemigo, oleadas, núcleo, compra de pelotas elementales entre oleadas, muerte → resumen → meta → nueva run. Sin paredes móviles. |
+| **Paredes móviles** | **Se eliminan.** |
+| **Movimiento** (2026-09-01) | Las pelotas **orbitan el núcleo** (no van en línea recta) y se **curvan hacia el enemigo más cercano** para interceptarlo. Flingear una pelota la saca de la órbita y vuelve en espiral. |
+| **Estructuras de campo** (2026-09-01) | **Aplazadas.** El agujero negro se quita por ahora; se retoman después. |
+| **Prioridad ahora** (2026-09-01) | **Modificadores de pelota** = pelotas elementales (fuego: quemadura; viento: dispara; agua: rastro que daña; piedra: suelta obstáculos). Se compran con chatarra al final de cada oleada. |
+| **Oferta "ganar chatarra"** (2026-09-01) | **Eliminada.** La chatarra solo cae de los enemigos (+ 25 de semilla al empezar la run). |
 
 ---
 
@@ -179,13 +183,21 @@ Fase → **Fantasma** (atraviesa estructuras, a revisar) · Frenesí x3 → **Fr
 - **Fase 0 — MVP roguelite. [IMPLEMENTADO]**
   Bucle completo jugable: Hub -> Play (oleadas) -> Choice -> ... -> RunSummary ->
   Hub. Nucleo central con vida, 1 enemigo (Errante) que va al nucleo, spawner de
-  oleadas con escalado, daño por contacto `f(velocidad, combo)`, agujero negro
-  arrastrable, eleccion 1-de-3 entre oleadas (+skip por chatarra), muerte ->
-  resumen -> nucleos -> hub con 2 desbloqueos permanentes. Guardado v3 (meta
-  siempre, run en curso reanudable). Las pelotas tienen un leve auto-guiado hacia
-  el enemigo mas cercano para que sin estructuras la oleada 1 sea ganable; las
-  estructuras siguen mandando en el trazado. Ajuste en `core/Config.hpp`.
-  Pendiente afinar: sensacion del auto-guiado, curva de dificultad por oleada.
+  oleadas con escalado, muerte -> resumen -> nucleos -> hub con 2 desbloqueos.
+  Guardado v4 (meta siempre, run reanudable con `ball i <elem>`).
+
+- **Fase 0b — orbita + pelotas elementales. [IMPLEMENTADO 2026-09-01]**
+  - Las pelotas **orbitan el nucleo** (`cfg::orbit`) y se **curvan hacia el
+    enemigo mas cercano** (`interceptAccel`). Ya no van en linea recta.
+  - **Agujero negro / estructuras: fuera.** `FieldObject` eliminado del codigo.
+  - **Pelotas elementales** (`enum class Element`): Fire (quemadura DoT), Wind
+    (dispara `Projectile` al mas cercano), Water (suelta `Puddle` que daña),
+    Stone (suelta `Obstacle` que bloquea enemigos). Se compran en la Choice con
+    chatarra; el precio sube con el nº de pelotas.
+  - Oferta "ganar chatarra": eliminada. Run empieza con 2 pelotas Plain + 25
+    chatarra. Nucleo se cura `cfg::core::waveHeal` al limpiar una oleada.
+  - Verificado headless: ~15 oleadas, sin NaN, elementos activos, curva de
+    dificultad decreciente (afinar escalado de enemigos mas adelante).
 
   Detalle original:
   - Quitar paredes.
