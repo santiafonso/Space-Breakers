@@ -37,7 +37,7 @@ meta-progresión de un roguelite.
 | **Meta-progresión** | Al terminar la run ganas meta-moneda según lo lejos que llegaste + hitos. Se gasta en un **hub** para desbloquear qué *puede aparecer* en futuras runs y bonus de inicio. |
 | **Primer jugable** | MVP: 1 arena que escala, daño por contacto, 1 tipo de enemigo, oleadas, núcleo, compra de pelotas elementales entre oleadas, muerte → resumen → meta → nueva run. Sin paredes móviles. |
 | **Paredes móviles** | **Se eliminan.** |
-| **Movimiento** (2026-09-01) | Las pelotas **orbitan el núcleo** (no van en línea recta) y se **curvan hacia el enemigo más cercano** para interceptarlo. Flingear una pelota la saca de la órbita y vuelve en espiral. |
+| **Movimiento** (2026-09-01) | Las pelotas **rebotan libres en línea recta** por la pantalla y también **rebotan contra el núcleo** (sólido). **No siguen nada**: sin órbita, sin autoguiado, movimiento aleatorio. Flingear una pelota la redirige — es la habilidad principal. (Órbita y autoguiado se probaron y se descartaron.) |
 | **Estructuras de campo** (2026-09-01) | **Aplazadas.** El agujero negro se quita por ahora; se retoman después. |
 | **Prioridad ahora** (2026-09-01) | **Modificadores de pelota** = pelotas elementales (fuego: quemadura; viento: dispara; agua: rastro que daña; piedra: suelta obstáculos). Se compran con chatarra al final de cada oleada. |
 | **Oferta "ganar chatarra"** (2026-09-01) | **Eliminada.** La chatarra solo cae de los enemigos (+ 25 de semilla al empezar la run). |
@@ -186,9 +186,10 @@ Fase → **Fantasma** (atraviesa estructuras, a revisar) · Frenesí x3 → **Fr
   oleadas con escalado, muerte -> resumen -> nucleos -> hub con 2 desbloqueos.
   Guardado v4 (meta siempre, run reanudable con `ball i <elem>`).
 
-- **Fase 0b — orbita + pelotas elementales. [IMPLEMENTADO 2026-09-01]**
-  - Las pelotas **orbitan el nucleo** (`cfg::orbit`) y se **curvan hacia el
-    enemigo mas cercano** (`interceptAccel`). Ya no van en linea recta.
+- **Fase 0b — pelotas elementales + rebote libre. [IMPLEMENTADO 2026-09-01]**
+  - Movimiento: **rebote libre en linea recta** por la pantalla y contra el
+    nucleo solido. Sin seguir nada (se probo orbita y autoguiado, descartados).
+    Flingear = redirigir, es la habilidad. `cfg::orbit` eliminado.
   - **Agujero negro / estructuras: fuera.** `FieldObject` eliminado del codigo.
   - **Pelotas elementales** (`enum class Element`): Fire (quemadura DoT), Wind
     (dispara `Projectile` al mas cercano), Water (suelta `Puddle` que daña),

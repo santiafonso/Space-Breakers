@@ -1,7 +1,8 @@
 # Space-Breakers
 
-A roguelite about defending a core. Your balls orbit the core and curve into the
-enemies that march on it; you fling a ball to redirect it and it spirals back.
+A roguelite about defending a core. Your balls bounce freely around the arena —
+off the walls and off the core — clearing waves of enemies that march on the
+core. They don't track anything; you fling a ball to aim it into a cluster.
 Clear a wave, then spend scrap on an elemental ball — fire (burns), wind (fires
 bolts), water (damaging trail) or stone (drops blocking rubble). When the core
 falls the run ends and leaves you *cores* to spend on permanent unlocks before
@@ -52,7 +53,7 @@ src/
     Math.hpp      vector maths, colour helpers, RNG
     Theme.hpp     palette, type sizes, ball speed->colour ramp
   sim/
-    World.*       the simulation: orbiting balls, enemies, the core, waves, elements
+    World.*       the simulation: bouncing balls, enemies, the core, waves, elements
     Entities.hpp  Ball(+Element) / Enemy / Projectile / Puddle / Obstacle / Core
     Collision.*   circle-vs-bounds, circle-vs-circle, ball-vs-ball resolution
   render/
