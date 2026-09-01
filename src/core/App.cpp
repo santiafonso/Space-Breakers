@@ -21,7 +21,7 @@ namespace {
 sf::Vector2f kLogical() { return {1280.f, 800.f}; }
 
 bool loadFont(sf::Font& font) {
-    for (const char* path : {"arial.ttf", "assets/arial.ttf", "../arial.ttf"})
+    for (const char* path : {"assets/arial.ttf", "../assets/arial.ttf", "arial.ttf"})
         if (std::filesystem::exists(path) && font.loadFromFile(path)) return true;
     return false;
 }
@@ -30,7 +30,7 @@ bool loadFont(sf::Font& font) {
 
 App::App() : window_(kLogical()), world_(kLogical()) {
     if (!loadFont(font_)) {
-        std::cerr << "Space-Breakers: could not load arial.ttf (looked in . and ./assets)\n";
+        std::cerr << "Space-Breakers: could not load assets/arial.ttf (run from the project root)\n";
         std::exit(1);
     }
     if (!audio_.init())

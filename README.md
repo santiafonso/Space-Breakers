@@ -21,7 +21,7 @@ g++ -std=c++17 -O2 -Isrc $(find src -name '*.cpp') -o space_breakers \
     -lsfml-graphics -lsfml-window -lsfml-audio -lsfml-system
 ```
 
-Run it from the project root so it can find `arial.ttf`.
+Run it from the project root so it can find `assets/arial.ttf`.
 Set `SPACE_BREAKERS_NO_AUDIO=1` to run without sound (headless / SSH).
 
 ## Controls
@@ -41,6 +41,7 @@ drifting and bouncing around the arena, right-click to settle it again.
 ## Layout
 
 ```
+assets/arial.ttf   the only bundled asset (SFX and graphics are procedural)
 src/
   main.cpp
   core/
