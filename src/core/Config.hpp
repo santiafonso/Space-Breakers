@@ -14,7 +14,7 @@ inline constexpr int maxSteps = 12;        // spiral-of-death guard per frame
 }  // namespace loop
 
 namespace ball {
-inline constexpr float radius = 14.f;
+inline constexpr float radius = 16.f;
 inline constexpr float baseCruise = 300.f;       // px/s orbit speed at level 0
 inline constexpr float hardSpeedCap = 2600.f;
 inline constexpr float maxSpeedCruiseMul = 4.0f; // ceiling = cruise * this (capped by hardSpeedCap)
@@ -40,16 +40,24 @@ inline constexpr int maxSubsteps = 8;
 // Balls orbit the core. A radial spring holds them near their orbit radius; a
 // tangential term keeps them circling at cruise speed. Flinging a ball knocks it
 // off orbit and it spirals back.
+// Each ball is steered toward a target velocity every step: cruise speed along
+// the tangent to a circle around the core, plus a correction toward its orbit
+// radius. That target is what makes the motion curved. The steer is applied to
+// the velocity directly so it converges no matter how fast the ball is going.
 namespace orbit {
-inline constexpr float radiusPx = 210.f;      // nominal orbit radius
-inline constexpr float radiusJitter = 46.f;   // +/- per ball so they spread out
-inline constexpr float pullK = 5.5f;          // spring toward the orbit radius
-inline constexpr float radialDamp = 3.0f;     // damping on radial velocity
-inline constexpr float tangentK = 2.2f;       // ease tangential speed toward cruise
-// On top of the orbit, a ball curves toward the nearest enemy so it actually
-// intercepts them instead of sweeping an empty ring.
-inline constexpr float interceptAccel = 1150.f;
-inline constexpr float interceptRange = 520.f;
+inline constexpr float radiusPx = 215.f;       // nominal orbit radius
+inline constexpr float radiusJitter = 55.f;    // +/- per ball so they spread out
+inline constexpr float pullK = 3.6f;           // radius error -> radial correction speed
+inline constexpr float maxRadial = 460.f;      // clamp on that correction (px/s)
+inline constexpr float steerRate = 10.0f;      // how fast velocity eases to the orbit target
+// When an enemy is near, the ball's orbit ring expands / shrinks to the enemy's
+// distance from the core (so the circle passes through the enemy), and the
+// target velocity leans partly toward it. The path stays a curve.
+inline constexpr float interceptWeight = 0.62f; // 0 = pure orbit, 1 = straight at the enemy
+inline constexpr float interceptRange = 720.f;
+inline constexpr float ringMin = 120.f;        // clamp on the adaptive orbit radius
+inline constexpr float ringMax = 360.f;
+inline constexpr float ringAdapt = 6.0f;       // how fast orbitRadius eases toward the enemy ring
 }  // namespace orbit
 
 namespace combo {
@@ -99,12 +107,12 @@ inline constexpr float radius = 34.f;
 inline constexpr float baseHp = 140.f;
 inline constexpr float hpPlusBonus = 70.f;     // "reinforced core" meta unlock
 inline constexpr float enemyDamage = 8.f;      // hp lost per enemy that reaches the core
-inline constexpr float waveHeal = 6.f;         // core repaired this much on a wave clear
+inline constexpr float waveHeal = 9.f;         // core repaired this much on a wave clear
 }  // namespace core
 
 namespace wave {
 inline constexpr int baseCount = 3;
-inline constexpr float countGrowth = 1.28f;
+inline constexpr float countGrowth = 1.22f;
 inline constexpr int maxCount = 60;
 inline constexpr float spawnInterval = 0.95f;
 inline constexpr float hpBase = 3.f;

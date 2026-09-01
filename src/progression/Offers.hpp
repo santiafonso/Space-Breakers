@@ -22,11 +22,11 @@ struct OfferInfo {
 inline OfferInfo offerInfo(OfferKind k) {
     switch (k) {
         case OfferKind::BallFire:
-            return {"Fire ball", "sets enemies it touches burning", Element::Fire, 25};
+            return {"Fire ball", "sets enemies it touches burning", Element::Fire, 18};
         case OfferKind::BallWind:
             return {"Wind ball", "fires bolts at the nearest enemy", Element::Wind, 45};
         case OfferKind::BallWater:
-            return {"Water ball", "leaves a damaging trail", Element::Water, 30};
+            return {"Water ball", "leaves a damaging trail", Element::Water, 24};
         case OfferKind::BallStone:
             return {"Stone ball", "drops rubble that blocks enemies", Element::Stone, 45};
     }
@@ -35,7 +35,7 @@ inline OfferInfo offerInfo(OfferKind k) {
 
 // Cost rises with how many balls you already field.
 inline std::uint32_t offerCost(OfferKind k, int ballCount) {
-    return offerInfo(k).baseCost + 15u * static_cast<std::uint32_t>(std::max(0, ballCount - 1));
+    return offerInfo(k).baseCost + 10u * static_cast<std::uint32_t>(std::max(0, ballCount - 1));
 }
 
 // ---- permanent meta unlocks (spent with cores, in the hub) ------------------

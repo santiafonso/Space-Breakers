@@ -59,7 +59,9 @@ float World::fastestBall() const {
 void World::spawnBall(Element e, const WorldParams& p) {
     Ball b;
     b.element = e;
-    b.orbitRadius = cfg::orbit::radiusPx + rng_.range(-cfg::orbit::radiusJitter, cfg::orbit::radiusJitter);
+    b.baseOrbit =
+        cfg::orbit::radiusPx + rng_.range(-cfg::orbit::radiusJitter, cfg::orbit::radiusJitter);
+    b.orbitRadius = b.baseOrbit;
     const float a = rng_.range(0.f, 2.f * kPi);
     const sf::Vector2f radial{std::cos(a), std::sin(a)};
     b.pos = core_.pos + radial * b.orbitRadius;
@@ -234,31 +236,47 @@ float World::ballDamage(const Ball& b, const WorldParams& p) const {
 }
 
 void World::orbitAssist(Ball& b, float dt, const WorldParams& p) const {
-    sf::Vector2f r = b.pos - core_.pos;
-    float dist = length(r);
-    sf::Vector2f radial = dist > 1e-3f ? r / dist : sf::Vector2f{1.f, 0.f};
+    const sf::Vector2f r = b.pos - core_.pos;
+    const float dist = length(r);
+    const sf::Vector2f radial = dist > 1e-3f ? r / dist : sf::Vector2f{1.f, 0.f};
     sf::Vector2f tangent = perp(radial);
     if (dot(b.vel, tangent) < 0.f) tangent = -tangent;  // keep its spin direction
 
     const float cruise = cruiseSpeed(p);
-    const float radialVel = dot(b.vel, radial);
-    const float tangVel = dot(b.vel, tangent);
 
-    const float radialForce =
-        -cfg::orbit::pullK * (dist - b.orbitRadius) - cfg::orbit::radialDamp * radialVel;
-    const float tangForce = cfg::orbit::tangentK * (cruise - tangVel);
-
-    b.vel += (radial * radialForce + tangent * tangForce) * dt;
-
-    // Curve toward the nearest enemy so the ball intercepts instead of sweeping
-    // an empty ring.
+    // Nearest enemy in range.
     const Enemy* near = nullptr;
     float bestD2 = cfg::orbit::interceptRange * cfg::orbit::interceptRange;
     for (const Enemy& e : enemies_) {
         const float d2 = dot(e.pos - b.pos, e.pos - b.pos);
         if (d2 < bestD2) { bestD2 = d2; near = &e; }
     }
-    if (near) b.vel += normalized(near->pos - b.pos) * (cfg::orbit::interceptAccel * dt);
+
+    // Adapt the orbit radius: expand / shrink the ring so it passes through the
+    // nearest enemy; otherwise ease back to this ball's resting radius.
+    const float wantRing =
+        near ? clampf(length(near->pos - core_.pos), cfg::orbit::ringMin, cfg::orbit::ringMax)
+             : b.baseOrbit;
+    b.orbitRadius += (wantRing - b.orbitRadius) * (1.f - std::exp(-cfg::orbit::ringAdapt * dt));
+
+    // Target orbit velocity: cruise along the tangent + a bounded pull toward the
+    // (adapted) orbit radius. Tangential -> following it traces a curve.
+    const float radialCorr = clampf(-cfg::orbit::pullK * (dist - b.orbitRadius),
+                                    -cfg::orbit::maxRadial, cfg::orbit::maxRadial);
+    sf::Vector2f target = tangent * cruise + radial * radialCorr;
+
+    // Lean the target partly toward the enemy (never all the way -> never a
+    // straight line at it).
+    if (near) {
+        const sf::Vector2f toEnemy = normalized(near->pos - b.pos) * cruise;
+        const float w = cfg::orbit::interceptWeight;
+        target = target * (1.f - w) + toEnemy * w;
+    }
+
+    // Steer the velocity toward the target (converges regardless of current speed,
+    // so a flung ball spirals back into orbit).
+    const float k = 1.f - std::exp(-cfg::orbit::steerRate * dt);
+    b.vel += (target - b.vel) * k;
 }
 
 void World::emitElement(Ball& b, float dt, const WorldParams& p) {
@@ -308,27 +326,16 @@ void World::emitElement(Ball& b, float dt, const WorldParams& p) {
     }
 }
 
-void World::regulateSpeed(Ball& b, float dt, const WorldParams& p) {
-    const float cruiseS = cruiseSpeed(p);
-    const float vMax = maxSpeed(p);
-    const bool slow = effect_ && effect_->kind == PowerUp::SlowMo;
-
+void World::regulateSpeed(Ball& b, const WorldParams& p) {
     const float sp = length(b.vel);
     if (sp < 1e-3f) {
-        b.vel = rng_.direction() * cruiseS;
+        b.vel = rng_.direction() * cruiseSpeed(p);
         return;
     }
-    if (sp > vMax) {
-        b.vel *= vMax / sp;
-        return;
-    }
-    // Only pull DOWN toward cruise from above; orbitAssist handles the rest.
-    if (sp > cruiseS) {
-        const float down =
-            1.f - std::exp((slow ? -cfg::ball::decayRateSlowMo : -cfg::ball::decayRate) * dt);
-        const float ns = lerpf(sp, cruiseS, down);
-        b.vel *= ns / sp;
-    }
+    // orbitAssist already steers speed toward cruise; here we only enforce the
+    // hard ceiling for a hard fling.
+    const float vMax = maxSpeed(p);
+    if (sp > vMax) b.vel *= vMax / sp;
 }
 
 void World::updateTrail(Ball& b) {
@@ -380,7 +387,7 @@ void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
     }
 
     emitElement(b, dt, p);
-    regulateSpeed(b, dt, p);
+    regulateSpeed(b, p);
     b.color = theme::speedColor(length(b.vel), cruiseBase(p));
     b.squash *= std::exp(-cfg::ball::squashDecay * dt);
     updateTrail(b);
