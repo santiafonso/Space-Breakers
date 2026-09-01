@@ -1,4 +1,6 @@
 space_breakers
 *.exe
+*.o
+*.d
 build/
-save.dat
+saves/
