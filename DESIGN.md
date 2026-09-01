@@ -176,7 +176,18 @@ Fase → **Fantasma** (atraviesa estructuras, a revisar) · Frenesí x3 → **Fr
 
 ## 8. Roadmap por fases
 
-- **Fase 0 — MVP roguelite (esta rama, ahora).**
+- **Fase 0 — MVP roguelite. [IMPLEMENTADO]**
+  Bucle completo jugable: Hub -> Play (oleadas) -> Choice -> ... -> RunSummary ->
+  Hub. Nucleo central con vida, 1 enemigo (Errante) que va al nucleo, spawner de
+  oleadas con escalado, daño por contacto `f(velocidad, combo)`, agujero negro
+  arrastrable, eleccion 1-de-3 entre oleadas (+skip por chatarra), muerte ->
+  resumen -> nucleos -> hub con 2 desbloqueos permanentes. Guardado v3 (meta
+  siempre, run en curso reanudable). Las pelotas tienen un leve auto-guiado hacia
+  el enemigo mas cercano para que sin estructuras la oleada 1 sea ganable; las
+  estructuras siguen mandando en el trazado. Ajuste en `core/Config.hpp`.
+  Pendiente afinar: sensacion del auto-guiado, curva de dificultad por oleada.
+
+  Detalle original:
   - Quitar paredes.
   - Núcleo + 1 tipo de enemigo + spawner de oleadas con escalado + derrota.
   - Daño por contacto `f(velocidad, combo)`; combo realimentado por impactos.

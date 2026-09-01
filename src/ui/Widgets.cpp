@@ -51,11 +51,12 @@ void drawStatsPanel(sf::RenderWindow& window, const sf::Font& font, sf::Vector2f
     drawCentered(window, font, "Stats", theme::fsTitle, {size.x * 0.5f, size.y * 0.16f},
                  theme::textHi);
 
-    const std::array<std::pair<std::string, std::string>, 6> rows = {{
-        {"Score record", std::to_string(s.bestScore)},
-        {"Lifetime points", std::to_string(s.lifetimePoints)},
-        {"Total bounces", std::to_string(s.lifetimeBounces)},
-        {"Best streak", std::to_string(s.bestCombo) + " bounces"},
+    const std::array<std::pair<std::string, std::string>, 7> rows = {{
+        {"Best wave", std::to_string(s.bestWave)},
+        {"Runs", std::to_string(s.runs)},
+        {"Enemies defeated", std::to_string(s.enemiesKilled)},
+        {"Lifetime scrap", std::to_string(s.lifetimeScrap)},
+        {"Best damage streak", std::to_string(s.bestCombo) + " hits"},
         {"Top speed", std::to_string(static_cast<long>(s.maxSpeed)) + " px/s"},
         {"Time played", formatTime(s.timePlayed)},
     }};

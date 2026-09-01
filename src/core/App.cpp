@@ -16,8 +16,6 @@ namespace sb {
 
 namespace {
 
-// Fixed internal resolution. The window can be any size; the letterboxed view
-// maps this logical space onto it, so every layout number is resolution-free.
 sf::Vector2f kLogical() { return {1280.f, 800.f}; }
 
 bool loadFont(sf::Font& font) {
@@ -37,36 +35,40 @@ App::App() : window_(kLogical()), world_(kLogical()) {
         std::cerr << "Space-Breakers: audio unavailable, continuing without sound\n";
 
     loadGame(savePath_, data_);
-    audio_.setEnabled(data_.soundOn);
-    window_.applyVideoMode(data_.fullscreen);
+    audio_.setEnabled(data_.meta.soundOn);
+    window_.applyVideoMode(data_.meta.fullscreen);
 
     effects_.init(font_, size());
     hud_.init(font_, size());
-    world_.reset(data_.level[UpgMultiball], params(), data_.walls);
-
     autosaveTimer_ = cfg::app::autosaveInterval;
-    replaceStack(ScreenId::MainMenu);
+
+    // Idle world so the renderer always has a valid core to draw.
+    world_.startRun(params(), 1, cfg::core::baseHp, cfg::core::baseHp, {});
+    replaceStack(ScreenId::Hub);
 }
 
 WorldParams App::params() const {
-    return {data_.level[UpgSpeed], data_.level[UpgPoints], data_.level[UpgWalls],
-            data_.level[UpgCombo], data_.level[UpgLuck]};
+    return {data_.run.damageMult, 1.f, std::max(1, data_.run.wave)};
 }
 
-bool App::hasSave() const { return hasSavedGame(savePath_); }
+float App::startCoreHp() const {
+    return cfg::core::baseHp +
+           (data_.meta.unlock[MetaCoreHp] > 0 ? cfg::core::hpPlusBonus : 0.f);
+}
 
 // ---------------------------------------------------------------- screen stack
 
 std::unique_ptr<Screen> App::makeScreen(ScreenId id) {
     switch (id) {
-        case ScreenId::MainMenu: return std::make_unique<MainMenuScreen>();
-        case ScreenId::Play:     return std::make_unique<PlayScreen>();
-        case ScreenId::Shop:     return std::make_unique<ShopScreen>();
-        case ScreenId::Pause:    return std::make_unique<PauseScreen>();
-        case ScreenId::Stats:    return std::make_unique<StatsScreen>();
-        case ScreenId::HowTo:    return std::make_unique<HowToScreen>();
+        case ScreenId::Hub:        return std::make_unique<HubScreen>();
+        case ScreenId::Play:       return std::make_unique<PlayScreen>();
+        case ScreenId::Choice:     return std::make_unique<ChoiceScreen>();
+        case ScreenId::RunSummary: return std::make_unique<RunSummaryScreen>();
+        case ScreenId::Pause:      return std::make_unique<PauseScreen>();
+        case ScreenId::Stats:      return std::make_unique<StatsScreen>();
+        case ScreenId::HowTo:      return std::make_unique<HowToScreen>();
     }
-    return std::make_unique<MainMenuScreen>();
+    return std::make_unique<HubScreen>();
 }
 
 void App::replaceStack(ScreenId id) {
@@ -91,48 +93,114 @@ bool App::simulating() const {
     return !stack_.empty() && stack_.back()->simulates();
 }
 
-// ---------------------------------------------------------------- commands
+// ---------------------------------------------------------------- run flow
 
 void App::newRun() {
-    data_.points = 0;
-    for (int i = 0; i < UpgradeCount; ++i) data_.level[i] = 0;
-    data_.walls.clear();
-    world_.reset(0, params(), data_.walls);
+    RunState& r = data_.run;
+    r = RunState{};
+    r.active = true;
+    r.ballCount = 1 + data_.meta.unlock[MetaStartBalls];
+    r.damageMult = 1.f;
+    r.wave = 0;
+    r.coreMaxHp = startCoreHp();
+    r.coreHp = r.coreMaxHp;
+    ++data_.meta.stats.runs;
+
+    world_.startRun(params(), r.ballCount, r.coreHp, r.coreMaxHp, r.field);
     effects_.clear();
-    runStartBest_ = data_.stats.bestScore;
-    announcedBest_ = false;
-    autosaveTimer_ = cfg::app::autosaveInterval;
-    save();
+    startNextWave();
     replaceStack(ScreenId::Play);
+    save();
 }
 
 void App::continueRun() {
-    loadGame(savePath_, data_);
-    audio_.setEnabled(data_.soundOn);
-    world_.reset(data_.level[UpgMultiball], params(), data_.walls);
+    RunState& r = data_.run;
+    if (!r.active) { newRun(); return; }
+    if (r.wave < 1) r.wave = 1;
+    world_.startRun(params(), r.ballCount, r.coreHp, r.coreMaxHp, r.field);
+    world_.startWave(r.wave, params());
     effects_.clear();
-    runStartBest_ = data_.stats.bestScore;
-    announcedBest_ = false;
-    autosaveTimer_ = cfg::app::autosaveInterval;
     replaceStack(ScreenId::Play);
 }
 
-void App::toMenu() {
-    world_.forceRelease();
+void App::startNextWave() {
+    data_.run.wave += 1;
+    world_.startWave(data_.run.wave, params());
+    data_.meta.stats.bestWave =
+        std::max(data_.meta.stats.bestWave, static_cast<std::uint32_t>(data_.run.wave));
     save();
-    replaceStack(ScreenId::MainMenu);
 }
 
-void App::openShop() {
-    world_.forceRelease();
-    push(ScreenId::Shop);
+void App::openChoice() {
+    int all[kOfferKindCount];
+    for (int i = 0; i < kOfferKindCount; ++i) all[i] = i;
+    for (int i = kOfferKindCount - 1; i > 0; --i) std::swap(all[i], all[rng_.irange(0, i)]);
+    for (int i = 0; i < 3; ++i) offers_[i] = static_cast<OfferKind>(all[i]);
+    push(ScreenId::Choice);
 }
+
+void App::applyOffer(OfferKind k) {
+    RunState& r = data_.run;
+    switch (k) {
+        case OfferKind::AddBall:
+            r.ballCount = std::min(cfg::ball::maxBalls, r.ballCount + 1);
+            world_.setBallCount(r.ballCount, params());
+            break;
+        case OfferKind::MoreDamage:
+            r.damageMult *= 1.25f;
+            break;
+        case OfferKind::AddBlackHole: {
+            const sf::Vector2f at = world_.core().pos +
+                                    sf::Vector2f{rng_.range(-170.f, 170.f), rng_.range(-170.f, 170.f)};
+            world_.addField(FieldKind::BlackHole, at, 1.f);
+            break;
+        }
+        case OfferKind::CoreRepair:
+            world_.repairCore(35.f);
+            break;
+        case OfferKind::Scrap:
+            r.scrap += 40;
+            break;
+    }
+    audio_.purchase();
+    effects_.flash(theme::accent, 0.4f);
+    back();
+    startNextWave();
+}
+
+void App::skipChoice() {
+    data_.run.scrap += 20;
+    audio_.thrown(0.2f);
+    back();
+    startNextWave();
+}
+
+void App::endRun() {
+    RunState& r = data_.run;
+    lastRunWave_ = r.wave;
+    lastRunCores_ = r.wave * cfg::meta::coresPerWave;
+    data_.meta.cores += static_cast<std::uint32_t>(lastRunCores_);
+    data_.meta.stats.bestWave =
+        std::max(data_.meta.stats.bestWave, static_cast<std::uint32_t>(r.wave));
+    data_.run = RunState{};
+    data_.run.active = false;
+    save();
+    push(ScreenId::RunSummary);
+}
+
+void App::abandonRun() {
+    data_.run = RunState{};
+    data_.run.active = false;
+    save();
+    replaceStack(ScreenId::Hub);
+}
+
+void App::finishSummary() { replaceStack(ScreenId::Hub); }
 
 void App::openPause() {
     world_.forceRelease();
     push(ScreenId::Pause);
 }
-
 void App::openStats() { push(ScreenId::Stats); }
 void App::openHowTo() { push(ScreenId::HowTo); }
 
@@ -141,34 +209,37 @@ void App::quit() {
     window_.close();
 }
 
+void App::buyMetaUnlock(int u) {
+    if (u < 0 || u >= MetaUnlockCount) return;
+    if (metaUnlockMaxed(u, data_.meta.unlock[u])) return;
+    const std::uint32_t cost = metaUnlockCost(u, data_.meta.unlock[u]);
+    if (data_.meta.cores < cost) return;
+    data_.meta.cores -= cost;
+    ++data_.meta.unlock[u];
+    audio_.purchase();
+    effects_.flash(theme::accent, 0.4f);
+    save();
+}
+
 void App::toggleSound() {
-    data_.soundOn = !data_.soundOn;
-    audio_.setEnabled(data_.soundOn);
+    data_.meta.soundOn = !data_.meta.soundOn;
+    audio_.setEnabled(data_.meta.soundOn);
     save();
 }
 
 void App::toggleFullscreen() {
-    data_.fullscreen = !data_.fullscreen;
-    window_.applyVideoMode(data_.fullscreen);
+    data_.meta.fullscreen = !data_.meta.fullscreen;
+    window_.applyVideoMode(data_.meta.fullscreen);
     save();
 }
 
-void App::buyUpgrade(int u) {
-    if (u < 0 || u >= UpgradeCount) return;
-    if (upgradeMaxed(u, data_.level[u])) return;
-    const std::uint32_t cost = upgradeCost(u, data_.level[u]);
-    if (data_.points < cost) return;
-
-    data_.points -= cost;
-    ++data_.level[u];
-    if (u == UpgMultiball) world_.setMultiball(data_.level[UpgMultiball], params());
-    if (u == UpgWalls) world_.syncWallCount(data_.level[UpgWalls]);
-    audio_.purchase();
-    effects_.flash(theme::accent, 0.5f);
-}
-
 void App::save() {
-    data_.walls = world_.wallSnapshot();
+    if (data_.run.active) {
+        data_.run.field = world_.fieldSnapshot();
+        data_.run.coreHp = world_.core().hp;
+        data_.run.coreMaxHp = world_.core().maxHp;
+        if (world_.wave() > 0) data_.run.wave = world_.wave();
+    }
     saveGame(savePath_, data_);
 }
 
@@ -193,12 +264,15 @@ void App::handleEvent(const sf::Event& e) {
 }
 
 void App::processEvents(const FrameEvents& ev) {
-    if (ev.pointsGained > 0) {
-        data_.points += static_cast<std::uint32_t>(ev.pointsGained);
-        data_.stats.lifetimePoints += static_cast<std::uint32_t>(ev.pointsGained);
+    if (ev.scrapGained > 0) {
+        data_.run.scrap += static_cast<std::uint32_t>(ev.scrapGained);
+        data_.meta.stats.lifetimeScrap += static_cast<std::uint32_t>(ev.scrapGained);
+    }
+    for (const sf::Vector2f& k : ev.kills) {
+        ++data_.meta.stats.enemiesKilled;
+        effects_.addRing(k, 520.f, theme::enemy);
     }
     for (const BounceFx& b : ev.bounces) {
-        ++data_.stats.lifetimeBounces;
         effects_.addRing(b.pos, b.speed, b.color);
         effects_.edgeHit(b.normal);
         audio_.bounce(clampf(b.speed / 900.f, 0.f, 1.f));
@@ -209,19 +283,26 @@ void App::processEvents(const FrameEvents& ev) {
     }
     if (ev.gotPickup) {
         const sf::Color c = powerUpColor(ev.pickupKind);
-        effects_.addLabel(powerUpName(ev.pickupKind), {size().x * 0.5f, size().y * 0.38f}, c, 24, 1.1f);
+        effects_.addLabel(powerUpName(ev.pickupKind), {size().x * 0.5f, size().y * 0.34f}, c, 24, 1.1f);
         effects_.flash(c, 0.7f);
         audio_.pickup();
     }
+    if (ev.coreHit) {
+        effects_.flash(theme::coreLow, 0.55f);
+        audio_.bounce(0.15f);
+    }
 
-    data_.stats.bestScore = std::max(data_.stats.bestScore, data_.points);
-    data_.stats.bestCombo =
-        std::max(data_.stats.bestCombo, static_cast<std::uint32_t>(world_.comboStreak()));
-    data_.stats.maxSpeed = std::max(data_.stats.maxSpeed, world_.fastestBall());
+    data_.meta.stats.bestCombo =
+        std::max(data_.meta.stats.bestCombo, static_cast<std::uint32_t>(world_.comboStreak()));
+    data_.meta.stats.maxSpeed = std::max(data_.meta.stats.maxSpeed, world_.fastestBall());
 
-    if (!announcedBest_ && runStartBest_ > 0 && data_.points > runStartBest_) {
-        announcedBest_ = true;
-        effects_.addLabel("NEW BEST", {size().x * 0.5f, size().y * 0.46f}, theme::accent, 18, 1.3f);
+    if (ev.runOver) {
+        endRun();
+        return;
+    }
+    if (ev.waveCleared) {
+        audio_.purchase();
+        openChoice();
     }
 }
 
@@ -239,10 +320,11 @@ void App::update(float frameDt) {
             processEvents(world_.step(cfg::loop::fixedDt, params()));
             worldAccum_ -= cfg::loop::fixedDt;
             ++steps;
+            if (!simulating()) break;  // a screen (choice / summary) was just pushed
         }
-        if (steps == cfg::loop::maxSteps) worldAccum_ = 0.f;  // drop an unrecoverable backlog
+        if (steps == cfg::loop::maxSteps) worldAccum_ = 0.f;
 
-        data_.stats.timePlayed += frameDt;
+        data_.meta.stats.timePlayed += frameDt;
         autosaveTimer_ -= frameDt;
         if (autosaveTimer_ <= 0.f) {
             save();
@@ -252,8 +334,9 @@ void App::update(float frameDt) {
         worldAccum_ = 0.f;
     }
 
-    hud_.update(frameDt, data_.points, data_.stats.bestScore, world_.comboMultiplier(),
-                world_.effect());
+    const Core& c = world_.core();
+    hud_.update(frameDt, data_.run.scrap, world_.wave(), world_.enemiesLeft(),
+                c.maxHp > 0.f ? c.hp / c.maxHp : 0.f, world_.comboMultiplier(), world_.effect());
 }
 
 void App::render() {

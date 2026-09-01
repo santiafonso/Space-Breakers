@@ -23,6 +23,12 @@ inline const sf::Color ballMid{90, 214, 160};
 inline const sf::Color ballFast{240, 206, 96};
 inline const sf::Color ballUltra{240, 96, 104};
 
+// Combat
+inline const sf::Color core{120, 230, 200};
+inline const sf::Color coreLow{240, 110, 90};
+inline const sf::Color enemy{232, 120, 120};
+inline const sf::Color field{150, 120, 235};
+
 // Power-ups
 inline const sf::Color puPoints{245, 200, 90};
 inline const sf::Color puSlow{130, 200, 255};

@@ -1,6 +1,5 @@
 #include "sim/Collision.hpp"
 
-#include <algorithm>
 #include <cmath>
 
 namespace sb::collision {
@@ -37,48 +36,22 @@ Contact circleVsBounds(Ball& b, sf::Vector2f size) {
     return c;
 }
 
-Contact circleVsWall(Ball& b, const Wall& w) {
-    const float left = w.pos.x - w.half.x;
-    const float right = w.pos.x + w.half.x;
-    const float top = w.pos.y - w.half.y;
-    const float bottom = w.pos.y + w.half.y;
-    const float cx = clampf(b.pos.x, left, right);
-    const float cy = clampf(b.pos.y, top, bottom);
-    const sf::Vector2f d = b.pos - sf::Vector2f(cx, cy);
+Contact circleVsSolidCircle(Ball& b, sf::Vector2f center, float radius, float rebound) {
+    const sf::Vector2f d = b.pos - center;
+    const float sum = b.radius + radius;
     const float dist2 = dot(d, d);
-    if (dist2 >= b.radius * b.radius) return {};
+    if (dist2 >= sum * sum) return {};
 
     Contact c;
-    if (dist2 > 1e-6f) {
-        const float dist = std::sqrt(dist2);
-        c.normal = d / dist;
-        b.pos += c.normal * (b.radius - dist);
-    } else {
-        // Centre is inside the wall: shove out along the shallowest face.
-        const float l = b.pos.x - left, rr = right - b.pos.x;
-        const float t = b.pos.y - top, bo = bottom - b.pos.y;
-        const float m = std::min({l, rr, t, bo});
-        if (m == l) { b.pos.x = left - b.radius; c.normal = {-1.f, 0.f}; }
-        else if (m == rr) { b.pos.x = right + b.radius; c.normal = {1.f, 0.f}; }
-        else if (m == t) { b.pos.y = top - b.radius; c.normal = {0.f, -1.f}; }
-        else { b.pos.y = bottom + b.radius; c.normal = {0.f, 1.f}; }
-    }
+    const float dist = std::sqrt(std::max(dist2, 1e-6f));
+    c.normal = dist > 1e-4f ? d / dist : sf::Vector2f{0.f, -1.f};
+    b.pos += c.normal * (sum - dist);  // separate
 
-    sf::Vector2f rel = b.vel - w.vel;
-    const float vn = dot(rel, c.normal);
-    if (vn < 0.f) rel -= 2.f * vn * c.normal;
-    b.vel = rel + w.vel;
-    c.point = {cx, cy};
+    const float vn = dot(b.vel, c.normal);
+    if (vn < 0.f) b.vel -= (1.f + rebound) * vn * c.normal;
+    c.point = center + c.normal * radius;
     c.hit = true;
     return c;
-}
-
-void pushOutOfWall(Ball& b, const Wall& w) {
-    const float cx = clampf(b.pos.x, w.pos.x - w.half.x, w.pos.x + w.half.x);
-    const float cy = clampf(b.pos.y, w.pos.y - w.half.y, w.pos.y + w.half.y);
-    const sf::Vector2f d = b.pos - sf::Vector2f(cx, cy);
-    const float dist = length(d);
-    if (dist < b.radius && dist > 1e-4f) b.pos += normalized(d) * (b.radius - dist);
 }
 
 void resolveBallPair(Ball& a, Ball& b) {

@@ -8,33 +8,29 @@
 namespace sb {
 
 namespace {
+constexpr float kFieldVisualRadius = 22.f;  // matches WorldRenderer
 
-Wall defaultWall(int i, sf::Vector2f s) {
-    const float cx = s.x * 0.5f;
-    const float cy = s.y * 0.5f;
-    switch (i % cfg::wall::maxWalls) {
-        case 0: return {{s.x * 0.30f, cy}, {7.f, s.y * 0.24f}};
-        case 1: return {{s.x * 0.70f, cy}, {7.f, s.y * 0.24f}};
-        case 2: return {{cx, s.y * 0.28f}, {s.x * 0.20f, 7.f}};
-        case 3: return {{cx, s.y * 0.72f}, {s.x * 0.20f, 7.f}};
-        case 4: return {{cx, cy}, {32.f, 32.f}};
-        default: return {{cx, cy}, {58.f, 12.f}};
-    }
+int waveEnemyCount(int wave) {
+    const int n = static_cast<int>(std::lround(
+        cfg::wave::baseCount * std::pow(cfg::wave::countGrowth, static_cast<float>(wave - 1))));
+    return std::clamp(n, 1, cfg::wave::maxCount);
 }
-
-float luckMultiplier(int luckLevel) {
-    return std::pow(cfg::pickup::luckFactor, static_cast<float>(luckLevel));
+float waveEnemyHp(int wave) {
+    return cfg::wave::hpBase * std::pow(cfg::wave::hpGrowth, static_cast<float>(wave - 1));
 }
-
+float waveEnemySpeed(int wave) {
+    return std::min(cfg::wave::speedMax,
+                    cfg::wave::speedBase * std::pow(cfg::wave::speedGrowth, static_cast<float>(wave - 1)));
+}
+int scrapPerKill(int wave) { return 1 + wave / 3; }
 }  // namespace
 
-World::World(sf::Vector2f size) : size_(size) {}
+World::World(sf::Vector2f size) : size_(size) { core_.pos = size_ * 0.5f; }
 
 // ---------------------------------------------------------------- speeds
 
 float World::cruiseBase(const WorldParams& p) const {
-    return cfg::ball::baseCruise *
-           std::pow(cfg::ball::cruiseGrowth, static_cast<float>(p.speedLevel));
+    return cfg::ball::baseCruise * p.cruiseMult;
 }
 
 float World::cruiseSpeed(const WorldParams& p) const {
@@ -56,97 +52,132 @@ float World::fastestBall() const {
     return m;
 }
 
-// ---------------------------------------------------------------- walls
+// ---------------------------------------------------------------- field
 
-void World::configureWalls(int wallLevel, const std::vector<WallSnapshot>& saved) {
-    walls_.clear();
-    const int want = std::clamp(wallLevel, 0, cfg::wall::maxWalls);
-    for (int i = 0; i < want; ++i) {
-        if (i < static_cast<int>(saved.size()) && saved[i].hx > 0.f && saved[i].hy > 0.f) {
-            const WallSnapshot& s = saved[i];
-            walls_.push_back(Wall{{s.cx, s.cy}, {s.hx, s.hy}, {s.vx, s.vy}});
-        } else {
-            walls_.push_back(defaultWall(i, size_));
-        }
+void World::configureField(const std::vector<FieldSnapshot>& snap) {
+    field_.clear();
+    for (const FieldSnapshot& s : snap) {
+        FieldObject f;
+        f.pos = {s.x, s.y};
+        f.kind = static_cast<FieldKind>(s.kind);
+        f.strength = s.strength > 0.f ? s.strength : 1.f;
+        f.radius = cfg::field::blackHoleRadius;
+        field_.push_back(f);
     }
 }
 
-void World::syncWallCount(int wallLevel) {
-    const int want = std::clamp(wallLevel, 0, cfg::wall::maxWalls);
-    while (static_cast<int>(walls_.size()) < want)
-        walls_.push_back(defaultWall(static_cast<int>(walls_.size()), size_));
-    while (static_cast<int>(walls_.size()) > want) walls_.pop_back();
+void World::addField(FieldKind kind, sf::Vector2f pos, float strength) {
+    FieldObject f;
+    f.kind = kind;
+    f.pos = {clampf(pos.x, 40.f, size_.x - 40.f), clampf(pos.y, 40.f, size_.y - 40.f)};
+    f.strength = strength > 0.f ? strength : 1.f;
+    f.radius = cfg::field::blackHoleRadius;
+    field_.push_back(f);
 }
 
-std::vector<WallSnapshot> World::wallSnapshot() const {
-    std::vector<WallSnapshot> out;
-    out.reserve(walls_.size());
-    for (const Wall& w : walls_)
-        out.push_back({w.pos.x, w.pos.y, w.half.x, w.half.y, w.vel.x, w.vel.y});
+void World::repairCore(float amount) {
+    core_.maxHp += amount;
+    core_.hp = std::min(core_.maxHp, core_.hp + amount);
+}
+
+std::vector<FieldSnapshot> World::fieldSnapshot() const {
+    std::vector<FieldSnapshot> out;
+    out.reserve(field_.size());
+    for (const FieldObject& f : field_)
+        out.push_back({f.pos.x, f.pos.y, f.strength, static_cast<int>(f.kind)});
     return out;
 }
 
-bool World::wallHit(const Wall& w, sf::Vector2f point) const {
-    return std::fabs(point.x - w.pos.x) <= w.half.x + cfg::wall::grabPadding &&
-           std::fabs(point.y - w.pos.y) <= w.half.y + cfg::wall::grabPadding;
-}
-
-void World::updateWalls(float dt) {
-    for (Wall& w : walls_) {
-        if (w.held || !w.drifting()) continue;
-        const float s = length(w.vel);
-        if (s > cfg::wall::driftCap) w.vel *= cfg::wall::driftCap / s;
-        w.pos += w.vel * dt;
-        if (w.pos.x - w.half.x < 0.f) { w.pos.x = w.half.x; w.vel.x = std::fabs(w.vel.x); }
-        else if (w.pos.x + w.half.x > size_.x) { w.pos.x = size_.x - w.half.x; w.vel.x = -std::fabs(w.vel.x); }
-        if (w.pos.y - w.half.y < 0.f) { w.pos.y = w.half.y; w.vel.y = std::fabs(w.vel.y); }
-        else if (w.pos.y + w.half.y > size_.y) { w.pos.y = size_.y - w.half.y; w.vel.y = -std::fabs(w.vel.y); }
-    }
+bool World::fieldHit(const FieldObject& f, sf::Vector2f point) const {
+    return length(point - f.pos) <= kFieldVisualRadius + cfg::field::grabPadding;
 }
 
 // ---------------------------------------------------------------- lifecycle
 
-void World::spawnBall(const WorldParams& p) {
+void World::spawnBallAtCore(const WorldParams& p) {
     Ball b;
-    const sf::Vector2f jitter{rng_.range(-40.f, 40.f), rng_.range(-40.f, 40.f)};
-    b.pos = size_ * 0.5f + jitter;
+    b.pos = core_.pos + rng_.direction() * (core_.radius + b.radius + 8.f);
     b.vel = rng_.direction() * cruiseBase(p);
     b.color = theme::speedColor(length(b.vel), cruiseBase(p));
     balls_.push_back(b);
 }
 
-void World::setMultiball(int multiballLevel, const WorldParams& p) {
-    const int want = std::min(1 + std::max(0, multiballLevel), cfg::ball::maxBalls);
-    while (static_cast<int>(balls_.size()) < want) spawnBall(p);
+void World::setBallCount(int n, const WorldParams& p) {
+    n = std::clamp(n, 1, cfg::ball::maxBalls);
+    while (static_cast<int>(balls_.size()) < n) spawnBallAtCore(p);
+    while (static_cast<int>(balls_.size()) > n) balls_.pop_back();
 }
 
-void World::reset(int multiballLevel, const WorldParams& p,
-                  const std::vector<WallSnapshot>& walls) {
+void World::startRun(const WorldParams& p, int ballCount, float coreHp, float coreMaxHp,
+                     const std::vector<FieldSnapshot>& field) {
     balls_.clear();
+    enemies_.clear();
     pickups_.clear();
     effect_.reset();
     grabbed_ = Grabbed::None;
     heldIndex_ = -1;
     comboStreak_ = 0;
-    comboCapTier_ = cfg::combo::baseCapTier + p.comboLevel;
+    comboCapTier_ = cfg::combo::baseCapTier;
+    sinceHit_ = 0.f;
     reportedTier_ = 0;
-    sinceBounce_ = 0.f;
-    pickupTimer_ =
-        rng_.range(cfg::pickup::firstSpawnMin, cfg::pickup::firstSpawnMax) * luckMultiplier(p.luckLevel);
-    configureWalls(p.wallLevel, walls);
-    setMultiball(multiballLevel, p);
+    wave_ = 0;
+    waveRunning_ = false;
+    runOver_ = false;
+    toSpawn_ = 0;
+    spawnTimer_ = 0.f;
+
+    core_.pos = size_ * 0.5f;
+    core_.maxHp = coreMaxHp;
+    core_.hp = std::min(coreHp, coreMaxHp);
+    core_.hitFlash = 0.f;
+
+    configureField(field);
+    setBallCount(ballCount, p);
+    pickupTimer_ = rng_.range(cfg::pickup::firstSpawnMin, cfg::pickup::firstSpawnMax);
+}
+
+void World::startWave(int wave, const WorldParams& p) {
+    wave_ = wave;
+    toSpawn_ = waveEnemyCount(wave);
+    spawnTimer_ = 0.3f;
+    waveRunning_ = true;
+
+    // Every wave re-launches the balls from the core.
+    for (Ball& b : balls_) {
+        b.pos = core_.pos + rng_.direction() * (core_.radius + b.radius + 8.f);
+        b.vel = rng_.direction() * cruiseBase(p);
+        b.trail.clear();
+        b.held = false;
+    }
+    grabbed_ = Grabbed::None;
+    heldIndex_ = -1;
+}
+
+void World::spawnEnemy() {
+    sf::Vector2f pos;
+    switch (rng_.irange(0, 3)) {
+        case 0: pos = {rng_.range(0.f, size_.x), -cfg::wave::enemyRadius}; break;
+        case 1: pos = {rng_.range(0.f, size_.x), size_.y + cfg::wave::enemyRadius}; break;
+        case 2: pos = {-cfg::wave::enemyRadius, rng_.range(0.f, size_.y)}; break;
+        default: pos = {size_.x + cfg::wave::enemyRadius, rng_.range(0.f, size_.y)}; break;
+    }
+    Enemy e;
+    e.pos = pos;
+    e.radius = cfg::wave::enemyRadius;
+    e.maxHp = e.hp = waveEnemyHp(wave_);
+    e.speed = waveEnemySpeed(wave_);
+    e.vel = normalized(core_.pos - pos) * e.speed;
+    enemies_.push_back(e);
 }
 
 // ---------------------------------------------------------------- grab / throw
 
 bool World::grabAt(sf::Vector2f point, float catchRadius) {
-    // Walls take priority (larger, visually on top). Search topmost first.
-    for (int i = static_cast<int>(walls_.size()) - 1; i >= 0; --i) {
-        if (wallHit(walls_[i], point)) {
-            grabbed_ = Grabbed::Wall;
+    for (int i = static_cast<int>(field_.size()) - 1; i >= 0; --i) {
+        if (fieldHit(field_[i], point)) {
+            grabbed_ = Grabbed::Field;
             heldIndex_ = i;
-            walls_[i].held = true;
-            walls_[i].vel = {0.f, 0.f};
+            field_[i].held = true;
             return true;
         }
     }
@@ -171,11 +202,10 @@ bool World::grabAt(sf::Vector2f point, float catchRadius) {
 }
 
 void World::moveHeld(sf::Vector2f target) {
-    if (grabbed_ == Grabbed::Wall) {
-        Wall& w = walls_[heldIndex_];
-        w.pos.x = clampf(target.x, w.half.x, size_.x - w.half.x);
-        w.pos.y = clampf(target.y, w.half.y, size_.y - w.half.y);
-        w.vel = {0.f, 0.f};
+    if (grabbed_ == Grabbed::Field) {
+        FieldObject& f = field_[heldIndex_];
+        f.pos.x = clampf(target.x, 24.f, size_.x - 24.f);
+        f.pos.y = clampf(target.y, 24.f, size_.y - 24.f);
         return;
     }
     if (grabbed_ != Grabbed::Ball) return;
@@ -183,17 +213,11 @@ void World::moveHeld(sf::Vector2f target) {
     b.pos.x = clampf(target.x, b.radius, size_.x - b.radius);
     b.pos.y = clampf(target.y, b.radius, size_.y - b.radius);
     b.vel = {0.f, 0.f};
-    for (const Wall& w : walls_) collision::pushOutOfWall(b, w);
 }
 
 void World::releaseHeld(sf::Vector2f throwVel) {
-    const float s = length(throwVel);
-    if (grabbed_ == Grabbed::Wall) {
-        Wall& w = walls_[heldIndex_];
-        w.held = false;
-        w.vel = (s < cfg::wall::minThrowToDrift)
-                    ? sf::Vector2f{0.f, 0.f}
-                    : normalized(throwVel) * std::min(s * cfg::wall::throwToDrift, cfg::wall::driftCap);
+    if (grabbed_ == Grabbed::Field) {
+        field_[heldIndex_].held = false;
         grabbed_ = Grabbed::None;
         heldIndex_ = -1;
         return;
@@ -201,6 +225,7 @@ void World::releaseHeld(sf::Vector2f throwVel) {
     if (grabbed_ != Grabbed::Ball) return;
     Ball& b = balls_[heldIndex_];
     b.held = false;
+    const float s = length(throwVel);
     if (s < cfg::ball::minThrowSpeed) b.vel = rng_.direction() * cfg::ball::nudgeSpeed;
     else if (s > cfg::ball::hardSpeedCap) b.vel = throwVel * (cfg::ball::hardSpeedCap / s);
     else b.vel = throwVel;
@@ -209,8 +234,8 @@ void World::releaseHeld(sf::Vector2f throwVel) {
 }
 
 void World::forceRelease() {
-    if (grabbed_ == Grabbed::Wall) {
-        walls_[heldIndex_].held = false;
+    if (grabbed_ == Grabbed::Field) {
+        field_[heldIndex_].held = false;
     } else if (grabbed_ == Grabbed::Ball) {
         Ball& b = balls_[heldIndex_];
         b.held = false;
@@ -220,31 +245,18 @@ void World::forceRelease() {
     heldIndex_ = -1;
 }
 
-bool World::toggleDriftAt(sf::Vector2f point) {
-    for (int i = static_cast<int>(walls_.size()) - 1; i >= 0; --i) {
-        Wall& w = walls_[i];
-        if (w.held || !wallHit(w, point)) continue;
-        w.vel = w.drifting() ? sf::Vector2f{0.f, 0.f}
-                             : rng_.direction() * cfg::wall::rightClickDrift;
-        return true;
-    }
-    return false;
-}
-
 // ---------------------------------------------------------------- per-step parts
 
-void World::advanceCombo(float dt, const WorldParams& p) {
-    comboCapTier_ = cfg::combo::baseCapTier + p.comboLevel;
-    const float window =
-        cfg::combo::decayWindow + cfg::combo::decayWindowPerLevel * static_cast<float>(p.comboLevel);
-    sinceBounce_ += dt;
-    if (sinceBounce_ > window && comboStreak_ > 0) {
+void World::advanceCombo(float dt) {
+    comboCapTier_ = cfg::combo::baseCapTier;
+    sinceHit_ += dt;
+    if (sinceHit_ > cfg::combo::decayWindow && comboStreak_ > 0) {
         comboStreak_ = std::max(0, comboStreak_ - cfg::combo::bouncesPerTier);
-        sinceBounce_ = 0.f;
+        sinceHit_ = 0.f;
     }
 }
 
-void World::afterBounce(Ball& b, sf::Vector2f normal) {
+void World::afterBounce(Ball& b, sf::Vector2f normal, bool countHit) {
     b.squash = 1.f;
     b.squashAxis = normal;
 
@@ -259,28 +271,55 @@ void World::afterBounce(Ball& b, sf::Vector2f normal) {
         b.vel = normalized(d) * sp;
     }
 
-    ++comboStreak_;
-    sinceBounce_ = 0.f;
+    if (countHit) {
+        ++comboStreak_;
+        sinceHit_ = 0.f;
+    }
 }
 
-int World::awardPoints(const WorldParams& p) const {
-    const int per = 1 + p.pointsLevel;
-    const int tier = std::min(comboStreak_ / cfg::combo::bouncesPerTier, comboCapTier_);
-    int gained = static_cast<int>(
-        std::lround(per * (1.f + tier * cfg::combo::multiplierPerTier)));
+float World::ballDamage(const Ball& b, const WorldParams& p) const {
+    const float ratio = length(b.vel) / cfg::ball::baseCruise;
+    float dmg = (cfg::combat::contactDamageBase + cfg::combat::contactDamagePerCruise * ratio) *
+                comboMultiplier() * p.damageMult;
     if (effect_) {
-        if (effect_->kind == PowerUp::Points2x) gained *= cfg::powerup::points2xMul;
-        else if (effect_->kind == PowerUp::Frenzy) gained *= cfg::powerup::frenzyMul;
-        else if (effect_->kind == PowerUp::Golden)
-            gained += cfg::powerup::goldenBonusBase +
-                      cfg::powerup::goldenBonusPerPoints * p.pointsLevel;
+        if (effect_->kind == PowerUp::Points2x) dmg *= 2.f;
+        else if (effect_->kind == PowerUp::Frenzy) dmg *= 3.f;
+        else if (effect_->kind == PowerUp::Golden) dmg += 3.f;
     }
-    return gained;
+    return dmg;
+}
+
+void World::applyFieldForce(Ball& b, float dt) const {
+    sf::Vector2f acc{0.f, 0.f};
+    for (const FieldObject& f : field_) {
+        if (f.held) continue;
+        const sf::Vector2f d = f.pos - b.pos;
+        const float dist = length(d);
+        if (dist > f.radius || dist < 1e-3f) continue;
+        const float dd = std::max(dist, cfg::field::minDist);
+        float a = cfg::field::blackHoleStrength * f.strength / (dd * dd);
+        a = std::min(a, cfg::field::maxAccel);
+        acc += (d / dist) * a;
+    }
+    b.vel += acc * dt;
+}
+
+void World::applyHoming(Ball& b, float dt) const {
+    float bestDist2 = cfg::combat::homingRange * cfg::combat::homingRange;
+    const Enemy* target = nullptr;
+    for (const Enemy& e : enemies_) {
+        const sf::Vector2f d = e.pos - b.pos;
+        const float d2 = dot(d, d);
+        if (d2 < bestDist2) {
+            bestDist2 = d2;
+            target = &e;
+        }
+    }
+    if (!target) return;
+    b.vel += normalized(target->pos - b.pos) * (cfg::combat::homingAccel * dt);
 }
 
 void World::regulateSpeed(Ball& b, float dt, const WorldParams& p) {
-    // Cruise is a floor the ball climbs back to quickly and a target it eases
-    // down to slowly, so a throw stays fast for seconds.
     const float cruiseS = cruiseSpeed(p);
     const float vMax = maxSpeed(p);
     const bool slow = effect_ && effect_->kind == PowerUp::SlowMo;
@@ -291,7 +330,8 @@ void World::regulateSpeed(Ball& b, float dt, const WorldParams& p) {
         return;
     }
     const float up = 1.f - std::exp(-cfg::ball::regainRate * dt);
-    const float down = 1.f - std::exp((slow ? -cfg::ball::decayRateSlowMo : -cfg::ball::decayRate) * dt);
+    const float down =
+        1.f - std::exp((slow ? -cfg::ball::decayRateSlowMo : -cfg::ball::decayRate) * dt);
     const float k = (sp < cruiseS) ? up : down;
     const float ns = std::min(lerpf(sp, cruiseS, k), vMax);
     b.vel *= ns / sp;
@@ -305,7 +345,8 @@ void World::updateTrail(Ball& b) {
 }
 
 void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev) {
-    const bool phasing = effect_ && effect_->kind == PowerUp::Ghost;
+    applyFieldForce(b, dt);
+    applyHoming(b, dt);
 
     const float speed = length(b.vel);
     const int steps = std::clamp(
@@ -313,23 +354,34 @@ void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
         1, cfg::ball::maxSubsteps);
     const float h = dt / static_cast<float>(steps);
 
-    auto record = [&](const collision::Contact& c) {
-        afterBounce(b, c.normal);
+    auto pushFx = [&](const collision::Contact& c) {
         BounceFx fx;
         fx.normal = c.normal;
         fx.pos = c.point;
         fx.color = b.color;
         fx.speed = length(b.vel);
         ev.bounces.push_back(fx);
-        ev.pointsGained += awardPoints(p);
     };
 
     for (int s = 0; s < steps; ++s) {
         b.pos += b.vel * h;
-        if (collision::Contact c = collision::circleVsBounds(b, size_); c.hit) record(c);
-        if (!phasing)
-            for (const Wall& w : walls_)
-                if (collision::Contact c = collision::circleVsWall(b, w); c.hit) record(c);
+
+        if (collision::Contact c = collision::circleVsBounds(b, size_); c.hit) {
+            afterBounce(b, c.normal, false);
+            pushFx(c);
+        }
+        // The core is not solid to balls: they flow through the middle where the
+        // enemies pile up. Enemies still damage the core on contact.
+        for (Enemy& e : enemies_) {
+            collision::Contact c =
+                collision::circleVsSolidCircle(b, e.pos, e.radius, cfg::combat::hitRebound);
+            if (!c.hit) continue;
+            e.hp -= ballDamage(b, p);
+            e.hitFlash = 1.f;
+            e.vel += -c.normal * cfg::combat::knockback;
+            afterBounce(b, c.normal, true);
+            pushFx(c);
+        }
     }
 
     regulateSpeed(b, dt, p);
@@ -348,9 +400,60 @@ void World::resolveBallPairs() {
     }
 }
 
-void World::updatePickups(float dt, const WorldParams& p, FrameEvents& ev) {
-    const float luck = luckMultiplier(p.luckLevel);
+void World::sweepDeadEnemies(const WorldParams& p, FrameEvents& ev) {
+    for (auto it = enemies_.begin(); it != enemies_.end();) {
+        if (it->hp <= 0.f) {
+            ev.kills.push_back(it->pos);
+            ev.scrapGained += scrapPerKill(p.wave);
+            it = enemies_.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
 
+void World::updateEnemies(float dt, FrameEvents& ev) {
+    for (auto it = enemies_.begin(); it != enemies_.end();) {
+        const sf::Vector2f d = core_.pos - it->pos;
+        const float dist = length(d);
+        const sf::Vector2f steer = (dist > 1e-3f ? d / dist : sf::Vector2f{0.f, 1.f}) * it->speed;
+        it->vel += (steer - it->vel) * (1.f - std::exp(-8.f * dt));
+        it->pos += it->vel * dt;
+        it->hitFlash *= std::exp(-6.f * dt);
+
+        if (dist <= core_.radius + it->radius) {
+            core_.hp -= cfg::core::enemyDamage;
+            core_.hitFlash = 1.f;
+            ev.coreHit = true;
+            it = enemies_.erase(it);
+            if (core_.hp <= 0.f) {
+                core_.hp = 0.f;
+                runOver_ = true;
+            }
+        } else {
+            ++it;
+        }
+    }
+    core_.hitFlash *= std::exp(-5.f * dt);
+}
+
+void World::updateWaveSpawner(float dt, FrameEvents& ev) {
+    if (!waveRunning_) return;
+    if (toSpawn_ > 0) {
+        spawnTimer_ -= dt;
+        if (spawnTimer_ <= 0.f) {
+            spawnEnemy();
+            --toSpawn_;
+            spawnTimer_ = cfg::wave::spawnInterval;
+        }
+    }
+    if (toSpawn_ == 0 && enemies_.empty()) {
+        waveRunning_ = false;
+        ev.waveCleared = true;
+    }
+}
+
+void World::updatePickups(float dt, FrameEvents& ev) {
     if (!effect_ && pickups_.empty()) {
         pickupTimer_ -= dt;
         if (pickupTimer_ <= 0.f) {
@@ -360,7 +463,7 @@ void World::updatePickups(float dt, const WorldParams& p, FrameEvents& ev) {
                       rng_.range(size_.y * 0.15f, size_.y * 0.85f)};
             pu.vel = rng_.direction() * rng_.range(cfg::pickup::driftMin, cfg::pickup::driftMax);
             pickups_.push_back(pu);
-            pickupTimer_ = rng_.range(cfg::pickup::spawnMin, cfg::pickup::spawnMax) * luck;
+            pickupTimer_ = rng_.range(cfg::pickup::spawnMin, cfg::pickup::spawnMax);
         }
     }
 
@@ -384,7 +487,7 @@ void World::updatePickups(float dt, const WorldParams& p, FrameEvents& ev) {
                 effect_ = ActiveEffect{pu.kind, dur, dur};
                 ev.gotPickup = true;
                 ev.pickupKind = pu.kind;
-                pickupTimer_ = rng_.range(cfg::pickup::spawnMin, cfg::pickup::spawnMax) * luck;
+                pickupTimer_ = rng_.range(cfg::pickup::spawnMin, cfg::pickup::spawnMax);
                 collected = true;
                 break;
             }
@@ -404,10 +507,12 @@ void World::advanceEffect(float dt) {
 
 FrameEvents World::step(float dt, const WorldParams& p) {
     FrameEvents ev;
-    if (dt <= 0.f) return ev;
+    if (dt <= 0.f || runOver_) {
+        ev.runOver = runOver_;
+        return ev;
+    }
 
-    advanceCombo(dt, p);
-    updateWalls(dt);
+    advanceCombo(dt);
 
     for (std::size_t i = 0; i < balls_.size(); ++i) {
         Ball& b = balls_[i];
@@ -419,13 +524,17 @@ FrameEvents World::step(float dt, const WorldParams& p) {
     }
 
     resolveBallPairs();
-    updatePickups(dt, p, ev);
+    sweepDeadEnemies(p, ev);
+    updateEnemies(dt, ev);
+    updateWaveSpawner(dt, ev);
+    updatePickups(dt, ev);
     advanceEffect(dt);
 
     const int tier = comboTier();
     ev.comboTier = tier;
     if (tier > reportedTier_) ev.comboTierUp = true;
     reportedTier_ = tier;
+    ev.runOver = runOver_;
     return ev;
 }
 

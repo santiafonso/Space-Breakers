@@ -4,25 +4,74 @@
 
 namespace sb {
 
-void WorldRenderer::drawWall(sf::RenderWindow& window, const Wall& w) const {
-    const bool active = w.held || w.drifting();
-    sf::RectangleShape rs({w.half.x * 2.f, w.half.y * 2.f});
-    rs.setOrigin(w.half);
-    rs.setPosition(w.pos);
-    rs.setFillColor(withAlpha(theme::arenaEdge, 0.5f));
-    rs.setOutlineThickness(1.5f);
-    rs.setOutlineColor(withAlpha(theme::accent, active ? 0.6f : 0.28f));
-    window.draw(rs);
+namespace {
+constexpr float kFieldVisualRadius = 22.f;  // matches World::grabAt
+}
 
-    if (w.held) {
-        sf::RectangleShape hl({w.half.x * 2.f + 10.f, w.half.y * 2.f + 10.f});
-        hl.setOrigin(hl.getSize() * 0.5f);
-        hl.setPosition(w.pos);
-        hl.setFillColor(sf::Color::Transparent);
-        hl.setOutlineThickness(2.f);
-        hl.setOutlineColor(withAlpha(theme::accent, 0.7f));
-        window.draw(hl);
-    }
+void WorldRenderer::drawField(sf::RenderWindow& window, const FieldObject& f) const {
+    // Faint influence radius.
+    sf::CircleShape halo(f.radius, 40);
+    halo.setOrigin(f.radius, f.radius);
+    halo.setPosition(f.pos);
+    halo.setFillColor(withAlpha(theme::field, f.held ? 0.10f : 0.05f));
+    window.draw(halo);
+
+    // Swirl ring + dark core.
+    sf::CircleShape ring(kFieldVisualRadius, 32);
+    ring.setOrigin(kFieldVisualRadius, kFieldVisualRadius);
+    ring.setPosition(f.pos);
+    ring.setFillColor(sf::Color::Transparent);
+    ring.setOutlineThickness(2.f);
+    ring.setOutlineColor(withAlpha(theme::field, f.held ? 0.95f : 0.7f));
+    window.draw(ring);
+
+    sf::CircleShape hole(kFieldVisualRadius * 0.55f, 24);
+    hole.setOrigin(hole.getRadius(), hole.getRadius());
+    hole.setPosition(f.pos);
+    hole.setFillColor(withAlpha(theme::bg, 0.95f));
+    window.draw(hole);
+}
+
+void WorldRenderer::drawCore(sf::RenderWindow& window, const Core& c) const {
+    const float frac = c.maxHp > 0.f ? clampf(c.hp / c.maxHp, 0.f, 1.f) : 0.f;
+    const sf::Color tint = lerpColor(theme::coreLow, theme::core, frac);
+
+    sf::CircleShape body(c.radius, 40);
+    body.setOrigin(c.radius, c.radius);
+    body.setPosition(c.pos);
+    body.setFillColor(withAlpha(tint, 0.18f + 0.3f * c.hitFlash));
+    body.setOutlineThickness(2.f);
+    body.setOutlineColor(withAlpha(tint, 0.85f));
+    window.draw(body);
+
+    // Health arc as a shrinking ring segment approximated by a thick outline
+    // circle scaled by frac (simple + readable).
+    sf::CircleShape hp(c.radius - 6.f, 40);
+    hp.setOrigin(hp.getRadius(), hp.getRadius());
+    hp.setPosition(c.pos);
+    hp.setScale(frac, frac);
+    hp.setFillColor(withAlpha(tint, 0.5f));
+    window.draw(hp);
+}
+
+void WorldRenderer::drawEnemy(sf::RenderWindow& window, const Enemy& e) const {
+    const float frac = e.maxHp > 0.f ? clampf(e.hp / e.maxHp, 0.f, 1.f) : 0.f;
+    sf::Color fill = lerpColor(theme::enemy, sf::Color::White, e.hitFlash);
+
+    sf::CircleShape body(e.radius, 24);
+    body.setOrigin(e.radius, e.radius);
+    body.setPosition(e.pos);
+    body.setFillColor(withAlpha(fill, 0.9f));
+    body.setOutlineThickness(2.f);
+    body.setOutlineColor(withAlpha(sf::Color::White, 0.15f + 0.5f * e.hitFlash));
+    window.draw(body);
+
+    // Inner dot shrinks as hp drops.
+    sf::CircleShape hpDot(e.radius * 0.5f * frac + 1.f, 16);
+    hpDot.setOrigin(hpDot.getRadius(), hpDot.getRadius());
+    hpDot.setPosition(e.pos);
+    hpDot.setFillColor(withAlpha(theme::bg, 0.55f));
+    window.draw(hpDot);
 }
 
 void WorldRenderer::drawPickup(sf::RenderWindow& window, const Pickup& pu) const {
@@ -45,11 +94,11 @@ void WorldRenderer::drawPickup(sf::RenderWindow& window, const Pickup& pu) const
     ring.setOutlineColor(withAlpha(col, 0.8f * fade));
     window.draw(ring);
 
-    sf::CircleShape core(pu.radius * 0.4f, 16);
-    core.setOrigin(core.getRadius(), core.getRadius());
-    core.setPosition(pu.pos);
-    core.setFillColor(withAlpha(col, fade));
-    window.draw(core);
+    sf::CircleShape corePt(pu.radius * 0.4f, 16);
+    corePt.setOrigin(corePt.getRadius(), corePt.getRadius());
+    corePt.setPosition(pu.pos);
+    corePt.setFillColor(withAlpha(col, fade));
+    window.draw(corePt);
 }
 
 void WorldRenderer::drawBall(sf::RenderWindow& window, const Ball& b,
@@ -99,7 +148,9 @@ void WorldRenderer::drawBall(sf::RenderWindow& window, const Ball& b,
 }
 
 void WorldRenderer::draw(sf::RenderWindow& window, const World& world) const {
-    for (const Wall& w : world.walls()) drawWall(window, w);
+    for (const FieldObject& f : world.field()) drawField(window, f);
+    drawCore(window, world.core());
+    for (const Enemy& e : world.enemies()) drawEnemy(window, e);
     for (const Pickup& pu : world.pickups()) drawPickup(window, pu);
     for (const Ball& b : world.balls()) drawBall(window, b, world.effect());
 }

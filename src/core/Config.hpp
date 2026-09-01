@@ -14,8 +14,8 @@ inline constexpr int maxSteps = 12;        // spiral-of-death guard per frame
 }  // namespace loop
 
 namespace ball {
-inline constexpr float radius = 13.f;
-inline constexpr float baseCruise = 330.f;       // px/s at speed level 0
+inline constexpr float radius = 14.f;
+inline constexpr float baseCruise = 300.f;       // px/s at speed level 0
 inline constexpr float cruiseGrowth = 1.16f;     // x per Speed upgrade level
 inline constexpr float hardSpeedCap = 2600.f;
 inline constexpr float maxSpeedCruiseMul = 4.0f; // ceiling = cruise * this (capped by hardSpeedCap)
@@ -39,21 +39,59 @@ inline constexpr int maxSubsteps = 8;
 }  // namespace ball
 
 namespace combo {
-inline constexpr int bouncesPerTier = 8;
-inline constexpr int baseCapTier = 6;              // + 1 per Combo Hold level
-inline constexpr float decayWindow = 2.6f;         // s without a bounce before a tier drops
-inline constexpr float decayWindowPerLevel = 0.9f; // + per Combo Hold level
+// Combo is now a DAMAGE multiplier: it climbs when balls hit enemies in quick
+// succession and decays on time since the last hit.
+inline constexpr int bouncesPerTier = 6;           // enemy hits per tier
+inline constexpr int baseCapTier = 8;
+inline constexpr float decayWindow = 2.4f;         // s without an enemy hit before a tier drops
+inline constexpr float decayWindowPerLevel = 0.0f;
 inline constexpr float multiplierPerTier = 0.5f;
 }  // namespace combo
 
-namespace wall {
-inline constexpr int maxWalls = 6;
-inline constexpr float driftCap = 150.f;           // px/s ceiling for a drifting wall
-inline constexpr float throwToDrift = 0.22f;       // fraction of throw speed kept as drift
-inline constexpr float minThrowToDrift = 60.f;     // slower throw just parks the wall
-inline constexpr float rightClickDrift = 70.f;     // px/s given by a right-click nudge
-inline constexpr float grabPadding = 6.f;          // px of slack around a wall for grabbing
-}  // namespace wall
+namespace combat {
+inline constexpr float contactDamageBase = 1.0f;   // damage at zero speed
+inline constexpr float contactDamagePerCruise = 1.7f;  // + this * (speed / baseCruise)
+inline constexpr float knockback = 210.f;          // px/s pushed into the enemy on a hit
+inline constexpr float hitRebound = 0.85f;         // how much the ball reflects off an enemy (1 = full)
+// Baseline pull toward the nearest enemy so a ball reliably finds work even with
+// no structures placed. Field structures still dominate the routing.
+inline constexpr float homingAccel = 1150.f;       // px/s^2 toward the nearest enemy
+inline constexpr float homingRange = 760.f;        // only within this distance
+}  // namespace combat
+
+namespace field {
+inline constexpr int startSlots = 2;               // black holes you may have placed at once
+inline constexpr float blackHoleStrength = 3.2e5f; // accel = strength / dist^2
+inline constexpr float blackHoleRadius = 260.f;    // influence radius
+inline constexpr float maxAccel = 2200.f;          // clamp so it never yanks the ball insanely
+inline constexpr float minDist = 26.f;             // distance floor for the 1/d^2 term
+inline constexpr float grabPadding = 14.f;         // slack around a structure for grabbing
+}  // namespace field
+
+namespace core {
+inline constexpr float radius = 34.f;
+inline constexpr float baseHp = 140.f;
+inline constexpr float hpPlusBonus = 70.f;         // "reinforced core" meta unlock
+inline constexpr float enemyDamage = 8.f;          // hp lost per enemy that reaches the core
+}  // namespace core
+
+namespace wave {
+inline constexpr int baseCount = 4;
+inline constexpr float countGrowth = 1.26f;        // enemies = baseCount * growth^(wave-1)
+inline constexpr int maxCount = 60;
+inline constexpr float spawnInterval = 0.95f;      // seconds between spawns
+inline constexpr float hpBase = 3.f;
+inline constexpr float hpGrowth = 1.15f;
+inline constexpr float speedBase = 34.f;
+inline constexpr float speedGrowth = 1.05f;
+inline constexpr float speedMax = 120.f;
+inline constexpr float enemyRadius = 19.f;
+}  // namespace wave
+
+namespace meta {
+inline constexpr int coresPerWave = 1;             // meta currency earned per wave survived
+inline constexpr int coresPerBoss = 5;
+}  // namespace meta
 
 namespace pickup {
 inline constexpr float radius = 12.f;

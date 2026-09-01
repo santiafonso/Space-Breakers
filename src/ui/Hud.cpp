@@ -16,17 +16,19 @@ void Hud::init(const sf::Font& font, sf::Vector2f size) {
 
 void Hud::pulseCombo() { comboPop_ = 1.f; }
 
-void Hud::update(float dt, std::uint32_t score, std::uint32_t bestScore, float comboMultiplier,
-                 const std::optional<ActiveEffect>& effect) {
-    if (score != score_) {
-        scorePop_ = 1.f;
-        score_ = score;
+void Hud::update(float dt, std::uint32_t scrap, int wave, int enemiesLeft, float coreFrac,
+                 float comboMultiplier, const std::optional<ActiveEffect>& effect) {
+    if (scrap != scrap_) {
+        scrapPop_ = 1.f;
+        scrap_ = scrap;
     }
-    best_ = bestScore;
+    wave_ = wave;
+    enemiesLeft_ = enemiesLeft;
+    coreFrac_ = clampf(coreFrac, 0.f, 1.f);
     comboMul_ = comboMultiplier;
     effect_ = effect;
 
-    scorePop_ *= std::exp(-9.f * dt);
+    scrapPop_ *= std::exp(-9.f * dt);
     comboPop_ *= std::exp(-7.f * dt);
     const float target = effect ? 1.f : 0.f;
     effectAlpha_ = lerpf(effectAlpha_, target, 1.f - std::exp(-10.f * dt));
@@ -35,55 +37,72 @@ void Hud::update(float dt, std::uint32_t score, std::uint32_t bestScore, float c
 void Hud::draw(sf::RenderWindow& window) const {
     if (!font_) return;
 
-    // Score, top-left, with a small pop on gain.
-    sf::Text score = makeText(*font_, std::to_string(score_), theme::fsHud, theme::textHi);
-    const sf::FloatRect sb = score.getLocalBounds();
-    score.setOrigin(sb.left, sb.top);
-    const float scale = 1.f + 0.16f * scorePop_;
-    score.setScale(scale, scale);
-    score.setPosition(theme::margin, theme::margin - 4.f);
-    window.draw(score);
+    // Scrap, top-left, with a small pop on gain.
+    sf::Text scrap = makeText(*font_, std::to_string(scrap_) + "  scrap", theme::fsHud, theme::textHi);
+    const sf::FloatRect sb = scrap.getLocalBounds();
+    scrap.setOrigin(sb.left, sb.top);
+    const float scale = 1.f + 0.16f * scrapPop_;
+    scrap.setScale(scale, scale);
+    scrap.setPosition(theme::margin, theme::margin - 4.f);
+    window.draw(scrap);
 
-    if (best_ > score_) {
-        sf::Text best = makeText(*font_, "best  " + std::to_string(best_), theme::fsSmall, theme::textLo);
-        best.setPosition(theme::margin + 2.f, theme::margin + theme::fsHud + 4.f);
-        window.draw(best);
-    }
-
-    // Combo multiplier chip, just under the score. SFML renders std::string as
-    // Latin-1, so stick to ASCII glyphs here.
+    // Damage-combo chip.
     if (comboMul_ > 1.001f) {
         char chip[16];
-        std::snprintf(chip, sizeof(chip), "x%.1f", comboMul_);
+        std::snprintf(chip, sizeof(chip), "dmg x%.1f", comboMul_);
         sf::Text combo = makeText(*font_, chip, 18, theme::accent);
         const sf::FloatRect cb = combo.getLocalBounds();
         combo.setOrigin(cb.left, cb.top);
         const float cs = 1.f + 0.22f * comboPop_;
         combo.setScale(cs, cs);
-        combo.setPosition(theme::margin + 2.f, theme::margin + theme::fsHud + 22.f);
+        combo.setPosition(theme::margin + 2.f, theme::margin + theme::fsHud + 8.f);
         window.draw(combo);
     }
 
-    // Active power-up: a thin countdown bar centred at the top.
+    // Wave / core-health banner, top centre.
+    char banner[48];
+    std::snprintf(banner, sizeof(banner), "Wave %d", wave_);
+    drawCentered(window, *font_, banner, theme::fsHeading, {size_.x * 0.5f, theme::margin + 6.f},
+                 theme::textHi);
+
+    const float barW = 260.f;
+    const float x = size_.x * 0.5f - barW * 0.5f;
+    const float y = theme::margin + 28.f;
+    const sf::Color hpCol = lerpColor(theme::coreLow, theme::core, coreFrac_);
+
+    sf::RectangleShape track({barW, 4.f});
+    track.setPosition(x, y);
+    track.setFillColor(withAlpha(theme::arenaEdge, 0.9f));
+    window.draw(track);
+
+    sf::RectangleShape fill({barW * coreFrac_, 4.f});
+    fill.setPosition(x, y);
+    fill.setFillColor(hpCol);
+    window.draw(fill);
+
+    drawCentered(window, *font_, std::to_string(enemiesLeft_) + " left", theme::fsSmall,
+                 {size_.x * 0.5f, y + 16.f}, theme::textLo);
+
+    // Active power-up bar, a bit lower so it clears the banner.
     if (effectAlpha_ > 0.01f && effect_) {
         const float w = 172.f;
-        const float x = size_.x * 0.5f - w / 2.f;
-        const float y = theme::margin + 6.f;
+        const float px = size_.x * 0.5f - w / 2.f;
+        const float py = theme::margin + 64.f;
         const sf::Color col = powerUpColor(effect_->kind);
         const float frac = clampf(effect_->remaining / effect_->duration, 0.f, 1.f);
 
         drawCentered(window, *font_, powerUpName(effect_->kind), theme::fsSmall,
-                     {size_.x * 0.5f, y - 6.f}, withAlpha(col, effectAlpha_));
+                     {size_.x * 0.5f, py - 6.f}, withAlpha(col, effectAlpha_));
 
-        sf::RectangleShape track({w, 3.f});
-        track.setPosition(x, y + 8.f);
-        track.setFillColor(withAlpha(theme::arenaEdge, effectAlpha_));
-        window.draw(track);
+        sf::RectangleShape t({w, 3.f});
+        t.setPosition(px, py + 8.f);
+        t.setFillColor(withAlpha(theme::arenaEdge, effectAlpha_));
+        window.draw(t);
 
-        sf::RectangleShape fill({w * frac, 3.f});
-        fill.setPosition(x, y + 8.f);
-        fill.setFillColor(withAlpha(col, effectAlpha_));
-        window.draw(fill);
+        sf::RectangleShape ff({w * frac, 3.f});
+        ff.setPosition(px, py + 8.f);
+        ff.setFillColor(withAlpha(col, effectAlpha_));
+        window.draw(ff);
     }
 }
 

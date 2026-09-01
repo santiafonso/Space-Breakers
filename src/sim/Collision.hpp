@@ -2,9 +2,9 @@
 
 #include "sim/Entities.hpp"
 
-// Pure collision resolution. These helpers mutate the entity they are handed
+// Pure collision resolution. These helpers mutate the ball they are handed
 // (position pushed out of penetration, velocity reflected) and report the
-// contact so the caller can spawn feedback. They know nothing about the World.
+// contact so the caller can spawn feedback and apply damage.
 namespace sb::collision {
 
 struct Contact {
@@ -13,18 +13,15 @@ struct Contact {
     sf::Vector2f point;   // where the hit happened, for ring / edge feedback
 };
 
-// Circle against the inside of the arena rectangle spanning [0, size].
+// Ball against the inside of the arena rectangle spanning [0, size].
 Contact circleVsBounds(Ball& b, sf::Vector2f size);
 
-// Circle against one (possibly moving) axis-aligned wall. Reflection happens in
-// the wall's reference frame, so a drifting wall imparts a kick.
-Contact circleVsWall(Ball& b, const Wall& w);
+// Ball against a solid circular obstacle (an enemy or the core). Pushes the ball
+// clear and reflects the radial part of its velocity, scaled by `rebound`
+// (1 = elastic, 0 = the ball just grazes past).
+Contact circleVsSolidCircle(Ball& b, sf::Vector2f center, float radius, float rebound);
 
-// Push a held / parked ball out of a wall it overlaps. No velocity change.
-void pushOutOfWall(Ball& b, const Wall& w);
-
-// Equal-mass elastic response for a pair of overlapping balls: separate them,
-// then exchange the velocity component along the contact normal.
+// Equal-mass elastic response for a pair of overlapping balls.
 void resolveBallPair(Ball& a, Ball& b);
 
 }  // namespace sb::collision
