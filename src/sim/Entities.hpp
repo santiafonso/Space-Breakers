@@ -35,8 +35,6 @@ struct Ball {
     bool held = false;
     Element element = Element::Plain;
     float cooldown = 0.f;   // wind bolt / stone drop / water drip timer
-    float baseOrbit = cfg::orbit::radiusPx;    // resting orbit radius (with per-ball jitter)
-    float orbitRadius = cfg::orbit::radiusPx;  // current, adapts toward nearby enemies
     float squash = 0.f;
     sf::Vector2f squashAxis{1.f, 0.f};
     sf::Color color = theme::ballSlow;

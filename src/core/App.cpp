@@ -103,8 +103,8 @@ void App::newRun() {
     r.wave = 0;
     r.coreMaxHp = startCoreHp();
     r.coreHp = r.coreMaxHp;
-    r.scrap = 25;  // seed so the first offer is reachable
-    r.balls.assign(2 + data_.meta.unlock[MetaStartBalls], static_cast<int>(Element::Plain));
+    r.scrap = 40;  // seed so the first offer is reachable
+    r.balls.assign(4 + data_.meta.unlock[MetaStartBalls], static_cast<int>(Element::Plain));
     ++data_.meta.stats.runs;
 
     world_.startRun(params(), r.balls, r.coreHp, r.coreMaxHp);

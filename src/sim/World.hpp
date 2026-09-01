@@ -67,7 +67,6 @@ private:
     void spawnEnemy();
     void advanceCombo(float dt);
     void advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev);
-    void orbitAssist(Ball& b, float dt, const WorldParams& p) const;
     void emitElement(Ball& b, float dt, const WorldParams& p);
     void resolveBallPairs();
     void updateProjectiles(float dt);
@@ -79,7 +78,7 @@ private:
     void updatePickups(float dt, FrameEvents& ev);
     void advanceEffect(float dt);
     void afterBounce(Ball& b, sf::Vector2f normal, bool countHit);
-    void regulateSpeed(Ball& b, const WorldParams& p);
+    void regulateSpeed(Ball& b, float dt, const WorldParams& p);
     void updateTrail(Ball& b);
     float ballDamage(const Ball& b, const WorldParams& p) const;
 
