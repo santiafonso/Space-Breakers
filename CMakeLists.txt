@@ -5,6 +5,11 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# CMake >= 4.0 (already on the CI runners) refuses to configure a project that
+# asks for a policy version older than 3.5 - SFML 2.6's bundled build does.
+# This lets that sub-build configure. Harmless for our own project.
+set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
+
 # Single-config generators (Make, Ninja): default to an optimised build.
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "" FORCE)
@@ -12,12 +17,12 @@ endif()
 
 # --- SFML -------------------------------------------------------------------
 # Use the system SFML if it is installed (fast: the usual case on Linux).
-# Otherwise fetch and build 2.6.1 from source and link it statically, so a
+# Otherwise fetch and build 2.6.2 from source and link it statically, so a
 # fresh Windows machine needs no SFML install and the .exe ships with just
 # openal32.dll beside it.
 find_package(SFML 2.5 COMPONENTS graphics window audio system QUIET)
 if(NOT SFML_FOUND)
-    message(STATUS "SFML not found on the system - fetching and building 2.6.1")
+    message(STATUS "SFML not found on the system - fetching and building 2.6.2")
     include(FetchContent)
     set(SFML_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
     set(SFML_BUILD_DOC      OFF CACHE BOOL "" FORCE)
@@ -25,7 +30,7 @@ if(NOT SFML_FOUND)
     set(BUILD_SHARED_LIBS   OFF CACHE BOOL "" FORCE)
     FetchContent_Declare(SFML
         GIT_REPOSITORY https://github.com/SFML/SFML.git
-        GIT_TAG        2.6.1
+        GIT_TAG        2.6.2
         GIT_SHALLOW    ON)
     FetchContent_MakeAvailable(SFML)
 endif()
