@@ -32,6 +32,25 @@ struct UpgradeInfo {
     const char* desc;
 };
 
+// Machine-readable name, for the SB_UPGRADES dev override.
+inline const char* upgradeKindId(UpgradeKind k) {
+    switch (k) {
+        case UpgradeKind::AddBall:       return "AddBall";
+        case UpgradeKind::BallToFire:    return "BallToFire";
+        case UpgradeKind::CoreArmor:     return "CoreArmor";
+        case UpgradeKind::CoreRepair:    return "CoreRepair";
+        case UpgradeKind::CoreSpring:    return "CoreSpring";
+        case UpgradeKind::CoreRetaliate: return "CoreRetaliate";
+        case UpgradeKind::FlingMomentum: return "FlingMomentum";
+        case UpgradeKind::HeavyImpact:   return "HeavyImpact";
+        case UpgradeKind::BigBall:       return "BigBall";
+        case UpgradeKind::StrayBolt:     return "StrayBolt";
+        case UpgradeKind::Loot:          return "Loot";
+        case UpgradeKind::SecondChance:  return "SecondChance";
+    }
+    return "";
+}
+
 inline UpgradeInfo upgradeInfo(UpgradeKind k) {
     switch (k) {
         case UpgradeKind::AddBall:       return {"Extra ball", "one more ball in the arena"};

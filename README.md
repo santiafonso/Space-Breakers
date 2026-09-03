@@ -47,12 +47,39 @@ Pushing a `vX.Y.Z` tag also attaches both as zips to a GitHub Release.
 
 Set `SPACE_BREAKERS_NO_AUDIO=1` to run without sound (headless / SSH).
 
+## Developer mode
+
+Launch with `SB_DEV=1` to enable it (off for normal players — the keys and
+overrides do nothing without it).
+
+Start-of-run overrides, read when you hit **Start run**:
+
+| Env var | Effect |
+|---------|--------|
+| `SB_WAVE=8` | begin the run on wave 8 (1–10) |
+| `SB_BALLS=4` | start with this many balls |
+| `SB_UPGRADES=CoreSpring,HeavyImpact,HeavyImpact` | grant these upgrades up front (names from `Offers.hpp` `upgradeKindId`) |
+
+In-run keys (dev mode only):
+
+| Key | Effect |
+|-----|--------|
+| `]` | win the current wave now |
+| `H` | heal the core to full |
+| `G` | toggle core invulnerability |
+| `B` | add a ball |
+| `U` | grant the next upgrade in the pool (cycles) |
+| `=` | +25 cores |
+
+Example: `SB_DEV=1 SB_WAVE=9 SB_BALLS=3 SB_UPGRADES=CoreRetaliate,BigBall ./space_breakers`
+
 ## Controls
 
 | Input | Action |
 |-------|--------|
 | Left mouse | grab a ball and fling it to redirect it |
 | `ESC` | pause (and back out of any screen) |
+| `TAB` | (held, in play) list the upgrades taken this run |
 | `F` / `F11` | toggle fullscreen |
 | `M` | toggle sound |
 | `1`-`4` | choice screen: pick that upgrade |

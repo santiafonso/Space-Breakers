@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
+#include <sstream>
 
 #include "core/Config.hpp"
 #include "core/Theme.hpp"
@@ -18,6 +19,21 @@ namespace sb {
 namespace {
 
 sf::Vector2f kLogical() { return {1280.f, 800.f}; }
+
+bool envDevMode() {
+    const char* v = std::getenv("SB_DEV");
+    return v && *v && *v != '0';
+}
+
+int envInt(const char* key, int fallback) {
+    const char* v = std::getenv(key);
+    if (!v || !*v) return fallback;
+    try {
+        return std::stoi(v);
+    } catch (...) {
+        return fallback;
+    }
+}
 
 bool loadFont(sf::Font& font) {
     // Next to the binary first (packaged build), then the project-root layouts
@@ -137,8 +153,33 @@ void App::newRun() {
     r.balls.assign(static_cast<std::size_t>(startBallCount()), static_cast<int>(Element::Plain));
     ++data_.meta.stats.runs;
 
+    // Dev overrides: SB_BALLS / SB_WAVE / SB_UPGRADES=Name,Name,...
+    int startWave = 1;
+    if (devMode()) {
+        const int nb = envInt("SB_BALLS", 0);
+        if (nb > 0)
+            r.balls.assign(static_cast<std::size_t>(std::min(nb, cfg::ball::maxBalls)),
+                           static_cast<int>(Element::Plain));
+        startWave = std::clamp(envInt("SB_WAVE", 1), 1, cfg::run::finalWave);
+    }
+
     world_.startRun(params(), r.balls, r.coreHp, r.coreMaxHp);
     effects_.clear();
+
+    if (devMode()) {
+        if (const char* up = std::getenv("SB_UPGRADES")) {
+            std::string s(up), tok;
+            std::stringstream ss(s);
+            while (std::getline(ss, tok, ',')) {
+                for (int i = 0; i < kUpgradeKindCount; ++i) {
+                    const auto k = static_cast<UpgradeKind>(i);
+                    if (tok == upgradeKindId(k)) { applyUpgradeKind(k); break; }
+                }
+            }
+        }
+    }
+
+    r.wave = startWave - 1;
     startNextWave();
     replaceStack(ScreenId::Play);
     save();
@@ -191,11 +232,11 @@ void App::openChoice() {
     push(ScreenId::Choice);
 }
 
-void App::applyUpgrade(int idx) {
-    if (idx < 0 || idx >= kChoiceCount) return;
+void App::applyUpgradeKind(UpgradeKind k) {
     RunState& r = data_.run;
     RunMods& m = r.mods;
-    switch (choices_[idx]) {
+    r.picks.push_back(static_cast<int>(k));
+    switch (k) {
         case UpgradeKind::AddBall:
             world_.addBall(Element::Plain, params());
             r.balls.push_back(static_cast<int>(Element::Plain));
@@ -219,6 +260,11 @@ void App::applyUpgrade(int idx) {
         case UpgradeKind::Loot:          m.loot = true; break;
         case UpgradeKind::SecondChance:  m.secondChance = true; break;
     }
+}
+
+void App::applyUpgrade(int idx) {
+    if (idx < 0 || idx >= kChoiceCount) return;
+    applyUpgradeKind(choices_[idx]);
     audio_.purchase();
     effects_.flash(theme::accent, 0.4f);
     back();
@@ -251,6 +297,52 @@ void App::abandonRun() {
     save();
     replaceStack(ScreenId::Menu);
     push(ScreenId::Loadout);
+}
+
+// ---------------------------------------------------------------- dev tools
+
+bool App::devMode() const {
+    static const bool on = envDevMode();
+    return on;
+}
+
+void App::devWinWave() {
+    if (!devMode() || !data_.run.active) return;
+    world_.devWinWave();
+}
+
+void App::devGrantCores(int n) {
+    if (!devMode()) return;
+    data_.meta.cores += static_cast<std::uint32_t>(std::max(0, n));
+    effects_.flash(theme::accent, 0.3f);
+}
+
+void App::devHealCore() {
+    if (!devMode() || !data_.run.active) return;
+    world_.repairCore(1e9f);
+    effects_.flash(theme::core, 0.3f);
+}
+
+void App::devToggleInvuln() {
+    if (!devMode() || !data_.run.active) return;
+    world_.devSetInvuln(!world_.devInvuln());
+    effects_.flash(world_.devInvuln() ? theme::core : theme::coreLow, 0.3f);
+}
+
+void App::devAddBall() {
+    if (!devMode() || !data_.run.active) return;
+    if (runBallCount() >= cfg::ball::maxBalls) return;
+    world_.addBall(Element::Plain, params());
+    data_.run.balls.push_back(static_cast<int>(Element::Plain));
+}
+
+void App::devCycleGrant() {
+    if (!devMode() || !data_.run.active) return;
+    const auto k = static_cast<UpgradeKind>(devGrantNext_ % kUpgradeKindCount);
+    devGrantNext_ = (devGrantNext_ + 1) % kUpgradeKindCount;
+    applyUpgradeKind(k);
+    effects_.addLabel(std::string("+ ") + upgradeInfo(k).title, {size().x * 0.5f, size().y * 0.4f},
+                      theme::accent, 22, 1.0f);
 }
 
 void App::openPause() {

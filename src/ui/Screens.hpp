@@ -53,9 +53,11 @@ private:
     void grab(App& app, sf::Vector2f mouse);
     void release(App& app);
     sf::Vector2f pointerVelocity() const;
+    void drawPicks(App& app, sf::RenderWindow& w) const;
 
     WorldRenderer renderer_;
     bool dragging_ = false;
+    bool showPicks_ = false;   // Tab held: list upgrades taken this run
     float clock_ = 0.f;
     std::deque<std::pair<float, sf::Vector2f>> samples_;
 };

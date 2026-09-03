@@ -52,6 +52,7 @@ struct RunState {
     float coreHp = cfg::core::baseHp;
     float coreMaxHp = cfg::core::baseHp;
     std::vector<int> balls;  // Element per ball
+    std::vector<int> picks;  // UpgradeKind per between-wave choice made, in order
     RunMods mods;
 };
 

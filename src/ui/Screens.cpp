@@ -1,5 +1,6 @@
 #include "ui/Screens.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdint>
@@ -213,6 +214,7 @@ void LoadoutScreen::draw(App& app, sf::RenderWindow& w) {
 
 void PlayScreen::onEnter(App&) {
     dragging_ = false;
+    showPicks_ = false;
     clock_ = 0.f;
     samples_.clear();
 }
@@ -246,7 +248,23 @@ void PlayScreen::release(App& app) {
 void PlayScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
     if (isKey(e, sf::Keyboard::Escape)) { app.openPause(); return; }
     if (isKey(e, sf::Keyboard::M)) { app.toggleSound(); return; }
-    if (e.type == sf::Event::LostFocus) { release(app); return; }
+    if (isKey(e, sf::Keyboard::Tab)) { showPicks_ = true; return; }
+    if (e.type == sf::Event::KeyReleased && e.key.code == sf::Keyboard::Tab) {
+        showPicks_ = false;
+        return;
+    }
+    if (app.devMode() && e.type == sf::Event::KeyPressed) {
+        switch (e.key.code) {
+            case sf::Keyboard::RBracket: app.devWinWave(); return;
+            case sf::Keyboard::H:        app.devHealCore(); return;
+            case sf::Keyboard::G:        app.devToggleInvuln(); return;
+            case sf::Keyboard::B:        app.devAddBall(); return;
+            case sf::Keyboard::U:        app.devCycleGrant(); return;
+            case sf::Keyboard::Equal:    app.devGrantCores(25); return;
+            default: break;
+        }
+    }
+    if (e.type == sf::Event::LostFocus) { release(app); showPicks_ = false; return; }
     if (isLeftClick(e)) { grab(app, mouse); return; }
     if (e.type == sf::Event::MouseButtonReleased && e.mouseButton.button == sf::Mouse::Left)
         release(app);
@@ -287,6 +305,72 @@ void PlayScreen::draw(App& app, sf::RenderWindow& w) {
         dot.setFillColor(b.element == Element::Plain ? theme::textLo : elementColor(b.element));
         w.draw(dot);
         dx += 15.f;
+    }
+
+    drawCentered(w, app.font(), app.devMode() ? "TAB upgrades   (dev keys on)" : "hold TAB for upgrades",
+                 theme::fsSmall, {theme::margin + 60.f, s.y - theme::margin - 56.f}, theme::textDim);
+
+    if (showPicks_) drawPicks(app, w);
+}
+
+void PlayScreen::drawPicks(App& app, sf::RenderWindow& w) const {
+    const sf::Vector2f s = app.size();
+    const std::vector<int>& picks = app.data().run.picks;
+
+    // Tally repeats so "Heavy impact" taken 3x shows as one "x3" row.
+    std::array<int, kUpgradeKindCount> count{};
+    std::array<int, kUpgradeKindCount> firstSeen{};
+    int order = 0;
+    for (int i = 0; i < kUpgradeKindCount; ++i) firstSeen[i] = 1000;
+    for (int p : picks) {
+        if (p < 0 || p >= kUpgradeKindCount) continue;
+        if (count[p] == 0) firstSeen[p] = order++;
+        ++count[p];
+    }
+
+    std::vector<int> kinds;
+    for (int i = 0; i < kUpgradeKindCount; ++i)
+        if (count[i] > 0) kinds.push_back(i);
+    std::sort(kinds.begin(), kinds.end(),
+              [&](int a, int b) { return firstSeen[a] < firstSeen[b]; });
+
+    const float panelW = 320.f;
+    const float rowH = 26.f;
+    const float panelH = 56.f + rowH * static_cast<float>(std::max<std::size_t>(kinds.size(), 1));
+    const float px = s.x * 0.5f - panelW * 0.5f;
+    const float py = s.y * 0.5f - panelH * 0.5f;
+
+    sf::RectangleShape panel({panelW, panelH});
+    panel.setPosition(px, py);
+    panel.setFillColor(withAlpha(theme::panel, 0.92f));
+    panel.setOutlineThickness(1.f);
+    panel.setOutlineColor(withAlpha(theme::accent, 0.35f));
+    w.draw(panel);
+
+    drawCentered(w, app.font(), "Upgrades this run", theme::fsBody, {px + panelW * 0.5f, py + 18.f},
+                 theme::textHi);
+
+    if (kinds.empty()) {
+        drawCentered(w, app.font(), "none yet", theme::fsSmall, {px + panelW * 0.5f, py + 46.f},
+                     theme::textDim);
+        return;
+    }
+
+    float y = py + 44.f;
+    for (int k : kinds) {
+        sf::Text t = makeText(app.font(), upgradeInfo(static_cast<UpgradeKind>(k)).title, theme::fsBody,
+                              theme::textLo);
+        t.setPosition(px + 18.f, y);
+        w.draw(t);
+        if (count[k] > 1) {
+            sf::Text c = makeText(app.font(), "x" + std::to_string(count[k]), theme::fsBody,
+                                  theme::accent);
+            const sf::FloatRect cb = c.getLocalBounds();
+            c.setOrigin(cb.left + cb.width, cb.top);
+            c.setPosition(px + panelW - 18.f, y);
+            w.draw(c);
+        }
+        y += rowH;
     }
 }
 
@@ -438,8 +522,8 @@ void HowToScreen::draw(App& app, sf::RenderWindow& w) {
                      {s.x * 0.5f, y0 + 44.f * static_cast<float>(i)},
                      i + 1 == lines.size() ? theme::textHi : theme::textLo);
 
-    drawCentered(w, app.font(), "ESC  pause      F  fullscreen      M  sound", theme::fsSmall,
-                 {s.x * 0.5f, s.y * 0.72f}, theme::textLo);
+    drawCentered(w, app.font(), "ESC  pause      TAB  upgrades taken      F  fullscreen      M  sound",
+                 theme::fsSmall, {s.x * 0.5f, s.y * 0.72f}, theme::textLo);
     drawCentered(w, app.font(), "press ESC or click to go back", theme::fsSmall,
                  {s.x * 0.5f, s.y * 0.82f}, theme::textDim);
 }

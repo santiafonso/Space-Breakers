@@ -48,6 +48,15 @@ public:
     void newRun();          // Loadout "Start" -> a fresh run
     void applyUpgrade(int idx);   // Choice: pick one of the four
     void abandonRun();
+
+    // ---- dev tools: enabled by the SB_DEV env var, no-ops otherwise -----
+    bool devMode() const;
+    void devWinWave();
+    void devGrantCores(int n);
+    void devHealCore();
+    void devToggleInvuln();
+    void devAddBall();
+    void devCycleGrant();  // grant the "next" upgrade in the pool
     void openPause();
     void openStats();
     void openHowTo();
@@ -72,6 +81,7 @@ private:
     void startNextWave();
     void openChoice();
     void rollChoices();
+    void applyUpgradeKind(UpgradeKind k);
     void endRun(bool won);
 
     void handleEvent(const sf::Event& e);
@@ -95,6 +105,7 @@ private:
     int lastRunWave_ = 0;
     int lastRunCores_ = 0;
     bool lastRunWon_ = false;
+    int devGrantNext_ = 0;
 
     float fade_ = 0.f;
     float worldAccum_ = 0.f;

@@ -26,6 +26,11 @@ public:
     void repairCore(float amount);
     void addCoreMaxHp(float delta);                  // "Reinforce core" upgrade
 
+    // ---- dev tools (no-ops unless the caller is in dev mode) ---------
+    void devWinWave();                    // clear the current wave now
+    void devSetInvuln(bool on) { invuln_ = on; }
+    bool devInvuln() const { return invuln_; }
+
     FrameEvents step(float dt, const WorldParams& p);
 
     // ---- grab / throw: knock a ball off its orbit -------------------
@@ -113,6 +118,7 @@ private:
     float pickupTimer_ = cfg::pickup::spawnMin;
     float strayBoltTimer_ = cfg::element::strayInterval;
     bool secondChanceSpent_ = false;
+    bool invuln_ = false;  // dev: core takes no damage
 };
 
 }  // namespace sb

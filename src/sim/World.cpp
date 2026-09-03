@@ -89,6 +89,12 @@ void World::addCoreMaxHp(float delta) {
     core_.hp = std::min(core_.maxHp, core_.hp + delta);
 }
 
+void World::devWinWave() {
+    toSpawn_ = 0;
+    enemies_.clear();
+    projectiles_.clear();
+}
+
 void World::startRun(const WorldParams& p, const std::vector<int>& ballElements,
                      float coreHp, float coreMaxHp) {
     balls_.clear();
@@ -111,6 +117,7 @@ void World::startRun(const WorldParams& p, const std::vector<int>& ballElements,
     spawnTimer_ = 0.f;
     strayBoltTimer_ = cfg::element::strayInterval;
     secondChanceSpent_ = false;
+    invuln_ = false;
 
     core_.pos = size_ * 0.5f;
     core_.maxHp = coreMaxHp;
@@ -496,7 +503,7 @@ void World::updateEnemies(float dt, const WorldParams& p, FrameEvents& ev) {
         }
 
         if (dist <= core_.radius + e.radius) {
-            core_.hp -= cfg::core::enemyDamage;
+            if (!invuln_) core_.hp -= cfg::core::enemyDamage;
             core_.hitFlash = 1.f;
             ev.coreHit = true;
 
