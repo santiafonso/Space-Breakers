@@ -17,9 +17,10 @@ void Hud::init(const sf::Font& font, sf::Vector2f size) {
 void Hud::pulseCombo() { comboPop_ = 1.f; }
 
 void Hud::update(float dt, int wave, int finalWave, int enemiesLeft, float coreFrac,
-                 float comboMultiplier, const std::optional<ActiveEffect>& effect) {
+                 float comboMultiplier, const std::optional<ActiveEffect>& effect, bool bossWave) {
     wave_ = wave;
     finalWave_ = finalWave;
+    bossWave_ = bossWave;
     enemiesLeft_ = enemiesLeft;
     coreFrac_ = clampf(coreFrac, 0.f, 1.f);
     comboMul_ = comboMultiplier;
@@ -48,9 +49,12 @@ void Hud::draw(sf::RenderWindow& window) const {
 
     // Wave / core-health banner, top centre.
     char banner[48];
-    std::snprintf(banner, sizeof(banner), "Wave %d / %d", wave_, finalWave_);
+    if (bossWave_)
+        std::snprintf(banner, sizeof(banner), "Wave %d / %d  -  MINIBOSS", wave_, finalWave_);
+    else
+        std::snprintf(banner, sizeof(banner), "Wave %d / %d", wave_, finalWave_);
     drawCentered(window, *font_, banner, theme::fsHeading, {size_.x * 0.5f, theme::margin + 6.f},
-                 theme::textHi);
+                 bossWave_ ? theme::coreLow : theme::textHi);
 
     const float barW = 260.f;
     const float x = size_.x * 0.5f - barW * 0.5f;

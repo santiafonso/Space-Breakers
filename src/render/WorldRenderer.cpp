@@ -53,6 +53,47 @@ void WorldRenderer::drawProjectile(sf::RenderWindow& window, const Projectile& p
     window.draw(s);
 }
 
+void WorldRenderer::drawBoss(sf::RenderWindow& window, const Boss& b) const {
+    if (!b.alive) return;
+    const float frac = b.maxHp > 0.f ? clampf(b.hp / b.maxHp, 0.f, 1.f) : 0.f;
+    const sf::Color fill = lerpColor(theme::enemy, sf::Color::White, b.hitFlash);
+
+    sf::CircleShape glow(b.radius * 1.7f, 28);
+    glow.setOrigin(glow.getRadius(), glow.getRadius());
+    glow.setPosition(b.pos);
+    glow.setFillColor(withAlpha(theme::coreLow, 0.12f));
+    window.draw(glow);
+
+    sf::CircleShape body(b.radius, 30);
+    body.setOrigin(b.radius, b.radius);
+    body.setPosition(b.pos);
+    body.setFillColor(withAlpha(fill, 0.92f));
+    body.setOutlineThickness(3.f);
+    body.setOutlineColor(withAlpha(theme::coreLow, 0.8f));
+    window.draw(body);
+
+    sf::CircleShape core(b.radius * 0.42f, 20);
+    core.setOrigin(core.getRadius(), core.getRadius());
+    core.setPosition(b.pos);
+    core.setFillColor(withAlpha(theme::bg, 0.5f));
+    window.draw(core);
+
+    // Small health bar just above the boss.
+    const float bw = 76.f, bh = 6.f;
+    const float y = b.pos.y - b.radius - 16.f;
+    sf::RectangleShape track({bw, bh});
+    track.setOrigin(bw * 0.5f, bh * 0.5f);
+    track.setPosition(b.pos.x, y);
+    track.setFillColor(withAlpha(theme::arenaEdge, 0.9f));
+    window.draw(track);
+
+    sf::RectangleShape hp({bw * frac, bh});
+    hp.setOrigin(bw * 0.5f, bh * 0.5f);
+    hp.setPosition(b.pos.x, y);
+    hp.setFillColor(theme::coreLow);
+    window.draw(hp);
+}
+
 void WorldRenderer::drawEnemy(sf::RenderWindow& window, const Enemy& e) const {
     const float frac = e.maxHp > 0.f ? clampf(e.hp / e.maxHp, 0.f, 1.f) : 0.f;
     sf::Color fill = lerpColor(theme::enemy, sf::Color::White, e.hitFlash);
@@ -151,6 +192,7 @@ void WorldRenderer::draw(sf::RenderWindow& window, const World& world) const {
     for (const Puddle& p : world.puddles()) drawPuddle(window, p);
     for (const Obstacle& o : world.obstacles()) drawObstacle(window, o);
     drawCore(window, world.core());
+    drawBoss(window, world.boss());
     for (const Enemy& e : world.enemies()) drawEnemy(window, e);
     for (const Projectile& pr : world.projectiles()) drawProjectile(window, pr);
     for (const Pickup& pu : world.pickups()) drawPickup(window, pu);

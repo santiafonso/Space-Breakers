@@ -36,6 +36,8 @@ public:
     Hud& hud() { return hud_; }
     const sf::Font& font() const { return font_; }
     sf::Vector2f size() const { return window_.logicalSize(); }
+    void useWorldView() { window_.useWorldView(); }
+    void useUiView() { window_.useUiView(); }
     WorldParams params() const;
 
     int runBallCount() const { return static_cast<int>(data_.run.balls.size()); }
@@ -110,6 +112,9 @@ private:
     float fade_ = 0.f;
     float worldAccum_ = 0.f;
     float autosaveTimer_ = 20.f;
+
+    sf::Vector2f camSize_{1280.f, 800.f};
+    sf::Vector2f camCenter_{640.f, 400.f};
 };
 
 }  // namespace sb

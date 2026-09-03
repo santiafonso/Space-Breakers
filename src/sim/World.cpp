@@ -24,7 +24,7 @@ float waveEnemySpeed(int wave) {
 
 }  // namespace
 
-World::World(sf::Vector2f size) : size_(size) { core_.pos = size_ * 0.5f; }
+World::World(sf::Vector2f size) : baseSize_(size), size_(size) { core_.pos = size_ * 0.5f; }
 
 // ---------------------------------------------------------------- speeds
 
@@ -93,6 +93,7 @@ void World::devWinWave() {
     toSpawn_ = 0;
     enemies_.clear();
     projectiles_.clear();
+    if (bossWave_ && boss_.alive) boss_.hp = 0.f;  // updateBoss clears it -> waveCleared
 }
 
 void World::startRun(const WorldParams& p, const std::vector<int>& ballElements,
@@ -118,7 +119,10 @@ void World::startRun(const WorldParams& p, const std::vector<int>& ballElements,
     strayBoltTimer_ = cfg::element::strayInterval;
     secondChanceSpent_ = false;
     invuln_ = false;
+    bossWave_ = false;
+    boss_ = Boss{};
 
+    size_ = baseSize_;
     core_.pos = size_ * 0.5f;
     core_.maxHp = coreMaxHp;
     core_.hp = std::min(coreHp, coreMaxHp);
@@ -132,14 +136,7 @@ void World::startRun(const WorldParams& p, const std::vector<int>& ballElements,
     pickupTimer_ = rng_.range(cfg::pickup::firstSpawnMin, cfg::pickup::firstSpawnMax);
 }
 
-void World::startWave(int wave, const WorldParams& p) {
-    wave_ = wave;
-    toSpawn_ = waveEnemyCount(wave);
-    spawnTimer_ = 0.35f;
-    waveRunning_ = true;
-    projectiles_.clear();
-
-    // Re-launch the balls from the core, each on a fresh straight heading.
+void World::relaunchBalls(const WorldParams& p) {
     for (Ball& b : balls_) {
         const float a = rng_.range(0.f, 2.f * kPi);
         b.pos = core_.pos + sf::Vector2f{std::cos(a), std::sin(a)} * (core_.radius + b.radius + 20.f);
@@ -149,6 +146,42 @@ void World::startWave(int wave, const WorldParams& p) {
     }
     grabbed_ = Grabbed::None;
     heldIndex_ = -1;
+}
+
+void World::startWave(int wave, const WorldParams& p) {
+    bossWave_ = false;
+    boss_ = Boss{};
+    size_ = baseSize_;
+    core_.pos = size_ * 0.5f;
+
+    wave_ = wave;
+    toSpawn_ = waveEnemyCount(wave);
+    spawnTimer_ = 0.35f;
+    waveRunning_ = true;
+    projectiles_.clear();
+    relaunchBalls(p);
+}
+
+void World::startBossWave(const WorldParams& p) {
+    bossWave_ = true;
+    wave_ = cfg::run::finalWave;
+    waveRunning_ = true;
+    toSpawn_ = 0;
+    spawnTimer_ = 1.0f;
+    enemies_.clear();
+    projectiles_.clear();
+
+    // Wider arena, core shoved to the far left.
+    size_ = {baseSize_.x * cfg::boss::arenaScaleX, baseSize_.y * cfg::boss::arenaScaleY};
+    core_.pos = {core_.radius + cfg::boss::coreMarginX, size_.y * 0.5f};
+
+    boss_ = Boss{};
+    boss_.alive = true;
+    boss_.hp = boss_.maxHp = cfg::boss::hp;
+    boss_.pos = {size_.x - boss_.radius - 4.f, size_.y * 0.5f};
+    boss_.vel = {-cfg::boss::speed, 0.f};
+
+    relaunchBalls(p);
 }
 
 void World::spawnEnemy() {
@@ -419,6 +452,18 @@ void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
             afterBounce(b, c.normal, true);
             pushFx(c);
         }
+
+        // The miniboss is solid and takes damage, but never moves off its line.
+        if (boss_.alive) {
+            if (collision::Contact c = collision::circleVsSolidCircle(
+                    b, boss_.pos, boss_.radius, cfg::combat::hitRebound);
+                c.hit) {
+                boss_.hp -= ballDamage(b, p);
+                boss_.hitFlash = 1.f;
+                afterBounce(b, c.normal, true);
+                pushFx(c);
+            }
+        }
     }
 
     emitElement(b, dt, p);
@@ -450,6 +495,11 @@ void World::updateProjectiles(float dt) {
                 hit = true;
                 break;
             }
+        }
+        if (!hit && boss_.alive && length(boss_.pos - it->pos) < boss_.radius + 4.f) {
+            boss_.hp -= it->damage;
+            boss_.hitFlash = 1.f;
+            hit = true;
         }
         if (hit || it->life <= 0.f || it->pos.x < -20.f || it->pos.x > size_.x + 20.f ||
             it->pos.y < -20.f || it->pos.y > size_.y + 20.f)
@@ -552,8 +602,45 @@ void World::sweepDeadEnemies(FrameEvents& ev) {
     }
 }
 
+void World::updateBoss(float dt, const WorldParams& p, FrameEvents& ev) {
+    (void)p;
+    if (!bossWave_ || !boss_.alive) return;
+
+    boss_.pos += boss_.vel * dt;   // dead straight, immune to knockback / steering
+    boss_.hitFlash *= std::exp(-6.f * dt);
+
+    if (boss_.hp <= 0.f) {
+        boss_.alive = false;
+        waveRunning_ = false;
+        ev.kills.push_back(boss_.pos);
+        ev.waveCleared = true;
+        return;
+    }
+    if (boss_.pos.x - boss_.radius <= core_.pos.x + core_.radius) {
+        boss_.alive = false;
+        core_.hp = 0.f;
+        core_.hitFlash = 1.f;
+        ev.coreHit = true;
+        runOver_ = true;   // reaching the core loses the run outright
+    }
+}
+
 void World::updateWaveSpawner(float dt, FrameEvents& ev) {
     if (!waveRunning_) return;
+
+    if (bossWave_) {
+        // Adds keep coming until the boss is down (the boss's own update ends
+        // the wave). Capped so it stays fair.
+        if (boss_.alive) {
+            spawnTimer_ -= dt;
+            if (spawnTimer_ <= 0.f && static_cast<int>(enemies_.size()) < cfg::boss::maxAdds) {
+                spawnEnemy();
+                spawnTimer_ = cfg::boss::addInterval;
+            }
+        }
+        return;
+    }
+
     if (toSpawn_ > 0) {
         spawnTimer_ -= dt;
         if (spawnTimer_ <= 0.f) {
@@ -646,6 +733,7 @@ FrameEvents World::step(float dt, const WorldParams& p) {
     updateObstacles(dt);
     updateEnemies(dt, p, ev);
     sweepDeadEnemies(ev);
+    updateBoss(dt, p, ev);
     updateWaveSpawner(dt, ev);
     updatePickups(dt, p, ev);
     advanceEffect(dt);

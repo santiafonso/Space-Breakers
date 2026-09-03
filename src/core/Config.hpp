@@ -111,6 +111,19 @@ inline constexpr int startBalls = 1;   // before the "Squad" meta unlock
 inline constexpr int finalWave = 10;
 }  // namespace run
 
+// The final wave is a miniboss duel in a wider arena.
+namespace boss {
+inline constexpr float arenaScaleX = 1.45f;   // boss arena vs the normal one
+inline constexpr float arenaScaleY = 1.15f;
+inline constexpr float coreMarginX = 96.f;    // core sits this far from the left wall
+inline constexpr float hp = 50.f;             // small bar - a handful of clean hits
+inline constexpr float radius = 40.f;         // big target - you are meant to fling at it
+inline constexpr float speed = 38.f;          // px/s, dead straight at the core, no steering
+inline constexpr float addInterval = 1.2f;    // infinite adds cadence while the boss lives
+inline constexpr int   maxAdds = 14;          // concurrent cap so it stays fair
+inline constexpr float camEase = 2.6f;        // camera zoom transition rate
+}  // namespace boss
+
 namespace wave {
 inline constexpr int baseCount = 3;
 inline constexpr float countGrowth = 1.22f;

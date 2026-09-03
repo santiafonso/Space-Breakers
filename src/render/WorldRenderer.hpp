@@ -12,6 +12,7 @@ public:
 
 private:
     void drawCore(sf::RenderWindow& window, const Core& c) const;
+    void drawBoss(sf::RenderWindow& window, const Boss& b) const;
     void drawEnemy(sf::RenderWindow& window, const Enemy& e) const;
     void drawPuddle(sf::RenderWindow& window, const Puddle& p) const;
     void drawObstacle(sf::RenderWindow& window, const Obstacle& o) const;

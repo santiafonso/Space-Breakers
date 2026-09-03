@@ -287,8 +287,11 @@ void PlayScreen::update(App& app, float dt, sf::Vector2f mouse) {
 }
 
 void PlayScreen::draw(App& app, sf::RenderWindow& w) {
+    app.useWorldView();
     renderer_.draw(w, app.world());
     app.effects().drawRings(w);
+    app.useUiView();
+
     app.hud().draw(w);
 
     // Ball tally, bottom-left: how many are in play and of what element.

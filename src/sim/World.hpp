@@ -21,6 +21,7 @@ public:
     void startRun(const WorldParams& p, const std::vector<int>& ballElements,
                   float coreHp, float coreMaxHp);
     void startWave(int wave, const WorldParams& p);
+    void startBossWave(const WorldParams& p);   // the wave-10 miniboss duel
     void addBall(Element e, const WorldParams& p);
     void convertOneBall(Element from, Element to);   // "Ignite a ball" upgrade
     void repairCore(float amount);
@@ -49,10 +50,16 @@ public:
     const std::vector<Obstacle>& obstacles() const { return obstacles_; }
     const std::vector<Pickup>& pickups() const { return pickups_; }
     const Core& core() const { return core_; }
+    const Boss& boss() const { return boss_; }
     const std::optional<ActiveEffect>& effect() const { return effect_; }
     sf::Vector2f size() const { return size_; }
 
+    // Area the camera should frame (grows for the boss wave).
+    sf::Vector2f viewSize() const { return size_; }
+    sf::Vector2f viewCenter() const { return size_ * 0.5f; }
+
     bool waveRunning() const { return waveRunning_; }
+    bool bossWave() const { return bossWave_; }
     bool runOver() const { return runOver_; }
     int wave() const { return wave_; }
     int enemiesLeft() const { return static_cast<int>(enemies_.size()) + toSpawn_; }
@@ -72,6 +79,7 @@ public:
 private:
     void spawnBall(Element e, const WorldParams& p);
     void spawnEnemy();
+    void relaunchBalls(const WorldParams& p);
     void advanceCombo(float dt);
     void advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev);
     void emitElement(Ball& b, float dt, const WorldParams& p);
@@ -81,6 +89,7 @@ private:
     void updatePuddles(float dt);
     void updateObstacles(float dt);
     void updateEnemies(float dt, const WorldParams& p, FrameEvents& ev);
+    void updateBoss(float dt, const WorldParams& p, FrameEvents& ev);
     void sweepDeadEnemies(FrameEvents& ev);
     void updateWaveSpawner(float dt, FrameEvents& ev);
     void updatePickups(float dt, const WorldParams& p, FrameEvents& ev);
@@ -90,7 +99,8 @@ private:
     void updateTrail(Ball& b);
     float ballDamage(const Ball& b, const WorldParams& p) const;
 
-    sf::Vector2f size_;
+    sf::Vector2f baseSize_;   // the normal arena
+    sf::Vector2f size_;       // current arena (== baseSize_ except on the boss wave)
     std::vector<Ball> balls_;
     std::vector<Enemy> enemies_;
     std::vector<Projectile> projectiles_;
@@ -98,6 +108,7 @@ private:
     std::vector<Obstacle> obstacles_;
     std::vector<Pickup> pickups_;
     Core core_;
+    Boss boss_;
     std::optional<ActiveEffect> effect_;
     Rng rng_;
 
@@ -111,6 +122,7 @@ private:
 
     int wave_ = 0;
     bool waveRunning_ = false;
+    bool bossWave_ = false;
     bool runOver_ = false;
     int toSpawn_ = 0;
     float spawnTimer_ = 0.f;

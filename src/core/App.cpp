@@ -188,7 +188,10 @@ void App::newRun() {
 void App::startNextWave() {
     data_.run.wave += 1;
     world_.repairCore(cfg::core::waveHeal);
-    world_.startWave(data_.run.wave, params());
+    if (data_.run.wave >= cfg::run::finalWave)
+        world_.startBossWave(params());        // wide arena + miniboss
+    else
+        world_.startWave(data_.run.wave, params());
     data_.meta.stats.bestWave =
         std::max(data_.meta.stats.bestWave, static_cast<std::uint32_t>(data_.run.wave));
 }
@@ -485,13 +488,35 @@ void App::update(float frameDt) {
         worldAccum_ = 0.f;
     }
 
+    // Camera: ease toward the area the world wants framed (wider on the boss
+    // wave), snap back to the fixed view whenever we are not in a live run.
+    sf::Vector2f tgtSize = kLogical();
+    sf::Vector2f tgtCenter = kLogical() * 0.5f;
+    bool snap = true;
+    if (simulating() && data_.run.active) {
+        tgtSize = world_.viewSize();
+        tgtCenter = world_.viewCenter();
+        snap = false;
+    }
+    if (snap) {
+        camSize_ = tgtSize;
+        camCenter_ = tgtCenter;
+    } else {
+        const float k = 1.f - std::exp(-cfg::boss::camEase * frameDt);
+        camSize_ += (tgtSize - camSize_) * k;
+        camCenter_ += (tgtCenter - camCenter_) * k;
+    }
+    window_.setWorldView(camSize_, camCenter_);
+
     const Core& c = world_.core();
     hud_.update(frameDt, world_.wave(), cfg::run::finalWave, world_.enemiesLeft(),
-                c.maxHp > 0.f ? c.hp / c.maxHp : 0.f, world_.comboMultiplier(), world_.effect());
+                c.maxHp > 0.f ? c.hp / c.maxHp : 0.f, world_.comboMultiplier(), world_.effect(),
+                world_.bossWave());
 }
 
 void App::render() {
     sf::RenderWindow& w = window_.handle();
+    window_.useUiView();
     w.clear(theme::bg);
     effects_.drawBorder(w);
 

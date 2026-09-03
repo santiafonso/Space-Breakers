@@ -4,9 +4,11 @@ A roguelite about defending a core. You start a run with a single ball that
 bounces freely around the arena — off the walls and off the core — clearing
 enemies that march on the core. It tracks nothing; you fling it to aim it into
 a cluster. After each wave you pick 1 of 4 rolled upgrades (more balls, core
-buffs, a fire ball, …). A run is ten waves: clear the tenth to win, or lose it
-when the core falls. Either way you keep *cores*, spent in the game menu on
-permanent unlocks before the next run.
+buffs, a fire ball, …). A run is ten waves; the tenth pulls the camera back
+into a wider arena for a miniboss that walks dead straight at the core while
+enemies keep coming — kill it to win, let it touch the core and you lose.
+Either way you keep *cores*, spent in the game menu on permanent unlocks
+before the next run.
 
 Work in progress on the `combat-rework` branch. See `DESIGN.md` for the full
 design and roadmap.

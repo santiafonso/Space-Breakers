@@ -4,7 +4,8 @@
 
 namespace sb {
 
-Window::Window(sf::Vector2f logicalSize) : logical_(logicalSize) {}
+Window::Window(sf::Vector2f logicalSize)
+    : logical_(logicalSize), worldSize_(logicalSize), worldCenter_(logicalSize * 0.5f) {}
 
 void Window::applyVideoMode(bool fullscreen) {
     if (fullscreen) {
@@ -22,26 +23,49 @@ void Window::applyVideoMode(bool fullscreen) {
     applyLetterbox(win_.getSize().x, win_.getSize().y);
 }
 
-void Window::applyLetterbox(unsigned pixelW, unsigned pixelH) {
-    view_.setSize(logical_.x, logical_.y);
-    view_.setCenter(logical_.x * 0.5f, logical_.y * 0.5f);
+// The letterbox rectangle is derived from the UI aspect and shared by both
+// views, so switching between them never shifts the picture on screen.
+void Window::rebuildViews(unsigned pixelW, unsigned pixelH) {
+    pixelW_ = pixelW;
+    pixelH_ = std::max(1u, pixelH);
 
-    const float windowRatio = static_cast<float>(pixelW) / std::max(1u, pixelH);
-    const float viewRatio = logical_.x / logical_.y;
+    const float windowRatio = static_cast<float>(pixelW) / static_cast<float>(pixelH_);
+    const float uiRatio = logical_.x / logical_.y;
     float sx = 1.f, sy = 1.f, ox = 0.f, oy = 0.f;
-    if (windowRatio > viewRatio) {
-        sx = viewRatio / windowRatio;
+    if (windowRatio > uiRatio) {
+        sx = uiRatio / windowRatio;
         ox = (1.f - sx) * 0.5f;
     } else {
-        sy = windowRatio / viewRatio;
+        sy = windowRatio / uiRatio;
         oy = (1.f - sy) * 0.5f;
     }
-    view_.setViewport({ox, oy, sx, sy});
-    win_.setView(view_);
+    const sf::FloatRect viewport{ox, oy, sx, sy};
+
+    uiView_.setSize(logical_.x, logical_.y);
+    uiView_.setCenter(logical_ * 0.5f);
+    uiView_.setViewport(viewport);
+
+    // Fit the requested world area inside the same UI aspect (extra head-room
+    // above/below rather than stretching).
+    float w = std::max(worldSize_.x, worldSize_.y * uiRatio);
+    float h = w / uiRatio;
+    worldView_.setSize(w, h);
+    worldView_.setCenter(worldCenter_);
+    worldView_.setViewport(viewport);
+
+    win_.setView(uiView_);
+}
+
+void Window::applyLetterbox(unsigned pixelW, unsigned pixelH) { rebuildViews(pixelW, pixelH); }
+
+void Window::setWorldView(sf::Vector2f size, sf::Vector2f center) {
+    worldSize_ = size;
+    worldCenter_ = center;
+    rebuildViews(pixelW_, pixelH_);
 }
 
 sf::Vector2f Window::mousePosition() const {
-    return win_.mapPixelToCoords(sf::Mouse::getPosition(win_), view_);
+    return win_.mapPixelToCoords(sf::Mouse::getPosition(win_), worldView_);
 }
 
 }  // namespace sb

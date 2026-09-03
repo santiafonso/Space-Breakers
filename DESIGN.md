@@ -217,8 +217,22 @@ Fase → **Fantasma** (atraviesa estructuras, a revisar) · Frenesí x3 → **Fr
   - Flujo de pantallas: **Menu -> Loadout -> Play (10 oleadas, Choice entre
     cada una) -> Loadout**. `RunSummaryScreen` eliminada (el resultado se
     muestra arriba del Loadout). Guardado **v5**: solo meta, sin reanudar run.
-  - Mas adelante: **jefe tras la oleada 10** que da los upgrades de pelota
-    (viento/agua/piedra), que por eso quedan fuera del pool.
+  - "Bala perdida" (StrayBolt) sacada del pool (queda en el codigo, solo
+    dev/env) - las mejoras de disparo se suman despues.
+
+- **Fase 1b — oleada 10 = duelo de miniboss. [IMPLEMENTADO 2026-09-03]**
+  - Al pasar a la oleada 10, `World::startBossWave`: **arena mas ancha**
+    (`cfg::boss::arenaScale*`), el **nucleo pegado a la izquierda**, y la
+    **camara se aleja con transicion** (`Window` ahora tiene dos vistas:
+    `uiView_` fija para HUD/menus y `worldView_` que se agranda; `App`
+    interpola `camSize_/camCenter_` hacia `World::viewSize/viewCenter`).
+  - **Miniboss** (`struct Boss`): sale de la mitad del lado derecho, va
+    **recto** al nucleo, **inmune a knockback y sin steering**. Barra de
+    vida chica encima. Si toca el nucleo -> `runOver_` (derrota directa).
+    Las pelotas le pegan y rebotan pero no lo mueven.
+  - **Adds infinitos** mientras el boss vive (cap `cfg::boss::maxAdds`).
+    Matar al boss -> `waveCleared` -> `endRun(true)` (victoria).
+  - Tuning en `cfg::boss` (hp 50, radio 40, vel 38, arena 1.45x/1.15x).
 
   Detalle original (Fase 0b):
   - Quitar paredes.

@@ -96,7 +96,7 @@ inline bool upgradeEligible(UpgradeKind k, const UpgradeCtx& c) {
         case UpgradeKind::CoreSpring:    return !c.spring;
         case UpgradeKind::CoreRetaliate: return !c.retaliate;
         case UpgradeKind::FlingMomentum: return !c.flingMomentum;
-        case UpgradeKind::StrayBolt:     return !c.strayBolt;
+        case UpgradeKind::StrayBolt:     return false;  // deferred - not offered yet (dev/env only)
         case UpgradeKind::Loot:          return !c.loot;
         case UpgradeKind::SecondChance:  return !c.secondChance;
         case UpgradeKind::CoreArmor:     return true;

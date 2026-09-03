@@ -87,6 +87,18 @@ struct Core {
     float hitFlash = 0.f;
 };
 
+// The wave-10 miniboss: walks dead straight at the core from the right, ignores
+// knockback and steering. If it touches the core you lose the run outright.
+struct Boss {
+    sf::Vector2f pos;
+    sf::Vector2f vel;
+    float radius = cfg::boss::radius;
+    float hp = cfg::boss::hp;
+    float maxHp = cfg::boss::hp;
+    float hitFlash = 0.f;
+    bool alive = false;
+};
+
 struct Pickup {
     sf::Vector2f pos;
     sf::Vector2f vel;
