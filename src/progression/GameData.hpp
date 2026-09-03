@@ -39,7 +39,6 @@ struct RunMods {
     bool spring = false;
     bool retaliate = false;
     bool flingMomentum = false;
-    bool strayBolt = false;
     bool loot = false;
     bool secondChance = false;
     bool secondChanceUsed = false;

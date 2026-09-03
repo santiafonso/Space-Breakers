@@ -20,11 +20,10 @@ enum class UpgradeKind {
     FlingMomentum,  // a flung ball keeps its speed longer
     HeavyImpact,    // +contact damage, stacks
     BigBall,        // +ball radius, stacks (capped)
-    StrayBolt,      // a random ball fires a bolt at the nearest enemy on a timer
     Loot,           // +cores at the end of the run
     SecondChance,   // once per run the core survives a lethal hit
 };
-inline constexpr int kUpgradeKindCount = 12;
+inline constexpr int kUpgradeKindCount = 11;
 inline constexpr int kChoiceCount = 4;
 
 struct UpgradeInfo {
@@ -44,7 +43,6 @@ inline const char* upgradeKindId(UpgradeKind k) {
         case UpgradeKind::FlingMomentum: return "FlingMomentum";
         case UpgradeKind::HeavyImpact:   return "HeavyImpact";
         case UpgradeKind::BigBall:       return "BigBall";
-        case UpgradeKind::StrayBolt:     return "StrayBolt";
         case UpgradeKind::Loot:          return "Loot";
         case UpgradeKind::SecondChance:  return "SecondChance";
     }
@@ -62,7 +60,6 @@ inline UpgradeInfo upgradeInfo(UpgradeKind k) {
         case UpgradeKind::FlingMomentum: return {"Reflexes", "a flung ball keeps its speed longer"};
         case UpgradeKind::HeavyImpact:   return {"Heavy impact", "+30% ball contact damage"};
         case UpgradeKind::BigBall:       return {"Big ball", "+25% ball radius"};
-        case UpgradeKind::StrayBolt:     return {"Stray bolt", "a ball fires at the nearest enemy on a timer"};
         case UpgradeKind::Loot:          return {"Loot", "+20% cores at the end of the run"};
         case UpgradeKind::SecondChance:  return {"Second chance", "once, the core survives a lethal hit"};
     }
@@ -81,7 +78,6 @@ struct UpgradeCtx {
     bool spring = false;
     bool retaliate = false;
     bool flingMomentum = false;
-    bool strayBolt = false;
     bool loot = false;
     bool secondChance = false;
 };
@@ -96,7 +92,6 @@ inline bool upgradeEligible(UpgradeKind k, const UpgradeCtx& c) {
         case UpgradeKind::CoreSpring:    return !c.spring;
         case UpgradeKind::CoreRetaliate: return !c.retaliate;
         case UpgradeKind::FlingMomentum: return !c.flingMomentum;
-        case UpgradeKind::StrayBolt:     return false;  // deferred - not offered yet (dev/env only)
         case UpgradeKind::Loot:          return !c.loot;
         case UpgradeKind::SecondChance:  return !c.secondChance;
         case UpgradeKind::CoreArmor:     return true;

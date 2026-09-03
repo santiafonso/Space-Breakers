@@ -83,7 +83,6 @@ private:
     void advanceCombo(float dt);
     void advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev);
     void emitElement(Ball& b, float dt, const WorldParams& p);
-    void fireStrayBolt(float dt, const WorldParams& p);
     void resolveBallPairs();
     void updateProjectiles(float dt);
     void updatePuddles(float dt);
@@ -128,7 +127,6 @@ private:
     float spawnTimer_ = 0.f;
 
     float pickupTimer_ = cfg::pickup::spawnMin;
-    float strayBoltTimer_ = cfg::element::strayInterval;
     bool secondChanceSpent_ = false;
     bool invuln_ = false;  // dev: core takes no damage
 };

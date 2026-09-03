@@ -148,7 +148,6 @@ struct WorldParams {
     float coreBounceBoost = 1.f;  // Spring
     float flingDecayMult = 1.f;   // Reflexes (< 1 keeps fling speed longer)
     bool retaliate = false;       // Retaliate
-    bool strayBolt = false;       // Stray bolt
     bool secondChanceAvail = false;
     int powerUpsUnlocked = kPowerUpCount;
 };

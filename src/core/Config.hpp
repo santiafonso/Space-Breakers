@@ -86,8 +86,6 @@ inline constexpr float waterInterval = 0.26f;
 inline constexpr float puddleRadius = 26.f;
 inline constexpr float puddleLife = 2.4f;
 inline constexpr float puddleDps = 3.4f;
-// "Stray bolt" upgrade: a random ball fires a wind-style bolt on this timer
-inline constexpr float strayInterval = 1.6f;
 // stone: drops blocking rubble on a timer
 inline constexpr float stoneInterval = 2.0f;
 inline constexpr float obstacleRadius = 17.f;
@@ -113,15 +111,15 @@ inline constexpr int finalWave = 10;
 
 // The final wave is a miniboss duel in a wider arena.
 namespace boss {
-inline constexpr float arenaScaleX = 1.45f;   // boss arena vs the normal one
-inline constexpr float arenaScaleY = 1.15f;
-inline constexpr float coreMarginX = 96.f;    // core sits this far from the left wall
-inline constexpr float hp = 50.f;             // small bar - a handful of clean hits
-inline constexpr float radius = 40.f;         // big target - you are meant to fling at it
-inline constexpr float speed = 38.f;          // px/s, dead straight at the core, no steering
-inline constexpr float addInterval = 1.2f;    // infinite adds cadence while the boss lives
-inline constexpr int   maxAdds = 14;          // concurrent cap so it stays fair
-inline constexpr float camEase = 2.6f;        // camera zoom transition rate
+inline constexpr float arenaScaleX = 1.95f;   // boss arena vs the normal one (camera pulls way back)
+inline constexpr float arenaScaleY = 1.45f;
+inline constexpr float coreMarginX = 110.f;   // core sits this far from the left wall
+inline constexpr float hp = 40.f;             // small bar - a handful of clean hits
+inline constexpr float radius = 58.f;         // fat target - you are meant to fling at it
+inline constexpr float speed = 54.f;          // px/s, dead straight at the core, no steering
+inline constexpr float addInterval = 1.15f;   // infinite adds cadence while the boss lives
+inline constexpr int   maxAdds = 16;          // concurrent cap so it stays fair
+inline constexpr float camEase = 2.1f;        // camera zoom transition rate (lower = slower pull-back)
 }  // namespace boss
 
 namespace wave {

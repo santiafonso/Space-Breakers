@@ -217,8 +217,9 @@ Fase → **Fantasma** (atraviesa estructuras, a revisar) · Frenesí x3 → **Fr
   - Flujo de pantallas: **Menu -> Loadout -> Play (10 oleadas, Choice entre
     cada una) -> Loadout**. `RunSummaryScreen` eliminada (el resultado se
     muestra arriba del Loadout). Guardado **v5**: solo meta, sin reanudar run.
-  - "Bala perdida" (StrayBolt) sacada del pool (queda en el codigo, solo
-    dev/env) - las mejoras de disparo se suman despues.
+  - "Bala perdida" (StrayBolt) **eliminada** por completo (enum, RunMods,
+    World, config) - las mejoras de disparo se rehacen con el resto mas
+    adelante. Pool ahora = 11 mejoras.
 
 - **Fase 1b — oleada 10 = duelo de miniboss. [IMPLEMENTADO 2026-09-03]**
   - Al pasar a la oleada 10, `World::startBossWave`: **arena mas ancha**
@@ -232,7 +233,8 @@ Fase → **Fantasma** (atraviesa estructuras, a revisar) · Frenesí x3 → **Fr
     Las pelotas le pegan y rebotan pero no lo mueven.
   - **Adds infinitos** mientras el boss vive (cap `cfg::boss::maxAdds`).
     Matar al boss -> `waveCleared` -> `endRun(true)` (victoria).
-  - Tuning en `cfg::boss` (hp 50, radio 40, vel 38, arena 1.45x/1.15x).
+  - Tuning en `cfg::boss` (hp 40, radio 58, vel 54, arena 1.95x/1.45x -
+    la camara se aleja bastante).
 
   Detalle original (Fase 0b):
   - Quitar paredes.

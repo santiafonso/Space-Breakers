@@ -83,7 +83,6 @@ WorldParams App::params() const {
     p.coreBounceBoost = m.spring ? cfg::combat::springBoost : 1.f;
     p.flingDecayMult = m.flingMomentum ? cfg::combat::flingDecayMult : 1.f;
     p.retaliate = m.retaliate;
-    p.strayBolt = m.strayBolt;
     p.secondChanceAvail = m.secondChance && !m.secondChanceUsed;
     p.powerUpsUnlocked = powerUpsUnlocked();
     return p;
@@ -213,7 +212,6 @@ void App::rollChoices() {
     c.spring = r.mods.spring;
     c.retaliate = r.mods.retaliate;
     c.flingMomentum = r.mods.flingMomentum;
-    c.strayBolt = r.mods.strayBolt;
     c.loot = r.mods.loot;
     c.secondChance = r.mods.secondChance;
 
@@ -259,7 +257,6 @@ void App::applyUpgradeKind(UpgradeKind k) {
         case UpgradeKind::FlingMomentum: m.flingMomentum = true; break;
         case UpgradeKind::HeavyImpact:   ++m.heavyImpact; break;
         case UpgradeKind::BigBall:       ++m.bigBall; break;
-        case UpgradeKind::StrayBolt:     m.strayBolt = true; break;
         case UpgradeKind::Loot:          m.loot = true; break;
         case UpgradeKind::SecondChance:  m.secondChance = true; break;
     }

@@ -116,7 +116,6 @@ void World::startRun(const WorldParams& p, const std::vector<int>& ballElements,
     runOver_ = false;
     toSpawn_ = 0;
     spawnTimer_ = 0.f;
-    strayBoltTimer_ = cfg::element::strayInterval;
     secondChanceSpent_ = false;
     invuln_ = false;
     bossWave_ = false;
@@ -344,33 +343,6 @@ void World::emitElement(Ball& b, float dt, const WorldParams& p) {
         default:
             break;
     }
-}
-
-// "Stray bolt" upgrade: on a timer, a random ball spits a wind-style bolt at the
-// nearest enemy. Independent of the ball's element.
-void World::fireStrayBolt(float dt, const WorldParams& p) {
-    if (!p.strayBolt || balls_.empty() || enemies_.empty()) {
-        strayBoltTimer_ = cfg::element::strayInterval;
-        return;
-    }
-    strayBoltTimer_ -= dt;
-    if (strayBoltTimer_ > 0.f) return;
-    strayBoltTimer_ = cfg::element::strayInterval;
-
-    const Ball& b = balls_[static_cast<std::size_t>(rng_.irange(0, static_cast<int>(balls_.size()) - 1))];
-    const Enemy* target = nullptr;
-    float bestD2 = 1e30f;
-    for (const Enemy& e : enemies_) {
-        const float d2 = dot(e.pos - b.pos, e.pos - b.pos);
-        if (d2 < bestD2) { bestD2 = d2; target = &e; }
-    }
-    if (!target || static_cast<int>(projectiles_.size()) >= cfg::element::maxProjectiles) return;
-    Projectile pr;
-    pr.pos = b.pos;
-    pr.vel = normalized(target->pos - b.pos) * cfg::element::windSpeed;
-    pr.life = cfg::element::windLife;
-    pr.damage = cfg::element::windDamage * p.damageMult;
-    projectiles_.push_back(pr);
 }
 
 void World::regulateSpeed(Ball& b, float dt, const WorldParams& p) {
@@ -727,7 +699,6 @@ FrameEvents World::step(float dt, const WorldParams& p) {
     }
 
     resolveBallPairs();
-    fireStrayBolt(dt, p);
     updateProjectiles(dt);
     updatePuddles(dt);
     updateObstacles(dt);
