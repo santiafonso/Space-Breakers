@@ -259,12 +259,12 @@ void PlayScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
     }
     if (app.devMode() && e.type == sf::Event::KeyPressed) {
         switch (e.key.code) {
-            case sf::Keyboard::RBracket: app.devWinWave(); return;
+            case sf::Keyboard::N:        app.devWinWave(); return;
             case sf::Keyboard::H:        app.devHealCore(); return;
             case sf::Keyboard::G:        app.devToggleInvuln(); return;
             case sf::Keyboard::B:        app.devAddBall(); return;
             case sf::Keyboard::U:        app.devCycleGrant(); return;
-            case sf::Keyboard::Equal:    app.devGrantCores(25); return;
+            case sf::Keyboard::C:        app.devGrantCores(25); return;
             default: break;
         }
     }
@@ -323,12 +323,12 @@ void PlayScreen::drawDevKeys(App& app, sf::RenderWindow& w) const {
     const bool invuln = app.world().devInvuln();
     const std::array<std::string, 8> lines = {{
         "- DEV -",
-        "]   win wave",
+        "N   win wave",
         "H   heal core",
         std::string("G   invuln: ") + (invuln ? "ON" : "off"),
         "B   add ball",
         "U   grant next upgrade",
-        "=   +25 cores",
+        "C   +25 cores",
         "TAB   upgrades taken",
     }};
     const float right = s.x - theme::margin;

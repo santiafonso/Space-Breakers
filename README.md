@@ -64,12 +64,12 @@ In-run keys (dev mode only):
 
 | Key | Effect |
 |-----|--------|
-| `]` | win the current wave now |
+| `N` | win the current wave now |
 | `H` | heal the core to full |
 | `G` | toggle core invulnerability |
 | `B` | add a ball |
 | `U` | grant the next upgrade in the pool (cycles) |
-| `=` | +25 cores |
+| `C` | +25 cores |
 
 Example: `SB_DEV=1 SB_WAVE=9 SB_BALLS=3 SB_UPGRADES=CoreRetaliate,BigBall ./space_breakers`
 
