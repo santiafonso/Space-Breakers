@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <string>
+#include <vector>
 
 #include "core/App.hpp"
 #include "core/Config.hpp"
@@ -26,8 +27,31 @@ bool isDismiss(const sf::Event& e) {
            isKey(e, sf::Keyboard::Space);
 }
 
-constexpr float kCardW = 250.f;
-constexpr float kCardH = 190.f;
+// Greedy word-wrap: break `str` into lines no wider than `maxW` at `size`.
+std::vector<std::string> wrapText(const sf::Font& font, const std::string& str, unsigned size,
+                                  float maxW) {
+    std::vector<std::string> lines;
+    std::string line;
+    std::size_t i = 0;
+    while (i < str.size()) {
+        std::size_t sp = str.find(' ', i);
+        const std::string word = str.substr(i, sp == std::string::npos ? std::string::npos : sp - i);
+        const std::string trial = line.empty() ? word : line + " " + word;
+        if (!line.empty() && makeText(font, trial, size, theme::textLo).getLocalBounds().width > maxW) {
+            lines.push_back(line);
+            line = word;
+        } else {
+            line = trial;
+        }
+        if (sp == std::string::npos) break;
+        i = sp + 1;
+    }
+    if (!line.empty()) lines.push_back(line);
+    return lines;
+}
+
+constexpr float kCardW = 252.f;
+constexpr float kCardH = 176.f;
 constexpr float kCardGap = 22.f;
 
 sf::Vector2f cardCenter(sf::Vector2f size, int i) {
@@ -35,6 +59,11 @@ sf::Vector2f cardCenter(sf::Vector2f size, int i) {
     const float startX = size.x * 0.5f - total * 0.5f;
     return {startX + kCardW * 0.5f + static_cast<float>(i) * (kCardW + kCardGap), size.y * 0.52f};
 }
+
+constexpr float kUnlockTop = 0.30f;   // * size.y
+constexpr float kUnlockGap = 48.f;
+constexpr float kUnlockRowW = 540.f;
+constexpr float kUnlockRowH = 42.f;
 
 }  // namespace
 
@@ -83,6 +112,21 @@ void LoadoutScreen::rebuild(App& app) {
 
 void LoadoutScreen::onEnter(App& app) { rebuild(app); }
 
+sf::Vector2f LoadoutScreen::unlockRowCenter(App& app, int i) const {
+    const sf::Vector2f s = app.size();
+    return {s.x * 0.5f, s.y * kUnlockTop + static_cast<float>(i) * kUnlockGap};
+}
+
+int LoadoutScreen::unlockRowAt(App& app, sf::Vector2f mouse) const {
+    for (int i = 0; i < MetaUnlockCount; ++i) {
+        const sf::Vector2f c = unlockRowCenter(app, i);
+        if (std::fabs(mouse.x - c.x) < kUnlockRowW * 0.5f &&
+            std::fabs(mouse.y - c.y) < kUnlockRowH * 0.5f)
+            return i;
+    }
+    return -1;
+}
+
 void LoadoutScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
     if (isKey(e, sf::Keyboard::Escape)) { app.back(); return; }
     if (isKey(e, sf::Keyboard::Enter) || isKey(e, sf::Keyboard::Space)) { app.newRun(); return; }
@@ -92,6 +136,8 @@ void LoadoutScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse
         return;
     }
     if (!isLeftClick(e)) return;
+    const int row = unlockRowAt(app, mouse);
+    if (row >= 0) { app.buyMetaUnlock(row); return; }
     switch (menu_.clickIndex(mouse)) {
         case 0: app.newRun(); break;
         case 1: app.back(); break;
@@ -99,7 +145,13 @@ void LoadoutScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse
     }
 }
 
-void LoadoutScreen::update(App&, float dt, sf::Vector2f mouse) { menu_.update(dt, mouse); }
+void LoadoutScreen::update(App& app, float dt, sf::Vector2f mouse) {
+    menu_.update(dt, mouse);
+    const int row = unlockRowAt(app, mouse);
+    const float k = 1.f - std::exp(-16.f * dt);
+    for (int i = 0; i < MetaUnlockCount; ++i)
+        hover_[i] = lerpf(hover_[i], row == i ? 1.f : 0.f, k);
+}
 
 void LoadoutScreen::draw(App& app, sf::RenderWindow& w) {
     const sf::Vector2f s = app.size();
@@ -121,19 +173,40 @@ void LoadoutScreen::draw(App& app, sf::RenderWindow& w) {
         const MetaUnlockDef& d = metaUnlockDef(i);
         const int lvl = m.unlock[i];
         const bool maxed = metaUnlockMaxed(i, lvl);
-        const std::string cost = maxed ? "MAX" : std::to_string(metaUnlockCost(i, lvl));
+        const std::string cost = maxed ? "MAX" : (std::to_string(metaUnlockCost(i, lvl)) + " cores");
         const bool afford = !maxed && m.cores >= metaUnlockCost(i, lvl);
-        char line[160];
-        std::snprintf(line, sizeof(line), "%d   %s  (Lv %d)  -  %s", i + 1, d.name, lvl, cost.c_str());
-        drawCentered(w, app.font(), line, theme::fsBody, {s.x * 0.5f, s.y * 0.30f + i * 44.f},
-                     maxed ? theme::textDim : (afford ? theme::textHi : theme::textLo));
-        drawCentered(w, app.font(), d.effect, theme::fsSmall, {s.x * 0.5f, s.y * 0.30f + i * 44.f + 18.f},
-                     theme::textDim);
+        const sf::Vector2f c = unlockRowCenter(app, i);
+
+        sf::RectangleShape box({kUnlockRowW, kUnlockRowH});
+        box.setOrigin(kUnlockRowW * 0.5f, kUnlockRowH * 0.5f);
+        box.setPosition(c);
+        box.setFillColor(withAlpha(theme::accent, 0.05f + 0.13f * hover_[i]));
+        box.setOutlineThickness(1.f);
+        box.setOutlineColor(withAlpha(theme::accent, afford ? 0.25f + 0.45f * hover_[i] : 0.12f));
+        w.draw(box);
+
+        char head[96];
+        std::snprintf(head, sizeof(head), "%d.  %s   Lv %d", i + 1, d.name, lvl);
+        sf::Text ht = makeText(app.font(), head, theme::fsBody,
+                               maxed ? theme::textDim : (afford ? theme::textHi : theme::textLo));
+        ht.setPosition(c.x - kUnlockRowW * 0.5f + 14.f, c.y - kUnlockRowH * 0.5f + 3.f);
+        w.draw(ht);
+
+        sf::Text ct = makeText(app.font(), cost, theme::fsBody,
+                               maxed ? theme::textDim : (afford ? theme::accent : theme::textLo));
+        const sf::FloatRect cb = ct.getLocalBounds();
+        ct.setOrigin(cb.left + cb.width, cb.top);
+        ct.setPosition(c.x + kUnlockRowW * 0.5f - 14.f, c.y - kUnlockRowH * 0.5f + 3.f);
+        w.draw(ct);
+
+        sf::Text et = makeText(app.font(), d.effect, theme::fsSmall, theme::textDim);
+        et.setPosition(c.x - kUnlockRowW * 0.5f + 14.f, c.y + 2.f);
+        w.draw(et);
     }
 
     menu_.draw(w);
-    drawCentered(w, app.font(), "1-5 spend cores      Enter start", theme::fsSmall,
-                 {s.x * 0.5f, s.y * 0.92f}, theme::textDim);
+    drawCentered(w, app.font(), "click a row or press 1-5      Enter starts the run", theme::fsSmall,
+                 {s.x * 0.5f, s.y * 0.93f}, theme::textDim);
 }
 
 // ================================================================ Play
@@ -195,6 +268,26 @@ void PlayScreen::draw(App& app, sf::RenderWindow& w) {
     renderer_.draw(w, app.world());
     app.effects().drawRings(w);
     app.hud().draw(w);
+
+    // Ball tally, bottom-left: how many are in play and of what element.
+    const std::vector<Ball>& balls = app.world().balls();
+    const sf::Vector2f s = app.size();
+    const std::string n = std::to_string(balls.size());
+    sf::Text tally = makeText(app.font(), n + (balls.size() == 1 ? " ball" : " balls"),
+                              theme::fsBody, theme::textLo);
+    tally.setPosition(theme::margin, s.y - theme::margin - 40.f);
+    w.draw(tally);
+
+    float dx = theme::margin + 5.f;
+    const float dy = s.y - theme::margin - 12.f;
+    for (const Ball& b : balls) {
+        sf::CircleShape dot(5.f);
+        dot.setOrigin(5.f, 5.f);
+        dot.setPosition(dx, dy);
+        dot.setFillColor(b.element == Element::Plain ? theme::textLo : elementColor(b.element));
+        w.draw(dot);
+        dx += 15.f;
+    }
 }
 
 // ================================================================ Choice
@@ -248,8 +341,17 @@ void ChoiceScreen::draw(App& app, sf::RenderWindow& w) {
 
         drawCentered(w, app.font(), std::to_string(i + 1), theme::fsSmall,
                      {c.x, c.y - kCardH * 0.5f + 16.f}, theme::textDim);
-        drawCentered(w, app.font(), info.title, theme::fsItem, {c.x, c.y - 24.f}, theme::textHi);
-        drawCentered(w, app.font(), info.desc, theme::fsSmall, {c.x, c.y + 20.f}, theme::textLo);
+        drawCentered(w, app.font(), info.title, theme::fsItem,
+                     {c.x, c.y - kCardH * 0.5f + 52.f}, theme::textHi);
+
+        const std::vector<std::string> desc =
+            wrapText(app.font(), info.desc, theme::fsSmall, kCardW - 28.f);
+        const float lineH = 18.f;
+        float dy = c.y + 24.f - lineH * 0.5f * static_cast<float>(desc.size() - 1);
+        for (const std::string& dl : desc) {
+            drawCentered(w, app.font(), dl, theme::fsSmall, {c.x, dy}, theme::textLo);
+            dy += lineH;
+        }
     }
 
     drawCentered(w, app.font(), "click a card or press 1-4", theme::fsSmall,

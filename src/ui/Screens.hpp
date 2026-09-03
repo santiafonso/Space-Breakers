@@ -3,6 +3,7 @@
 #include <deque>
 #include <utility>
 
+#include "progression/Offers.hpp"
 #include "render/WorldRenderer.hpp"
 #include "ui/Menu.hpp"
 #include "ui/Screen.hpp"
@@ -32,7 +33,11 @@ public:
 
 private:
     void rebuild(App& app);
+    int unlockRowAt(App& app, sf::Vector2f mouse) const;  // 0..count-1, -1 none
+    sf::Vector2f unlockRowCenter(App& app, int i) const;
+
     Menu menu_;
+    float hover_[MetaUnlockCount] = {};
 };
 
 // Combat. One or more balls bounce freely; you fling them into the enemies.
