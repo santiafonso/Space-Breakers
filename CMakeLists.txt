@@ -61,11 +61,18 @@ add_custom_command(TARGET space_breakers POST_BUILD
             "$<TARGET_FILE_DIR:space_breakers>/assets"
     VERBATIM)
 
-# OpenAL is a runtime DLL on Windows even when SFML itself is static.
-if(WIN32 AND TARGET OpenAL)
+# OpenAL stays a runtime DLL on Windows even with static SFML. SFML ships it
+# under extlibs/ - copy that one next to the binary (only when we fetched SFML;
+# a system SFML on Windows would provide its own).
+if(WIN32 AND NOT SFML_FOUND)
+    set(_oal_arch x64)
+    if(CMAKE_SIZEOF_VOID_P EQUAL 4)
+        set(_oal_arch x86)
+    endif()
     add_custom_command(TARGET space_breakers POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "$<TARGET_FILE:OpenAL>" "$<TARGET_FILE_DIR:space_breakers>"
+                "${sfml_SOURCE_DIR}/extlibs/bin/${_oal_arch}/openal32.dll"
+                "$<TARGET_FILE_DIR:space_breakers>"
         VERBATIM)
 endif()
 

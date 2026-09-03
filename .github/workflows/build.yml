@@ -2,7 +2,7 @@ name: build
 
 on:
   push:
-    branches: [main, combat-rework]
+    branches: [main, combat-rework, build-windows]
     tags: ['v*']
   pull_request:
   workflow_dispatch:
@@ -41,7 +41,7 @@ jobs:
         run: |
           mkdir -p dist
           cp build/Release/space_breakers.exe dist/
-          cp build/Release/*.dll dist/ 2>/dev/null || true
+          cp build/Release/openal32.dll dist/   # fail loudly if it is missing
           cp -r assets dist/
       - uses: actions/upload-artifact@v4
         with:
