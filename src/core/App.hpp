@@ -84,7 +84,7 @@ private:
 
     GameData data_;
     Rng rng_;
-    const std::string savePath_ = "saves/save.txt";
+    std::string savePath_;  // set in the ctor: <exe dir>/saves/save.txt
 
     std::vector<std::unique_ptr<Screen>> stack_;
     int lastRunWave_ = 0;

@@ -13,21 +13,38 @@ design and roadmap.
 
 ## Build
 
-Requires SFML 2.5+ (`libsfml-dev`) and a C++17 compiler.
+Needs a C++17 compiler. CMake is the cross-platform path (Linux + Windows);
+the `Makefile` is a Linux-only shortcut.
+
+### CMake (Linux or Windows)
 
 ```bash
-make            # produces ./space_breakers
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release -j
+```
+
+The executable lands in `build/` (Linux) or `build/Release/` (Windows) with a
+copy of `assets/` — and `openal32.dll` — placed next to it, so it runs when
+launched from anywhere, not just the project root.
+
+If SFML is installed system-wide (`libsfml-dev` on Linux) CMake uses it.
+Otherwise it downloads and statically links SFML 2.6.1 — no manual install,
+which is what makes a fresh Windows machine build with nothing but CMake + the
+MSVC or MinGW toolchain.
+
+### Makefile (Linux shortcut)
+
+```bash
+make            # produces ./space_breakers  (needs libsfml-dev)
 make run
 ```
 
-Or without the Makefile:
+### Prebuilt binaries
 
-```bash
-g++ -std=c++17 -O2 -Isrc $(find src -name '*.cpp') -o space_breakers \
-    -lsfml-graphics -lsfml-window -lsfml-audio -lsfml-system
-```
+Every push builds a Linux and a Windows package on CI
+(`.github/workflows/build.yml`); grab them from the run's **Artifacts**.
+Pushing a `vX.Y.Z` tag also attaches both as zips to a GitHub Release.
 
-Run it from the project root so it can find `assets/arial.ttf`.
 Set `SPACE_BREAKERS_NO_AUDIO=1` to run without sound (headless / SSH).
 
 ## Controls
@@ -44,6 +61,9 @@ Set `SPACE_BREAKERS_NO_AUDIO=1` to run without sound (headless / SSH).
 ## Layout
 
 ```
+CMakeLists.txt     cross-platform build (system SFML, or fetch+static)
+Makefile           Linux-only shortcut
+.github/workflows  CI: Linux + Windows packages on every push
 assets/arial.ttf   the only bundled asset (SFX and graphics are procedural)
 src/
   main.cpp

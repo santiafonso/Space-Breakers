@@ -3,4 +3,6 @@ space_breakers
 *.o
 *.d
 build/
+build-*/
+dist/
 saves/

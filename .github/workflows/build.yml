@@ -1,0 +1,67 @@
+name: build
+
+on:
+  push:
+    branches: [main, combat-rework]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: install SFML
+        run: sudo apt-get update && sudo apt-get install -y libsfml-dev
+      - name: configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+      - name: build
+        run: cmake --build build --config Release -j
+      - name: package
+        run: |
+          mkdir -p dist
+          cp build/space_breakers dist/
+          cp -r assets dist/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: space-breakers-linux
+          path: dist
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+      - name: build
+        run: cmake --build build --config Release -j
+      - name: package
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp build/Release/space_breakers.exe dist/
+          cp build/Release/*.dll dist/ 2>/dev/null || true
+          cp -r assets dist/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: space-breakers-windows
+          path: dist
+
+  release:
+    needs: [linux, windows]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: zip
+        run: |
+          cd artifacts/space-breakers-linux   && zip -r ../../space-breakers-linux.zip   . && cd ../..
+          cd artifacts/space-breakers-windows && zip -r ../../space-breakers-windows.zip . && cd ../..
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            space-breakers-linux.zip
+            space-breakers-windows.zip

@@ -8,6 +8,7 @@
 
 #include "core/Config.hpp"
 #include "core/Theme.hpp"
+#include "platform/Paths.hpp"
 #include "platform/Save.hpp"
 #include "ui/Screens.hpp"
 #include "ui/Widgets.hpp"
@@ -19,14 +20,24 @@ namespace {
 sf::Vector2f kLogical() { return {1280.f, 800.f}; }
 
 bool loadFont(sf::Font& font) {
-    for (const char* path : {"assets/arial.ttf", "../assets/arial.ttf", "arial.ttf"})
-        if (std::filesystem::exists(path) && font.loadFromFile(path)) return true;
+    // Next to the binary first (packaged build), then the project-root layouts
+    // used when running straight from a build tree.
+    const std::filesystem::path dir = exeDir();
+    const std::filesystem::path candidates[] = {
+        dir / "assets" / "arial.ttf", dir / "arial.ttf",
+        dir / ".." / "assets" / "arial.ttf",
+        "assets/arial.ttf", "../assets/arial.ttf", "arial.ttf",
+    };
+    for (const std::filesystem::path& path : candidates)
+        if (std::filesystem::exists(path) && font.loadFromFile(path.string())) return true;
     return false;
 }
 
 }  // namespace
 
 App::App() : window_(kLogical()), world_(kLogical()) {
+    savePath_ = (exeDir() / "saves" / "save.txt").string();
+
     if (!loadFont(font_)) {
         std::cerr << "Space-Breakers: could not load assets/arial.ttf (run from the project root)\n";
         std::exit(1);
