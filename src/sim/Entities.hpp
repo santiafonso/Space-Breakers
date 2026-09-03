@@ -114,20 +114,31 @@ struct BounceFx {
 struct FrameEvents {
     std::vector<BounceFx> bounces;
     std::vector<sf::Vector2f> kills;
-    int scrapGained = 0;
     int comboTier = 0;
     bool comboTierUp = false;
     bool gotPickup = false;
     PowerUp pickupKind = PowerUp::Points2x;
     bool coreHit = false;
+    bool corePulsed = false;             // "Retaliate" upgrade fired
+    sf::Vector2f corePulsePos;
+    bool secondChanceUsed = false;       // "Second chance" upgrade saved the core
     bool waveCleared = false;
     bool runOver = false;
 };
 
+// Per-step tuning handed to the simulation: the wave number plus whatever
+// between-wave upgrades the player has picked this run.
 struct WorldParams {
-    float damageMult = 1.f;
+    float damageMult = 1.f;       // Heavy impact
     float cruiseMult = 1.f;
     int wave = 1;
+    float ballRadiusMult = 1.f;   // Big ball
+    float coreBounceBoost = 1.f;  // Spring
+    float flingDecayMult = 1.f;   // Reflexes (< 1 keeps fling speed longer)
+    bool retaliate = false;       // Retaliate
+    bool strayBolt = false;       // Stray bolt
+    bool secondChanceAvail = false;
+    int powerUpsUnlocked = kPowerUpCount;
 };
 
 }  // namespace sb

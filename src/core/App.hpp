@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -16,11 +17,11 @@
 
 namespace sb {
 
-enum class ScreenId { Hub, Play, Choice, RunSummary, Pause, Stats, HowTo };
+enum class ScreenId { Menu, Loadout, Play, Choice, Pause, Stats, HowTo };
 
 // Top-level application: owns the window, subsystems and the screen stack, runs
-// the loop (fixed-step simulation, per-frame render) and wires the roguelite
-// flow: Hub -> Play (waves) -> Choice -> ... -> RunSummary -> Hub.
+// the loop (fixed-step simulation, per-frame render) and wires the flow:
+// Menu -> Loadout (spend cores) -> Play (10 waves, Choice between each) -> Loadout.
 class App {
 public:
     App();
@@ -37,17 +38,16 @@ public:
     sf::Vector2f size() const { return window_.logicalSize(); }
     WorldParams params() const;
 
-    bool hasRunInProgress() const { return data_.run.active; }
     int runBallCount() const { return static_cast<int>(data_.run.balls.size()); }
     int lastRunWave() const { return lastRunWave_; }
     int lastRunCores() const { return lastRunCores_; }
+    bool lastRunWon() const { return lastRunWon_; }
+    const std::array<UpgradeKind, kChoiceCount>& choices() const { return choices_; }
 
-    void newRun();
-    void continueRun();
-    void applyOffer(OfferKind k);
-    void skipChoice();
+    void openLoadout();     // Menu -> the game menu
+    void newRun();          // Loadout "Start" -> a fresh run
+    void applyUpgrade(int idx);   // Choice: pick one of the four
     void abandonRun();
-    void finishSummary();
     void openPause();
     void openStats();
     void openHowTo();
@@ -65,10 +65,14 @@ private:
     void push(ScreenId id);
     bool simulating() const;
 
+    int startBallCount() const;
     float startCoreHp() const;
+    int fireCap() const;
+    int powerUpsUnlocked() const;
     void startNextWave();
     void openChoice();
-    void endRun();
+    void rollChoices();
+    void endRun(bool won);
 
     void handleEvent(const sf::Event& e);
     void update(float frameDt);
@@ -87,8 +91,10 @@ private:
     std::string savePath_;  // set in the ctor: <exe dir>/saves/save.txt
 
     std::vector<std::unique_ptr<Screen>> stack_;
+    std::array<UpgradeKind, kChoiceCount> choices_{};
     int lastRunWave_ = 0;
     int lastRunCores_ = 0;
+    bool lastRunWon_ = false;
 
     float fade_ = 0.f;
     float worldAccum_ = 0.f;

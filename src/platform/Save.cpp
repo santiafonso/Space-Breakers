@@ -5,13 +5,12 @@
 #include <sstream>
 
 // Plain-text "key value" save file. Trivial to inspect, forward compatible
-// (unknown keys ignored, missing keys keep defaults). `meta.*` / `stat.*` always
-// persist; `run.*` + `ball` lines only while a run is in progress.
+// (unknown keys ignored, missing keys keep defaults). Only the persistent meta
+// is stored - a run is a short sprint and is never resumed.
 namespace sb {
 
 namespace {
-constexpr int kSaveVersion = 4;
-constexpr std::size_t kMaxBalls = 8;
+constexpr int kSaveVersion = 5;
 }  // namespace
 
 bool hasSavedGame(const std::string& path) {
@@ -32,29 +31,18 @@ bool saveGame(const std::string& path, const GameData& d) {
     const MetaState& m = d.meta;
     f << "version " << kSaveVersion << '\n';
     f << "meta.cores " << m.cores << '\n';
-    f << "meta.startBalls " << m.unlock[MetaStartBalls] << '\n';
-    f << "meta.coreHp " << m.unlock[MetaCoreHp] << '\n';
+    for (int i = 0; i < MetaUnlockCount; ++i)
+        f << "meta.unlock " << i << ' ' << m.unlock[i] << '\n';
     f << "sound " << (m.soundOn ? 1 : 0) << '\n';
     f << "fullscreen " << (m.fullscreen ? 1 : 0) << '\n';
     f << "stat.enemiesKilled " << m.stats.enemiesKilled << '\n';
-    f << "stat.lifetimeScrap " << m.stats.lifetimeScrap << '\n';
+    f << "stat.coresEarned " << m.stats.coresEarned << '\n';
     f << "stat.bestWave " << m.stats.bestWave << '\n';
     f << "stat.bestCombo " << m.stats.bestCombo << '\n';
     f << "stat.runs " << m.stats.runs << '\n';
+    f << "stat.wins " << m.stats.wins << '\n';
     f << "stat.maxSpeed " << m.stats.maxSpeed << '\n';
     f << "stat.timePlayed " << m.stats.timePlayed << '\n';
-
-    const RunState& r = d.run;
-    f << "run.active " << (r.active ? 1 : 0) << '\n';
-    if (r.active) {
-        f << "run.scrap " << r.scrap << '\n';
-        f << "run.wave " << r.wave << '\n';
-        f << "run.damageMult " << r.damageMult << '\n';
-        f << "run.coreHp " << r.coreHp << '\n';
-        f << "run.coreMaxHp " << r.coreMaxHp << '\n';
-        for (std::size_t i = 0; i < r.balls.size() && i < kMaxBalls; ++i)
-            f << "ball " << i << ' ' << r.balls[i] << '\n';
-    }
     return f.good();
 }
 
@@ -63,7 +51,6 @@ bool loadGame(const std::string& path, GameData& d) {
     if (!f) return false;
 
     MetaState& m = d.meta;
-    RunState& r = d.run;
     bool sawAnything = false;
     std::string line;
     while (std::getline(f, line)) {
@@ -73,38 +60,30 @@ bool loadGame(const std::string& path, GameData& d) {
         sawAnything = true;
 
         if (key == "meta.cores") ls >> m.cores;
+        else if (key == "meta.unlock") {
+            int i = -1, lvl = 0;
+            if (ls >> i >> lvl && i >= 0 && i < MetaUnlockCount) m.unlock[i] = lvl;
+        }
+        // v4 and earlier stored these two unlocks by name.
         else if (key == "meta.startBalls") ls >> m.unlock[MetaStartBalls];
         else if (key == "meta.coreHp") ls >> m.unlock[MetaCoreHp];
         else if (key == "sound") { int v = 1; ls >> v; m.soundOn = v != 0; }
         else if (key == "fullscreen") { int v = 0; ls >> v; m.fullscreen = v != 0; }
         else if (key == "stat.enemiesKilled") ls >> m.stats.enemiesKilled;
-        else if (key == "stat.lifetimeScrap") ls >> m.stats.lifetimeScrap;
+        else if (key == "stat.coresEarned") ls >> m.stats.coresEarned;
         else if (key == "stat.bestWave") ls >> m.stats.bestWave;
         else if (key == "stat.bestCombo") ls >> m.stats.bestCombo;
         else if (key == "stat.runs") ls >> m.stats.runs;
+        else if (key == "stat.wins") ls >> m.stats.wins;
         else if (key == "stat.maxSpeed") ls >> m.stats.maxSpeed;
         else if (key == "stat.timePlayed") ls >> m.stats.timePlayed;
-        else if (key == "run.active") { int v = 0; ls >> v; r.active = v != 0; }
-        else if (key == "run.scrap") ls >> r.scrap;
-        else if (key == "run.wave") ls >> r.wave;
-        else if (key == "run.damageMult") ls >> r.damageMult;
-        else if (key == "run.coreHp") ls >> r.coreHp;
-        else if (key == "run.coreMaxHp") ls >> r.coreMaxHp;
-        else if (key == "ball") {
-            std::size_t idx = 0;
-            int elem = 0;
-            if (ls >> idx >> elem && idx < kMaxBalls) {
-                if (r.balls.size() <= idx) r.balls.resize(idx + 1, 0);
-                r.balls[idx] = elem;
-            }
-        }
-        // "version" and anything unrecognised: ignored on purpose.
+        // "version", old run.* / ball / stat.lifetimeScrap lines: ignored.
     }
 
-    for (int i = 0; i < MetaUnlockCount; ++i)
+    for (int i = 0; i < MetaUnlockCount; ++i) {
         if (m.unlock[i] < 0) m.unlock[i] = 0;
-    if (r.damageMult <= 0.f) r.damageMult = 1.f;
-
+        if (m.unlock[i] > metaUnlockDef(i).maxLevel) m.unlock[i] = metaUnlockDef(i).maxLevel;
+    }
     return sawAnything;
 }
 

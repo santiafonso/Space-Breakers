@@ -26,81 +26,114 @@ bool isDismiss(const sf::Event& e) {
            isKey(e, sf::Keyboard::Space);
 }
 
-constexpr float kCardW = 248.f;
-constexpr float kCardH = 180.f;
+constexpr float kCardW = 250.f;
+constexpr float kCardH = 190.f;
 constexpr float kCardGap = 22.f;
 
 sf::Vector2f cardCenter(sf::Vector2f size, int i) {
-    const float total = kOfferKindCount * kCardW + (kOfferKindCount - 1) * kCardGap;
+    const float total = kChoiceCount * kCardW + (kChoiceCount - 1) * kCardGap;
     const float startX = size.x * 0.5f - total * 0.5f;
-    return {startX + kCardW * 0.5f + static_cast<float>(i) * (kCardW + kCardGap), size.y * 0.5f};
-}
-
-sf::Vector2f skipCenter(sf::Vector2f size) {
-    return {size.x * 0.5f, size.y * 0.5f + kCardH * 0.5f + 54.f};
+    return {startX + kCardW * 0.5f + static_cast<float>(i) * (kCardW + kCardGap), size.y * 0.52f};
 }
 
 }  // namespace
 
-// ================================================================ Hub
+// ================================================================ Menu
 
-void HubScreen::rebuild(App& app) {
+void MenuScreen::rebuild(App& app) {
     const sf::Vector2f s = app.size();
-    menu_.init(app.font(), theme::fsItem, s.y * 0.066f);
-    menu_.setItems({{"New Run", true},
-                    {"Continue Run", app.hasRunInProgress()},
-                    {"Stats", true},
-                    {"How to Play", true},
-                    {"Quit", true}});
-    menu_.layout({s.x * 0.5f, s.y * 0.44f});
+    menu_.init(app.font(), theme::fsItem, s.y * 0.072f);
+    menu_.setItems({{"Play", true}, {"Stats", true}, {"How to Play", true}, {"Quit", true}});
+    menu_.layout({s.x * 0.5f, s.y * 0.46f});
 }
 
-void HubScreen::onEnter(App& app) { rebuild(app); }
+void MenuScreen::onEnter(App& app) { rebuild(app); }
 
-void HubScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
+void MenuScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
+    if (isKey(e, sf::Keyboard::Enter) || isKey(e, sf::Keyboard::Space)) { app.openLoadout(); return; }
+    if (!isLeftClick(e)) return;
+    switch (menu_.clickIndex(mouse)) {
+        case 0: app.openLoadout(); break;
+        case 1: app.openStats(); break;
+        case 2: app.openHowTo(); break;
+        case 3: app.quit(); break;
+        default: break;
+    }
+}
+
+void MenuScreen::update(App&, float dt, sf::Vector2f mouse) { menu_.update(dt, mouse); }
+
+void MenuScreen::draw(App& app, sf::RenderWindow& w) {
+    const sf::Vector2f s = app.size();
+    drawCentered(w, app.font(), "Space-Breakers", theme::fsTitle, {s.x * 0.5f, s.y * 0.2f},
+                 theme::textHi);
+    drawCentered(w, app.font(), std::to_string(app.data().meta.cores) + " cores", theme::fsHeading,
+                 {s.x * 0.5f, s.y * 0.2f + 42.f}, theme::accent);
+    menu_.draw(w);
+}
+
+// ================================================================ Loadout
+
+void LoadoutScreen::rebuild(App& app) {
+    const sf::Vector2f s = app.size();
+    menu_.init(app.font(), theme::fsItem, s.y * 0.066f);
+    menu_.setItems({{"Start run", true}, {"Back", true}});
+    menu_.layout({s.x * 0.5f, s.y * 0.72f});
+}
+
+void LoadoutScreen::onEnter(App& app) { rebuild(app); }
+
+void LoadoutScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
+    if (isKey(e, sf::Keyboard::Escape)) { app.back(); return; }
+    if (isKey(e, sf::Keyboard::Enter) || isKey(e, sf::Keyboard::Space)) { app.newRun(); return; }
     if (e.type == sf::Event::KeyPressed && e.key.code >= sf::Keyboard::Num1 &&
-        e.key.code <= sf::Keyboard::Num2) {
+        e.key.code < sf::Keyboard::Num1 + MetaUnlockCount) {
         app.buyMetaUnlock(e.key.code - sf::Keyboard::Num1);
         return;
     }
     if (!isLeftClick(e)) return;
     switch (menu_.clickIndex(mouse)) {
         case 0: app.newRun(); break;
-        case 1: app.continueRun(); break;
-        case 2: app.openStats(); break;
-        case 3: app.openHowTo(); break;
-        case 4: app.quit(); break;
+        case 1: app.back(); break;
         default: break;
     }
 }
 
-void HubScreen::update(App&, float dt, sf::Vector2f mouse) { menu_.update(dt, mouse); }
+void LoadoutScreen::update(App&, float dt, sf::Vector2f mouse) { menu_.update(dt, mouse); }
 
-void HubScreen::draw(App& app, sf::RenderWindow& w) {
+void LoadoutScreen::draw(App& app, sf::RenderWindow& w) {
     const sf::Vector2f s = app.size();
     const MetaState& m = app.data().meta;
 
-    drawCentered(w, app.font(), "Space-Breakers", theme::fsTitle, {s.x * 0.5f, s.y * 0.16f},
-                 theme::textHi);
+    drawCentered(w, app.font(), "Game menu", theme::fsTitle, {s.x * 0.5f, s.y * 0.11f}, theme::textHi);
     drawCentered(w, app.font(), std::to_string(m.cores) + " cores", theme::fsHeading,
-                 {s.x * 0.5f, s.y * 0.16f + 40.f}, theme::accent);
+                 {s.x * 0.5f, s.y * 0.11f + 38.f}, theme::accent);
 
-    // Two meta unlocks, keys 1-2.
+    if (app.lastRunWave() > 0) {
+        char line[96];
+        std::snprintf(line, sizeof(line), "Last run: %s on wave %d   +%d cores",
+                      app.lastRunWon() ? "won" : "lost", app.lastRunWave(), app.lastRunCores());
+        drawCentered(w, app.font(), line, theme::fsBody, {s.x * 0.5f, s.y * 0.11f + 70.f},
+                     app.lastRunWon() ? theme::core : theme::textLo);
+    }
+
     for (int i = 0; i < MetaUnlockCount; ++i) {
         const MetaUnlockDef& d = metaUnlockDef(i);
         const int lvl = m.unlock[i];
         const bool maxed = metaUnlockMaxed(i, lvl);
         const std::string cost = maxed ? "MAX" : std::to_string(metaUnlockCost(i, lvl));
         const bool afford = !maxed && m.cores >= metaUnlockCost(i, lvl);
-        char line[128];
-        std::snprintf(line, sizeof(line), "%d  %s  (Lv %d)  -  %s", i + 1, d.name, lvl, cost.c_str());
-        drawCentered(w, app.font(), line, theme::fsBody, {s.x * 0.5f, s.y * 0.26f + i * 26.f},
+        char line[160];
+        std::snprintf(line, sizeof(line), "%d   %s  (Lv %d)  -  %s", i + 1, d.name, lvl, cost.c_str());
+        drawCentered(w, app.font(), line, theme::fsBody, {s.x * 0.5f, s.y * 0.30f + i * 44.f},
                      maxed ? theme::textDim : (afford ? theme::textHi : theme::textLo));
+        drawCentered(w, app.font(), d.effect, theme::fsSmall, {s.x * 0.5f, s.y * 0.30f + i * 44.f + 18.f},
+                     theme::textDim);
     }
 
     menu_.draw(w);
-    drawCentered(w, app.font(), "press 1-2 to spend cores on permanent unlocks", theme::fsSmall,
-                 {s.x * 0.5f, s.y * 0.86f}, theme::textDim);
+    drawCentered(w, app.font(), "1-5 spend cores      Enter start", theme::fsSmall,
+                 {s.x * 0.5f, s.y * 0.92f}, theme::textDim);
 }
 
 // ================================================================ Play
@@ -166,13 +199,9 @@ void PlayScreen::draw(App& app, sf::RenderWindow& w) {
 
 // ================================================================ Choice
 
-namespace {
-OfferKind offerKindAt(int i) { return static_cast<OfferKind>(i); }
-}
-
 int ChoiceScreen::cardAt(App& app, sf::Vector2f mouse) const {
     const sf::Vector2f s = app.size();
-    for (int i = 0; i < kOfferKindCount; ++i) {
+    for (int i = 0; i < kChoiceCount; ++i) {
         const sf::Vector2f c = cardCenter(s, i);
         if (std::fabs(mouse.x - c.x) < kCardW * 0.5f && std::fabs(mouse.y - c.y) < kCardH * 0.5f)
             return i;
@@ -180,99 +209,51 @@ int ChoiceScreen::cardAt(App& app, sf::Vector2f mouse) const {
     return -1;
 }
 
-bool ChoiceScreen::skipAt(App& app, sf::Vector2f mouse) const {
-    const sf::Vector2f c = skipCenter(app.size());
-    return std::fabs(mouse.x - c.x) < 150.f && std::fabs(mouse.y - c.y) < 24.f;
-}
-
 void ChoiceScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
-    if (e.type == sf::Event::KeyPressed) {
-        if (e.key.code >= sf::Keyboard::Num1 &&
-            e.key.code < sf::Keyboard::Num1 + kOfferKindCount) {
-            app.applyOffer(offerKindAt(e.key.code - sf::Keyboard::Num1));
-            return;
-        }
-        if (e.key.code == sf::Keyboard::S) { app.skipChoice(); return; }
+    if (e.type == sf::Event::KeyPressed && e.key.code >= sf::Keyboard::Num1 &&
+        e.key.code < sf::Keyboard::Num1 + kChoiceCount) {
+        app.applyUpgrade(e.key.code - sf::Keyboard::Num1);
+        return;
     }
     if (!isLeftClick(e)) return;
     const int c = cardAt(app, mouse);
-    if (c >= 0) { app.applyOffer(offerKindAt(c)); return; }
-    if (skipAt(app, mouse)) app.skipChoice();
+    if (c >= 0) app.applyUpgrade(c);
 }
 
 void ChoiceScreen::update(App& app, float dt, sf::Vector2f mouse) {
     const float k = 1.f - std::exp(-16.f * dt);
     const int c = cardAt(app, mouse);
-    for (int i = 0; i < kOfferKindCount && i < 4; ++i)
-        hover_[i] = lerpf(hover_[i], c == i ? 1.f : 0.f, k);
-    skipHover_ = lerpf(skipHover_, skipAt(app, mouse) ? 1.f : 0.f, k);
+    for (int i = 0; i < kChoiceCount; ++i) hover_[i] = lerpf(hover_[i], c == i ? 1.f : 0.f, k);
 }
 
 void ChoiceScreen::draw(App& app, sf::RenderWindow& w) {
     const sf::Vector2f s = app.size();
-    const int ballCount = app.runBallCount();
-    const std::uint32_t scrap = app.data().run.scrap;
-    const bool full = ballCount >= cfg::ball::maxBalls;
 
-    drawDim(w, s, 0.80f);
-    drawCentered(w, app.font(), "Wave cleared - add a ball", theme::fsTitle,
-                 {s.x * 0.5f, s.y * 0.22f}, theme::textHi);
-    drawCentered(w, app.font(), std::to_string(scrap) + " scrap", theme::fsHeading,
-                 {s.x * 0.5f, s.y * 0.22f + 38.f}, theme::accent);
+    drawDim(w, s, 0.82f);
+    drawCentered(w, app.font(), "Wave cleared - choose an upgrade", theme::fsTitle,
+                 {s.x * 0.5f, s.y * 0.26f}, theme::textHi);
 
-    for (int i = 0; i < kOfferKindCount; ++i) {
-        const OfferKind k = offerKindAt(i);
-        const OfferInfo info = offerInfo(k);
-        const std::uint32_t cost = offerCost(k, ballCount);
-        const bool afford = !full && scrap >= cost;
+    for (int i = 0; i < kChoiceCount; ++i) {
+        const UpgradeInfo info = upgradeInfo(app.choices()[i]);
         const sf::Vector2f c = cardCenter(s, i);
         const float h = hover_[i];
-        const sf::Color eco = elementColor(info.element);
 
         sf::RectangleShape card({kCardW, kCardH});
         card.setOrigin(kCardW * 0.5f, kCardH * 0.5f);
         card.setPosition(c);
-        card.setFillColor(withAlpha(eco, (afford ? 0.14f : 0.05f) + 0.14f * h));
+        card.setFillColor(withAlpha(theme::accent, 0.10f + 0.16f * h));
         card.setOutlineThickness(2.f);
-        card.setOutlineColor(withAlpha(eco, afford ? 0.4f + 0.5f * h : 0.2f));
+        card.setOutlineColor(withAlpha(theme::accent, 0.4f + 0.5f * h));
         w.draw(card);
 
         drawCentered(w, app.font(), std::to_string(i + 1), theme::fsSmall,
-                     {c.x, c.y - kCardH * 0.5f + 15.f}, theme::textDim);
-        drawCentered(w, app.font(), info.title, theme::fsItem, {c.x, c.y - 34.f},
-                     afford ? theme::textHi : theme::textLo);
-        drawCentered(w, app.font(), info.desc, theme::fsSmall, {c.x, c.y + 6.f}, theme::textLo);
-        drawCentered(w, app.font(), full ? "team full" : (std::to_string(cost) + " scrap"),
-                     theme::fsBody, {c.x, c.y + kCardH * 0.5f - 22.f},
-                     afford ? theme::accent : theme::textDim);
+                     {c.x, c.y - kCardH * 0.5f + 16.f}, theme::textDim);
+        drawCentered(w, app.font(), info.title, theme::fsItem, {c.x, c.y - 24.f}, theme::textHi);
+        drawCentered(w, app.font(), info.desc, theme::fsSmall, {c.x, c.y + 20.f}, theme::textLo);
     }
 
-    const sf::Vector2f sk = skipCenter(s);
-    drawCentered(w, app.font(), "S  next wave", theme::fsBody, sk,
-                 lerpColor(theme::textLo, theme::accent, skipHover_));
-}
-
-// ================================================================ RunSummary
-
-void RunSummaryScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f) {
-    if (isDismiss(e)) app.finishSummary();
-}
-
-void RunSummaryScreen::draw(App& app, sf::RenderWindow& w) {
-    const sf::Vector2f s = app.size();
-    drawCentered(w, app.font(), "The core fell", theme::fsTitle, {s.x * 0.5f, s.y * 0.28f},
-                 theme::coreLow);
-
-    char l1[64], l2[64];
-    std::snprintf(l1, sizeof(l1), "Reached wave %d", app.lastRunWave());
-    std::snprintf(l2, sizeof(l2), "+%d cores", app.lastRunCores());
-    drawCentered(w, app.font(), l1, theme::fsItem, {s.x * 0.5f, s.y * 0.44f}, theme::textHi);
-    drawCentered(w, app.font(), l2, theme::fsHeading, {s.x * 0.5f, s.y * 0.52f}, theme::accent);
-
-    drawCentered(w, app.font(), "spend them in the hub on permanent unlocks", theme::fsSmall,
-                 {s.x * 0.5f, s.y * 0.60f}, theme::textLo);
-    drawCentered(w, app.font(), "press ESC or click to continue", theme::fsSmall,
-                 {s.x * 0.5f, s.y * 0.82f}, theme::textDim);
+    drawCentered(w, app.font(), "click a card or press 1-4", theme::fsSmall,
+                 {s.x * 0.5f, s.y * 0.52f + kCardH * 0.5f + 40.f}, theme::textDim);
 }
 
 // ================================================================ Pause
@@ -285,7 +266,7 @@ void PauseScreen::rebuild(App& app) {
                     {"Stats", true},
                     {"How to Play", true},
                     {lastSound_ ? "Sound: On" : "Sound: Off", true},
-                    {"Abandon Run", true},
+                    {"Abandon run", true},
                     {"Quit", true}});
     menu_.layout({s.x * 0.5f, s.y * 0.34f});
 }
@@ -342,18 +323,17 @@ void HowToScreen::draw(App& app, sf::RenderWindow& w) {
     drawCentered(w, app.font(), "How to Play", theme::fsTitle, {s.x * 0.5f, s.y * 0.16f},
                  theme::textHi);
 
-    const std::array<const char*, 6> lines = {{
-        "Enemies march on the core at the centre. Defend it.",
-        "Your balls orbit the core on their own, hitting enemies that cross them.",
-        "Grab a ball and fling it to redirect it; it spirals back to its orbit.",
-        "Clear a wave, then buy an elemental ball with scrap: fire / wind / water / stone.",
-        "Hit enemies in quick succession to build a damage combo.",
-        "When the core falls the run ends - you keep cores for permanent unlocks.",
+    const std::array<const char*, 5> lines = {{
+        "Enemies march on the core at the centre. Keep it alive through 10 waves.",
+        "Your ball bounces freely off the walls and the core - it tracks nothing.",
+        "Grab the ball and fling it to aim it into the enemies.",
+        "After each wave, pick 1 of 4 upgrades: more balls, core buffs, a fire ball...",
+        "Clear wave 10 to win the run. Cores you earn buy permanent unlocks.",
     }};
-    const float y0 = s.y * 0.30f;
+    const float y0 = s.y * 0.32f;
     for (std::size_t i = 0; i < lines.size(); ++i)
         drawCentered(w, app.font(), lines[i], theme::fsBody,
-                     {s.x * 0.5f, y0 + 42.f * static_cast<float>(i)},
+                     {s.x * 0.5f, y0 + 44.f * static_cast<float>(i)},
                      i + 1 == lines.size() ? theme::textHi : theme::textLo);
 
     drawCentered(w, app.font(), "ESC  pause      F  fullscreen      M  sound", theme::fsSmall,

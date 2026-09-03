@@ -21,7 +21,6 @@ float waveEnemySpeed(int wave) {
     return std::min(cfg::wave::speedMax,
                     cfg::wave::speedBase * std::pow(cfg::wave::speedGrowth, static_cast<float>(wave - 1)));
 }
-int scrapPerKill(int wave) { return 2 + wave / 2; }
 
 }  // namespace
 
@@ -57,6 +56,7 @@ float World::fastestBall() const {
 void World::spawnBall(Element e, const WorldParams& p) {
     Ball b;
     b.element = e;
+    b.radius = cfg::ball::radius * p.ballRadiusMult;
     const float a = rng_.range(0.f, 2.f * kPi);
     b.pos = core_.pos + sf::Vector2f{std::cos(a), std::sin(a)} * (core_.radius + b.radius + 20.f);
     b.vel = rng_.direction() * cruiseBase(p);  // straight line, random heading
@@ -70,8 +70,23 @@ void World::addBall(Element e, const WorldParams& p) {
     spawnBall(e, p);
 }
 
+void World::convertOneBall(Element from, Element to) {
+    for (Ball& b : balls_) {
+        if (b.element == from) {
+            b.element = to;
+            b.cooldown = 0.25f;
+            return;
+        }
+    }
+}
+
 void World::repairCore(float amount) {
     core_.hp = std::min(core_.maxHp, core_.hp + amount);
+}
+
+void World::addCoreMaxHp(float delta) {
+    core_.maxHp += delta;
+    core_.hp = std::min(core_.maxHp, core_.hp + delta);
 }
 
 void World::startRun(const WorldParams& p, const std::vector<int>& ballElements,
@@ -94,6 +109,8 @@ void World::startRun(const WorldParams& p, const std::vector<int>& ballElements,
     runOver_ = false;
     toSpawn_ = 0;
     spawnTimer_ = 0.f;
+    strayBoltTimer_ = cfg::element::strayInterval;
+    secondChanceSpent_ = false;
 
     core_.pos = size_ * 0.5f;
     core_.maxHp = coreMaxHp;
@@ -289,6 +306,33 @@ void World::emitElement(Ball& b, float dt, const WorldParams& p) {
     }
 }
 
+// "Stray bolt" upgrade: on a timer, a random ball spits a wind-style bolt at the
+// nearest enemy. Independent of the ball's element.
+void World::fireStrayBolt(float dt, const WorldParams& p) {
+    if (!p.strayBolt || balls_.empty() || enemies_.empty()) {
+        strayBoltTimer_ = cfg::element::strayInterval;
+        return;
+    }
+    strayBoltTimer_ -= dt;
+    if (strayBoltTimer_ > 0.f) return;
+    strayBoltTimer_ = cfg::element::strayInterval;
+
+    const Ball& b = balls_[static_cast<std::size_t>(rng_.irange(0, static_cast<int>(balls_.size()) - 1))];
+    const Enemy* target = nullptr;
+    float bestD2 = 1e30f;
+    for (const Enemy& e : enemies_) {
+        const float d2 = dot(e.pos - b.pos, e.pos - b.pos);
+        if (d2 < bestD2) { bestD2 = d2; target = &e; }
+    }
+    if (!target || static_cast<int>(projectiles_.size()) >= cfg::element::maxProjectiles) return;
+    Projectile pr;
+    pr.pos = b.pos;
+    pr.vel = normalized(target->pos - b.pos) * cfg::element::windSpeed;
+    pr.life = cfg::element::windLife;
+    pr.damage = cfg::element::windDamage * p.damageMult;
+    projectiles_.push_back(pr);
+}
+
 void World::regulateSpeed(Ball& b, float dt, const WorldParams& p) {
     // Cruise is a floor the ball climbs back to fast and a target it eases down
     // to slowly, so a fling stays fast for a moment.
@@ -302,8 +346,9 @@ void World::regulateSpeed(Ball& b, float dt, const WorldParams& p) {
         return;
     }
     const float up = 1.f - std::exp(-cfg::ball::regainRate * dt);
-    const float down =
-        1.f - std::exp((slow ? -cfg::ball::decayRateSlowMo : -cfg::ball::decayRate) * dt);
+    const float decayRate =
+        (slow ? cfg::ball::decayRateSlowMo : cfg::ball::decayRate) * p.flingDecayMult;
+    const float down = 1.f - std::exp(-decayRate * dt);
     const float k = (sp < cruiseS) ? up : down;
     const float ns = std::min(lerpf(sp, cruiseS, k), vMax);
     b.vel *= ns / sp;
@@ -317,6 +362,8 @@ void World::updateTrail(Ball& b) {
 }
 
 void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev) {
+    b.radius = cfg::ball::radius * p.ballRadiusMult;  // "Big ball" upgrade
+
     const float speed = length(b.vel);
     const int steps = std::clamp(
         static_cast<int>(std::ceil(speed * dt / (b.radius * cfg::ball::substepPerRadius))),
@@ -344,6 +391,11 @@ void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
                 collision::circleVsSolidCircle(b, core_.pos, core_.radius, 1.f);
             c.hit) {
             afterBounce(b, c.normal, false);
+            if (p.coreBounceBoost > 1.f) {  // "Spring core" upgrade
+                const float sp = length(b.vel);
+                if (sp > 1e-3f)
+                    b.vel *= std::min(sp * p.coreBounceBoost, maxSpeed(p)) / sp;
+            }
             pushFx(c);
         }
         for (Enemy& e : enemies_) {
@@ -419,7 +471,7 @@ void World::updateObstacles(float dt) {
     }
 }
 
-void World::updateEnemies(float dt, FrameEvents& ev) {
+void World::updateEnemies(float dt, const WorldParams& p, FrameEvents& ev) {
     for (auto it = enemies_.begin(); it != enemies_.end();) {
         Enemy& e = *it;
 
@@ -447,10 +499,33 @@ void World::updateEnemies(float dt, FrameEvents& ev) {
             core_.hp -= cfg::core::enemyDamage;
             core_.hitFlash = 1.f;
             ev.coreHit = true;
+
+            if (p.retaliate) {  // "Retaliate" upgrade: blast the crowd near the core
+                ev.corePulsed = true;
+                ev.corePulsePos = core_.pos;
+                for (Enemy& o : enemies_) {
+                    const sf::Vector2f away = o.pos - core_.pos;
+                    const float ad = length(away);
+                    if (ad < cfg::combat::retaliateRadius && ad > 1e-3f) {
+                        o.hp -= cfg::combat::retaliateDamage;
+                        o.vel += (away / ad) * cfg::combat::retaliateKnockback;
+                    }
+                }
+            }
+
             it = enemies_.erase(it);
+
             if (core_.hp <= 0.f) {
-                core_.hp = 0.f;
-                runOver_ = true;
+                if (p.secondChanceAvail && !secondChanceSpent_) {  // "Second chance" upgrade
+                    secondChanceSpent_ = true;
+                    core_.hp = std::min(core_.maxHp,
+                                        cfg::combat::secondChanceHp +
+                                            cfg::core::baseHp * cfg::combat::secondChanceHeal);
+                    ev.secondChanceUsed = true;
+                } else {
+                    core_.hp = 0.f;
+                    runOver_ = true;
+                }
             }
         } else {
             ++it;
@@ -459,11 +534,10 @@ void World::updateEnemies(float dt, FrameEvents& ev) {
     core_.hitFlash *= std::exp(-5.f * dt);
 }
 
-void World::sweepDeadEnemies(const WorldParams& p, FrameEvents& ev) {
+void World::sweepDeadEnemies(FrameEvents& ev) {
     for (auto it = enemies_.begin(); it != enemies_.end();) {
         if (it->hp <= 0.f) {
             ev.kills.push_back(it->pos);
-            ev.scrapGained += scrapPerKill(p.wave);
             it = enemies_.erase(it);
         } else {
             ++it;
@@ -487,12 +561,13 @@ void World::updateWaveSpawner(float dt, FrameEvents& ev) {
     }
 }
 
-void World::updatePickups(float dt, FrameEvents& ev) {
+void World::updatePickups(float dt, const WorldParams& p, FrameEvents& ev) {
     if (!effect_ && pickups_.empty()) {
         pickupTimer_ -= dt;
         if (pickupTimer_ <= 0.f) {
             Pickup pu;
-            pu.kind = static_cast<PowerUp>(rng_.irange(0, kPowerUpCount - 1));
+            const int kinds = std::clamp(p.powerUpsUnlocked, 1, kPowerUpCount);
+            pu.kind = static_cast<PowerUp>(rng_.irange(0, kinds - 1));
             pu.pos = {rng_.range(size_.x * 0.15f, size_.x * 0.85f),
                       rng_.range(size_.y * 0.15f, size_.y * 0.85f)};
             pu.vel = rng_.direction() * rng_.range(cfg::pickup::driftMin, cfg::pickup::driftMax);
@@ -558,13 +633,14 @@ FrameEvents World::step(float dt, const WorldParams& p) {
     }
 
     resolveBallPairs();
+    fireStrayBolt(dt, p);
     updateProjectiles(dt);
     updatePuddles(dt);
     updateObstacles(dt);
-    updateEnemies(dt, ev);
-    sweepDeadEnemies(p, ev);
+    updateEnemies(dt, p, ev);
+    sweepDeadEnemies(ev);
     updateWaveSpawner(dt, ev);
-    updatePickups(dt, ev);
+    updatePickups(dt, p, ev);
     advanceEffect(dt);
 
     const int tier = comboTier();

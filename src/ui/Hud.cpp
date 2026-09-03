@@ -16,19 +16,15 @@ void Hud::init(const sf::Font& font, sf::Vector2f size) {
 
 void Hud::pulseCombo() { comboPop_ = 1.f; }
 
-void Hud::update(float dt, std::uint32_t scrap, int wave, int enemiesLeft, float coreFrac,
+void Hud::update(float dt, int wave, int finalWave, int enemiesLeft, float coreFrac,
                  float comboMultiplier, const std::optional<ActiveEffect>& effect) {
-    if (scrap != scrap_) {
-        scrapPop_ = 1.f;
-        scrap_ = scrap;
-    }
     wave_ = wave;
+    finalWave_ = finalWave;
     enemiesLeft_ = enemiesLeft;
     coreFrac_ = clampf(coreFrac, 0.f, 1.f);
     comboMul_ = comboMultiplier;
     effect_ = effect;
 
-    scrapPop_ *= std::exp(-9.f * dt);
     comboPop_ *= std::exp(-7.f * dt);
     const float target = effect ? 1.f : 0.f;
     effectAlpha_ = lerpf(effectAlpha_, target, 1.f - std::exp(-10.f * dt));
@@ -37,16 +33,7 @@ void Hud::update(float dt, std::uint32_t scrap, int wave, int enemiesLeft, float
 void Hud::draw(sf::RenderWindow& window) const {
     if (!font_) return;
 
-    // Scrap, top-left, with a small pop on gain.
-    sf::Text scrap = makeText(*font_, std::to_string(scrap_) + "  scrap", theme::fsHud, theme::textHi);
-    const sf::FloatRect sb = scrap.getLocalBounds();
-    scrap.setOrigin(sb.left, sb.top);
-    const float scale = 1.f + 0.16f * scrapPop_;
-    scrap.setScale(scale, scale);
-    scrap.setPosition(theme::margin, theme::margin - 4.f);
-    window.draw(scrap);
-
-    // Damage-combo chip.
+    // Damage-combo chip, top-left.
     if (comboMul_ > 1.001f) {
         char chip[16];
         std::snprintf(chip, sizeof(chip), "dmg x%.1f", comboMul_);
@@ -55,13 +42,13 @@ void Hud::draw(sf::RenderWindow& window) const {
         combo.setOrigin(cb.left, cb.top);
         const float cs = 1.f + 0.22f * comboPop_;
         combo.setScale(cs, cs);
-        combo.setPosition(theme::margin + 2.f, theme::margin + theme::fsHud + 8.f);
+        combo.setPosition(theme::margin, theme::margin - 2.f);
         window.draw(combo);
     }
 
     // Wave / core-health banner, top centre.
     char banner[48];
-    std::snprintf(banner, sizeof(banner), "Wave %d", wave_);
+    std::snprintf(banner, sizeof(banner), "Wave %d / %d", wave_, finalWave_);
     drawCentered(window, *font_, banner, theme::fsHeading, {size_.x * 0.5f, theme::margin + 6.f},
                  theme::textHi);
 

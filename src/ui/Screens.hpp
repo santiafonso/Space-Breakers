@@ -9,8 +9,8 @@
 
 namespace sb {
 
-// Between-run home: meta currency, permanent unlocks, start / continue a run.
-class HubScreen : public Screen {
+// Main menu: start playing, stats, how-to, quit.
+class MenuScreen : public Screen {
 public:
     void onEnter(App& app) override;
     void handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) override;
@@ -22,7 +22,20 @@ private:
     Menu menu_;
 };
 
-// Combat. Balls clear the wave; you drag field structures to bend their paths.
+// The game menu: spend cores on permanent unlocks, then start a run.
+class LoadoutScreen : public Screen {
+public:
+    void onEnter(App& app) override;
+    void handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) override;
+    void update(App& app, float dt, sf::Vector2f mouse) override;
+    void draw(App& app, sf::RenderWindow& w) override;
+
+private:
+    void rebuild(App& app);
+    Menu menu_;
+};
+
+// Combat. One or more balls bounce freely; you fling them into the enemies.
 class PlayScreen : public Screen {
 public:
     void onEnter(App& app) override;
@@ -42,7 +55,7 @@ private:
     std::deque<std::pair<float, sf::Vector2f>> samples_;
 };
 
-// Overlay after a wave: pick 1 of 3 offers (or skip for scrap).
+// Overlay after a wave: pick 1 of 4 rolled upgrades.
 class ChoiceScreen : public Screen {
 public:
     void handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) override;
@@ -52,16 +65,7 @@ public:
 
 private:
     int cardAt(App& app, sf::Vector2f mouse) const;  // 0..3, -1 none
-    bool skipAt(App& app, sf::Vector2f mouse) const;
     float hover_[4] = {};
-    float skipHover_ = 0.f;
-};
-
-// Shown when the core falls: the run's result, then back to the hub.
-class RunSummaryScreen : public Screen {
-public:
-    void handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) override;
-    void draw(App& app, sf::RenderWindow& w) override;
 };
 
 class PauseScreen : public Screen {

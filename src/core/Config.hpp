@@ -54,6 +54,20 @@ inline constexpr float contactDamageBase = 1.0f;
 inline constexpr float contactDamagePerCruise = 1.7f;   // + this * (speed / baseCruise)
 inline constexpr float knockback = 190.f;
 inline constexpr float hitRebound = 0.9f;               // the ball bounces off an enemy like a wall
+
+// Between-wave upgrades that touch the simulation.
+inline constexpr float springBoost = 1.6f;        // "Spring": ball speed x this on a core bounce
+inline constexpr float flingDecayMult = 0.45f;    // "Reflexes": fling speed decays this much slower
+inline constexpr float heavyImpactPerPick = 0.30f;// "Heavy impact": +this contact damage per pick
+inline constexpr float bigBallPerPick = 0.25f;    // "Big ball": +this radius fraction per pick
+inline constexpr int   bigBallMaxPicks = 3;
+inline constexpr float coreArmorHp = 25.f;        // "Reinforced core" upgrade, per pick
+inline constexpr float retaliateRadius = 190.f;   // "Retaliate": pulse when an enemy hits the core
+inline constexpr float retaliateDamage = 6.f;
+inline constexpr float retaliateKnockback = 320.f;
+inline constexpr float secondChanceHp = 1.f;      // "Second chance": core survives a lethal hit at this
+inline constexpr float secondChanceHeal = 0.30f;  // ...then heals this fraction of base HP
+inline constexpr int   lootBonusPct = 20;         // "Loot": +this% cores at the end of the run
 }  // namespace combat
 
 // Per-element behaviour for the ball types bought between waves.
@@ -72,6 +86,8 @@ inline constexpr float waterInterval = 0.26f;
 inline constexpr float puddleRadius = 26.f;
 inline constexpr float puddleLife = 2.4f;
 inline constexpr float puddleDps = 3.4f;
+// "Stray bolt" upgrade: a random ball fires a wind-style bolt on this timer
+inline constexpr float strayInterval = 1.6f;
 // stone: drops blocking rubble on a timer
 inline constexpr float stoneInterval = 2.0f;
 inline constexpr float obstacleRadius = 17.f;
@@ -84,10 +100,16 @@ inline constexpr int maxProjectiles = 40;
 namespace core {
 inline constexpr float radius = 34.f;
 inline constexpr float baseHp = 140.f;
-inline constexpr float hpPlusBonus = 70.f;     // "reinforced core" meta unlock
+inline constexpr float hpPerBulwark = 40.f;    // "Bulwark" meta unlock, per level
 inline constexpr float enemyDamage = 8.f;      // hp lost per enemy that reaches the core
 inline constexpr float waveHeal = 9.f;         // core repaired this much on a wave clear
 }  // namespace core
+
+// A run is a fixed sprint: survive to the final wave and you win.
+namespace run {
+inline constexpr int startBalls = 1;   // before the "Squad" meta unlock
+inline constexpr int finalWave = 10;
+}  // namespace run
 
 namespace wave {
 inline constexpr int baseCount = 3;
@@ -103,8 +125,8 @@ inline constexpr float enemyRadius = 19.f;
 }  // namespace wave
 
 namespace meta {
-inline constexpr int coresPerWave = 1;
-inline constexpr int coresPerBoss = 5;
+inline constexpr int coresPerWave = 2;   // earned at the end of a run, per wave reached
+inline constexpr int winBonus = 10;      // extra for clearing the final wave
 }  // namespace meta
 
 // Power-up orbs still drift in and buff the balls for a few seconds.

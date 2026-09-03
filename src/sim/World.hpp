@@ -22,7 +22,9 @@ public:
                   float coreHp, float coreMaxHp);
     void startWave(int wave, const WorldParams& p);
     void addBall(Element e, const WorldParams& p);
+    void convertOneBall(Element from, Element to);   // "Ignite a ball" upgrade
     void repairCore(float amount);
+    void addCoreMaxHp(float delta);                  // "Reinforce core" upgrade
 
     FrameEvents step(float dt, const WorldParams& p);
 
@@ -68,14 +70,15 @@ private:
     void advanceCombo(float dt);
     void advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev);
     void emitElement(Ball& b, float dt, const WorldParams& p);
+    void fireStrayBolt(float dt, const WorldParams& p);
     void resolveBallPairs();
     void updateProjectiles(float dt);
     void updatePuddles(float dt);
     void updateObstacles(float dt);
-    void updateEnemies(float dt, FrameEvents& ev);
-    void sweepDeadEnemies(const WorldParams& p, FrameEvents& ev);
+    void updateEnemies(float dt, const WorldParams& p, FrameEvents& ev);
+    void sweepDeadEnemies(FrameEvents& ev);
     void updateWaveSpawner(float dt, FrameEvents& ev);
-    void updatePickups(float dt, FrameEvents& ev);
+    void updatePickups(float dt, const WorldParams& p, FrameEvents& ev);
     void advanceEffect(float dt);
     void afterBounce(Ball& b, sf::Vector2f normal, bool countHit);
     void regulateSpeed(Ball& b, float dt, const WorldParams& p);
@@ -108,6 +111,8 @@ private:
     float spawnTimer_ = 0.f;
 
     float pickupTimer_ = cfg::pickup::spawnMin;
+    float strayBoltTimer_ = cfg::element::strayInterval;
+    bool secondChanceSpent_ = false;
 };
 
 }  // namespace sb

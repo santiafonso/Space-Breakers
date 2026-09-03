@@ -1,46 +1,101 @@
 #pragma once
 
-#include <algorithm>
 #include <cstdint>
-
-#include "sim/Entities.hpp"  // Element
 
 namespace sb {
 
-// ---- between-wave offers: add an elemental ball, paid with scrap -------------
+// ---- between-wave upgrades: pick 1 of 4 rolled from this pool ----------------
+//
+// A run shows four random, eligible upgrades after every wave. Ball-element
+// upgrades beyond "turn a ball to fire" are deliberately left out - those are
+// meant to come from a boss later.
 
-enum class OfferKind { BallFire, BallWind, BallWater, BallStone };
-inline constexpr int kOfferKindCount = 4;
+enum class UpgradeKind {
+    AddBall,        // +1 plain ball
+    BallToFire,     // turn one plain ball into a fire ball (needs the meta unlock)
+    CoreArmor,      // +max core HP, stacks
+    CoreRepair,     // heal the core to full, now
+    CoreSpring,     // balls ricochet off the core faster
+    CoreRetaliate,  // an enemy hitting the core triggers a damaging pulse
+    FlingMomentum,  // a flung ball keeps its speed longer
+    HeavyImpact,    // +contact damage, stacks
+    BigBall,        // +ball radius, stacks (capped)
+    StrayBolt,      // a random ball fires a bolt at the nearest enemy on a timer
+    Loot,           // +cores at the end of the run
+    SecondChance,   // once per run the core survives a lethal hit
+};
+inline constexpr int kUpgradeKindCount = 12;
+inline constexpr int kChoiceCount = 4;
 
-struct OfferInfo {
+struct UpgradeInfo {
     const char* title;
     const char* desc;
-    Element element;
-    std::uint32_t baseCost;
 };
 
-inline OfferInfo offerInfo(OfferKind k) {
+inline UpgradeInfo upgradeInfo(UpgradeKind k) {
     switch (k) {
-        case OfferKind::BallFire:
-            return {"Fire ball", "sets enemies it touches burning", Element::Fire, 18};
-        case OfferKind::BallWind:
-            return {"Wind ball", "fires bolts at the nearest enemy", Element::Wind, 45};
-        case OfferKind::BallWater:
-            return {"Water ball", "leaves a damaging trail", Element::Water, 24};
-        case OfferKind::BallStone:
-            return {"Stone ball", "drops rubble that blocks enemies", Element::Stone, 45};
+        case UpgradeKind::AddBall:       return {"Extra ball", "one more ball in the arena"};
+        case UpgradeKind::BallToFire:    return {"Ignite a ball", "turns a plain ball into a fire ball"};
+        case UpgradeKind::CoreArmor:     return {"Reinforce core", "+25 max core health, and heal it"};
+        case UpgradeKind::CoreRepair:    return {"Repair core", "heal the core back to full"};
+        case UpgradeKind::CoreSpring:    return {"Spring core", "your balls bounce off the core faster"};
+        case UpgradeKind::CoreRetaliate: return {"Retaliate", "a hit on the core blasts nearby enemies"};
+        case UpgradeKind::FlingMomentum: return {"Reflexes", "a flung ball keeps its speed longer"};
+        case UpgradeKind::HeavyImpact:   return {"Heavy impact", "+30% ball contact damage"};
+        case UpgradeKind::BigBall:       return {"Big ball", "+25% ball radius"};
+        case UpgradeKind::StrayBolt:     return {"Stray bolt", "a ball fires at the nearest enemy on a timer"};
+        case UpgradeKind::Loot:          return {"Loot", "+20% cores at the end of the run"};
+        case UpgradeKind::SecondChance:  return {"Second chance", "once, the core survives a lethal hit"};
     }
-    return {"", "", Element::Plain, 0};
+    return {"", ""};
 }
 
-// Cost rises with how many balls you already field.
-inline std::uint32_t offerCost(OfferKind k, int ballCount) {
-    return offerInfo(k).baseCost + 10u * static_cast<std::uint32_t>(std::max(0, ballCount - 1));
+// What the roll needs to know to drop picks that would do nothing.
+struct UpgradeCtx {
+    int ballCount = 1;
+    int maxBalls = 8;
+    int fireBalls = 0;
+    int fireCap = 1;
+    bool fireUnlocked = false;
+    bool coreFull = true;
+    int bigBallPicks = 0;
+    bool spring = false;
+    bool retaliate = false;
+    bool flingMomentum = false;
+    bool strayBolt = false;
+    bool loot = false;
+    bool secondChance = false;
+};
+
+inline bool upgradeEligible(UpgradeKind k, const UpgradeCtx& c) {
+    switch (k) {
+        case UpgradeKind::AddBall:       return c.ballCount < c.maxBalls;
+        case UpgradeKind::BallToFire:    return c.fireUnlocked && c.fireBalls < c.fireCap &&
+                                                (c.ballCount - c.fireBalls) > 0;
+        case UpgradeKind::CoreRepair:    return !c.coreFull;
+        case UpgradeKind::BigBall:       return c.bigBallPicks < 3;
+        case UpgradeKind::CoreSpring:    return !c.spring;
+        case UpgradeKind::CoreRetaliate: return !c.retaliate;
+        case UpgradeKind::FlingMomentum: return !c.flingMomentum;
+        case UpgradeKind::StrayBolt:     return !c.strayBolt;
+        case UpgradeKind::Loot:          return !c.loot;
+        case UpgradeKind::SecondChance:  return !c.secondChance;
+        case UpgradeKind::CoreArmor:     return true;
+        case UpgradeKind::HeavyImpact:   return true;
+    }
+    return false;
 }
 
-// ---- permanent meta unlocks (spent with cores, in the hub) ------------------
+// ---- permanent meta unlocks (spent with cores, in the game menu) -----------
 
-enum MetaUnlock { MetaStartBalls, MetaCoreHp, MetaUnlockCount };
+enum MetaUnlock {
+    MetaStartBalls,   // +1 starting ball
+    MetaCoreHp,       // +core HP at the start
+    MetaFireBall,     // unlocks the "ignite a ball" between-wave upgrade
+    MetaFireCap,      // +1 to how many balls can be fire in one run
+    MetaPowerups,     // +1 power-up type that can drop
+    MetaUnlockCount
+};
 
 struct MetaUnlockDef {
     const char* name;
@@ -51,8 +106,11 @@ struct MetaUnlockDef {
 
 inline const MetaUnlockDef& metaUnlockDef(int u) {
     static const MetaUnlockDef defs[MetaUnlockCount] = {
-        {"Squad", "start every run with one more ball", 3u, 3},
-        {"Reinforced core", "start with +70 core health", 4u, 1},
+        {"Squad",    "start each run with one more ball",      8u,  3},
+        {"Bulwark",  "start with +40 core health",             10u, 3},
+        {"Ignition", "the fire-ball upgrade can appear",       12u, 1},
+        {"Forge",    "one more ball may be fire in a run",      10u, 3},
+        {"Fortune",  "one more power-up type can drop",         6u,  4},
     };
     return defs[u];
 }

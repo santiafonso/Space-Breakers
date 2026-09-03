@@ -1,12 +1,12 @@
 # Space-Breakers
 
-A roguelite about defending a core. Your balls bounce freely around the arena —
-off the walls and off the core — clearing waves of enemies that march on the
-core. They don't track anything; you fling a ball to aim it into a cluster.
-Clear a wave, then spend scrap on an elemental ball — fire (burns), wind (fires
-bolts), water (damaging trail) or stone (drops blocking rubble). When the core
-falls the run ends and leaves you *cores* to spend on permanent unlocks before
-the next run.
+A roguelite about defending a core. You start a run with a single ball that
+bounces freely around the arena — off the walls and off the core — clearing
+enemies that march on the core. It tracks nothing; you fling it to aim it into
+a cluster. After each wave you pick 1 of 4 rolled upgrades (more balls, core
+buffs, a fire ball, …). A run is ten waves: clear the tenth to win, or lose it
+when the core falls. Either way you keep *cores*, spent in the game menu on
+permanent unlocks before the next run.
 
 Work in progress on the `combat-rework` branch. See `DESIGN.md` for the full
 design and roadmap.
@@ -28,7 +28,7 @@ copy of `assets/` — and `openal32.dll` — placed next to it, so it runs when
 launched from anywhere, not just the project root.
 
 If SFML is installed system-wide (`libsfml-dev` on Linux) CMake uses it.
-Otherwise it downloads and statically links SFML 2.6.1 — no manual install,
+Otherwise it downloads and statically links SFML 2.6.2 — no manual install,
 which is what makes a fresh Windows machine build with nothing but CMake + the
 MSVC or MinGW toolchain.
 
@@ -55,8 +55,8 @@ Set `SPACE_BREAKERS_NO_AUDIO=1` to run without sound (headless / SSH).
 | `ESC` | pause (and back out of any screen) |
 | `F` / `F11` | toggle fullscreen |
 | `M` | toggle sound |
-| `1`-`4` | choice screen: buy an elemental ball &nbsp;&nbsp; `S` next wave |
-| `1`-`2` | hub: spend cores on a permanent unlock |
+| `1`-`4` | choice screen: pick that upgrade |
+| `1`-`5` | game menu: spend cores on a permanent unlock &nbsp;&nbsp; `Enter` start run |
 
 ## Layout
 
@@ -81,15 +81,15 @@ src/
     Effects.*        impact rings, edge glow, floating labels, screen tint
   ui/
     Screen.hpp    screen interface (input / update / draw, stackable)
-    Screens.*     hub, play, choice, run-summary, pause, stats, how-to
+    Screens.*     menu, loadout (game menu), play, choice, pause, stats, how-to
     Menu.* Hud.* Widgets.*   the individual widgets
   platform/
     Window.*      video mode, letterboxed view, fullscreen
     Audio.*       procedural sound effects (no audio assets)
-    Save.*        plain-text save file (v4: meta.* always, run.* when resuming)
+    Save.*        plain-text save file (v5: persistent meta only)
   progression/
-    Offers.hpp    the four elemental-ball offers + permanent meta-unlock table
-    GameData.hpp  MetaState (persists) + RunState (resumable)
+    Offers.hpp    the 12-upgrade between-wave pool + permanent meta-unlock table
+    GameData.hpp  MetaState (persists) + RunState + RunMods (in memory only)
 ```
 
 The simulation runs on a fixed timestep (`cfg::loop::fixedDt`), so the ball

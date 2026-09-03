@@ -200,7 +200,27 @@ Fase → **Fantasma** (atraviesa estructuras, a revisar) · Frenesí x3 → **Fr
   - Verificado headless: ~15 oleadas, sin NaN, elementos activos, curva de
     dificultad decreciente (afinar escalado de enemigos mas adelante).
 
-  Detalle original:
+- **Fase 1 — run acotada + progresion afuera. [IMPLEMENTADO 2026-09-03]**
+  - **Empezas con 1 pelota** (+1 por nivel del unlock "Squad", tope 4).
+  - **La run son 10 oleadas.** Limpiar la 10 = victoria -> volves al menu del
+    juego. El nucleo muere antes = derrota -> tambien al menu del juego.
+  - **Sin scrap.** Las mejoras entre oleadas son **eleccion libre 1 de 4**,
+    tiradas al azar de un pool de 12 (`UpgradeKind` en `progression/Offers.hpp`):
+    +pelota, encender una pelota (necesita el unlock "Ignition"), +HP nucleo,
+    reparar nucleo, resorte (rebotas mas rapido en el nucleo), contraataque
+    (onda al golpear el nucleo), reflejos, +30% daño, pelota grande, bala
+    perdida, botin (+20% cores), segunda oportunidad.
+  - **Menu del juego** (`LoadoutScreen`): gastas **cores** en unlocks
+    permanentes (Squad, Bulwark, Ignition, Forge, Fortune) y arrancas la run.
+  - **Cores** = `wave * cfg::meta::coresPerWave` + `winBonus` al ganar
+    (`endRun(bool won)`).
+  - Flujo de pantallas: **Menu -> Loadout -> Play (10 oleadas, Choice entre
+    cada una) -> Loadout**. `RunSummaryScreen` eliminada (el resultado se
+    muestra arriba del Loadout). Guardado **v5**: solo meta, sin reanudar run.
+  - Mas adelante: **jefe tras la oleada 10** que da los upgrades de pelota
+    (viento/agua/piedra), que por eso quedan fuera del pool.
+
+  Detalle original (Fase 0b):
   - Quitar paredes.
   - Núcleo + 1 tipo de enemigo + spawner de oleadas con escalado + derrota.
   - Daño por contacto `f(velocidad, combo)`; combo realimentado por impactos.
@@ -214,12 +234,13 @@ Fase → **Fantasma** (atraviesa estructuras, a revisar) · Frenesí x3 → **Fr
   - **Nueva run** desde arena 1 con los unlocks aplicados.
   - Guardado v3 (solo meta entre sesiones; run en curso reanudable).
   - Debe compilar y ser jugable en bucle completo.
-- **Fase 1 — Disparos.** Clase Artillero / nodo torreta. `Projectile`.
-- **Fase 2 — Variedad.** Repulsor, bumper, rampa. Corredor, tanque, escindido.
-  Primer jefe. Afijos de élite.
-- **Fase 3 — Clases y modificadores profundos.** Árbol de clases. Power-ups
+- **Fase 2 — Jefe tras la oleada 10.** Da upgrades de pelota (viento/agua/
+  piedra). Extiende la run mas alla de 10 en "modo infinito" opcional.
+- **Fase 3 — Variedad.** Repulsor, bumper, rampa. Corredor, tanque, escindido.
+  Afijos de élite.
+- **Fase 4 — Clases y modificadores profundos.** Árbol de clases. Power-ups
   re-tematizados. Más modificadores (cadena, esquirla, órbita).
-- **Fase 4 — Equipo y meta grande.** Roster de varias pelotas. Hub ampliado,
+- **Fase 5 — Equipo y meta grande.** Roster de varias pelotas. Hub ampliado,
   hitos, ramas de meta-progresión, tutorial guiado por arenas.
 
 ---
