@@ -208,6 +208,10 @@ void LoadoutScreen::draw(App& app, sf::RenderWindow& w) {
     menu_.draw(w);
     drawCentered(w, app.font(), "click a row or press 1-5      Enter starts the run", theme::fsSmall,
                  {s.x * 0.5f, s.y * 0.93f}, theme::textDim);
+    if (app.devMode())
+        drawCentered(w, app.font(),
+                     "DEV: env SB_WAVE / SB_BALLS / SB_UPGRADES apply on Start   -   in-run keys shown on screen",
+                     theme::fsSmall, {s.x * 0.5f, s.y * 0.96f}, theme::accent);
 }
 
 // ================================================================ Play
@@ -307,10 +311,38 @@ void PlayScreen::draw(App& app, sf::RenderWindow& w) {
         dx += 15.f;
     }
 
-    drawCentered(w, app.font(), app.devMode() ? "TAB upgrades   (dev keys on)" : "hold TAB for upgrades",
-                 theme::fsSmall, {theme::margin + 60.f, s.y - theme::margin - 56.f}, theme::textDim);
+    drawCentered(w, app.font(), "hold TAB for upgrades", theme::fsSmall,
+                 {theme::margin + 60.f, s.y - theme::margin - 56.f}, theme::textDim);
 
+    if (app.devMode()) drawDevKeys(app, w);
     if (showPicks_) drawPicks(app, w);
+}
+
+void PlayScreen::drawDevKeys(App& app, sf::RenderWindow& w) const {
+    const sf::Vector2f s = app.size();
+    const bool invuln = app.world().devInvuln();
+    const std::array<std::string, 8> lines = {{
+        "- DEV -",
+        "]   win wave",
+        "H   heal core",
+        std::string("G   invuln: ") + (invuln ? "ON" : "off"),
+        "B   add ball",
+        "U   grant next upgrade",
+        "=   +25 cores",
+        "TAB   upgrades taken",
+    }};
+    const float right = s.x - theme::margin;
+    float y = theme::margin + 74.f;
+    for (std::size_t i = 0; i < lines.size(); ++i) {
+        const sf::Color col = i == 0 ? theme::accent
+                                     : (invuln && i == 3 ? theme::core : theme::textDim);
+        sf::Text t = makeText(app.font(), lines[i], theme::fsSmall, col);
+        const sf::FloatRect b = t.getLocalBounds();
+        t.setOrigin(b.left + b.width, b.top);
+        t.setPosition(right, y);
+        w.draw(t);
+        y += 17.f;
+    }
 }
 
 void PlayScreen::drawPicks(App& app, sf::RenderWindow& w) const {

@@ -54,6 +54,7 @@ private:
     void release(App& app);
     sf::Vector2f pointerVelocity() const;
     void drawPicks(App& app, sf::RenderWindow& w) const;
+    void drawDevKeys(App& app, sf::RenderWindow& w) const;
 
     WorldRenderer renderer_;
     bool dragging_ = false;
