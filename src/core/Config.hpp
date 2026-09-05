@@ -127,6 +127,7 @@ inline constexpr int baseCount = 3;
 inline constexpr float countGrowth = 1.22f;
 inline constexpr int maxCount = 60;
 inline constexpr float spawnInterval = 0.95f;
+inline constexpr float introDelay = 1.15f;   // calm beat before the first enemy of a wave
 inline constexpr float hpBase = 3.f;
 inline constexpr float hpGrowth = 1.16f;
 inline constexpr float speedBase = 34.f;
@@ -165,6 +166,10 @@ inline constexpr float surgeCruiseMul = 2.0f;
 
 namespace app {
 inline constexpr float autosaveInterval = 20.f;
+// A new wave eases in: the sim runs from this fraction of speed up to full over
+// this long, so the scene you ended on flows into the next one instead of snapping.
+inline constexpr float waveIntroTime = 0.85f;
+inline constexpr float waveIntroSlow = 0.35f;
 inline constexpr float throwVelScale = 1.15f;
 inline constexpr float pointerSampleWindow = 0.09f;
 inline constexpr float catchRadius = 95.f;

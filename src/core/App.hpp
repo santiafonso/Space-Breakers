@@ -110,6 +110,7 @@ private:
     int devGrantNext_ = 0;
 
     float fade_ = 0.f;
+    float waveIntro_ = 0.f;   // >0 while a new wave eases in (sim runs slow -> full)
     float worldAccum_ = 0.f;
     float autosaveTimer_ = 20.f;
 

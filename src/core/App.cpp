@@ -186,6 +186,7 @@ void App::newRun() {
 
 void App::startNextWave() {
     data_.run.wave += 1;
+    waveIntro_ = cfg::app::waveIntroTime;   // ease the sim in instead of snapping
     world_.repairCore(cfg::core::waveHeal);
     if (data_.run.wave >= cfg::run::finalWave)
         world_.startBossWave(params());        // wide arena + miniboss
@@ -465,7 +466,15 @@ void App::update(float frameDt) {
     if (!stack_.empty()) stack_.back()->update(*this, frameDt, mouse);
 
     if (simulating()) {
-        worldAccum_ += frameDt;
+        // A fresh wave eases in: feed the fixed-step accumulator slowly at first
+        // and ramp to real time, so balls flow out of the previous wave.
+        float simDt = frameDt;
+        if (waveIntro_ > 0.f) {
+            waveIntro_ = std::max(0.f, waveIntro_ - frameDt);
+            const float t = 1.f - waveIntro_ / cfg::app::waveIntroTime;  // 0 -> 1
+            simDt *= cfg::app::waveIntroSlow + (1.f - cfg::app::waveIntroSlow) * t;
+        }
+        worldAccum_ += simDt;
         int steps = 0;
         while (worldAccum_ >= cfg::loop::fixedDt && steps < cfg::loop::maxSteps) {
             processEvents(world_.step(cfg::loop::fixedDt, params()));

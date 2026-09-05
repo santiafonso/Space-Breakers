@@ -233,8 +233,22 @@ Fase → **Fantasma** (atraviesa estructuras, a revisar) · Frenesí x3 → **Fr
     Las pelotas le pegan y rebotan pero no lo mueven.
   - **Adds infinitos** mientras el boss vive (cap `cfg::boss::maxAdds`).
     Matar al boss -> `waveCleared` -> `endRun(true)` (victoria).
+  - **Lanzamiento solo desde la mitad derecha:** `moveHeld` limita la `x`
+    de la pelota agarrada a `size_.x/2` en la oleada del boss (y
+    `releaseHeld` la reencaja por si fue un toque). El renderer dibuja una
+    linea fina en la mitad **solo mientras se arrastra** una pelota.
   - Tuning en `cfg::boss` (hp 40, radio 58, vel 54, arena 1.95x/1.45x -
     la camara se aleja bastante).
+
+- **Fase 1c — transicion entre oleadas mas suave. [IMPLEMENTADO 2026-09-05]**
+  - Las pelotas **ya no se reposicionan** al cambiar de oleada:
+    `World::relaunchBalls` -> `carryBalls`, que mantiene posicion y rumbo
+    y solo suelta la agarrada / despierta a las quietas.
+  - **Ease-in de la oleada:** `App::update` alimenta el acumulador de paso
+    fijo mas lento al principio y sube a tiempo real en
+    `cfg::app::waveIntroTime` (desde `waveIntroSlow`), asi la escena de la
+    oleada anterior fluye hacia la nueva en vez de saltar.
+  - Primer enemigo con un respiro extra (`cfg::wave::introDelay`).
 
   Detalle original (Fase 0b):
   - Quitar paredes.

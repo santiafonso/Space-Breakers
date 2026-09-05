@@ -79,7 +79,7 @@ public:
 private:
     void spawnBall(Element e, const WorldParams& p);
     void spawnEnemy();
-    void relaunchBalls(const WorldParams& p);
+    void carryBalls(const WorldParams& p);   // keep balls in place across a wave change
     void advanceCombo(float dt);
     void advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev);
     void emitElement(Ball& b, float dt, const WorldParams& p);

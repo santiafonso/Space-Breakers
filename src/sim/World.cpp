@@ -135,13 +135,14 @@ void World::startRun(const WorldParams& p, const std::vector<int>& ballElements,
     pickupTimer_ = rng_.range(cfg::pickup::firstSpawnMin, cfg::pickup::firstSpawnMax);
 }
 
-void World::relaunchBalls(const WorldParams& p) {
+void World::carryBalls(const WorldParams& p) {
+    // A wave change no longer teleports the balls: they stay exactly where the
+    // last wave left them, keeping their heading. Only a held ball is let go and
+    // any ball that had stopped is woken back up to cruise speed.
     for (Ball& b : balls_) {
-        const float a = rng_.range(0.f, 2.f * kPi);
-        b.pos = core_.pos + sf::Vector2f{std::cos(a), std::sin(a)} * (core_.radius + b.radius + 20.f);
-        b.vel = rng_.direction() * cruiseBase(p);
-        b.trail.clear();
         b.held = false;
+        if (length(b.vel) < cfg::ball::minThrowSpeed)
+            b.vel = rng_.direction() * cruiseBase(p);
     }
     grabbed_ = Grabbed::None;
     heldIndex_ = -1;
@@ -155,10 +156,10 @@ void World::startWave(int wave, const WorldParams& p) {
 
     wave_ = wave;
     toSpawn_ = waveEnemyCount(wave);
-    spawnTimer_ = 0.35f;
+    spawnTimer_ = cfg::wave::introDelay;
     waveRunning_ = true;
     projectiles_.clear();
-    relaunchBalls(p);
+    carryBalls(p);
 }
 
 void World::startBossWave(const WorldParams& p) {
@@ -180,7 +181,7 @@ void World::startBossWave(const WorldParams& p) {
     boss_.pos = {size_.x - boss_.radius - 4.f, size_.y * 0.5f};
     boss_.vel = {-cfg::boss::speed, 0.f};
 
-    relaunchBalls(p);
+    carryBalls(p);
 }
 
 void World::spawnEnemy() {
@@ -225,7 +226,10 @@ bool World::grabAt(sf::Vector2f point, float catchRadius) {
 void World::moveHeld(sf::Vector2f target) {
     if (grabbed_ != Grabbed::Ball) return;
     Ball& b = balls_[heldIndex_];
-    b.pos.x = clampf(target.x, b.radius, size_.x - b.radius);
+    // On the miniboss wave a ball can only be launched from the right half of
+    // the arena, so it can't be carried past the midline while held.
+    const float minX = bossWave_ ? size_.x * 0.5f : b.radius;
+    b.pos.x = clampf(target.x, minX, size_.x - b.radius);
     b.pos.y = clampf(target.y, b.radius, size_.y - b.radius);
     b.vel = {0.f, 0.f};
 }
@@ -234,6 +238,7 @@ void World::releaseHeld(sf::Vector2f throwVel) {
     if (grabbed_ != Grabbed::Ball) return;
     Ball& b = balls_[heldIndex_];
     b.held = false;
+    if (bossWave_ && b.pos.x < size_.x * 0.5f) b.pos.x = size_.x * 0.5f;  // right-half launch only
     const float s = length(throwVel);
     if (s < cfg::ball::minThrowSpeed) b.vel = rng_.direction() * cfg::ball::nudgeSpeed;
     else if (s > cfg::ball::hardSpeedCap) b.vel = throwVel * (cfg::ball::hardSpeedCap / s);
