@@ -139,6 +139,7 @@ inline constexpr float enemyRadius = 19.f;
 namespace meta {
 inline constexpr int coresPerWave = 2;   // earned at the end of a run, per wave reached
 inline constexpr int winBonus = 10;      // extra for clearing the final wave
+inline constexpr int prismsPerWin = 1;   // "prism": special currency dropped by the miniboss
 }  // namespace meta
 
 // Power-up orbs still drift in and buff the balls for a few seconds.

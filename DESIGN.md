@@ -231,12 +231,27 @@ Fase → **Fantasma** (atraviesa estructuras, a revisar) · Frenesí x3 → **Fr
     **recto** al nucleo, **inmune a knockback y sin steering**. Barra de
     vida chica encima. Si toca el nucleo -> `runOver_` (derrota directa).
     Las pelotas le pegan y rebotan pero no lo mueven.
-  - **Adds infinitos** mientras el boss vive (cap `cfg::boss::maxAdds`).
-    Matar al boss -> `waveCleared` -> `endRun(true)` (victoria).
+  - **Adds infinitos** mientras el boss vive (cap `cfg::boss::maxAdds`),
+    y **solo entran por la mitad derecha** de la arena (`spawnEnemy` tiene
+    rama `bossWave_`). Al morir el boss se limpian los adds que queden.
   - **Lanzamiento solo desde la mitad derecha:** `moveHeld` limita la `x`
     de la pelota agarrada a `size_.x/2` en la oleada del boss (y
     `releaseHeld` la reencaja por si fue un toque). El renderer dibuja una
     linea fina en la mitad **solo mientras se arrastra** una pelota.
+  - **Borde de rebote en la vista de mundo:** `Effects::drawBorder(size)`
+    se dibuja desde `PlayScreen` con `World::size()`, asi el marco donde
+    rebotan las pelotas crece con la arena del boss. Los menus mantienen
+    el marco fijo (`App::render` lo dibuja solo si no hay run activa).
+  - **Cartel al matar al boss** (`BossWinScreen`, no opaco): la run queda
+    "activa" para que el mundo congelado se siga viendo detras. Botones
+    **Continue** (placeholder -> menu, se cablea el post-boss despues) y
+    **Back to menu**; ambos -> `App::leaveBossWin`. La camara sigue en el
+    encuadre ancho mientras el cartel esta arriba (`world_.bossWave()`).
+  - **Prisma** (`MetaState::prisms`, `cfg::meta::prismsPerWin`): moneda
+    especial que suelta el miniboss al morir. Se guarda (`save v6`), se
+    muestra junto a los cores en Menu/Loadout. Uso futuro: desbloqueos
+    "grandes". Perder contra el boss (llega al nucleo) no da cartel ni
+    prisma, sale directo al menu.
   - Tuning en `cfg::boss` (hp 40, radio 58, vel 54, arena 1.95x/1.45x -
     la camara se aleja bastante).
 

@@ -24,6 +24,7 @@ struct Stats {
 // unlocks and settings.
 struct MetaState {
     std::uint32_t cores = 0;
+    std::uint32_t prisms = 0;   // special currency from beating the miniboss
     int unlock[MetaUnlockCount] = {};
     bool soundOn = true;
     bool fullscreen = false;

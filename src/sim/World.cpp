@@ -601,6 +601,8 @@ void World::updateBoss(float dt, const WorldParams& p, FrameEvents& ev) {
     if (boss_.hp <= 0.f) {
         boss_.alive = false;
         waveRunning_ = false;
+        enemies_.clear();       // the remaining adds die with the boss
+        projectiles_.clear();
         ev.kills.push_back(boss_.pos);
         ev.waveCleared = true;
         return;

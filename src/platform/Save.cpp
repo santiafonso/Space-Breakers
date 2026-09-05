@@ -10,7 +10,7 @@
 namespace sb {
 
 namespace {
-constexpr int kSaveVersion = 5;
+constexpr int kSaveVersion = 6;
 }  // namespace
 
 bool hasSavedGame(const std::string& path) {
@@ -31,6 +31,7 @@ bool saveGame(const std::string& path, const GameData& d) {
     const MetaState& m = d.meta;
     f << "version " << kSaveVersion << '\n';
     f << "meta.cores " << m.cores << '\n';
+    f << "meta.prisms " << m.prisms << '\n';
     for (int i = 0; i < MetaUnlockCount; ++i)
         f << "meta.unlock " << i << ' ' << m.unlock[i] << '\n';
     f << "sound " << (m.soundOn ? 1 : 0) << '\n';
@@ -60,6 +61,7 @@ bool loadGame(const std::string& path, GameData& d) {
         sawAnything = true;
 
         if (key == "meta.cores") ls >> m.cores;
+        else if (key == "meta.prisms") ls >> m.prisms;
         else if (key == "meta.unlock") {
             int i = -1, lvl = 0;
             if (ls >> i >> lvl && i >= 0 && i < MetaUnlockCount) m.unlock[i] = lvl;

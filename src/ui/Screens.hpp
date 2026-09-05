@@ -102,4 +102,19 @@ public:
     void draw(App& app, sf::RenderWindow& w) override;
 };
 
+// Shown when the miniboss dies: the run is won. "Continue" is a placeholder for
+// now (goes to the game menu, same as "Back to menu").
+class BossWinScreen : public Screen {
+public:
+    void onEnter(App& app) override;
+    void handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) override;
+    void update(App& app, float dt, sf::Vector2f mouse) override;
+    void draw(App& app, sf::RenderWindow& w) override;
+    bool opaque() const override { return false; }
+
+private:
+    void rebuild(App& app);
+    Menu menu_;
+};
+
 }  // namespace sb

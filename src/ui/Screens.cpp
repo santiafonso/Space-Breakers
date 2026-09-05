@@ -61,6 +61,14 @@ sf::Vector2f cardCenter(sf::Vector2f size, int i) {
     return {startX + kCardW * 0.5f + static_cast<float>(i) * (kCardW + kCardGap), size.y * 0.52f};
 }
 
+// "12 cores" plus "  ·  3 prisms" once the player has any.
+std::string currencyLine(const MetaState& m) {
+    std::string s = std::to_string(m.cores) + " cores";
+    if (m.prisms > 0)
+        s += "   -   " + std::to_string(m.prisms) + (m.prisms == 1 ? " prism" : " prisms");
+    return s;
+}
+
 constexpr float kUnlockTop = 0.30f;   // * size.y
 constexpr float kUnlockGap = 48.f;
 constexpr float kUnlockRowW = 540.f;
@@ -97,7 +105,7 @@ void MenuScreen::draw(App& app, sf::RenderWindow& w) {
     const sf::Vector2f s = app.size();
     drawCentered(w, app.font(), "Space-Breakers", theme::fsTitle, {s.x * 0.5f, s.y * 0.2f},
                  theme::textHi);
-    drawCentered(w, app.font(), std::to_string(app.data().meta.cores) + " cores", theme::fsHeading,
+    drawCentered(w, app.font(), currencyLine(app.data().meta), theme::fsHeading,
                  {s.x * 0.5f, s.y * 0.2f + 42.f}, theme::accent);
     menu_.draw(w);
 }
@@ -159,7 +167,7 @@ void LoadoutScreen::draw(App& app, sf::RenderWindow& w) {
     const MetaState& m = app.data().meta;
 
     drawCentered(w, app.font(), "Game menu", theme::fsTitle, {s.x * 0.5f, s.y * 0.11f}, theme::textHi);
-    drawCentered(w, app.font(), std::to_string(m.cores) + " cores", theme::fsHeading,
+    drawCentered(w, app.font(), currencyLine(m), theme::fsHeading,
                  {s.x * 0.5f, s.y * 0.11f + 38.f}, theme::accent);
 
     if (app.lastRunWave() > 0) {
@@ -562,6 +570,48 @@ void HowToScreen::draw(App& app, sf::RenderWindow& w) {
                  theme::fsSmall, {s.x * 0.5f, s.y * 0.72f}, theme::textLo);
     drawCentered(w, app.font(), "press ESC or click to go back", theme::fsSmall,
                  {s.x * 0.5f, s.y * 0.82f}, theme::textDim);
+}
+
+// ================================================================ BossWin
+
+void BossWinScreen::rebuild(App& app) {
+    const sf::Vector2f s = app.size();
+    menu_.init(app.font(), theme::fsItem, s.y * 0.075f);
+    menu_.setItems({{"Continue", true}, {"Back to menu", true}});
+    menu_.layout({s.x * 0.5f, s.y * 0.6f});
+}
+
+void BossWinScreen::onEnter(App& app) { rebuild(app); }
+
+void BossWinScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
+    if (isKey(e, sf::Keyboard::Enter) || isKey(e, sf::Keyboard::Space) ||
+        isKey(e, sf::Keyboard::Escape)) {
+        app.leaveBossWin();
+        return;
+    }
+    if (!isLeftClick(e)) return;
+    // Both routes go to the game menu for now - "Continue" is a placeholder.
+    if (menu_.clickIndex(mouse) >= 0) app.leaveBossWin();
+}
+
+void BossWinScreen::update(App&, float dt, sf::Vector2f mouse) { menu_.update(dt, mouse); }
+
+void BossWinScreen::draw(App& app, sf::RenderWindow& w) {
+    const sf::Vector2f s = app.size();
+    drawDim(w, s, 0.8f);
+    drawCentered(w, app.font(), "Miniboss defeated", theme::fsTitle, {s.x * 0.5f, s.y * 0.28f},
+                 theme::core);
+
+    const int pr = app.lastRunPrisms();
+    char line[96];
+    std::snprintf(line, sizeof(line), "+%d cores      +%d %s", app.lastRunCores(), pr,
+                  pr == 1 ? "prism" : "prisms");
+    drawCentered(w, app.font(), line, theme::fsHeading, {s.x * 0.5f, s.y * 0.28f + 46.f},
+                 theme::accent);
+    drawCentered(w, app.font(), "run complete", theme::fsBody, {s.x * 0.5f, s.y * 0.28f + 78.f},
+                 theme::textDim);
+
+    menu_.draw(w);
 }
 
 }  // namespace sb

@@ -112,6 +112,7 @@ std::unique_ptr<Screen> App::makeScreen(ScreenId id) {
         case ScreenId::Pause:   return std::make_unique<PauseScreen>();
         case ScreenId::Stats:   return std::make_unique<StatsScreen>();
         case ScreenId::HowTo:   return std::make_unique<HowToScreen>();
+        case ScreenId::BossWin: return std::make_unique<BossWinScreen>();
     }
     return std::make_unique<MenuScreen>();
 }
@@ -280,13 +281,29 @@ void App::endRun(bool won) {
     int cores = r.wave * cfg::meta::coresPerWave + (won ? cfg::meta::winBonus : 0);
     if (r.mods.loot) cores = cores * (100 + cfg::combat::lootBonusPct) / 100;
     lastRunCores_ = cores;
+    lastRunPrisms_ = won ? cfg::meta::prismsPerWin : 0;
 
     data_.meta.cores += static_cast<std::uint32_t>(cores);
+    data_.meta.prisms += static_cast<std::uint32_t>(lastRunPrisms_);
     data_.meta.stats.coresEarned += static_cast<std::uint32_t>(cores);
     data_.meta.stats.bestWave =
         std::max(data_.meta.stats.bestWave, static_cast<std::uint32_t>(r.wave));
     if (won) ++data_.meta.stats.wins;
 
+    save();
+
+    if (won) {
+        // Miniboss down: freeze the arena and let the player pick Continue / Back.
+        // The run stays "active" so the world keeps drawing behind the card.
+        push(ScreenId::BossWin);
+    } else {
+        data_.run = RunState{};
+        replaceStack(ScreenId::Menu);
+        push(ScreenId::Loadout);
+    }
+}
+
+void App::leaveBossWin() {
     data_.run = RunState{};
     save();
     replaceStack(ScreenId::Menu);
@@ -499,7 +516,9 @@ void App::update(float frameDt) {
     sf::Vector2f tgtSize = kLogical();
     sf::Vector2f tgtCenter = kLogical() * 0.5f;
     bool snap = true;
-    if (simulating() && data_.run.active) {
+    // Keep framing the world during a live run - and hold the wide boss framing
+    // while the sim is paused on the boss wave (pause / the "boss down" card).
+    if (data_.run.active && (simulating() || world_.bossWave())) {
         tgtSize = world_.viewSize();
         tgtCenter = world_.viewCenter();
         snap = false;
