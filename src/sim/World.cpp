@@ -185,12 +185,24 @@ void World::startBossWave(const WorldParams& p) {
 }
 
 void World::spawnEnemy() {
+    const float r = cfg::wave::enemyRadius;
     sf::Vector2f pos;
-    switch (rng_.irange(0, 3)) {
-        case 0: pos = {rng_.range(0.f, size_.x), -cfg::wave::enemyRadius}; break;
-        case 1: pos = {rng_.range(0.f, size_.x), size_.y + cfg::wave::enemyRadius}; break;
-        case 2: pos = {-cfg::wave::enemyRadius, rng_.range(0.f, size_.y)}; break;
-        default: pos = {size_.x + cfg::wave::enemyRadius, rng_.range(0.f, size_.y)}; break;
+    if (bossWave_) {
+        // Adds only come in from the right half of the arena - never from behind
+        // the core or the flanks near it.
+        const float xLo = size_.x * 0.5f;
+        switch (rng_.irange(0, 2)) {
+            case 0:  pos = {rng_.range(xLo, size_.x), -r}; break;            // top, right half
+            case 1:  pos = {rng_.range(xLo, size_.x), size_.y + r}; break;   // bottom, right half
+            default: pos = {size_.x + r, rng_.range(0.f, size_.y)}; break;   // right edge
+        }
+    } else {
+        switch (rng_.irange(0, 3)) {
+            case 0:  pos = {rng_.range(0.f, size_.x), -r}; break;
+            case 1:  pos = {rng_.range(0.f, size_.x), size_.y + r}; break;
+            case 2:  pos = {-r, rng_.range(0.f, size_.y)}; break;
+            default: pos = {size_.x + r, rng_.range(0.f, size_.y)}; break;
+        }
     }
     Enemy e;
     e.pos = pos;

@@ -23,7 +23,7 @@ public:
     void clear();
 
     void update(float dt);
-    void drawBorder(sf::RenderWindow& window) const;  // behind the balls
+    void drawBorder(sf::RenderWindow& window, sf::Vector2f size) const;  // behind the balls
     void drawRings(sf::RenderWindow& window) const;    // above the balls
     void drawOverlay(sf::RenderWindow& window) const;  // labels + tint, above HUD
 

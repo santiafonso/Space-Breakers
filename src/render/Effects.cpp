@@ -79,16 +79,16 @@ void Effects::update(float dt) {
     flash_ *= std::exp(-6.f * dt);
 }
 
-void Effects::drawBorder(sf::RenderWindow& window) const {
+void Effects::drawBorder(sf::RenderWindow& window, sf::Vector2f size) const {
     const float thickness = 2.f;
     const struct {
         sf::Vector2f size;
         sf::Vector2f pos;
     } bars[4] = {
-        {{thickness, size_.y}, {0.f, 0.f}},
-        {{thickness, size_.y}, {size_.x - thickness, 0.f}},
-        {{size_.x, thickness}, {0.f, 0.f}},
-        {{size_.x, thickness}, {0.f, size_.y - thickness}},
+        {{thickness, size.y}, {0.f, 0.f}},
+        {{thickness, size.y}, {size.x - thickness, 0.f}},
+        {{size.x, thickness}, {0.f, 0.f}},
+        {{size.x, thickness}, {0.f, size.y - thickness}},
     };
     for (int i = 0; i < 4; ++i) {
         sf::RectangleShape bar(bars[i].size);

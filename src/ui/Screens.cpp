@@ -288,6 +288,7 @@ void PlayScreen::update(App& app, float dt, sf::Vector2f mouse) {
 
 void PlayScreen::draw(App& app, sf::RenderWindow& w) {
     app.useWorldView();
+    app.effects().drawBorder(w, app.world().size());   // arena edge, grows on the boss wave
     renderer_.draw(w, app.world());
     app.effects().drawRings(w);
     app.useUiView();

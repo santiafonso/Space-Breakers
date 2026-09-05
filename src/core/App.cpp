@@ -524,7 +524,9 @@ void App::render() {
     sf::RenderWindow& w = window_.handle();
     window_.useUiView();
     w.clear(theme::bg);
-    effects_.drawBorder(w);
+    // Menus get the fixed screen frame; during a run PlayScreen draws the arena
+    // edge in world space so it grows with the boss arena.
+    if (!data_.run.active) effects_.drawBorder(w, kLogical());
 
     std::size_t start = 0;
     for (std::size_t i = stack_.size(); i-- > 0;) {
