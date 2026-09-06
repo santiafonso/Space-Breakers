@@ -233,7 +233,10 @@ Fase → **Fantasma** (atraviesa estructuras, a revisar) · Frenesí x3 → **Fr
     Las pelotas le pegan y rebotan pero no lo mueven.
   - **Adds infinitos** mientras el boss vive (cap `cfg::boss::maxAdds`),
     y **solo entran por la mitad derecha** de la arena (`spawnEnemy` tiene
-    rama `bossWave_`). Al morir el boss se limpian los adds que queden.
+    rama `bossWave_`). Al morir el boss **no** se limpian los adds: dejan
+    de aparecer nuevos pero la oleada sigue viva hasta matar a los que
+    quedan (`updateWaveSpawner`: `!boss_.alive && enemies_.empty()` ->
+    `waveCleared`). Los adds siguen siendo peligrosos para el nucleo.
     La pelota se puede agarrar y mover a cualquier lado, sin restriccion
     de mitad de mapa (se probo y molestaba).
   - El borde (`Effects::drawBorder`) se dibuja como siempre en la vista UI,

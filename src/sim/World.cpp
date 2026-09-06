@@ -605,11 +605,10 @@ void World::updateBoss(float dt, const WorldParams& p, FrameEvents& ev) {
 
     if (boss_.hp <= 0.f) {
         boss_.alive = false;
-        waveRunning_ = false;
-        enemies_.clear();       // the remaining adds die with the boss
-        projectiles_.clear();
+        boss_.hitFlash = 0.f;
         ev.kills.push_back(boss_.pos);
-        ev.waveCleared = true;
+        // The wave is NOT over yet: no more adds spawn, but the ones already out
+        // have to be cleared. updateWaveSpawner ends the wave once they are gone.
         return;
     }
     if (boss_.pos.x - boss_.radius <= core_.pos.x + core_.radius) {
@@ -625,14 +624,17 @@ void World::updateWaveSpawner(float dt, FrameEvents& ev) {
     if (!waveRunning_) return;
 
     if (bossWave_) {
-        // Adds keep coming until the boss is down (the boss's own update ends
-        // the wave). Capped so it stays fair.
+        // Adds keep coming (capped) while the boss lives. Once it's down no more
+        // spawn, and the wave ends only after the last add is cleared.
         if (boss_.alive) {
             spawnTimer_ -= dt;
             if (spawnTimer_ <= 0.f && static_cast<int>(enemies_.size()) < cfg::boss::maxAdds) {
                 spawnEnemy();
                 spawnTimer_ = cfg::boss::addInterval;
             }
+        } else if (enemies_.empty()) {
+            waveRunning_ = false;
+            ev.waveCleared = true;
         }
         return;
     }
