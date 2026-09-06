@@ -236,22 +236,25 @@ Fase → **Fantasma** (atraviesa estructuras, a revisar) · Frenesí x3 → **Fr
     rama `bossWave_`). Al morir el boss se limpian los adds que queden.
     La pelota se puede agarrar y mover a cualquier lado, sin restriccion
     de mitad de mapa (se probo y molestaba).
-  - **Borde de rebote en la vista de mundo:** `Effects::drawBorder(size)`
-    se dibuja desde `PlayScreen` con `World::size()`, asi el marco donde
-    rebotan las pelotas crece con la arena del boss. Los menus mantienen
-    el marco fijo (`App::render` lo dibuja solo si no hay run activa).
-  - **Cartel al matar al boss** (`BossWinScreen`, no opaco): la run queda
-    "activa" para que el mundo congelado se siga viendo detras. Botones
-    **Continue** (placeholder -> menu, se cablea el post-boss despues) y
-    **Back to menu**; ambos -> `App::leaveBossWin`. La camara sigue en el
-    encuadre ancho mientras el cartel esta arriba (`world_.bossWave()`).
+  - El borde (`Effects::drawBorder`) se dibuja como siempre en la vista UI,
+    en el marco de pantalla fijo. Se probo dibujarlo a `World::size()` en
+    la vista de mundo (borde real de la arena grande) pero cambiaba la
+    sensacion de la camara, se revirtio.
+  - **Cartel al matar al boss** (`BossWinScreen`, **opaco**): pantalla
+    limpia con el resultado, sin el mundo detras, para que la camara y el
+    mapeo del mouse sean los de UI normal (con la vista de mundo ancha el
+    cursor no caia sobre los botones). Botones **Continue** (placeholder
+    -> menu, se cablea el post-boss despues) y **Back to menu**; ambos ->
+    `App::leaveBossWin`. La camara vuelve al encuadre normal al aparecer
+    el cartel (condicion `simulating() && run.active`, sin cambios).
   - **Prisma** (`MetaState::prisms`, `cfg::meta::prismsPerWin`): moneda
     especial que suelta el miniboss al morir. Se guarda (`save v6`), se
     muestra junto a los cores en Menu/Loadout. Uso futuro: desbloqueos
     "grandes". Perder contra el boss (llega al nucleo) no da cartel ni
     prisma, sale directo al menu.
   - Tuning en `cfg::boss` (hp 40, radio 58, vel 54, arena 1.95x/1.45x -
-    la camara se aleja bastante).
+    la camara se aleja bastante). La camara del boss quedo como en
+    `2cbbd84`: nada la toco despues.
 
 - **Fase 1c — transicion entre oleadas mas suave. [IMPLEMENTADO 2026-09-05]**
   - Las pelotas **ya no se reposicionan** al cambiar de oleada:

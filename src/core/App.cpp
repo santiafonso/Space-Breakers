@@ -516,9 +516,7 @@ void App::update(float frameDt) {
     sf::Vector2f tgtSize = kLogical();
     sf::Vector2f tgtCenter = kLogical() * 0.5f;
     bool snap = true;
-    // Keep framing the world during a live run - and hold the wide boss framing
-    // while the sim is paused on the boss wave (pause / the "boss down" card).
-    if (data_.run.active && (simulating() || world_.bossWave())) {
+    if (simulating() && data_.run.active) {
         tgtSize = world_.viewSize();
         tgtCenter = world_.viewCenter();
         snap = false;
@@ -543,9 +541,7 @@ void App::render() {
     sf::RenderWindow& w = window_.handle();
     window_.useUiView();
     w.clear(theme::bg);
-    // Menus get the fixed screen frame; during a run PlayScreen draws the arena
-    // edge in world space so it grows with the boss arena.
-    if (!data_.run.active) effects_.drawBorder(w, kLogical());
+    effects_.drawBorder(w);
 
     std::size_t start = 0;
     for (std::size_t i = stack_.size(); i-- > 0;) {
