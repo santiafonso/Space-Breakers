@@ -38,7 +38,7 @@ public:
     bool grabAt(sf::Vector2f point, float catchRadius);
     bool hasHeld() const { return grabbed_ != Grabbed::None; }
     Grabbed grabbedKind() const { return grabbed_; }
-    void moveHeld(sf::Vector2f target);
+    void moveHeld(sf::Vector2f target, float dt);
     void releaseHeld(sf::Vector2f throwVel);
     void forceRelease();
 
@@ -113,6 +113,7 @@ private:
 
     Grabbed grabbed_ = Grabbed::None;
     int heldIndex_ = -1;
+    sf::Vector2f heldGrabOffset_{0.f, 0.f};  // ball pos - cursor at grab, eased to zero
 
     int comboStreak_ = 0;
     int comboCapTier_ = cfg::combo::baseCapTier;

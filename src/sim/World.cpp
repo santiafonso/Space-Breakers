@@ -144,6 +144,7 @@ void World::carryBalls(const WorldParams& p) {
         if (length(b.vel) < cfg::ball::minThrowSpeed)
             b.vel = rng_.direction() * cruiseBase(p);
     }
+    heldGrabOffset_ = {0.f, 0.f};
     grabbed_ = Grabbed::None;
     heldIndex_ = -1;
 }
@@ -229,20 +230,23 @@ bool World::grabAt(sf::Vector2f point, float catchRadius) {
     grabbed_ = Grabbed::Ball;
     heldIndex_ = best;
     Ball& b = balls_[best];
+    // Remember where the ball sat relative to the cursor so it doesn't snap to
+    // the pointer on grab - moveHeld eases this offset out.
+    heldGrabOffset_ = b.pos - point;
     b.held = true;
     b.vel = {0.f, 0.f};
     b.trail.clear();
     return true;
 }
 
-void World::moveHeld(sf::Vector2f target) {
+void World::moveHeld(sf::Vector2f target, float dt) {
     if (grabbed_ != Grabbed::Ball) return;
     Ball& b = balls_[heldIndex_];
-    // On the miniboss wave a ball can only be launched from the right half of
-    // the arena, so it can't be carried past the midline while held.
-    const float minX = bossWave_ ? size_.x * 0.5f : b.radius;
-    b.pos.x = clampf(target.x, minX, size_.x - b.radius);
-    b.pos.y = clampf(target.y, b.radius, size_.y - b.radius);
+    heldGrabOffset_ *= std::exp(-cfg::app::grabSettle * dt);
+    if (length(heldGrabOffset_) < 1.f) heldGrabOffset_ = {0.f, 0.f};
+    const sf::Vector2f p = target + heldGrabOffset_;
+    b.pos.x = clampf(p.x, b.radius, size_.x - b.radius);
+    b.pos.y = clampf(p.y, b.radius, size_.y - b.radius);
     b.vel = {0.f, 0.f};
 }
 
@@ -250,7 +254,7 @@ void World::releaseHeld(sf::Vector2f throwVel) {
     if (grabbed_ != Grabbed::Ball) return;
     Ball& b = balls_[heldIndex_];
     b.held = false;
-    if (bossWave_ && b.pos.x < size_.x * 0.5f) b.pos.x = size_.x * 0.5f;  // right-half launch only
+    heldGrabOffset_ = {0.f, 0.f};
     const float s = length(throwVel);
     if (s < cfg::ball::minThrowSpeed) b.vel = rng_.direction() * cfg::ball::nudgeSpeed;
     else if (s > cfg::ball::hardSpeedCap) b.vel = throwVel * (cfg::ball::hardSpeedCap / s);
@@ -265,6 +269,7 @@ void World::forceRelease() {
         b.held = false;
         b.vel = rng_.direction() * cfg::ball::forceReleaseSpeed;
     }
+    heldGrabOffset_ = {0.f, 0.f};
     grabbed_ = Grabbed::None;
     heldIndex_ = -1;
 }

@@ -189,16 +189,6 @@ void WorldRenderer::drawBall(sf::RenderWindow& window, const Ball& b,
 }
 
 void WorldRenderer::draw(sf::RenderWindow& window, const World& world) const {
-    // Miniboss wave: while dragging a ball, hint the right-half launch zone.
-    if (world.bossWave() && world.hasHeld()) {
-        const sf::Vector2f s = world.size();
-        sf::RectangleShape split({2.f, s.y});
-        split.setOrigin(1.f, 0.f);
-        split.setPosition(s.x * 0.5f, 0.f);
-        split.setFillColor(withAlpha(theme::accent, 0.10f));
-        window.draw(split);
-    }
-
     for (const Puddle& p : world.puddles()) drawPuddle(window, p);
     for (const Obstacle& o : world.obstacles()) drawObstacle(window, o);
     drawCore(window, world.core());

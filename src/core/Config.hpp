@@ -173,7 +173,8 @@ inline constexpr float waveIntroTime = 0.85f;
 inline constexpr float waveIntroSlow = 0.35f;
 inline constexpr float throwVelScale = 1.15f;
 inline constexpr float pointerSampleWindow = 0.09f;
-inline constexpr float catchRadius = 95.f;
+inline constexpr float catchRadius = 130.f;   // grab a ball from near it, not only dead-on
+inline constexpr float grabSettle = 16.f;     // how fast the grab offset eases out (per s)
 inline constexpr float fadeRate = 14.f;
 }  // namespace app
 

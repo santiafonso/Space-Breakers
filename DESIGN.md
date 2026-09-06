@@ -234,10 +234,8 @@ Fase → **Fantasma** (atraviesa estructuras, a revisar) · Frenesí x3 → **Fr
   - **Adds infinitos** mientras el boss vive (cap `cfg::boss::maxAdds`),
     y **solo entran por la mitad derecha** de la arena (`spawnEnemy` tiene
     rama `bossWave_`). Al morir el boss se limpian los adds que queden.
-  - **Lanzamiento solo desde la mitad derecha:** `moveHeld` limita la `x`
-    de la pelota agarrada a `size_.x/2` en la oleada del boss (y
-    `releaseHeld` la reencaja por si fue un toque). El renderer dibuja una
-    linea fina en la mitad **solo mientras se arrastra** una pelota.
+    La pelota se puede agarrar y mover a cualquier lado, sin restriccion
+    de mitad de mapa (se probo y molestaba).
   - **Borde de rebote en la vista de mundo:** `Effects::drawBorder(size)`
     se dibuja desde `PlayScreen` con `World::size()`, asi el marco donde
     rebotan las pelotas crece con la arena del boss. Los menus mantienen
@@ -264,6 +262,14 @@ Fase → **Fantasma** (atraviesa estructuras, a revisar) · Frenesí x3 → **Fr
     `cfg::app::waveIntroTime` (desde `waveIntroSlow`), asi la escena de la
     oleada anterior fluye hacia la nueva en vez de saltar.
   - Primer enemigo con un respiro extra (`cfg::wave::introDelay`).
+
+- **Fase 1d — agarre mas suelto. [IMPLEMENTADO 2026-09-05]**
+  - `cfg::app::catchRadius` 95 -> 130: agarras la pelota estando cerca,
+    no hace falta el cursor justo encima.
+  - `grabAt` guarda `heldGrabOffset_ = pos - cursor` y `moveHeld(target,
+    dt)` lo va disolviendo con `exp(-cfg::app::grabSettle*dt)`: la pelota
+    **no salta** al cursor al agarrarla, converge en ~0.2 s. Menos
+    "perseguir la pelota con el mouse", mas dinamico.
 
   Detalle original (Fase 0b):
   - Quitar paredes.

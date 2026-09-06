@@ -290,7 +290,7 @@ void PlayScreen::update(App& app, float dt, sf::Vector2f mouse) {
         while (samples_.size() > 2 &&
                clock_ - samples_.front().first > cfg::app::pointerSampleWindow)
             samples_.pop_front();
-        app.world().moveHeld(mouse);
+        app.world().moveHeld(mouse, dt);
     }
 }
 
