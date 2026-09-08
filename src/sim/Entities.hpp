@@ -52,6 +52,8 @@ struct Enemy {
     float hitFlash = 0.f;
     float burn = 0.f;       // seconds of burn remaining
     float burnDps = 0.f;
+    bool orbiter = false;   // wave-20 shield: orbits the boss instead of seeking the core
+    float orbitPhase = 0.f; // its slot angle on the ring
 };
 
 // A wind ball's bolt.
@@ -87,8 +89,13 @@ struct Core {
     float hitFlash = 0.f;
 };
 
-// The wave-10 miniboss: walks dead straight at the core from the right, ignores
-// knockback and steering. If it touches the core you lose the run outright.
+// Two bosses share this struct:
+//  - Charger  (wave 10): walks dead straight at the core from the right.
+//  - Orbital  (wave 20): spirals in toward the core behind a spinning ring of
+//    shield enemies; smaller and lower HP, the ring is the real problem.
+// Either one touching the core loses the run outright.
+enum class BossKind { Charger, Orbital };
+
 struct Boss {
     sf::Vector2f pos;
     sf::Vector2f vel;
@@ -97,6 +104,13 @@ struct Boss {
     float maxHp = cfg::boss::hp;
     float hitFlash = 0.f;
     bool alive = false;
+    BossKind kind = BossKind::Charger;
+    float ang = 0.f;          // Orbital: current angle around the core
+    float dist = 0.f;         // Orbital: current distance from the core
+    float ringAng = 0.f;      // Orbital: shield-ring rotation
+    float shieldTimer = 0.f;  // Orbital: countdown to the next orbiter refill
+    float intro = 0.f;        // Orbital: >0 while sliding in from the edge (invulnerable, no spiral yet)
+    float hitCd = 0.f;        // i-frames after a ball lands, so it can't be melted in place
 };
 
 struct Pickup {
@@ -131,6 +145,7 @@ struct FrameEvents {
     bool gotPickup = false;
     PowerUp pickupKind = PowerUp::Points2x;
     bool coreHit = false;
+    bool bossHit = false;                 // a ball landed on the miniboss this step
     bool corePulsed = false;             // "Retaliate" upgrade fired
     sf::Vector2f corePulsePos;
     bool secondChanceUsed = false;       // "Second chance" upgrade saved the core

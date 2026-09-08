@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <cstdlib>
+#include <filesystem>
 
 #include "core/Math.hpp"
 
@@ -11,6 +12,7 @@ namespace {
 
 constexpr unsigned kSampleRate = 44100;
 constexpr std::size_t kVoices = 8;
+constexpr float kMusicVolume = 38.f;   // background bed, well under the sfx
 
 enum Wave { Sine, Triangle, Square };
 
@@ -79,6 +81,43 @@ bool Audio::init() {
 
     if (ok_) pool_.resize(kVoices);
     return ok_;
+}
+
+void Audio::loadMusic(const std::string& menuFile, const std::string& gameFile) {
+    if (!ok_) return;   // no audio device / SPACE_BREAKERS_NO_AUDIO
+    auto open = [](sf::Music& m, const std::string& file) {
+        if (file.empty() || !std::filesystem::exists(file)) return false;
+        if (!m.openFromFile(file)) return false;
+        m.setLoop(true);
+        m.setVolume(kMusicVolume);
+        return true;
+    };
+    menuMusicOk_ = open(menuMusic_, menuFile);
+    gameMusicOk_ = open(gameMusic_, gameFile);
+}
+
+void Audio::setEnabled(bool e) {
+    enabled_ = e;
+    applyTrack();
+}
+
+void Audio::setTrack(Track t) {
+    if (t == track_) return;
+    track_ = t;
+    applyTrack();
+}
+
+void Audio::applyTrack() {
+    auto sync = [](sf::Music& m, bool loaded, bool wantPlaying) {
+        if (!loaded) return;
+        if (wantPlaying) {
+            if (m.getStatus() != sf::Music::Playing) m.play();
+        } else if (m.getStatus() == sf::Music::Playing) {
+            m.pause();   // resume from here when we come back
+        }
+    };
+    sync(menuMusic_, menuMusicOk_, enabled_ && track_ == Track::Menu);
+    sync(gameMusic_, gameMusicOk_, enabled_ && track_ == Track::Game);
 }
 
 void Audio::play(const sf::SoundBuffer& buffer, float pitch, float volume01) {

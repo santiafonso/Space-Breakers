@@ -27,6 +27,7 @@ public:
 
     sf::Vector2f logicalSize() const { return logical_; }
     sf::Vector2f mousePosition() const;             // in world coordinates
+    sf::Vector2f uiMousePosition() const;           // in fixed UI coordinates
 
 private:
     void rebuildViews(unsigned pixelW, unsigned pixelH);

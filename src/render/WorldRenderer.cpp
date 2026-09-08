@@ -53,15 +53,35 @@ void WorldRenderer::drawProjectile(sf::RenderWindow& window, const Projectile& p
     window.draw(s);
 }
 
-void WorldRenderer::drawBoss(sf::RenderWindow& window, const Boss& b) const {
+void WorldRenderer::drawBoss(sf::RenderWindow& window, const Boss& b, sf::Vector2f corePos) const {
     if (!b.alive) return;
     const float frac = b.maxHp > 0.f ? clampf(b.hp / b.maxHp, 0.f, 1.f) : 0.f;
     const sf::Color fill = lerpColor(theme::enemy, sf::Color::White, b.hitFlash);
 
-    sf::CircleShape glow(b.radius * 1.7f, 28);
+    // Orbital boss: draw a faint guide along the spiral it's about to travel, so
+    // the player can read where it comes from and how it moves.
+    if (b.kind == BossKind::Orbital) {
+        float ang = b.ang, dist = b.dist;
+        if (b.intro > 0.f) {  // during the slide-in the spiral hasn't started
+            ang = cfg::finalBoss::startAngle;
+        }
+        sf::VertexArray path(sf::LineStrip);
+        for (int i = 0; i < 30; ++i) {
+            ang += cfg::finalBoss::spiralOmega * 0.05f;
+            dist = std::max(0.f, dist - cfg::finalBoss::spiralShrink * 0.05f);
+            const sf::Vector2f pt =
+                corePos + sf::Vector2f{std::cos(ang), std::sin(ang)} * dist;
+            const float a = 0.22f * (1.f - static_cast<float>(i) / 30.f);
+            path.append(sf::Vertex(pt, withAlpha(theme::coreLow, a)));
+        }
+        window.draw(path);
+    }
+
+    const float glowPulse = b.intro > 0.f ? 1.7f + 0.5f * std::sin(b.intro * 12.f) : 1.7f;
+    sf::CircleShape glow(b.radius * glowPulse, 28);
     glow.setOrigin(glow.getRadius(), glow.getRadius());
     glow.setPosition(b.pos);
-    glow.setFillColor(withAlpha(theme::coreLow, 0.12f));
+    glow.setFillColor(withAlpha(theme::coreLow, b.intro > 0.f ? 0.18f : 0.12f));
     window.draw(glow);
 
     sf::CircleShape body(b.radius, 30);
@@ -192,7 +212,7 @@ void WorldRenderer::draw(sf::RenderWindow& window, const World& world) const {
     for (const Puddle& p : world.puddles()) drawPuddle(window, p);
     for (const Obstacle& o : world.obstacles()) drawObstacle(window, o);
     drawCore(window, world.core());
-    drawBoss(window, world.boss());
+    drawBoss(window, world.boss(), world.core().pos);
     for (const Enemy& e : world.enemies()) drawEnemy(window, e);
     for (const Projectile& pr : world.projectiles()) drawProjectile(window, pr);
     for (const Pickup& pu : world.pickups()) drawPickup(window, pu);

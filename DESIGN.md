@@ -277,6 +277,85 @@ Fase → **Fantasma** (atraviesa estructuras, a revisar) · Frenesí x3 → **Fr
     **no salta** al cursor al agarrarla, converge en ~0.2 s. Menos
     "perseguir la pelota con el mouse", mas dinamico.
 
+- **Fase 1e — run de 20 oleadas + "Continue" tras el miniboss. [IMPLEMENTADO 2026-09-07]**
+  - `cfg::run`: se separa `bossWave = 10` de `finalWave = 20`, mas
+    `coreSlideTime`. `startNextWave` enruta: `== bossWave` ->
+    `startBossWave` (Charger); `== finalWave` -> `startFinalBossWave`
+    (Orbital); `> bossWave` -> `startPostBossWave`; resto -> `startWave`.
+  - **Gate del "Continue":** `App::continueUnlocked_` = snapshot de
+    `stats.wins > 0` al empezar la run (no sube version de guardado).
+    - **Primera run** (nunca se gano): matar al miniboss -> `bankRun(true)`
+      + `BossWinScreen` con **solo "Back to menu"**. Cobra cores + prisma,
+      vuelve al menu a desbloquear.
+    - **Run 2+:** matar al miniboss -> `BossWinScreen` con **"Continue"**
+      (`continuePastBoss` -> oleada 11, sin cobrar) y **"Back to menu"**
+      (`leaveBossWin` -> cobra como victoria de oleada 10).
+  - **Oleadas 11-20** (solo desde la run 2): se juegan en la **arena ancha
+    del boss** (`wideArenaSize`, factorizada de `startBossWave`) con la
+    **camara alejada mantenida** durante toda la run viva
+    (`data_.run.active && !runBanked_`, incluye la Choice y el cartel).
+    Al entrar a la 11 el **nucleo se desliza** de la izquierda al centro
+    (`updateCoreSlide`, smoothstep sobre `coreSlideTime`); camara y arena
+    quietas.
+  - **Oleada 20 = boss Orbital** (`BossKind::Orbital`, comparte `struct
+    Boss`; `cfg::finalBoss`). Mas chico que el de la 10 (r 46 vs 58), hp 64.
+    - **Entrada legible:** aparece **fuera del borde izquierdo** y se
+      desliza hacia el punto de arranque de la espiral durante `introTime`
+      (invulnerable, sin espiralear todavia). El renderer dibuja un **arco
+      guia tenue** con la trayectoria que va a seguir, para que se lea de
+      donde viene y como se mueve.
+    - Despues **espiralea largo hacia el centro** (`ang`/`dist` +
+      `spiralOmega`/`spiralShrink`; arranca pegado al borde via
+      `spiralStartDist` clampeado, baja lento).
+    - **Dano acotado:** tras cada pelotazo queda `cfg::boss::hitCooldown`
+      en i-frames, y una pelota **solo hace dano al boss si va a >=
+      `cruiseBase * minHitCruiseFrac`** (0.9). Asi una pelota atrapada en
+      el anillo no lo derrite, y tampoco sirve "poner el cursor encima del
+      boss y clickear mil veces" (soltar la pelota le da solo `nudgeSpeed`,
+      muy por debajo del umbral). Vale para los dos bosses.
+    - **Anillo de enemigos** (`Enemy{orbiter=true}`, `shieldCount`) **fijado
+      rigidamente** al aro que gira alrededor del boss: la posicion se
+      setea directo cada frame (`e.pos = boss_.pos + dir(ringAng+phase) *
+      shieldRadius`), sin lerp, asi el aro queda centrado en el boss por
+      rapido que se mueva (antes se quedaba atras). Tapa las pelotas y se
+      **rellena** de a uno cada `shieldRespawn`. Los orbitadores **no tocan
+      el nucleo** mientras el boss vive - solo bloquean; la unica amenaza
+      al nucleo es el boss llegando al centro.
+    - Ademas **entran enemigos por los 4 bordes** mientras el boss vive
+      (`addInterval` 1.4 / `addCap` 16 / `addHp` / `addSpeed`, mas blandos
+      que un enemigo normal de la 20).
+    - Matar al boss -> el anillo se suelta (`orbiter=false`, empujon hacia
+      afuera `deathBurst`) y **ahi si** carga al nucleo; hay que limpiar
+      todo (anillo suelto + adds) para ganar (`updateWaveSpawner`:
+      `!boss_.alive && enemies_.empty()`). Boss al centro = derrota directa.
+      Limpiar la 20 = victoria -> `BossWinScreen` "Run complete".
+  - **Vida del nucleo:** `cfg::core::baseHp` 140 -> **60** (bajo 45 al
+    principio; se subio un poco al meterle mas adds de borde a la 20).
+  - **Refactor:** `endRun(bool)` -> `bankRun(bool)` (paga cores/prismas/
+    stats, idempotente via `runBanked_`) + `finishToMenu()` (limpia la run
+    y va al menu). El caller decide la navegacion.
+  - **Mouse por vista:** `App` pasa el puntero en unidades de mundo solo a
+    la pantalla que simula (Play, para agarrar/lanzar) y en unidades de UI
+    (`Window::uiMousePosition`) al resto, asi menus y carteles siguen
+    clicables con la camara alejada.
+  - **Dificultad:** `cfg::wave` mas agresivo (`baseCount 4`,
+    `countGrowth 1.24`, `maxCount 100`, `hpGrowth 1.17`, `speedMax 165`) +
+    `spawnIntervalMin`: la cadencia de spawn baja hacia la oleada final
+    (mas denso, no un goteo). Valores de arranque, a afinar jugando.
+  - Perder en cualquier oleada 11-20 (nucleo a 0) = derrota directa al
+    menu, sin cartel, cobra por oleada alcanzada.
+
+- **Musica de fondo. [IMPLEMENTADO 2026-09-07]**
+  - `Audio` ahora ademas streamea dos loops OGG:
+    `assets/music/menu.ogg` (menus/loadout) y `assets/music/game.ogg`
+    (run viva: Play, Choice, Pause y cartel del boss incluidos).
+  - `Audio::setTrack(Track)` cambia de loop; `App::update` lo llama cada
+    frame con `data_.run.active ? Game : Menu` (idempotente). El toggle de
+    sonido pausa/reanuda la musica.
+  - Archivos opcionales: si faltan, el juego suena igual que antes. Los
+    `.m4a` no sirven (SFML no decodifica AAC) - hay que convertir a OGG.
+    Ride junto al resto de `assets/` en el copy de CMake y el `install`.
+
   Detalle original (Fase 0b):
   - Quitar paredes.
   - Núcleo + 1 tipo de enemigo + spawner de oleadas con escalado + derrota.

@@ -21,7 +21,9 @@ public:
     void startRun(const WorldParams& p, const std::vector<int>& ballElements,
                   float coreHp, float coreMaxHp);
     void startWave(int wave, const WorldParams& p);
-    void startBossWave(const WorldParams& p);   // the wave-10 miniboss duel
+    void startBossWave(const WorldParams& p);   // the wave-10 miniboss duel (Charger)
+    void startPostBossWave(int wave, const WorldParams& p);  // waves 11..19: wide arena, core slides to centre
+    void startFinalBossWave(const WorldParams& p);           // wave 20: the Orbital boss + shield ring
     void addBall(Element e, const WorldParams& p);
     void convertOneBall(Element from, Element to);   // "Ignite a ball" upgrade
     void repairCore(float amount);
@@ -79,7 +81,10 @@ public:
 private:
     void spawnBall(Element e, const WorldParams& p);
     void spawnEnemy();
+    void spawnOrbiter(float phase);   // one shield enemy on the wave-20 ring
     void carryBalls(const WorldParams& p);   // keep balls in place across a wave change
+    sf::Vector2f wideArenaSize() const;      // the pulled-back arena used from the boss wave on
+    void updateCoreSlide(float dt);          // ease the core left -> centre entering wave 11
     void advanceCombo(float dt);
     void advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev);
     void emitElement(Ball& b, float dt, const WorldParams& p);
@@ -124,6 +129,9 @@ private:
     bool waveRunning_ = false;
     bool bossWave_ = false;
     bool runOver_ = false;
+    float coreSlideT_ = 0.f;   // >0 while the core is easing to the wide-arena centre
+    sf::Vector2f coreSlideFrom_{0.f, 0.f};
+    sf::Vector2f coreSlideTo_{0.f, 0.f};
     int toSpawn_ = 0;
     float spawnTimer_ = 0.f;
 

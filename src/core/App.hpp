@@ -50,8 +50,11 @@ public:
     void openLoadout();     // Menu -> the game menu
     void newRun();          // Loadout "Start" -> a fresh run
     void applyUpgrade(int idx);   // Choice: pick one of the four
-    void leaveBossWin();    // BossWin card ("Continue" / "Back") -> game menu
+    void leaveBossWin();    // BossWin card "Back to menu" -> game menu (banks the run)
+    void continuePastBoss();  // BossWin card "Continue" -> resume at wave 11
+    bool bossWinCanContinue() const;  // true when the BossWin card should offer "Continue"
     void abandonRun();
+    void wipeSave();        // Game menu "Reset progress" -> erase all saved data
 
     // ---- dev tools: enabled by the SB_DEV env var, no-ops otherwise -----
     bool devMode() const;
@@ -86,7 +89,8 @@ private:
     void openChoice();
     void rollChoices();
     void applyUpgradeKind(UpgradeKind k);
-    void endRun(bool won);
+    void bankRun(bool won);   // pay out cores/prisms/stats for the run; no navigation
+    void finishToMenu();      // clear the run and go back to the game menu
 
     void handleEvent(const sf::Event& e);
     void update(float frameDt);
@@ -110,15 +114,20 @@ private:
     int lastRunCores_ = 0;
     int lastRunPrisms_ = 0;
     bool lastRunWon_ = false;
+    bool continueUnlocked_ = false;  // snapshot at newRun: has a run ever been won before?
+    bool runBanked_ = false;         // this run's cores/prisms have been paid out
     int devGrantNext_ = 0;
 
     float fade_ = 0.f;
     float waveIntro_ = 0.f;   // >0 while a new wave eases in (sim runs slow -> full)
     float worldAccum_ = 0.f;
     float autosaveTimer_ = 20.f;
+    float hitstop_ = 0.f;     // >0 freezes the simulation for a beat after an impact
 
     sf::Vector2f camSize_{1280.f, 800.f};
     sf::Vector2f camCenter_{640.f, 400.f};
+    float camKick_ = 0.f;             // camera-shake magnitude, decays out after a hit
+    sf::Vector2f camShake_{0.f, 0.f}; // this frame's shake offset
 };
 
 }  // namespace sb

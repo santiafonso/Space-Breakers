@@ -120,6 +120,7 @@ void World::startRun(const WorldParams& p, const std::vector<int>& ballElements,
     invuln_ = false;
     bossWave_ = false;
     boss_ = Boss{};
+    coreSlideT_ = 0.f;
 
     size_ = baseSize_;
     core_.pos = size_ * 0.5f;
@@ -152,6 +153,7 @@ void World::carryBalls(const WorldParams& p) {
 void World::startWave(int wave, const WorldParams& p) {
     bossWave_ = false;
     boss_ = Boss{};
+    coreSlideT_ = 0.f;
     size_ = baseSize_;
     core_.pos = size_ * 0.5f;
 
@@ -163,21 +165,62 @@ void World::startWave(int wave, const WorldParams& p) {
     carryBalls(p);
 }
 
+// The pulled-back arena, sized to the base view's aspect ratio so the zoomed-out
+// camera frames it with no head-room (balls bounce at the visible screen edge,
+// not an invisible wall part-way up). Used from the boss wave onward.
+sf::Vector2f World::wideArenaSize() const {
+    sf::Vector2f s = {baseSize_.x * cfg::boss::arenaScaleX, baseSize_.y * cfg::boss::arenaScaleY};
+    const float viewRatio = baseSize_.x / baseSize_.y;
+    if (s.x / s.y > viewRatio) s.y = s.x / viewRatio;
+    else                       s.x = s.y * viewRatio;
+    return s;
+}
+
+// Waves 11..20: same wide arena and pulled-back camera as the boss, but a normal
+// (hard) wave. The core eases from the boss's far-left spot back to the centre.
+void World::startPostBossWave(int wave, const WorldParams& p) {
+    bossWave_ = false;
+    boss_ = Boss{};
+    size_ = wideArenaSize();
+
+    coreSlideFrom_ = core_.pos;          // wherever the boss wave left it (far left)
+    coreSlideTo_ = size_ * 0.5f;
+    coreSlideT_ = cfg::run::coreSlideTime;
+
+    wave_ = wave;
+    toSpawn_ = waveEnemyCount(wave);
+    spawnTimer_ = cfg::wave::introDelay;
+    waveRunning_ = true;
+    projectiles_.clear();
+    enemies_.clear();
+    carryBalls(p);
+}
+
+void World::updateCoreSlide(float dt) {
+    if (coreSlideT_ <= 0.f) return;
+    coreSlideT_ = std::max(0.f, coreSlideT_ - dt);
+    float u = 1.f - coreSlideT_ / cfg::run::coreSlideTime;   // 0 -> 1
+    u = u * u * (3.f - 2.f * u);                             // smoothstep
+    core_.pos = coreSlideFrom_ + (coreSlideTo_ - coreSlideFrom_) * u;
+}
+
 void World::startBossWave(const WorldParams& p) {
     bossWave_ = true;
-    wave_ = cfg::run::finalWave;
+    wave_ = cfg::run::bossWave;
     waveRunning_ = true;
     toSpawn_ = 0;
     spawnTimer_ = 1.0f;
     enemies_.clear();
     projectiles_.clear();
+    coreSlideT_ = 0.f;
 
     // Wider arena, core shoved to the far left.
-    size_ = {baseSize_.x * cfg::boss::arenaScaleX, baseSize_.y * cfg::boss::arenaScaleY};
+    size_ = wideArenaSize();
     core_.pos = {core_.radius + cfg::boss::coreMarginX, size_.y * 0.5f};
 
     boss_ = Boss{};
     boss_.alive = true;
+    boss_.kind = BossKind::Charger;
     boss_.hp = boss_.maxHp = cfg::boss::hp;
     boss_.pos = {size_.x - boss_.radius - 4.f, size_.y * 0.5f};
     boss_.vel = {-cfg::boss::speed, 0.f};
@@ -185,12 +228,66 @@ void World::startBossWave(const WorldParams& p) {
     carryBalls(p);
 }
 
+// Wave 20: the Orbital boss. Wide arena, core centred (it is already there from
+// waves 11-19). The boss starts near the arena edge and spirals inward; a ring
+// of shield enemies spins around it and is topped up while it lives.
+void World::startFinalBossWave(const WorldParams& p) {
+    bossWave_ = true;
+    wave_ = cfg::run::finalWave;
+    waveRunning_ = true;
+    toSpawn_ = 0;
+    spawnTimer_ = cfg::finalBoss::addInterval;   // first edge add after a short beat
+    enemies_.clear();
+    projectiles_.clear();
+    coreSlideT_ = 0.f;
+
+    size_ = wideArenaSize();
+    core_.pos = size_ * 0.5f;
+
+    boss_ = Boss{};
+    boss_.alive = true;
+    boss_.kind = BossKind::Orbital;
+    boss_.radius = cfg::finalBoss::radius;
+    boss_.hp = boss_.maxHp = cfg::finalBoss::hp;
+
+    // Spiral has to fit inside the arena, so cap the start radius on the shorter
+    // axis. The boss slides in from off the left edge to that spiral-start point
+    // during the intro, then winds inward - so the player sees where it comes
+    // from and reads the path (renderer draws a guide arc).
+    const float maxDist = std::min(size_.x, size_.y) * 0.5f - boss_.radius - 40.f;
+    boss_.dist = std::min(cfg::finalBoss::spiralStartDist, maxDist);
+    boss_.ang = cfg::finalBoss::startAngle;
+    boss_.pos = {-boss_.radius, core_.pos.y};   // just off the left edge
+    boss_.intro = cfg::finalBoss::introTime;
+    boss_.shieldTimer = cfg::finalBoss::shieldRespawn;
+
+    for (int i = 0; i < cfg::finalBoss::shieldCount; ++i)
+        spawnOrbiter(static_cast<float>(i) / cfg::finalBoss::shieldCount * 2.f * kPi);
+
+    carryBalls(p);
+}
+
+void World::spawnOrbiter(float phase) {
+    Enemy e;
+    e.orbiter = true;
+    e.orbitPhase = phase;
+    e.radius = cfg::wave::enemyRadius;
+    e.maxHp = e.hp = cfg::finalBoss::shieldHp;
+    e.speed = 0.f;
+    const float a = boss_.ringAng + phase;
+    e.pos = boss_.pos + sf::Vector2f{std::cos(a), std::sin(a)} * cfg::finalBoss::shieldRadius;
+    enemies_.push_back(e);
+}
+
 void World::spawnEnemy() {
     const float r = cfg::wave::enemyRadius;
+    const bool chargerWave = bossWave_ && boss_.kind == BossKind::Charger;
+    const bool orbitalWave = bossWave_ && boss_.kind == BossKind::Orbital;
+
     sf::Vector2f pos;
-    if (bossWave_) {
-        // Adds only come in from the right half of the arena - never from behind
-        // the core or the flanks near it.
+    if (chargerWave) {
+        // Charger: adds only from the right half - never from behind the far-left
+        // core or the flanks near it.
         const float xLo = size_.x * 0.5f;
         switch (rng_.irange(0, 2)) {
             case 0:  pos = {rng_.range(xLo, size_.x), -r}; break;            // top, right half
@@ -198,6 +295,7 @@ void World::spawnEnemy() {
             default: pos = {size_.x + r, rng_.range(0.f, size_.y)}; break;   // right edge
         }
     } else {
+        // Normal waves and the Orbital boss: any of the four screen edges.
         switch (rng_.irange(0, 3)) {
             case 0:  pos = {rng_.range(0.f, size_.x), -r}; break;
             case 1:  pos = {rng_.range(0.f, size_.x), size_.y + r}; break;
@@ -205,11 +303,17 @@ void World::spawnEnemy() {
             default: pos = {size_.x + r, rng_.range(0.f, size_.y)}; break;
         }
     }
+
     Enemy e;
     e.pos = pos;
     e.radius = cfg::wave::enemyRadius;
-    e.maxHp = e.hp = waveEnemyHp(wave_);
-    e.speed = waveEnemySpeed(wave_);
+    if (orbitalWave) {   // softer than a plain wave-20 enemy - the shield is the fight
+        e.maxHp = e.hp = cfg::finalBoss::addHp;
+        e.speed = cfg::finalBoss::addSpeed;
+    } else {
+        e.maxHp = e.hp = waveEnemyHp(wave_);
+        e.speed = waveEnemySpeed(wave_);
+    }
     e.vel = normalized(core_.pos - pos) * e.speed;
     enemies_.push_back(e);
 }
@@ -447,13 +551,21 @@ void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
             pushFx(c);
         }
 
-        // The miniboss is solid and takes damage, but never moves off its line.
+        // The boss is solid. Balls always bounce off it, but damage only lands
+        // when it isn't in i-frames, isn't still sliding in (intro), and the
+        // ball is genuinely moving - so a ball wedged in the ring can't melt it
+        // in place, and neither can dropping a ball on it and spam-clicking.
         if (boss_.alive) {
             if (collision::Contact c = collision::circleVsSolidCircle(
                     b, boss_.pos, boss_.radius, cfg::combat::hitRebound);
                 c.hit) {
-                boss_.hp -= ballDamage(b, p);
-                boss_.hitFlash = 1.f;
+                if (boss_.intro <= 0.f && boss_.hitCd <= 0.f &&
+                    length(b.vel) >= cruiseBase(p) * cfg::boss::minHitCruiseFrac) {
+                    boss_.hp -= ballDamage(b, p);
+                    boss_.hitFlash = 1.f;
+                    boss_.hitCd = cfg::boss::hitCooldown;
+                    ev.bossHit = true;
+                }
                 afterBounce(b, c.normal, true);
                 pushFx(c);
             }
@@ -531,21 +643,41 @@ void World::updateEnemies(float dt, const WorldParams& p, FrameEvents& ev) {
             e.hp -= e.burnDps * dt;
         }
 
-        const sf::Vector2f d = core_.pos - e.pos;
-        const float dist = length(d);
-        const sf::Vector2f steer = (dist > 1e-3f ? d / dist : sf::Vector2f{0.f, 1.f}) * e.speed;
-        e.vel += (steer - e.vel) * (1.f - std::exp(-8.f * dt));
-        e.pos += e.vel * dt;
-        e.hitFlash *= std::exp(-6.f * dt);
-
-        // Pushed out of any rubble in the way.
-        for (const Obstacle& o : obstacles_) {
-            const sf::Vector2f od = e.pos - o.pos;
-            const float sum = o.radius + e.radius;
-            const float dd = length(od);
-            if (dd < sum && dd > 1e-3f) e.pos += (od / dd) * (sum - dd);
+        // Wave-20 shield orbiters are locked rigidly onto the spinning ring
+        // around the boss - position set outright every frame so the ring stays
+        // centred on the boss no matter how fast it moves (no trailing lag).
+        // They only block balls (hits still damage them) and never touch the
+        // core; only the boss reaching the core loses. Once the boss dies they
+        // drop orbiter and become ordinary core-seekers (handled below).
+        if (e.orbiter && boss_.alive) {
+            const float a = boss_.ringAng + e.orbitPhase;
+            const sf::Vector2f slot =
+                boss_.pos + sf::Vector2f{std::cos(a), std::sin(a)} * cfg::finalBoss::shieldRadius;
+            e.vel = (slot - e.pos) / std::max(dt, 1e-4f);   // this frame's motion, for fx
+            e.pos = slot;
+            e.hitFlash *= std::exp(-6.f * dt);
+            ++it;
+            continue;
         }
 
+        {
+            const sf::Vector2f d = core_.pos - e.pos;
+            const float dl = length(d);
+            const sf::Vector2f steer = (dl > 1e-3f ? d / dl : sf::Vector2f{0.f, 1.f}) * e.speed;
+            e.vel += (steer - e.vel) * (1.f - std::exp(-8.f * dt));
+            e.pos += e.vel * dt;
+
+            // Pushed out of any rubble in the way.
+            for (const Obstacle& o : obstacles_) {
+                const sf::Vector2f od = e.pos - o.pos;
+                const float sum = o.radius + e.radius;
+                const float dd = length(od);
+                if (dd < sum && dd > 1e-3f) e.pos += (od / dd) * (sum - dd);
+            }
+        }
+        e.hitFlash *= std::exp(-6.f * dt);
+
+        const float dist = length(core_.pos - e.pos);
         if (dist <= core_.radius + e.radius) {
             if (!invuln_) core_.hp -= cfg::core::enemyDamage;
             core_.hitFlash = 1.f;
@@ -600,18 +732,67 @@ void World::updateBoss(float dt, const WorldParams& p, FrameEvents& ev) {
     (void)p;
     if (!bossWave_ || !boss_.alive) return;
 
-    boss_.pos += boss_.vel * dt;   // dead straight, immune to knockback / steering
+    boss_.hitCd = std::max(0.f, boss_.hitCd - dt);
     boss_.hitFlash *= std::exp(-6.f * dt);
+
+    if (boss_.kind == BossKind::Orbital) {
+        boss_.ringAng += cfg::finalBoss::shieldOmega * dt;
+
+        if (boss_.intro > 0.f) {
+            // Slide in from off the left edge to the spiral-start point.
+            boss_.intro = std::max(0.f, boss_.intro - dt);
+            float k = 1.f - boss_.intro / cfg::finalBoss::introTime;   // 0 -> 1
+            k = k * k * (3.f - 2.f * k);
+            const sf::Vector2f entry = {-boss_.radius, core_.pos.y};
+            const sf::Vector2f spiralStart =
+                core_.pos + sf::Vector2f{std::cos(boss_.ang), std::sin(boss_.ang)} * boss_.dist;
+            const sf::Vector2f prev = boss_.pos;
+            boss_.pos = entry + (spiralStart - entry) * k;
+            boss_.vel = (boss_.pos - prev) / std::max(dt, 1e-4f);
+        } else {
+            boss_.ang += cfg::finalBoss::spiralOmega * dt;
+            boss_.dist = std::max(0.f, boss_.dist - cfg::finalBoss::spiralShrink * dt);
+            const sf::Vector2f prev = boss_.pos;
+            boss_.pos = core_.pos +
+                        sf::Vector2f{std::cos(boss_.ang), std::sin(boss_.ang)} * boss_.dist;
+            boss_.vel = (boss_.pos - prev) / std::max(dt, 1e-4f);
+        }
+
+        // Keep the shield ring stocked, one orbiter at a time.
+        int live = 0;
+        for (const Enemy& e : enemies_)
+            if (e.orbiter) ++live;
+        if (live >= cfg::finalBoss::shieldCount) {
+            boss_.shieldTimer = cfg::finalBoss::shieldRespawn;
+        } else {
+            boss_.shieldTimer -= dt;
+            if (boss_.shieldTimer <= 0.f) {
+                spawnOrbiter(rng_.range(0.f, 2.f * kPi));
+                boss_.shieldTimer = cfg::finalBoss::shieldRespawn;
+            }
+        }
+    } else {
+        boss_.pos += boss_.vel * dt;   // Charger: dead straight, no knockback / steering
+    }
 
     if (boss_.hp <= 0.f) {
         boss_.alive = false;
         boss_.hitFlash = 0.f;
         ev.kills.push_back(boss_.pos);
-        // The wave is NOT over yet: no more adds spawn, but the ones already out
-        // have to be cleared. updateWaveSpawner ends the wave once they are gone.
+        // The wave is NOT over yet. The Orbital ring breaks loose: its orbiters
+        // become ordinary core-seekers, flung outward first so the player gets a
+        // beat. updateWaveSpawner ends the wave once every enemy is gone.
+        for (Enemy& e : enemies_) {
+            if (!e.orbiter) continue;
+            e.orbiter = false;
+            e.speed = cfg::finalBoss::addSpeed;
+            e.vel = normalized(e.pos - boss_.pos, {1.f, 0.f}) * cfg::finalBoss::deathBurst;
+        }
         return;
     }
-    if (boss_.pos.x - boss_.radius <= core_.pos.x + core_.radius) {
+
+    if (boss_.intro <= 0.f &&
+        length(core_.pos - boss_.pos) <= core_.radius + boss_.radius) {
         boss_.alive = false;
         core_.hp = 0.f;
         core_.hitFlash = 1.f;
@@ -624,13 +805,27 @@ void World::updateWaveSpawner(float dt, FrameEvents& ev) {
     if (!waveRunning_) return;
 
     if (bossWave_) {
-        // Adds keep coming (capped) while the boss lives. Once it's down no more
-        // spawn, and the wave ends only after the last add is cleared.
+        // Both bosses trickle adds from the edges while alive (the Orbital boss
+        // also runs its shield ring in updateBoss, which isn't counted here).
+        // The wave ends only once the boss is down and every enemy it left
+        // behind is cleared.
         if (boss_.alive) {
             spawnTimer_ -= dt;
-            if (spawnTimer_ <= 0.f && static_cast<int>(enemies_.size()) < cfg::boss::maxAdds) {
-                spawnEnemy();
-                spawnTimer_ = cfg::boss::addInterval;
+            if (spawnTimer_ <= 0.f) {
+                if (boss_.kind == BossKind::Charger) {
+                    if (static_cast<int>(enemies_.size()) < cfg::boss::maxAdds) {
+                        spawnEnemy();
+                        spawnTimer_ = cfg::boss::addInterval;
+                    }
+                } else {
+                    int adds = 0;
+                    for (const Enemy& e : enemies_)
+                        if (!e.orbiter) ++adds;
+                    if (adds < cfg::finalBoss::addCap) {
+                        spawnEnemy();
+                        spawnTimer_ = cfg::finalBoss::addInterval;
+                    }
+                }
             }
         } else if (enemies_.empty()) {
             waveRunning_ = false;
@@ -644,7 +839,11 @@ void World::updateWaveSpawner(float dt, FrameEvents& ev) {
         if (spawnTimer_ <= 0.f) {
             spawnEnemy();
             --toSpawn_;
-            spawnTimer_ = cfg::wave::spawnInterval;
+            // Later waves spawn denser: ease the cadence down toward the final wave.
+            const float t = clampf(static_cast<float>(wave_ - 1) /
+                                       static_cast<float>(cfg::run::finalWave - 1),
+                                   0.f, 1.f);
+            spawnTimer_ = lerpf(cfg::wave::spawnInterval, cfg::wave::spawnIntervalMin, t);
         }
     }
     if (toSpawn_ == 0 && enemies_.empty()) {
@@ -714,6 +913,7 @@ FrameEvents World::step(float dt, const WorldParams& p) {
     }
 
     advanceCombo(dt);
+    updateCoreSlide(dt);
 
     for (std::size_t i = 0; i < balls_.size(); ++i) {
         Ball& b = balls_[i];

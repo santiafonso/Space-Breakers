@@ -81,8 +81,13 @@ constexpr float kUnlockRowH = 42.f;
 void MenuScreen::rebuild(App& app) {
     const sf::Vector2f s = app.size();
     menu_.init(app.font(), theme::fsItem, s.y * 0.072f);
-    menu_.setItems({{"Play", true}, {"Stats", true}, {"How to Play", true}, {"Quit", true}});
-    menu_.layout({s.x * 0.5f, s.y * 0.46f});
+    menu_.setItems({{"Play", true},
+                    {"Stats", true},
+                    {"How to Play", true},
+                    {resetArm_ > 0.f ? "Reset progress - click again to confirm" : "Reset progress",
+                     true},
+                    {"Quit", true}});
+    menu_.layout({s.x * 0.5f, s.y * 0.44f});
 }
 
 void MenuScreen::onEnter(App& app) { rebuild(app); }
@@ -94,12 +99,23 @@ void MenuScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
         case 0: app.openLoadout(); break;
         case 1: app.openStats(); break;
         case 2: app.openHowTo(); break;
-        case 3: app.quit(); break;
+        case 3:
+            if (resetArm_ > 0.f) { app.wipeSave(); return; }  // wipeSave rebuilds the menu
+            resetArm_ = 4.f;
+            rebuild(app);
+            break;
+        case 4: app.quit(); break;
         default: break;
     }
 }
 
-void MenuScreen::update(App&, float dt, sf::Vector2f mouse) { menu_.update(dt, mouse); }
+void MenuScreen::update(App& app, float dt, sf::Vector2f mouse) {
+    menu_.update(dt, mouse);
+    if (resetArm_ > 0.f) {
+        resetArm_ -= dt;
+        if (resetArm_ <= 0.f) { resetArm_ = 0.f; rebuild(app); }  // un-arm: restore the label
+    }
+}
 
 void MenuScreen::draw(App& app, sf::RenderWindow& w) {
     const sf::Vector2f s = app.size();
@@ -576,21 +592,31 @@ void HowToScreen::draw(App& app, sf::RenderWindow& w) {
 void BossWinScreen::rebuild(App& app) {
     const sf::Vector2f s = app.size();
     menu_.init(app.font(), theme::fsItem, s.y * 0.075f);
-    menu_.setItems({{"Continue", true}, {"Back to menu", true}});
+    if (app.bossWinCanContinue())
+        menu_.setItems({{"Continue", true}, {"Back to menu", true}});
+    else
+        menu_.setItems({{"Back to menu", true}});
     menu_.layout({s.x * 0.5f, s.y * 0.6f});
 }
 
 void BossWinScreen::onEnter(App& app) { rebuild(app); }
 
 void BossWinScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
-    if (isKey(e, sf::Keyboard::Enter) || isKey(e, sf::Keyboard::Space) ||
-        isKey(e, sf::Keyboard::Escape)) {
+    const bool canContinue = app.bossWinCanContinue();
+    if (isKey(e, sf::Keyboard::Enter) || isKey(e, sf::Keyboard::Space)) {
+        if (canContinue) app.continuePastBoss();   // Enter takes the primary action
+        else app.leaveBossWin();
+        return;
+    }
+    if (isKey(e, sf::Keyboard::Escape)) {
         app.leaveBossWin();
         return;
     }
     if (!isLeftClick(e)) return;
-    // Both routes go to the game menu for now - "Continue" is a placeholder.
-    if (menu_.clickIndex(mouse) >= 0) app.leaveBossWin();
+    const int i = menu_.clickIndex(mouse);
+    if (i < 0) return;
+    if (canContinue && i == 0) app.continuePastBoss();
+    else app.leaveBossWin();
 }
 
 void BossWinScreen::update(App&, float dt, sf::Vector2f mouse) { menu_.update(dt, mouse); }
@@ -598,17 +624,25 @@ void BossWinScreen::update(App&, float dt, sf::Vector2f mouse) { menu_.update(dt
 void BossWinScreen::draw(App& app, sf::RenderWindow& w) {
     const sf::Vector2f s = app.size();
     drawDim(w, s, 0.8f);
-    drawCentered(w, app.font(), "Miniboss defeated", theme::fsTitle, {s.x * 0.5f, s.y * 0.28f},
-                 theme::core);
 
-    const int pr = app.lastRunPrisms();
-    char line[96];
-    std::snprintf(line, sizeof(line), "+%d cores      +%d %s", app.lastRunCores(), pr,
-                  pr == 1 ? "prism" : "prisms");
-    drawCentered(w, app.font(), line, theme::fsHeading, {s.x * 0.5f, s.y * 0.28f + 46.f},
-                 theme::accent);
-    drawCentered(w, app.font(), "run complete", theme::fsBody, {s.x * 0.5f, s.y * 0.28f + 78.f},
-                 theme::textDim);
+    const bool goingOn = app.bossWinCanContinue();   // run still live: the reward isn't due yet
+    const bool runEnd = !goingOn && app.lastRunWave() >= cfg::run::finalWave;
+    drawCentered(w, app.font(), runEnd ? "Run complete" : "Miniboss defeated", theme::fsTitle,
+                 {s.x * 0.5f, s.y * 0.28f}, theme::core);
+
+    if (goingOn) {
+        drawCentered(w, app.font(), "the run goes on - push through to wave 20", theme::fsBody,
+                     {s.x * 0.5f, s.y * 0.28f + 52.f}, theme::textDim);
+    } else {
+        const int pr = app.lastRunPrisms();
+        char line[96];
+        std::snprintf(line, sizeof(line), "+%d cores      +%d %s", app.lastRunCores(), pr,
+                      pr == 1 ? "prism" : "prisms");
+        drawCentered(w, app.font(), line, theme::fsHeading, {s.x * 0.5f, s.y * 0.28f + 46.f},
+                     theme::accent);
+        drawCentered(w, app.font(), "run complete", theme::fsBody, {s.x * 0.5f, s.y * 0.28f + 78.f},
+                     theme::textDim);
+    }
 
     menu_.draw(w);
 }

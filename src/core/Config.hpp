@@ -97,7 +97,7 @@ inline constexpr int maxProjectiles = 40;
 
 namespace core {
 inline constexpr float radius = 34.f;
-inline constexpr float baseHp = 140.f;
+inline constexpr float baseHp = 60.f;
 inline constexpr float hpPerBulwark = 40.f;    // "Bulwark" meta unlock, per level
 inline constexpr float enemyDamage = 8.f;      // hp lost per enemy that reaches the core
 inline constexpr float waveHeal = 9.f;         // core repaired this much on a wave clear
@@ -106,10 +106,12 @@ inline constexpr float waveHeal = 9.f;         // core repaired this much on a w
 // A run is a fixed sprint: survive to the final wave and you win.
 namespace run {
 inline constexpr int startBalls = 1;   // before the "Squad" meta unlock
-inline constexpr int finalWave = 10;
+inline constexpr int bossWave = 10;    // the miniboss duel
+inline constexpr int finalWave = 20;   // last wave once "Continue" past the boss is unlocked
+inline constexpr float coreSlideTime = 1.4f;  // core eases left -> arena centre entering wave 11
 }  // namespace run
 
-// The final wave is a miniboss duel in a wider arena.
+// Wave 10 is a miniboss duel in a wider arena.
 namespace boss {
 inline constexpr float arenaScaleX = 1.95f;   // boss arena vs the normal one (camera pulls way back)
 inline constexpr float arenaScaleY = 1.45f;
@@ -120,19 +122,47 @@ inline constexpr float speed = 54.f;          // px/s, dead straight at the core
 inline constexpr float addInterval = 1.15f;   // infinite adds cadence while the boss lives
 inline constexpr int   maxAdds = 16;          // concurrent cap so it stays fair
 inline constexpr float camEase = 2.1f;        // camera zoom transition rate (lower = slower pull-back)
+inline constexpr float hitCooldown = 0.1f;      // i-frames: a ball trapped against a boss can't melt it
+inline constexpr float minHitCruiseFrac = 0.9f; // a ball must be at ~cruise speed to hurt a boss, so a
+                                                // just-released "nudge" ball dropped on it does nothing
+                                                // (kills the "put the cursor on the boss and spam-click" cheese)
 }  // namespace boss
 
+// Wave 20: a smaller boss that spirals in toward the core while a spinning ring
+// of enemies shields it from the balls. Kill it and the ring breaks loose and
+// rushes the core - clear them to win.
+namespace finalBoss {
+inline constexpr float radius = 46.f;           // a touch smaller than the wave-10 boss (58)
+inline constexpr float hp = 64.f;               // takes real work - shouldn't fall to one burst
+inline constexpr float introTime = 1.2f;        // slides in from the left edge, invulnerable, before it spirals
+inline constexpr float startAngle = 3.14159265f; // enters from the left of the centred core
+inline constexpr float spiralOmega = 1.0f;      // rad/s around the core (more loops = longer path)
+inline constexpr float spiralShrink = 18.f;     // px/s pulled toward the core (lower = longer descent)
+inline constexpr float spiralStartDist = 1200.f; // clamped to the arena edge - starts as far out as it fits
+inline constexpr int   shieldCount = 6;         // orbiters kept alive around the boss
+inline constexpr float shieldRadius = 118.f;    // orbiter ring radius around the boss
+inline constexpr float shieldOmega = 1.5f;      // rad/s the ring spins
+inline constexpr float shieldRespawn = 2.0f;    // seconds to replace a downed orbiter
+inline constexpr float shieldHp = 6.f;
+inline constexpr float deathBurst = 260.f;      // outward shove on the ring when the boss dies
+inline constexpr float addInterval = 1.4f;      // enemies pour in from the screen edges
+inline constexpr int   addCap = 16;             // concurrent edge adds (orbiters not counted)
+inline constexpr float addHp = 10.f;            // softer than a plain wave-20 enemy would be
+inline constexpr float addSpeed = 95.f;
+}  // namespace finalBoss
+
 namespace wave {
-inline constexpr int baseCount = 3;
-inline constexpr float countGrowth = 1.22f;
-inline constexpr int maxCount = 60;
-inline constexpr float spawnInterval = 0.95f;
+inline constexpr int baseCount = 4;
+inline constexpr float countGrowth = 1.24f;
+inline constexpr int maxCount = 100;
+inline constexpr float spawnInterval = 0.95f;      // cadence on the early waves
+inline constexpr float spawnIntervalMin = 0.45f;   // cadence by the final wave (denser, not a trickle)
 inline constexpr float introDelay = 1.15f;   // calm beat before the first enemy of a wave
 inline constexpr float hpBase = 3.f;
-inline constexpr float hpGrowth = 1.16f;
+inline constexpr float hpGrowth = 1.17f;
 inline constexpr float speedBase = 34.f;
 inline constexpr float speedGrowth = 1.06f;
-inline constexpr float speedMax = 135.f;
+inline constexpr float speedMax = 165.f;
 inline constexpr float enemyRadius = 19.f;
 }  // namespace wave
 
@@ -176,6 +206,15 @@ inline constexpr float pointerSampleWindow = 0.09f;
 inline constexpr float catchRadius = 130.f;   // grab a ball from near it, not only dead-on
 inline constexpr float grabSettle = 16.f;     // how fast the grab offset eases out (per s)
 inline constexpr float fadeRate = 14.f;
+
+// Impact juice: freeze the sim for a beat and kick the camera on a hit. Kept
+// short so the game still feels fast.
+inline constexpr float hitstopKill    = 0.035f;  // an enemy dies
+inline constexpr float hitstopCoreHit = 0.075f;  // something reaches the core
+inline constexpr float hitstopBossHit = 0.055f;  // a ball lands on the miniboss
+inline constexpr float camKickCoreHit = 9.f;     // camera-shake amplitude (px at normal zoom)
+inline constexpr float camKickBossHit = 5.f;
+inline constexpr float camKickDecay   = 13.f;    // shake falloff per second
 }  // namespace app
 
 }  // namespace sb::cfg

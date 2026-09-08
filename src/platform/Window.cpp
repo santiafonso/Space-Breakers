@@ -68,4 +68,8 @@ sf::Vector2f Window::mousePosition() const {
     return win_.mapPixelToCoords(sf::Mouse::getPosition(win_), worldView_);
 }
 
+sf::Vector2f Window::uiMousePosition() const {
+    return win_.mapPixelToCoords(sf::Mouse::getPosition(win_), uiView_);
+}
+
 }  // namespace sb

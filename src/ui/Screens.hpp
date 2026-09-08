@@ -21,6 +21,7 @@ public:
 private:
     void rebuild(App& app);
     Menu menu_;
+    float resetArm_ = 0.f;   // >0 while "Reset progress" waits for a confirming click
 };
 
 // The game menu: spend cores on permanent unlocks, then start a run.
@@ -102,9 +103,10 @@ public:
     void draw(App& app, sf::RenderWindow& w) override;
 };
 
-// Shown when the miniboss dies: the run is won. "Continue" is a placeholder for
-// now (goes to the game menu, same as "Back to menu"). Opaque so the camera /
-// mouse mapping is the plain UI one, not the wide boss framing.
+// Shown when the miniboss dies, and again when wave 20 is cleared. "Continue"
+// only appears once a run has been won before (App::bossWinCanContinue) and
+// resumes the run at wave 11; otherwise the only option is "Back to menu".
+// Opaque so the camera / mouse mapping is the plain UI one, not the wide framing.
 class BossWinScreen : public Screen {
 public:
     void onEnter(App& app) override;

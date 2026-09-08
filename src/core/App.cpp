@@ -49,6 +49,20 @@ bool loadFont(sf::Font& font) {
     return false;
 }
 
+// First existing path for an asset given as "music/menu.ogg" etc., searching the
+// same layouts as the font. Empty string when nothing matches.
+std::string findAsset(const std::string& rel) {
+    const std::filesystem::path dir = exeDir();
+    const std::filesystem::path candidates[] = {
+        dir / "assets" / rel, dir / rel, dir / ".." / "assets" / rel,
+        std::filesystem::path("assets") / rel, std::filesystem::path("..") / "assets" / rel,
+        std::filesystem::path(rel),
+    };
+    for (const std::filesystem::path& p : candidates)
+        if (std::filesystem::exists(p)) return p.string();
+    return {};
+}
+
 }  // namespace
 
 App::App() : window_(kLogical()), world_(kLogical()) {
@@ -60,9 +74,11 @@ App::App() : window_(kLogical()), world_(kLogical()) {
     }
     if (!audio_.init())
         std::cerr << "Space-Breakers: audio unavailable, continuing without sound\n";
+    audio_.loadMusic(findAsset("music/menu.ogg"), findAsset("music/game.ogg"));
 
     loadGame(savePath_, data_);
     audio_.setEnabled(data_.meta.soundOn);
+    audio_.setTrack(Audio::Track::Menu);
     window_.applyVideoMode(data_.meta.fullscreen);
 
     effects_.init(font_, size());
@@ -153,6 +169,8 @@ void App::newRun() {
     r.balls.assign(static_cast<std::size_t>(startBallCount()), static_cast<int>(Element::Plain));
     ++data_.meta.stats.runs;
 
+    runBanked_ = false;
+
     // Dev overrides: SB_BALLS / SB_WAVE / SB_UPGRADES=Name,Name,...
     int startWave = 1;
     if (devMode()) {
@@ -163,8 +181,14 @@ void App::newRun() {
         startWave = std::clamp(envInt("SB_WAVE", 1), 1, cfg::run::finalWave);
     }
 
+    // "Continue" past the miniboss is offered only once a run has been won before
+    // (or when a dev shortcut drops us past the boss already).
+    continueUnlocked_ = data_.meta.stats.wins > 0 || startWave > cfg::run::bossWave;
+
     world_.startRun(params(), r.balls, r.coreHp, r.coreMaxHp);
     effects_.clear();
+    hitstop_ = 0.f;
+    camKick_ = 0.f;
 
     if (devMode()) {
         if (const char* up = std::getenv("SB_UPGRADES")) {
@@ -189,10 +213,15 @@ void App::startNextWave() {
     data_.run.wave += 1;
     waveIntro_ = cfg::app::waveIntroTime;   // ease the sim in instead of snapping
     world_.repairCore(cfg::core::waveHeal);
-    if (data_.run.wave >= cfg::run::finalWave)
-        world_.startBossWave(params());        // wide arena + miniboss
+    const int w = data_.run.wave;
+    if (w == cfg::run::bossWave)
+        world_.startBossWave(params());              // wave 10: Charger miniboss
+    else if (w == cfg::run::finalWave)
+        world_.startFinalBossWave(params());         // wave 20: Orbital boss + shield ring
+    else if (w > cfg::run::bossWave)
+        world_.startPostBossWave(w, params());       // waves 11..19: wide arena, core slides to centre
     else
-        world_.startWave(data_.run.wave, params());
+        world_.startWave(w, params());
     data_.meta.stats.bestWave =
         std::max(data_.meta.stats.bestWave, static_cast<std::uint32_t>(data_.run.wave));
 }
@@ -273,7 +302,13 @@ void App::applyUpgrade(int idx) {
     startNextWave();
 }
 
-void App::endRun(bool won) {
+// Pay out the run: cores, prisms and lifetime stats. No navigation - the caller
+// decides where to go (BossWin card, or straight to the game menu). Idempotent
+// via runBanked_ so a "Back to menu" after an already-banked win pays nothing.
+void App::bankRun(bool won) {
+    if (runBanked_) return;
+    runBanked_ = true;
+
     RunState& r = data_.run;
     lastRunWave_ = r.wave;
     lastRunWon_ = won;
@@ -291,23 +326,32 @@ void App::endRun(bool won) {
     if (won) ++data_.meta.stats.wins;
 
     save();
-
-    if (won) {
-        // Miniboss down: freeze the arena and let the player pick Continue / Back.
-        // The run stays "active" so the world keeps drawing behind the card.
-        push(ScreenId::BossWin);
-    } else {
-        data_.run = RunState{};
-        replaceStack(ScreenId::Menu);
-        push(ScreenId::Loadout);
-    }
 }
 
-void App::leaveBossWin() {
+void App::finishToMenu() {
     data_.run = RunState{};
     save();
     replaceStack(ScreenId::Menu);
     push(ScreenId::Loadout);
+}
+
+bool App::bossWinCanContinue() const {
+    return continueUnlocked_ && data_.run.active && !runBanked_ &&
+           data_.run.wave == cfg::run::bossWave;
+}
+
+// "Continue" on the BossWin card: resume the run at wave 11. Nothing is banked -
+// the run is still live and pays out when it truly ends (wave 20 or the core).
+void App::continuePastBoss() {
+    back();   // drop the BossWin card, back to the PlayScreen underneath
+    startNextWave();
+}
+
+// "Back to menu" on the BossWin card. If the run wasn't banked yet (miniboss just
+// cleared on a run that had "Continue" available), it counts as a win now.
+void App::leaveBossWin() {
+    if (!runBanked_) bankRun(true);
+    finishToMenu();
 }
 
 void App::abandonRun() {
@@ -315,6 +359,26 @@ void App::abandonRun() {
     save();
     replaceStack(ScreenId::Menu);
     push(ScreenId::Loadout);
+}
+
+void App::wipeSave() {
+    std::error_code ec;
+    std::filesystem::remove(savePath_, ec);   // start the next save from nothing
+
+    data_ = GameData{};                        // cores, prisms, unlocks, stats, run
+    audio_.setEnabled(data_.meta.soundOn);
+    window_.applyVideoMode(data_.meta.fullscreen);
+
+    lastRunWave_ = 0;
+    lastRunCores_ = 0;
+    lastRunPrisms_ = 0;
+    lastRunWon_ = false;
+
+    world_.startRun(params(), {}, cfg::core::baseHp, cfg::core::baseHp);
+    effects_.clear();
+    effects_.flash(theme::coreLow, 0.6f);
+    save();
+    replaceStack(ScreenId::Menu);
 }
 
 // ---------------------------------------------------------------- dev tools
@@ -417,8 +481,14 @@ void App::handleEvent(const sf::Event& e) {
         toggleFullscreen();
         return;
     }
-    if (!stack_.empty())
-        stack_.back()->handleEvent(*this, e, window_.mousePosition());
+    if (!stack_.empty()) {
+        // The play screen wants the pointer in world units (grab / throw); every
+        // other screen lays its widgets out in fixed UI units, so it must get the
+        // UI-mapped pointer - the world view may be zoomed out on the boss arena.
+        const sf::Vector2f mouse =
+            simulating() ? window_.mousePosition() : window_.uiMousePosition();
+        stack_.back()->handleEvent(*this, e, mouse);
+    }
 }
 
 void App::processEvents(const FrameEvents& ev) {
@@ -426,6 +496,7 @@ void App::processEvents(const FrameEvents& ev) {
         ++data_.meta.stats.enemiesKilled;
         effects_.addRing(k, 520.f, theme::enemy);
     }
+    if (!ev.kills.empty()) hitstop_ = std::max(hitstop_, cfg::app::hitstopKill);
     for (const BounceFx& b : ev.bounces) {
         effects_.addRing(b.pos, b.speed, b.color);
         effects_.edgeHit(b.normal);
@@ -444,6 +515,12 @@ void App::processEvents(const FrameEvents& ev) {
     if (ev.coreHit) {
         effects_.flash(theme::coreLow, 0.55f);
         audio_.bounce(0.15f);
+        hitstop_ = std::max(hitstop_, cfg::app::hitstopCoreHit);
+        camKick_ = std::max(camKick_, cfg::app::camKickCoreHit);
+    }
+    if (ev.bossHit) {
+        hitstop_ = std::max(hitstop_, cfg::app::hitstopBossHit);
+        camKick_ = std::max(camKick_, cfg::app::camKickBossHit);
     }
     if (ev.corePulsed) {
         effects_.addRing(ev.corePulsePos, 900.f, theme::core);
@@ -462,12 +539,22 @@ void App::processEvents(const FrameEvents& ev) {
     data_.meta.stats.maxSpeed = std::max(data_.meta.stats.maxSpeed, world_.fastestBall());
 
     if (ev.runOver) {
-        endRun(false);
+        bankRun(false);
+        finishToMenu();
         return;
     }
     if (ev.waveCleared) {
-        if (data_.run.wave >= cfg::run::finalWave) {
-            endRun(true);
+        const int w = data_.run.wave;
+        if (w == cfg::run::bossWave) {
+            // Miniboss down. First win ever: bank it now, card offers only "Back".
+            // Otherwise leave the run live so "Continue" can carry it to wave 11.
+            if (!continueUnlocked_) bankRun(true);
+            push(ScreenId::BossWin);
+            return;
+        }
+        if (w >= cfg::run::finalWave) {
+            bankRun(true);
+            push(ScreenId::BossWin);
             return;
         }
         audio_.purchase();
@@ -476,9 +563,16 @@ void App::processEvents(const FrameEvents& ev) {
 }
 
 void App::update(float frameDt) {
-    const sf::Vector2f mouse = window_.mousePosition();
+    // World units for the play screen, fixed UI units for menus / cards (see
+    // handleEvent) - the world view can be zoomed out on the boss arena.
+    const sf::Vector2f mouse =
+        simulating() ? window_.mousePosition() : window_.uiMousePosition();
     effects_.update(frameDt);
     fade_ *= std::exp(-cfg::app::fadeRate * frameDt);
+
+    // Music follows the run: the play track through a live run (Choice / Pause /
+    // BossWin card included), the menu track everywhere else.
+    audio_.setTrack(data_.run.active ? Audio::Track::Game : Audio::Track::Menu);
 
     if (!stack_.empty()) stack_.back()->update(*this, frameDt, mouse);
 
@@ -491,6 +585,10 @@ void App::update(float frameDt) {
             const float t = 1.f - waveIntro_ / cfg::app::waveIntroTime;  // 0 -> 1
             simDt *= cfg::app::waveIntroSlow + (1.f - cfg::app::waveIntroSlow) * t;
         }
+        if (hitstop_ > 0.f) {  // an impact landed: hold the frame, no catch-up after
+            hitstop_ = std::max(0.f, hitstop_ - frameDt);
+            simDt = 0.f;
+        }
         worldAccum_ += simDt;
         int steps = 0;
         while (worldAccum_ >= cfg::loop::fixedDt && steps < cfg::loop::maxSteps) {
@@ -498,6 +596,7 @@ void App::update(float frameDt) {
             worldAccum_ -= cfg::loop::fixedDt;
             ++steps;
             if (!simulating()) break;  // a screen (choice / summary) was just pushed
+            if (hitstop_ > 0.f) { worldAccum_ = 0.f; break; }  // impact mid-frame: stop now
         }
         if (steps == cfg::loop::maxSteps) worldAccum_ = 0.f;
 
@@ -511,12 +610,15 @@ void App::update(float frameDt) {
         worldAccum_ = 0.f;
     }
 
-    // Camera: ease toward the area the world wants framed (wider on the boss
-    // wave), snap back to the fixed view whenever we are not in a live run.
+    // Camera: ease toward the area the world wants framed (wider from the boss
+    // wave on). Hold that framing for the whole live run - through the between-
+    // wave Choice and the "Continue" card too - so the view doesn't zoom in and
+    // straight back out. It snaps to the fixed view once the run is banked (a
+    // loss, or the final "Back to menu") or gone.
     sf::Vector2f tgtSize = kLogical();
     sf::Vector2f tgtCenter = kLogical() * 0.5f;
     bool snap = true;
-    if (simulating() && data_.run.active) {
+    if (data_.run.active && !runBanked_) {
         tgtSize = world_.viewSize();
         tgtCenter = world_.viewCenter();
         snap = false;
@@ -524,15 +626,29 @@ void App::update(float frameDt) {
     if (snap) {
         camSize_ = tgtSize;
         camCenter_ = tgtCenter;
+        camKick_ = 0.f;
+        camShake_ = {0.f, 0.f};
     } else {
         const float k = 1.f - std::exp(-cfg::boss::camEase * frameDt);
         camSize_ += (tgtSize - camSize_) * k;
         camCenter_ += (tgtCenter - camCenter_) * k;
+
+        // Camera kick: a brief shake on hits, scaled to the current zoom so it
+        // reads the same whether or not the boss arena has pulled the view back.
+        camKick_ *= std::exp(-cfg::app::camKickDecay * frameDt);
+        if (camKick_ > 0.2f) {
+            const float amp = camKick_ * (camSize_.x / kLogical().x);
+            camShake_ = {rng_.range(-amp, amp), rng_.range(-amp, amp)};
+        } else {
+            camKick_ = 0.f;
+            camShake_ = {0.f, 0.f};
+        }
     }
-    window_.setWorldView(camSize_, camCenter_);
+    window_.setWorldView(camSize_, camCenter_ + camShake_);
 
     const Core& c = world_.core();
-    hud_.update(frameDt, world_.wave(), cfg::run::finalWave, world_.enemiesLeft(),
+    const int finalWave = continueUnlocked_ ? cfg::run::finalWave : cfg::run::bossWave;
+    hud_.update(frameDt, world_.wave(), finalWave, world_.enemiesLeft(),
                 c.maxHp > 0.f ? c.hp / c.maxHp : 0.f, world_.comboMultiplier(), world_.effect(),
                 world_.bossWave());
 }
