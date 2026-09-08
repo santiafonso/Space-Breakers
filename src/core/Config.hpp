@@ -68,6 +68,7 @@ inline constexpr float retaliateKnockback = 320.f;
 inline constexpr float secondChanceHp = 1.f;      // "Second chance": core survives a lethal hit at this
 inline constexpr float secondChanceHeal = 0.30f;  // ...then heals this fraction of base HP
 inline constexpr int   lootBonusPct = 20;         // "Loot": +this% cores at the end of the run
+inline constexpr int   prospectorPctPerLevel = 15;// "Prospector" meta node: +this% cores per level
 }  // namespace combat
 
 // Per-element behaviour for the ball types bought between waves.
@@ -101,6 +102,7 @@ inline constexpr float baseHp = 60.f;
 inline constexpr float hpPerBulwark = 40.f;    // "Bulwark" meta unlock, per level
 inline constexpr float enemyDamage = 8.f;      // hp lost per enemy that reaches the core
 inline constexpr float waveHeal = 9.f;         // core repaired this much on a wave clear
+inline constexpr float mendPerLevel = 6.f;     // "Mend" meta node: + this to waveHeal per level
 }  // namespace core
 
 // A run is a fixed sprint: survive to the final wave and you win.
@@ -170,6 +172,7 @@ namespace meta {
 inline constexpr int coresPerWave = 2;   // earned at the end of a run, per wave reached
 inline constexpr int winBonus = 10;      // extra for clearing the final wave
 inline constexpr int prismsPerWin = 1;   // "prism": special currency dropped by the miniboss
+inline constexpr int prismsPerWindfall = 1;  // "Windfall" meta node: + this many prisms per boss kill, per level
 }  // namespace meta
 
 // Power-up orbs still drift in and buff the balls for a few seconds.

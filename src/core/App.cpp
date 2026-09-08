@@ -138,17 +138,20 @@ void App::replaceStack(ScreenId id) {
     stack_.push_back(makeScreen(id));
     fade_ = 1.f;
     stack_.back()->onEnter(*this);
+    stack_.back()->beginIntro();
 }
 
 void App::push(ScreenId id) {
     stack_.push_back(makeScreen(id));
     fade_ = 1.f;
     stack_.back()->onEnter(*this);
+    stack_.back()->beginIntro();
 }
 
 void App::back() {
     if (stack_.size() > 1) stack_.pop_back();
     fade_ = 1.f;
+    if (!stack_.empty()) stack_.back()->beginIntro();   // replay the intro on the way back
 }
 
 bool App::simulating() const {
@@ -168,6 +171,12 @@ void App::newRun() {
     r.coreHp = r.coreMaxHp;
     r.balls.assign(static_cast<std::size_t>(startBallCount()), static_cast<int>(Element::Plain));
     ++data_.meta.stats.runs;
+
+    // Meta skill-web nodes that seed the run's mods before the world is built.
+    r.mods.heavyImpact += data_.meta.unlock[MetaHeft];
+    r.mods.bigBall     += data_.meta.unlock[MetaMass];
+    if (data_.meta.unlock[MetaMomentum] > 0) r.mods.flingMomentum = true;
+    if (data_.meta.unlock[MetaAegis] > 0)    r.mods.secondChance  = true;
 
     runBanked_ = false;
 
@@ -212,7 +221,8 @@ void App::newRun() {
 void App::startNextWave() {
     data_.run.wave += 1;
     waveIntro_ = cfg::app::waveIntroTime;   // ease the sim in instead of snapping
-    world_.repairCore(cfg::core::waveHeal);
+    world_.repairCore(cfg::core::waveHeal +
+                      cfg::core::mendPerLevel * static_cast<float>(data_.meta.unlock[MetaMend]));
     const int w = data_.run.wave;
     if (w == cfg::run::bossWave)
         world_.startBossWave(params());              // wave 10: Charger miniboss
@@ -315,8 +325,12 @@ void App::bankRun(bool won) {
 
     int cores = r.wave * cfg::meta::coresPerWave + (won ? cfg::meta::winBonus : 0);
     if (r.mods.loot) cores = cores * (100 + cfg::combat::lootBonusPct) / 100;
+    if (const int prospector = data_.meta.unlock[MetaProspector]; prospector > 0)
+        cores = cores * (100 + cfg::combat::prospectorPctPerLevel * prospector) / 100;
     lastRunCores_ = cores;
-    lastRunPrisms_ = won ? cfg::meta::prismsPerWin : 0;
+    lastRunPrisms_ = won ? cfg::meta::prismsPerWin +
+                               cfg::meta::prismsPerWindfall * data_.meta.unlock[MetaWindfall]
+                         : 0;
 
     data_.meta.cores += static_cast<std::uint32_t>(cores);
     data_.meta.prisms += static_cast<std::uint32_t>(lastRunPrisms_);
@@ -442,9 +456,15 @@ void App::quit() {
 void App::buyMetaUnlock(int u) {
     if (u < 0 || u >= MetaUnlockCount) return;
     if (metaUnlockMaxed(u, data_.meta.unlock[u])) return;
+    if (!metaUnlockAvailable(u, data_.meta.unlock)) return;
     const std::uint32_t cost = metaUnlockCost(u, data_.meta.unlock[u]);
-    if (data_.meta.cores < cost) return;
-    data_.meta.cores -= cost;
+    if (metaUnlockCurrency(u) == MetaCurrency::Prisms) {
+        if (data_.meta.prisms < cost) return;
+        data_.meta.prisms -= cost;
+    } else {
+        if (data_.meta.cores < cost) return;
+        data_.meta.cores -= cost;
+    }
     ++data_.meta.unlock[u];
     audio_.purchase();
     effects_.flash(theme::accent, 0.4f);
@@ -574,7 +594,10 @@ void App::update(float frameDt) {
     // BossWin card included), the menu track everywhere else.
     audio_.setTrack(data_.run.active ? Audio::Track::Game : Audio::Track::Menu);
 
-    if (!stack_.empty()) stack_.back()->update(*this, frameDt, mouse);
+    if (!stack_.empty()) {
+        stack_.back()->update(*this, frameDt, mouse);
+        stack_.back()->advanceIntro(frameDt);
+    }
 
     if (simulating()) {
         // A fresh wave eases in: feed the fixed-step accumulator slowly at first

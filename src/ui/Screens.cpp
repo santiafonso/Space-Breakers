@@ -69,10 +69,63 @@ std::string currencyLine(const MetaState& m) {
     return s;
 }
 
-constexpr float kUnlockTop = 0.30f;   // * size.y
-constexpr float kUnlockGap = 48.f;
-constexpr float kUnlockRowW = 540.f;
-constexpr float kUnlockRowH = 42.f;
+// ---- skill-web layout (the Loadout screen) -------------------------------
+// Polar layout: a node's (gx,gy) is a direction plus a ring index
+// (ring = max(|gx|,|gy|)), so every node sits exactly on a background ring.
+// Kept small on purpose - the web will gain many more nodes later.
+constexpr float kRingGap = 72.f;      // pixels between concentric rings
+constexpr float kNodeR = 14.f;        // branch node radius
+constexpr float kRootR = 20.f;        // centre node radius
+constexpr float kWebCenterY = 0.5f;   // * size.y
+constexpr int   kBackRings = 3;       // faint rings drawn behind the web (room to grow)
+
+const sf::Color kPrismColor = theme::puSurge;   // violet - distinct from the core-blue accent
+
+sf::Color branchColor(MetaBranch b) {
+    switch (b) {
+        case MetaBranch::Base:    return theme::core;
+        case MetaBranch::Combat:  return theme::ballFast;
+        case MetaBranch::Eco:     return theme::accent;
+        case MetaBranch::Special: return theme::elemFire;
+        case MetaBranch::Root:    return theme::textHi;
+    }
+    return theme::textHi;
+}
+
+// Ring index of a node (0 centre, 1, 2, ...) - drives the intro stagger.
+float nodeRing(int i) {
+    const MetaUnlockDef& d = metaUnlockDef(i);
+    return std::max(std::fabs(d.gx), std::fabs(d.gy));
+}
+
+const char* branchLabel(MetaBranch b) {
+    switch (b) {
+        case MetaBranch::Base:    return "Base";
+        case MetaBranch::Combat:  return "Ball combat";
+        case MetaBranch::Eco:     return "Economy";
+        case MetaBranch::Special: return "Special balls";
+        case MetaBranch::Root:    return "Core";
+    }
+    return "";
+}
+
+void drawLink(sf::RenderWindow& w, sf::Vector2f a, sf::Vector2f b, float thick, sf::Color c) {
+    const sf::Vector2f d = b - a;
+    sf::RectangleShape bar({length(d), thick});
+    bar.setOrigin(0.f, thick * 0.5f);
+    bar.setPosition(a);
+    bar.setRotation(std::atan2(d.y, d.x) * 180.f / kPi);
+    bar.setFillColor(c);
+    w.draw(bar);
+}
+
+void drawDot(sf::RenderWindow& w, sf::Vector2f p, float r, sf::Color c) {
+    sf::CircleShape d(r);
+    d.setOrigin(r, r);
+    d.setPosition(p);
+    d.setFillColor(c);
+    w.draw(d);
+}
 
 }  // namespace
 
@@ -90,7 +143,10 @@ void MenuScreen::rebuild(App& app) {
     menu_.layout({s.x * 0.5f, s.y * 0.44f});
 }
 
-void MenuScreen::onEnter(App& app) { rebuild(app); }
+void MenuScreen::onEnter(App& app) {
+    rebuild(app);
+    backdrop_.init(app.size());
+}
 
 void MenuScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
     if (isKey(e, sf::Keyboard::Enter) || isKey(e, sf::Keyboard::Space)) { app.openLoadout(); return; }
@@ -110,6 +166,7 @@ void MenuScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
 }
 
 void MenuScreen::update(App& app, float dt, sf::Vector2f mouse) {
+    backdrop_.update(dt);
     menu_.update(dt, mouse);
     if (resetArm_ > 0.f) {
         resetArm_ -= dt;
@@ -119,50 +176,85 @@ void MenuScreen::update(App& app, float dt, sf::Vector2f mouse) {
 
 void MenuScreen::draw(App& app, sf::RenderWindow& w) {
     const sf::Vector2f s = app.size();
-    drawCentered(w, app.font(), "Space-Breakers", theme::fsTitle, {s.x * 0.5f, s.y * 0.2f},
-                 theme::textHi);
-    drawCentered(w, app.font(), currencyLine(app.data().meta), theme::fsHeading,
-                 {s.x * 0.5f, s.y * 0.2f + 42.f}, theme::accent);
-    menu_.draw(w);
+    const float it = intro();
+    backdrop_.draw(w, clampf(introPop(it, 0.f, 0.9f), 0.f, 1.f));
+    drawCenteredPop(w, app.font(), "Space-Breakers", theme::fsTitle, {s.x * 0.5f, s.y * 0.2f},
+                    theme::textHi, introPop(it, 0.f, 0.34f));
+    drawCenteredPop(w, app.font(), currencyLine(app.data().meta), theme::fsHeading,
+                    {s.x * 0.5f, s.y * 0.2f + 42.f}, theme::accent, introPop(it, 0.09f));
+    menu_.draw(w, it);
 }
 
 // ================================================================ Loadout
 
 void LoadoutScreen::rebuild(App& app) {
     const sf::Vector2f s = app.size();
-    menu_.init(app.font(), theme::fsItem, s.y * 0.066f);
+    menu_.init(app.font(), theme::fsItem, s.y * 0.050f);
     menu_.setItems({{"Start run", true}, {"Back", true}});
-    menu_.layout({s.x * 0.5f, s.y * 0.72f});
+    menu_.layout({s.x * 0.5f, s.y * 0.85f});
 }
 
-void LoadoutScreen::onEnter(App& app) { rebuild(app); }
+void LoadoutScreen::onEnter(App& app) {
+    rebuild(app);
+    selNode_ = 0;
+    hoverNode_ = -1;
+    selUsed_ = false;
+    keyNav_ = false;
+    lastMouse_ = {-1.f, -1.f};
+    for (int i = 0; i < MetaUnlockCount; ++i) glow_[i] = 0.f;
+}
 
-sf::Vector2f LoadoutScreen::unlockRowCenter(App& app, int i) const {
+sf::Vector2f LoadoutScreen::nodePos(App& app, int i) const {
     const sf::Vector2f s = app.size();
-    return {s.x * 0.5f, s.y * kUnlockTop + static_cast<float>(i) * kUnlockGap};
+    const MetaUnlockDef& d = metaUnlockDef(i);
+    const sf::Vector2f centre{s.x * 0.5f, s.y * kWebCenterY};
+    const float ring = std::max(std::fabs(d.gx), std::fabs(d.gy));
+    if (ring < 0.01f) return centre;
+    return centre + normalized({d.gx, d.gy}) * (ring * kRingGap);
 }
 
-int LoadoutScreen::unlockRowAt(App& app, sf::Vector2f mouse) const {
+int LoadoutScreen::nodeAt(App& app, sf::Vector2f mouse) const {
     for (int i = 0; i < MetaUnlockCount; ++i) {
-        const sf::Vector2f c = unlockRowCenter(app, i);
-        if (std::fabs(mouse.x - c.x) < kUnlockRowW * 0.5f &&
-            std::fabs(mouse.y - c.y) < kUnlockRowH * 0.5f)
-            return i;
+        const float r = (i == 0 ? kRootR : kNodeR) + 10.f;
+        const sf::Vector2f d = mouse - nodePos(app, i);
+        if (d.x * d.x + d.y * d.y <= r * r) return i;
     }
     return -1;
+}
+
+// Jump the selection to the nearest node roughly in the (dx,dy) direction.
+void LoadoutScreen::moveSelection(App& app, int dx, int dy) {
+    const sf::Vector2f cur = nodePos(app, selNode_);
+    int best = -1;
+    float bestScore = 1e9f;
+    for (int i = 0; i < MetaUnlockCount; ++i) {
+        if (i == selNode_) continue;
+        const sf::Vector2f d = nodePos(app, i) - cur;
+        const float along = d.x * static_cast<float>(dx) + d.y * static_cast<float>(dy);
+        if (along <= 4.f) continue;
+        const float perp = std::fabs(d.x * static_cast<float>(dy) - d.y * static_cast<float>(dx));
+        const float score = perp * 2.f + along;
+        if (score < bestScore) { bestScore = score; best = i; }
+    }
+    if (best >= 0) { selNode_ = best; selUsed_ = true; keyNav_ = true; }
 }
 
 void LoadoutScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
     if (isKey(e, sf::Keyboard::Escape)) { app.back(); return; }
     if (isKey(e, sf::Keyboard::Enter) || isKey(e, sf::Keyboard::Space)) { app.newRun(); return; }
-    if (e.type == sf::Event::KeyPressed && e.key.code >= sf::Keyboard::Num1 &&
-        e.key.code < sf::Keyboard::Num1 + MetaUnlockCount) {
-        app.buyMetaUnlock(e.key.code - sf::Keyboard::Num1);
-        return;
+    if (e.type == sf::Event::KeyPressed) {
+        switch (e.key.code) {
+            case sf::Keyboard::Left:  moveSelection(app, -1, 0); return;
+            case sf::Keyboard::Right: moveSelection(app, 1, 0);  return;
+            case sf::Keyboard::Up:    moveSelection(app, 0, -1); return;
+            case sf::Keyboard::Down:  moveSelection(app, 0, 1);  return;
+            case sf::Keyboard::E:     app.buyMetaUnlock(selNode_); return;
+            default: break;
+        }
     }
     if (!isLeftClick(e)) return;
-    const int row = unlockRowAt(app, mouse);
-    if (row >= 0) { app.buyMetaUnlock(row); return; }
+    const int n = nodeAt(app, mouse);
+    if (n >= 0) { selNode_ = n; app.buyMetaUnlock(n); return; }
     switch (menu_.clickIndex(mouse)) {
         case 0: app.newRun(); break;
         case 1: app.back(); break;
@@ -172,70 +264,237 @@ void LoadoutScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse
 
 void LoadoutScreen::update(App& app, float dt, sf::Vector2f mouse) {
     menu_.update(dt, mouse);
-    const int row = unlockRowAt(app, mouse);
+    if (length(mouse - lastMouse_) > 0.5f) { keyNav_ = false; lastMouse_ = mouse; }
+    hoverNode_ = nodeAt(app, mouse);
+    if (hoverNode_ >= 0) { selNode_ = hoverNode_; selUsed_ = true; }   // hover drives card + E key
+    const int active = hoverNode_ >= 0 ? hoverNode_ : (keyNav_ ? selNode_ : -1);
     const float k = 1.f - std::exp(-16.f * dt);
     for (int i = 0; i < MetaUnlockCount; ++i)
-        hover_[i] = lerpf(hover_[i], row == i ? 1.f : 0.f, k);
+        glow_[i] = lerpf(glow_[i], (i == active) ? 1.f : 0.f, k);
+}
+
+void LoadoutScreen::drawInfoCard(App& app, sf::RenderWindow& w, int node) const {
+    if (node < 0 || node >= MetaUnlockCount) return;
+    const sf::Vector2f s = app.size();
+    const MetaState& m = app.data().meta;
+    const MetaUnlockDef& d = metaUnlockDef(node);
+    const int lvl = m.unlock[node];
+    const bool maxed = metaUnlockMaxed(node, lvl);
+    const bool avail = metaUnlockAvailable(node, m.unlock);
+    const bool isPrism = d.currency == MetaCurrency::Prisms;
+    const std::uint32_t cost = metaUnlockCost(node, lvl);
+    const sf::Color col = branchColor(d.branch);
+
+    const float cw = 300.f, ch = 116.f;
+    const sf::Vector2f o(theme::margin, s.y * 0.15f);
+
+    sf::RectangleShape card({cw, ch});
+    card.setPosition(o);
+    card.setFillColor(withAlpha(theme::panel, 0.85f));
+    card.setOutlineThickness(1.f);
+    card.setOutlineColor(withAlpha(col, 0.5f));
+    w.draw(card);
+
+    sf::RectangleShape stripe({3.f, ch});
+    stripe.setPosition(o);
+    stripe.setFillColor(col);
+    w.draw(stripe);
+
+    sf::Text name = makeText(app.font(), d.name, theme::fsItem, theme::textHi);
+    name.setPosition(o.x + 14.f, o.y + 8.f);
+    w.draw(name);
+
+    sf::Text br = makeText(app.font(), branchLabel(d.branch), theme::fsSmall, col);
+    const sf::FloatRect brb = br.getLocalBounds();
+    br.setOrigin(brb.left + brb.width, brb.top);
+    br.setPosition(o.x + cw - 14.f, o.y + 14.f);
+    w.draw(br);
+
+    char lv[48];
+    std::snprintf(lv, sizeof(lv), "Level %d / %d", lvl, d.maxLevel);
+    sf::Text lvt = makeText(app.font(), lv, theme::fsSmall, theme::textLo);
+    lvt.setPosition(o.x + 14.f, o.y + 38.f);
+    w.draw(lvt);
+
+    float y = o.y + 58.f;
+    for (const std::string& dl : wrapText(app.font(), d.effect, theme::fsSmall, cw - 28.f)) {
+        sf::Text t = makeText(app.font(), dl, theme::fsSmall, theme::textLo);
+        t.setPosition(o.x + 14.f, y);
+        w.draw(t);
+        y += 16.f;
+    }
+
+    std::string foot;
+    sf::Color footCol = theme::textDim;
+    if (maxed) {
+        foot = "fully unlocked";
+    } else if (!avail) {
+        foot = std::string("locked - get ") + metaUnlockDef(d.parent).name + " first";
+    } else {
+        foot = "cost  " + std::to_string(cost) + (isPrism ? " prisms" : " cores");
+        const bool afford = isPrism ? m.prisms >= cost : m.cores >= cost;
+        footCol = afford ? (isPrism ? kPrismColor : theme::accent) : theme::coreLow;
+    }
+    sf::Text ft = makeText(app.font(), foot, theme::fsSmall, footCol);
+    ft.setPosition(o.x + 14.f, o.y + ch - 22.f);
+    w.draw(ft);
 }
 
 void LoadoutScreen::draw(App& app, sf::RenderWindow& w) {
     const sf::Vector2f s = app.size();
     const MetaState& m = app.data().meta;
+    const float it = intro();
 
-    drawCentered(w, app.font(), "Game menu", theme::fsTitle, {s.x * 0.5f, s.y * 0.11f}, theme::textHi);
-    drawCentered(w, app.font(), currencyLine(m), theme::fsHeading,
-                 {s.x * 0.5f, s.y * 0.11f + 38.f}, theme::accent);
+    drawCenteredPop(w, app.font(), "Skill web", theme::fsTitle, {s.x * 0.5f, s.y * 0.055f},
+                    theme::textHi, introPop(it, 0.f, 0.32f));
+    drawCenteredPop(w, app.font(), "click a node to unlock      arrows move, E unlocks",
+                    theme::fsSmall, {s.x * 0.5f, s.y * 0.10f}, theme::textDim, introPop(it, 0.06f));
+
+    {
+        const float ca = clampf(introPop(it, 0.05f), 0.f, 1.f);
+        sf::Text ct = makeText(app.font(), currencyLine(m), theme::fsHeading,
+                               withAlpha(theme::accent, ca));
+        const sf::FloatRect cb = ct.getLocalBounds();
+        ct.setOrigin(cb.left + cb.width, cb.top);
+        ct.setPosition(s.x - theme::margin, theme::margin + (1.f - ca) * 8.f);
+        w.draw(ct);
+    }
 
     if (app.lastRunWave() > 0) {
+        const float la = clampf(introPop(it, 0.12f), 0.f, 1.f);
         char line[96];
         std::snprintf(line, sizeof(line), "Last run: %s on wave %d   +%d cores",
                       app.lastRunWon() ? "won" : "lost", app.lastRunWave(), app.lastRunCores());
-        drawCentered(w, app.font(), line, theme::fsBody, {s.x * 0.5f, s.y * 0.11f + 70.f},
-                     app.lastRunWon() ? theme::core : theme::textLo);
+        sf::Text lt = makeText(app.font(), line, theme::fsSmall,
+                               withAlpha(app.lastRunWon() ? theme::core : theme::textLo, la));
+        lt.setPosition(theme::margin, theme::margin + (1.f - la) * 8.f);
+        w.draw(lt);
     }
 
+    // Faint concentric rings behind the web - every node sits on one of them.
+    const sf::Vector2f centre = nodePos(app, 0);
+    const float ringsA = clampf(introPop(it, 0.10f, 0.4f), 0.f, 1.f);
+    for (int ring = 1; ring <= kBackRings; ++ring) {
+        const float rad = static_cast<float>(ring) * kRingGap;
+        sf::CircleShape halo(rad);
+        halo.setOrigin(rad, rad);
+        halo.setPosition(centre);
+        halo.setPointCount(96);
+        halo.setFillColor(sf::Color::Transparent);
+        halo.setOutlineThickness(1.f);
+        halo.setOutlineColor(withAlpha(theme::arenaEdge,
+                                       (0.26f - 0.05f * static_cast<float>(ring - 1)) * ringsA));
+        w.draw(halo);
+    }
+
+    // Links under the nodes - quiet unless both ends (or the parent) are earned.
+    for (int i = 0; i < MetaUnlockCount; ++i) {
+        const MetaUnlockDef& d = metaUnlockDef(i);
+        if (d.parent < 0) continue;
+        const float la = clampf(introPop(it, 0.16f + 0.05f * nodeRing(i), 0.3f), 0.f, 1.f);
+        if (la <= 0.001f) continue;
+        const sf::Vector2f a = nodePos(app, d.parent);
+        const sf::Vector2f b = nodePos(app, i);
+        const sf::Color col = branchColor(d.branch);
+        const bool lit = m.unlock[i] > 0;
+        const bool open = !lit && m.unlock[d.parent] > 0;
+        drawLink(w, a, b, lit ? 2.5f : 1.5f,
+                 lit ? withAlpha(col, 0.5f * la)
+                     : withAlpha(open ? col : theme::arenaEdge, 0.22f * la));
+    }
+
+    // Nodes. Only the one under the cursor / keyboard selection lights up.
     for (int i = 0; i < MetaUnlockCount; ++i) {
         const MetaUnlockDef& d = metaUnlockDef(i);
         const int lvl = m.unlock[i];
+        const bool owned = lvl > 0;
         const bool maxed = metaUnlockMaxed(i, lvl);
-        const std::string cost = maxed ? "MAX" : (std::to_string(metaUnlockCost(i, lvl)) + " cores");
-        const bool afford = !maxed && m.cores >= metaUnlockCost(i, lvl);
-        const sf::Vector2f c = unlockRowCenter(app, i);
+        const bool avail = metaUnlockAvailable(i, m.unlock);
+        const bool isPrism = d.currency == MetaCurrency::Prisms;
+        const std::uint32_t cost = metaUnlockCost(i, lvl);
+        const bool afford = avail && !maxed && (isPrism ? m.prisms >= cost : m.cores >= cost);
+        const sf::Color col = branchColor(d.branch);
+        const sf::Vector2f p = nodePos(app, i);
+        const float baseR = (i == 0 ? kRootR : kNodeR);
+        const float g = glow_[i];                 // 0 = idle, 1 = lit
+        const float pop = introPop(it, 0.12f + 0.06f * nodeRing(i), 0.34f);
+        if (pop <= 0.001f) continue;
+        const float na = clampf(pop, 0.f, 1.f);                 // intro alpha
+        const float r = baseR * clampf(pop, 0.f, 1.12f) * (1.f + 0.45f * g);
 
-        sf::RectangleShape box({kUnlockRowW, kUnlockRowH});
-        box.setOrigin(kUnlockRowW * 0.5f, kUnlockRowH * 0.5f);
-        box.setPosition(c);
-        box.setFillColor(withAlpha(theme::accent, 0.05f + 0.13f * hover_[i]));
-        box.setOutlineThickness(1.f);
-        box.setOutlineColor(withAlpha(theme::accent, afford ? 0.25f + 0.45f * hover_[i] : 0.12f));
-        w.draw(box);
+        if (g > 0.01f) {
+            const float gr = r + 4.f + 12.f * g;
+            sf::CircleShape halo(gr);
+            halo.setOrigin(gr, gr);
+            halo.setPosition(p);
+            halo.setFillColor(withAlpha(col, 0.20f * g * na));
+            w.draw(halo);
+        }
 
-        char head[96];
-        std::snprintf(head, sizeof(head), "%d.  %s   Lv %d", i + 1, d.name, lvl);
-        sf::Text ht = makeText(app.font(), head, theme::fsBody,
-                               maxed ? theme::textDim : (afford ? theme::textHi : theme::textLo));
-        ht.setPosition(c.x - kUnlockRowW * 0.5f + 14.f, c.y - kUnlockRowH * 0.5f + 3.f);
-        w.draw(ht);
+        sf::CircleShape body(r);
+        body.setOrigin(r, r);
+        body.setPosition(p);
+        body.setPointCount(40);
+        body.setOutlineThickness(2.f);
+        if (owned) {
+            body.setFillColor(withAlpha(col, 0.85f * na));
+            body.setOutlineColor(withAlpha(col, 0.9f * na));
+        } else if (avail) {
+            body.setFillColor(withAlpha(col, (0.10f + 0.30f * g) * na));
+            body.setOutlineColor(withAlpha(col, ((afford ? 0.42f : 0.24f) + 0.5f * g) * na));
+        } else {
+            body.setFillColor(withAlpha(theme::arenaEdge, 0.14f * na));
+            body.setOutlineColor(withAlpha(theme::arenaEdge, (0.34f + 0.4f * g) * na));
+        }
+        w.draw(body);
 
-        sf::Text ct = makeText(app.font(), cost, theme::fsBody,
-                               maxed ? theme::textDim : (afford ? theme::accent : theme::textLo));
-        const sf::FloatRect cb = ct.getLocalBounds();
-        ct.setOrigin(cb.left + cb.width, cb.top);
-        ct.setPosition(c.x + kUnlockRowW * 0.5f - 14.f, c.y - kUnlockRowH * 0.5f + 3.f);
-        w.draw(ct);
+        // a small pip marks an owned node while it is idle
+        if (owned && g < 0.6f)
+            drawDot(w, p, baseR * 0.36f, withAlpha(col, 0.9f * na));
 
-        sf::Text et = makeText(app.font(), d.effect, theme::fsSmall, theme::textDim);
-        et.setPosition(c.x - kUnlockRowW * 0.5f + 14.f, c.y + 2.f);
-        w.draw(et);
+        // name / level / cost only while lit
+        if (g > 0.03f) {
+            const float a = clampf(g * 1.5f, 0.f, 1.f);
+            drawCentered(w, app.font(), d.name, theme::fsSmall, {p.x, p.y - baseR - 13.f},
+                         withAlpha(theme::textHi, a));
+
+            std::string tag;
+            sf::Color tagCol = theme::textLo;
+            if (maxed) {
+                tag = "MAX";
+            } else if (owned) {
+                tag = "Lv " + std::to_string(lvl) + "  -  " + std::to_string(cost) +
+                      (isPrism ? " pr" : "");
+            } else if (!avail) {
+                tag = "locked";
+                tagCol = theme::textDim;
+            } else {
+                tag = std::to_string(cost) + (isPrism ? " prisms" : " cores");
+                tagCol = afford ? (isPrism ? kPrismColor : theme::accent) : theme::textDim;
+            }
+            drawCentered(w, app.font(), tag, theme::fsSmall, {p.x, p.y + baseR + 13.f},
+                         withAlpha(tagCol, a));
+
+            if (d.maxLevel > 1) {
+                const float span = static_cast<float>(d.maxLevel - 1) * 7.f;
+                for (int k = 0; k < d.maxLevel; ++k) {
+                    const bool got = k < lvl;
+                    drawDot(w,
+                            {p.x - span * 0.5f + static_cast<float>(k) * 7.f, p.y + baseR + 25.f},
+                            2.2f, withAlpha(got ? col : theme::textLo, a * (got ? 1.f : 0.45f)));
+                }
+            }
+        }
     }
 
-    menu_.draw(w);
-    drawCentered(w, app.font(), "click a row or press 1-5      Enter starts the run", theme::fsSmall,
-                 {s.x * 0.5f, s.y * 0.93f}, theme::textDim);
+    if (hoverNode_ >= 0 || selUsed_) drawInfoCard(app, w, selNode_);
+
+    menu_.draw(w, it);
+    drawCenteredPop(w, app.font(), "Enter starts the run      Esc goes back", theme::fsSmall,
+                    {s.x * 0.5f, s.y * 0.95f}, theme::textDim, introPop(it, 0.28f));
     if (app.devMode())
-        drawCentered(w, app.font(),
-                     "DEV: env SB_WAVE / SB_BALLS / SB_UPGRADES apply on Start   -   in-run keys shown on screen",
-                     theme::fsSmall, {s.x * 0.5f, s.y * 0.96f}, theme::accent);
+        drawCentered(w, app.font(), "DEV: env SB_WAVE / SB_BALLS / SB_UPGRADES apply on Start",
+                     theme::fsSmall, {s.x * 0.5f, s.y * 0.975f}, theme::accent);
 }
 
 // ================================================================ Play
@@ -245,6 +504,9 @@ void PlayScreen::onEnter(App&) {
     showPicks_ = false;
     clock_ = 0.f;
     samples_.clear();
+    sceneIn_ = 0.f;        // run just started: fade the arena up from black
+    bannerWave_ = 0;       // let the first update fire the "Wave 1" banner
+    bannerT_ = 999.f;
 }
 
 sf::Vector2f PlayScreen::pointerVelocity() const {
@@ -300,6 +562,12 @@ void PlayScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
 
 void PlayScreen::update(App& app, float dt, sf::Vector2f mouse) {
     clock_ += dt;
+    sceneIn_ += dt;
+    bannerT_ += dt;
+    if (const int wv = app.data().run.wave; wv > 0 && wv != bannerWave_) {
+        bannerWave_ = wv;   // a new wave began (run start, or back from the upgrade cards)
+        bannerT_ = 0.f;
+    }
     if (dragging_ && !sf::Mouse::isButtonPressed(sf::Mouse::Left)) release(app);
     if (dragging_ && app.world().hasHeld()) {
         samples_.push_back({clock_, mouse});
@@ -343,6 +611,44 @@ void PlayScreen::draw(App& app, sf::RenderWindow& w) {
 
     if (app.devMode()) drawDevKeys(app, w);
     if (showPicks_) drawPicks(app, w);
+
+    drawWaveBanner(app, w);
+
+    // Run start: the whole scene fades up from black (holds dark, then clears).
+    const float x = clampf(sceneIn_ / 0.55f, 0.f, 1.f);
+    const float black = (1.f - x) * (1.f - x);   // ease-out: lingers, then lifts fast
+    if (black > 0.001f) drawDim(w, s, black);
+}
+
+void PlayScreen::drawWaveBanner(App& app, sf::RenderWindow& w) const {
+    if (bannerT_ > 1.6f) return;
+    const sf::Vector2f s = app.size();
+
+    const float in = clampf(introPop(bannerT_, 0.f, 0.34f), 0.f, 1.15f);   // springs in
+    const float out = 1.f - clampf((bannerT_ - 1.05f) / 0.5f, 0.f, 1.f);   // then fades away
+    const float a = clampf(in, 0.f, 1.f) * out;
+    if (a <= 0.01f) return;
+
+    std::string label = "Wave " + std::to_string(bannerWave_);
+    if (bannerWave_ == cfg::run::bossWave) label = "Miniboss";
+    else if (bannerWave_ == cfg::run::finalWave) label = "Final boss";
+
+    const sf::Vector2f c{s.x * 0.5f, s.y * 0.40f - (1.f - out) * 16.f};
+
+    sf::Text t = makeText(app.font(), label, theme::fsTitle + 8u, withAlpha(theme::textHi, a));
+    centerOrigin(t);
+    const float sc = 0.6f + 0.4f * in;
+    t.setScale(sc, sc);
+    t.setPosition(std::round(c.x), std::round(c.y));
+    w.draw(t);
+
+    // accent underline that wipes open from the centre
+    const float uw = t.getGlobalBounds().width;
+    sf::RectangleShape bar({uw, 2.f});
+    bar.setOrigin(uw * 0.5f, 1.f);
+    bar.setPosition(c.x, c.y + static_cast<float>(theme::fsTitle) * 0.55f + 10.f);
+    bar.setFillColor(withAlpha(theme::accent, a));
+    w.draw(bar);
 }
 
 void PlayScreen::drawDevKeys(App& app, sf::RenderWindow& w) const {
@@ -464,41 +770,49 @@ void ChoiceScreen::update(App& app, float dt, sf::Vector2f mouse) {
 
 void ChoiceScreen::draw(App& app, sf::RenderWindow& w) {
     const sf::Vector2f s = app.size();
+    const float it = intro();
 
-    drawDim(w, s, 0.82f);
-    drawCentered(w, app.font(), "Wave cleared - choose an upgrade", theme::fsTitle,
-                 {s.x * 0.5f, s.y * 0.26f}, theme::textHi);
+    drawDim(w, s, 0.82f * clampf(introPop(it, 0.f, 0.2f), 0.f, 1.f));
+    drawCenteredPop(w, app.font(), "Wave cleared - choose an upgrade", theme::fsTitle,
+                    {s.x * 0.5f, s.y * 0.26f}, theme::textHi, introPop(it, 0.04f, 0.3f));
 
     for (int i = 0; i < kChoiceCount; ++i) {
         const UpgradeInfo info = upgradeInfo(app.choices()[i]);
-        const sf::Vector2f c = cardCenter(s, i);
+        const sf::Vector2f c0 = cardCenter(s, i);
         const float h = hover_[i];
+        const float cp = introPop(it, 0.10f + 0.09f * static_cast<float>(i), 0.40f);
+        if (cp <= 0.001f) continue;
+        const float ca = clampf(cp, 0.f, 1.f);
+        const sf::Vector2f c = c0 + sf::Vector2f(0.f, (1.f - ca) * 46.f);   // rises up into place
 
         sf::RectangleShape card({kCardW, kCardH});
         card.setOrigin(kCardW * 0.5f, kCardH * 0.5f);
         card.setPosition(c);
-        card.setFillColor(withAlpha(theme::accent, 0.10f + 0.16f * h));
+        const float sc = 0.55f + 0.45f * cp;                                // springs open
+        card.setScale(sc, sc);
+        card.setFillColor(withAlpha(theme::accent, (0.10f + 0.16f * h) * ca));
         card.setOutlineThickness(2.f);
-        card.setOutlineColor(withAlpha(theme::accent, 0.4f + 0.5f * h));
+        card.setOutlineColor(withAlpha(theme::accent, (0.4f + 0.5f * h) * ca));
         w.draw(card);
 
-        drawCentered(w, app.font(), std::to_string(i + 1), theme::fsSmall,
-                     {c.x, c.y - kCardH * 0.5f + 16.f}, theme::textDim);
-        drawCentered(w, app.font(), info.title, theme::fsItem,
-                     {c.x, c.y - kCardH * 0.5f + 52.f}, theme::textHi);
+        drawCenteredPop(w, app.font(), std::to_string(i + 1), theme::fsSmall,
+                        {c.x, c.y - kCardH * 0.5f + 16.f}, theme::textDim, cp);
+        drawCenteredPop(w, app.font(), info.title, theme::fsItem,
+                        {c.x, c.y - kCardH * 0.5f + 52.f}, theme::textHi, cp);
 
         const std::vector<std::string> desc =
             wrapText(app.font(), info.desc, theme::fsSmall, kCardW - 28.f);
         const float lineH = 18.f;
         float dy = c.y + 24.f - lineH * 0.5f * static_cast<float>(desc.size() - 1);
         for (const std::string& dl : desc) {
-            drawCentered(w, app.font(), dl, theme::fsSmall, {c.x, dy}, theme::textLo);
+            drawCenteredPop(w, app.font(), dl, theme::fsSmall, {c.x, dy}, theme::textLo, cp);
             dy += lineH;
         }
     }
 
-    drawCentered(w, app.font(), "click a card or press 1-4", theme::fsSmall,
-                 {s.x * 0.5f, s.y * 0.52f + kCardH * 0.5f + 40.f}, theme::textDim);
+    drawCenteredPop(w, app.font(), "click a card or press 1-4", theme::fsSmall,
+                    {s.x * 0.5f, s.y * 0.52f + kCardH * 0.5f + 40.f}, theme::textDim,
+                    introPop(it, 0.10f + 0.07f * kChoiceCount));
 }
 
 // ================================================================ Pause
@@ -539,9 +853,11 @@ void PauseScreen::update(App& app, float dt, sf::Vector2f mouse) {
 
 void PauseScreen::draw(App& app, sf::RenderWindow& w) {
     const sf::Vector2f s = app.size();
-    drawDim(w, s, 0.72f);
-    drawCentered(w, app.font(), "Paused", theme::fsTitle, {s.x * 0.5f, s.y * 0.2f}, theme::textHi);
-    menu_.draw(w);
+    const float it = intro();
+    drawDim(w, s, 0.72f * clampf(introPop(it, 0.f, 0.18f), 0.f, 1.f));
+    drawCenteredPop(w, app.font(), "Paused", theme::fsTitle, {s.x * 0.5f, s.y * 0.2f}, theme::textHi,
+                    introPop(it, 0.03f, 0.28f));
+    menu_.draw(w, it);
 }
 
 // ================================================================ Stats
@@ -552,9 +868,10 @@ void StatsScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f) {
 
 void StatsScreen::draw(App& app, sf::RenderWindow& w) {
     const sf::Vector2f s = app.size();
-    drawStatsPanel(w, app.font(), s, app.data().meta.stats);
-    drawCentered(w, app.font(), "press ESC or click to go back", theme::fsSmall,
-                 {s.x * 0.5f, s.y * 0.86f}, theme::textDim);
+    const float it = intro();
+    drawStatsPanel(w, app.font(), s, app.data().meta.stats, it);
+    drawCenteredPop(w, app.font(), "press ESC or click to go back", theme::fsSmall,
+                    {s.x * 0.5f, s.y * 0.86f}, theme::textDim, introPop(it, 0.5f));
 }
 
 // ================================================================ HowTo
@@ -565,8 +882,9 @@ void HowToScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f) {
 
 void HowToScreen::draw(App& app, sf::RenderWindow& w) {
     const sf::Vector2f s = app.size();
-    drawCentered(w, app.font(), "How to Play", theme::fsTitle, {s.x * 0.5f, s.y * 0.16f},
-                 theme::textHi);
+    const float it = intro();
+    drawCenteredPop(w, app.font(), "How to Play", theme::fsTitle, {s.x * 0.5f, s.y * 0.16f},
+                    theme::textHi, introPop(it, 0.f, 0.3f));
 
     const std::array<const char*, 5> lines = {{
         "Enemies march on the core at the centre. Keep it alive through 10 waves.",
@@ -577,14 +895,16 @@ void HowToScreen::draw(App& app, sf::RenderWindow& w) {
     }};
     const float y0 = s.y * 0.32f;
     for (std::size_t i = 0; i < lines.size(); ++i)
-        drawCentered(w, app.font(), lines[i], theme::fsBody,
-                     {s.x * 0.5f, y0 + 44.f * static_cast<float>(i)},
-                     i + 1 == lines.size() ? theme::textHi : theme::textLo);
+        drawCenteredPop(w, app.font(), lines[i], theme::fsBody,
+                        {s.x * 0.5f, y0 + 44.f * static_cast<float>(i)},
+                        i + 1 == lines.size() ? theme::textHi : theme::textLo,
+                        introPop(it, 0.08f + 0.05f * static_cast<float>(i)));
 
-    drawCentered(w, app.font(), "ESC  pause      TAB  upgrades taken      F  fullscreen      M  sound",
-                 theme::fsSmall, {s.x * 0.5f, s.y * 0.72f}, theme::textLo);
-    drawCentered(w, app.font(), "press ESC or click to go back", theme::fsSmall,
-                 {s.x * 0.5f, s.y * 0.82f}, theme::textDim);
+    drawCenteredPop(w, app.font(),
+                    "ESC  pause      TAB  upgrades taken      F  fullscreen      M  sound",
+                    theme::fsSmall, {s.x * 0.5f, s.y * 0.72f}, theme::textLo, introPop(it, 0.36f));
+    drawCenteredPop(w, app.font(), "press ESC or click to go back", theme::fsSmall,
+                    {s.x * 0.5f, s.y * 0.82f}, theme::textDim, introPop(it, 0.42f));
 }
 
 // ================================================================ BossWin
@@ -623,28 +943,29 @@ void BossWinScreen::update(App&, float dt, sf::Vector2f mouse) { menu_.update(dt
 
 void BossWinScreen::draw(App& app, sf::RenderWindow& w) {
     const sf::Vector2f s = app.size();
-    drawDim(w, s, 0.8f);
+    const float it = intro();
+    drawDim(w, s, 0.8f * clampf(introPop(it, 0.f, 0.25f), 0.f, 1.f));
 
     const bool goingOn = app.bossWinCanContinue();   // run still live: the reward isn't due yet
     const bool runEnd = !goingOn && app.lastRunWave() >= cfg::run::finalWave;
-    drawCentered(w, app.font(), runEnd ? "Run complete" : "Miniboss defeated", theme::fsTitle,
-                 {s.x * 0.5f, s.y * 0.28f}, theme::core);
+    drawCenteredPop(w, app.font(), runEnd ? "Run complete" : "Miniboss defeated", theme::fsTitle,
+                    {s.x * 0.5f, s.y * 0.28f}, theme::core, introPop(it, 0.05f, 0.34f));
 
     if (goingOn) {
-        drawCentered(w, app.font(), "the run goes on - push through to wave 20", theme::fsBody,
-                     {s.x * 0.5f, s.y * 0.28f + 52.f}, theme::textDim);
+        drawCenteredPop(w, app.font(), "the run goes on - push through to wave 20", theme::fsBody,
+                        {s.x * 0.5f, s.y * 0.28f + 52.f}, theme::textDim, introPop(it, 0.16f));
     } else {
         const int pr = app.lastRunPrisms();
         char line[96];
         std::snprintf(line, sizeof(line), "+%d cores      +%d %s", app.lastRunCores(), pr,
                       pr == 1 ? "prism" : "prisms");
-        drawCentered(w, app.font(), line, theme::fsHeading, {s.x * 0.5f, s.y * 0.28f + 46.f},
-                     theme::accent);
-        drawCentered(w, app.font(), "run complete", theme::fsBody, {s.x * 0.5f, s.y * 0.28f + 78.f},
-                     theme::textDim);
+        drawCenteredPop(w, app.font(), line, theme::fsHeading, {s.x * 0.5f, s.y * 0.28f + 46.f},
+                        theme::accent, introPop(it, 0.16f));
+        drawCenteredPop(w, app.font(), "run complete", theme::fsBody, {s.x * 0.5f, s.y * 0.28f + 78.f},
+                        theme::textDim, introPop(it, 0.24f));
     }
 
-    menu_.draw(w);
+    menu_.draw(w, it);
 }
 
 }  // namespace sb

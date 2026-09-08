@@ -10,7 +10,7 @@
 namespace sb {
 
 namespace {
-constexpr int kSaveVersion = 6;
+constexpr int kSaveVersion = 7;   // v7: meta.unlock is the 12-node skill web
 }  // namespace
 
 bool hasSavedGame(const std::string& path) {

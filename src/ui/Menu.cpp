@@ -43,9 +43,13 @@ int Menu::clickIndex(sf::Vector2f mouse) const {
     return -1;
 }
 
-void Menu::draw(sf::RenderWindow& window) {
+void Menu::draw(sf::RenderWindow& window, float intro) {
     if (!font_) return;
     for (std::size_t i = 0; i < items_.size(); ++i) {
+        const float pop = introPop(intro, 0.05f + 0.055f * static_cast<float>(i), 0.26f);
+        if (pop <= 0.001f) continue;
+        const float ia = clampf(pop, 0.f, 1.f);
+
         const float h = hover_[i];
         const sf::Vector2f c = first_ + sf::Vector2f(0.f, rowGap_ * static_cast<float>(i));
         sf::Color color = items_[i].enabled
@@ -53,9 +57,11 @@ void Menu::draw(sf::RenderWindow& window) {
                               : theme::textDim;
         if (items_[i].enabled) color = lerpColor(color, theme::accent, h * 0.8f);
 
-        sf::Text t = makeText(*font_, items_[i].label, fontSize_, color);
+        sf::Text t = makeText(*font_, items_[i].label, fontSize_, withAlpha(color, ia));
         centerOrigin(t);
-        t.setPosition(std::round(c.x + h * 6.f), std::round(c.y));
+        const float sc = 0.82f + 0.18f * pop;
+        t.setScale(sc, sc);
+        t.setPosition(std::round(c.x + h * 6.f), std::round(c.y + (1.f - ia) * 9.f));
         window.draw(t);
 
         if (h > 0.02f) {
@@ -63,7 +69,7 @@ void Menu::draw(sf::RenderWindow& window) {
             sf::RectangleShape bar({3.f, static_cast<float>(fontSize_) * 0.9f});
             bar.setOrigin(0.f, bar.getSize().y / 2.f);
             bar.setPosition(b.left - 16.f, c.y);
-            bar.setFillColor(withAlpha(theme::accent, h));
+            bar.setFillColor(withAlpha(theme::accent, h * ia));
             window.draw(bar);
         }
     }

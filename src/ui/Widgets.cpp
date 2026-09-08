@@ -40,6 +40,26 @@ void drawCentered(sf::RenderWindow& window, const sf::Font& font, const std::str
     window.draw(t);
 }
 
+float introPop(float elapsed, float delay, float dur) {
+    const float x = clampf((elapsed - delay) / (dur > 1e-3f ? dur : 1e-3f), 0.f, 1.f);
+    const float c1 = 1.70158f;          // easeOutBack: settles with a small overshoot
+    const float c3 = c1 + 1.f;
+    const float u = x - 1.f;
+    return 1.f + c3 * u * u * u + c1 * u * u;
+}
+
+void drawCenteredPop(sf::RenderWindow& window, const sf::Font& font, const std::string& str,
+                     unsigned size, sf::Vector2f pos, sf::Color color, float pop) {
+    if (pop <= 0.001f) return;
+    const float a = clampf(pop, 0.f, 1.f);
+    sf::Text t = makeText(font, str, size, withAlpha(color, a));
+    centerOrigin(t);
+    const float sc = 0.70f + 0.30f * pop;               // springs a touch past 1
+    t.setScale(sc, sc);
+    t.setPosition(std::round(pos.x), std::round(pos.y + (1.f - a) * 10.f));
+    window.draw(t);
+}
+
 void drawDim(sf::RenderWindow& window, sf::Vector2f size, float alpha) {
     sf::RectangleShape r(size);
     r.setFillColor(withAlpha(theme::panel, alpha));
@@ -47,9 +67,9 @@ void drawDim(sf::RenderWindow& window, sf::Vector2f size, float alpha) {
 }
 
 void drawStatsPanel(sf::RenderWindow& window, const sf::Font& font, sf::Vector2f size,
-                    const Stats& s) {
-    drawCentered(window, font, "Stats", theme::fsTitle, {size.x * 0.5f, size.y * 0.16f},
-                 theme::textHi);
+                    const Stats& s, float intro) {
+    drawCenteredPop(window, font, "Stats", theme::fsTitle, {size.x * 0.5f, size.y * 0.16f},
+                    theme::textHi, introPop(intro, 0.f));
 
     const std::array<std::pair<std::string, std::string>, 8> rows = {{
         {"Best wave", std::to_string(s.bestWave)},
@@ -67,15 +87,19 @@ void drawStatsPanel(sf::RenderWindow& window, const sf::Font& font, sf::Vector2f
     const float labelX = size.x * 0.5f - 200.f;
     const float valueX = size.x * 0.5f + 200.f;
     for (std::size_t i = 0; i < rows.size(); ++i) {
-        const float y = y0 + gap * static_cast<float>(i);
-        sf::Text label = makeText(font, rows[i].first, 18, theme::textLo);
-        label.setPosition(labelX, y - 12.f);
+        const float pop = introPop(intro, 0.10f + 0.045f * static_cast<float>(i), 0.26f);
+        if (pop <= 0.001f) continue;
+        const float a = clampf(pop, 0.f, 1.f);
+        const float y = y0 + gap * static_cast<float>(i) - 12.f + (1.f - a) * 8.f;
+
+        sf::Text label = makeText(font, rows[i].first, 18, withAlpha(theme::textLo, a));
+        label.setPosition(labelX, y);
         window.draw(label);
 
-        sf::Text value = makeText(font, rows[i].second, 18, theme::textHi);
+        sf::Text value = makeText(font, rows[i].second, 18, withAlpha(theme::textHi, a));
         const sf::FloatRect vb = value.getLocalBounds();
         value.setOrigin(vb.left + vb.width, vb.top);
-        value.setPosition(valueX, y - 12.f);
+        value.setPosition(valueX, y);
         window.draw(value);
     }
 }

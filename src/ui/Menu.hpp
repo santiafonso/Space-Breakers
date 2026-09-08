@@ -24,7 +24,8 @@ public:
     int hovered() const { return hovered_; }
     // Returns the index of the enabled row under `mouse`, or -1.
     int clickIndex(sf::Vector2f mouse) const;
-    void draw(sf::RenderWindow& window);
+    // `intro` staggers the rows springing in; pass a large value for no anim.
+    void draw(sf::RenderWindow& window, float intro = 1e6f);
 
 private:
     const sf::Font* font_ = nullptr;

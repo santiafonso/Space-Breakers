@@ -6,6 +6,7 @@
 #include "progression/Offers.hpp"
 #include "render/WorldRenderer.hpp"
 #include "ui/Menu.hpp"
+#include "ui/MenuBackdrop.hpp"
 #include "ui/Screen.hpp"
 
 namespace sb {
@@ -21,10 +22,15 @@ public:
 private:
     void rebuild(App& app);
     Menu menu_;
+    MenuBackdrop backdrop_;   // balls drifting behind the menu
     float resetArm_ = 0.f;   // >0 while "Reset progress" waits for a confirming click
 };
 
-// The game menu: spend cores on permanent unlocks, then start a run.
+// The game menu: a radial skill web. Spend cores (and prisms on a few key
+// nodes) to unlock permanent buffs, then start a run. The centre node is "+1
+// starting ball"; branches fan out - Base left, Ball combat down, Economy up,
+// Special balls right - and each node stays locked until the node that gates
+// it toward the centre has a level.
 class LoadoutScreen : public Screen {
 public:
     void onEnter(App& app) override;
@@ -34,11 +40,18 @@ public:
 
 private:
     void rebuild(App& app);
-    int unlockRowAt(App& app, sf::Vector2f mouse) const;  // 0..count-1, -1 none
-    sf::Vector2f unlockRowCenter(App& app, int i) const;
+    sf::Vector2f nodePos(App& app, int i) const;
+    int nodeAt(App& app, sf::Vector2f mouse) const;     // 0..count-1, -1 none
+    void moveSelection(App& app, int dx, int dy);       // arrow-key navigation
+    void drawInfoCard(App& app, sf::RenderWindow& w, int node) const;
 
     Menu menu_;
-    float hover_[MetaUnlockCount] = {};
+    int hoverNode_ = -1;
+    int selNode_ = 0;
+    bool selUsed_ = false;                // hovered a node or used the arrows at least once
+    bool keyNav_ = false;                 // arrows in use - light selNode_ until the mouse moves
+    sf::Vector2f lastMouse_{-1.f, -1.f};
+    float glow_[MetaUnlockCount] = {};    // 0 = idle, 1 = lit; only the active node rises
 };
 
 // Combat. One or more balls bounce freely; you fling them into the enemies.
@@ -57,11 +70,17 @@ private:
     void drawPicks(App& app, sf::RenderWindow& w) const;
     void drawDevKeys(App& app, sf::RenderWindow& w) const;
 
+    void drawWaveBanner(App& app, sf::RenderWindow& w) const;
+
     WorldRenderer renderer_;
     bool dragging_ = false;
     bool showPicks_ = false;   // Tab held: list upgrades taken this run
     float clock_ = 0.f;
     std::deque<std::pair<float, sf::Vector2f>> samples_;
+
+    float sceneIn_ = 999.f;    // counts up from 0 on run start - fade the scene up from black
+    int bannerWave_ = 0;       // wave the "Wave N" banner is showing
+    float bannerT_ = 999.f;    // time since the banner started (large = inactive)
 };
 
 // Overlay after a wave: pick 1 of 4 rolled upgrades.

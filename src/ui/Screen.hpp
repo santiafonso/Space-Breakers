@@ -22,6 +22,15 @@ public:
 
     virtual bool opaque() const { return true; }
     virtual bool simulates() const { return false; }
+
+    // Seconds since this screen last became the active one. Screens read it to
+    // stagger their contents popping in on entry; App resets and advances it.
+    void beginIntro() { intro_ = 0.f; }
+    void advanceIntro(float dt) { intro_ += dt; }
+    float intro() const { return intro_; }
+
+private:
+    float intro_ = 0.f;
 };
 
 }  // namespace sb
