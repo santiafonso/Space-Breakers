@@ -166,10 +166,7 @@ void WorldRenderer::drawBall(sf::RenderWindow& window, const Ball& b,
     sf::Color col = b.element == Element::Plain ? b.color
                                                : lerpColor(b.color, elementColor(b.element), 0.7f);
     float alpha = 1.f;
-    if (effect) {
-        if (effect->kind == PowerUp::Golden) col = lerpColor(col, theme::puGolden, 0.85f);
-        else if (effect->kind == PowerUp::Ghost) alpha = 0.4f;
-    }
+    if (effect && effect->kind == PowerUp::Golden) col = lerpColor(col, theme::puGolden, 0.85f);
 
     if (!b.held && !b.trail.empty()) {
         const int n = static_cast<int>(b.trail.size());

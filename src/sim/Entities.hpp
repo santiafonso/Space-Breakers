@@ -11,8 +11,10 @@ namespace sb {
 
 // ---------------------------------------------------------------- power-ups
 
-enum class PowerUp { Points2x, SlowMo, Surge, Golden, Ghost, Frenzy };
-inline constexpr int kPowerUpCount = 6;
+// Points2x / Surge drop from the start; SlowMo / Golden / Overdrive are gated by
+// web nodes (see App::powerUpMask). Order is the bit index in WorldParams.powerUpMask.
+enum class PowerUp { Points2x, SlowMo, Surge, Golden, Overdrive };
+inline constexpr int kPowerUpCount = 5;
 
 const char* powerUpName(PowerUp p);
 sf::Color powerUpColor(PowerUp p);
@@ -146,9 +148,6 @@ struct FrameEvents {
     PowerUp pickupKind = PowerUp::Points2x;
     bool coreHit = false;
     bool bossHit = false;                 // a ball landed on the miniboss this step
-    bool corePulsed = false;             // "Retaliate" upgrade fired
-    sf::Vector2f corePulsePos;
-    bool secondChanceUsed = false;       // "Second chance" upgrade saved the core
     bool waveCleared = false;
     bool runOver = false;
 };
@@ -162,9 +161,10 @@ struct WorldParams {
     float ballRadiusMult = 1.f;   // Big ball
     float coreBounceBoost = 1.f;  // Spring
     float flingDecayMult = 1.f;   // Reflexes (< 1 keeps fling speed longer)
-    bool retaliate = false;       // Retaliate
-    bool secondChanceAvail = false;
-    int powerUpsUnlocked = kPowerUpCount;
+    bool slowField = false;       // Slow field: a zone around the core slows enemies
+    unsigned powerUpMask = 0xffffffffu;  // bit i set => PowerUp(i) can drop
+    float pickupSpawnMult = 1.f;  // scales the gap between power-ups (< 1 = more often)
+    float pickupDurMult = 1.f;    // scales how long a power-up lasts
 };
 
 }  // namespace sb

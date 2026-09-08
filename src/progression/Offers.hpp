@@ -4,26 +4,22 @@
 
 namespace sb {
 
-// ---- between-wave upgrades: pick 1 of 4 rolled from this pool ----------------
+// ---- between-wave items: pick 1 of 4 rolled from this pool ------------------
 //
-// A run shows four random, eligible upgrades after every wave. Ball-element
-// upgrades beyond "turn a ball to fire" are deliberately left out - those are
-// meant to come from a boss later.
+// A run shows four random, eligible items after every wave (or you can skip the
+// pick to repair the core to full instead). Ball-element items beyond "turn a
+// ball to fire" are deliberately left out - those are meant to come from a boss.
 
 enum class UpgradeKind {
     AddBall,        // +1 plain ball
-    BallToFire,     // turn one plain ball into a fire ball (needs the meta unlock)
-    CoreArmor,      // +max core HP, stacks
-    CoreRepair,     // heal the core to full, now
+    BallToFire,     // turn one plain ball into a fire ball (needs the Ignition node)
     CoreSpring,     // balls ricochet off the core faster
-    CoreRetaliate,  // an enemy hitting the core triggers a damaging pulse
+    CoreSlowField,  // a zone around the core slows enemies inside it
     FlingMomentum,  // a flung ball keeps its speed longer
-    HeavyImpact,    // +contact damage, stacks
-    BigBall,        // +ball radius, stacks (capped)
-    Loot,           // +cores at the end of the run
-    SecondChance,   // once per run the core survives a lethal hit
+    HeavyImpact,    // +contact damage, small, stacks to a cap
+    BigBall,        // +ball radius, small, stacks to a cap
 };
-inline constexpr int kUpgradeKindCount = 11;
+inline constexpr int kUpgradeKindCount = 7;
 inline constexpr int kChoiceCount = 4;
 
 struct UpgradeInfo {
@@ -36,15 +32,11 @@ inline const char* upgradeKindId(UpgradeKind k) {
     switch (k) {
         case UpgradeKind::AddBall:       return "AddBall";
         case UpgradeKind::BallToFire:    return "BallToFire";
-        case UpgradeKind::CoreArmor:     return "CoreArmor";
-        case UpgradeKind::CoreRepair:    return "CoreRepair";
         case UpgradeKind::CoreSpring:    return "CoreSpring";
-        case UpgradeKind::CoreRetaliate: return "CoreRetaliate";
+        case UpgradeKind::CoreSlowField: return "CoreSlowField";
         case UpgradeKind::FlingMomentum: return "FlingMomentum";
         case UpgradeKind::HeavyImpact:   return "HeavyImpact";
         case UpgradeKind::BigBall:       return "BigBall";
-        case UpgradeKind::Loot:          return "Loot";
-        case UpgradeKind::SecondChance:  return "SecondChance";
     }
     return "";
 }
@@ -53,15 +45,11 @@ inline UpgradeInfo upgradeInfo(UpgradeKind k) {
     switch (k) {
         case UpgradeKind::AddBall:       return {"Extra ball", "one more ball in the arena"};
         case UpgradeKind::BallToFire:    return {"Ignite a ball", "turns a plain ball into a fire ball"};
-        case UpgradeKind::CoreArmor:     return {"Reinforce core", "+25 max core health, and heal it"};
-        case UpgradeKind::CoreRepair:    return {"Repair core", "heal the core back to full"};
         case UpgradeKind::CoreSpring:    return {"Spring core", "your balls bounce off the core faster"};
-        case UpgradeKind::CoreRetaliate: return {"Retaliate", "a hit on the core blasts nearby enemies"};
+        case UpgradeKind::CoreSlowField: return {"Slow field", "enemies near the core are slowed"};
         case UpgradeKind::FlingMomentum: return {"Reflexes", "a flung ball keeps its speed longer"};
-        case UpgradeKind::HeavyImpact:   return {"Heavy impact", "+30% ball contact damage"};
-        case UpgradeKind::BigBall:       return {"Big ball", "+25% ball radius"};
-        case UpgradeKind::Loot:          return {"Loot", "+20% cores at the end of the run"};
-        case UpgradeKind::SecondChance:  return {"Second chance", "once, the core survives a lethal hit"};
+        case UpgradeKind::HeavyImpact:   return {"Heavy impact", "+8% ball contact damage"};
+        case UpgradeKind::BigBall:       return {"Big ball", "+10% ball radius"};
     }
     return {"", ""};
 }
@@ -73,13 +61,11 @@ struct UpgradeCtx {
     int fireBalls = 0;
     int fireCap = 1;
     bool fireUnlocked = false;
-    bool coreFull = true;
     int bigBallPicks = 0;
+    int heavyImpactPicks = 0;
     bool spring = false;
-    bool retaliate = false;
+    bool slowField = false;
     bool flingMomentum = false;
-    bool loot = false;
-    bool secondChance = false;
 };
 
 inline bool upgradeEligible(UpgradeKind k, const UpgradeCtx& c) {
@@ -87,15 +73,11 @@ inline bool upgradeEligible(UpgradeKind k, const UpgradeCtx& c) {
         case UpgradeKind::AddBall:       return c.ballCount < c.maxBalls;
         case UpgradeKind::BallToFire:    return c.fireUnlocked && c.fireBalls < c.fireCap &&
                                                 (c.ballCount - c.fireBalls) > 0;
-        case UpgradeKind::CoreRepair:    return !c.coreFull;
         case UpgradeKind::BigBall:       return c.bigBallPicks < 3;
+        case UpgradeKind::HeavyImpact:   return c.heavyImpactPicks < 3;
         case UpgradeKind::CoreSpring:    return !c.spring;
-        case UpgradeKind::CoreRetaliate: return !c.retaliate;
+        case UpgradeKind::CoreSlowField: return !c.slowField;
         case UpgradeKind::FlingMomentum: return !c.flingMomentum;
-        case UpgradeKind::Loot:          return !c.loot;
-        case UpgradeKind::SecondChance:  return !c.secondChance;
-        case UpgradeKind::CoreArmor:     return true;
-        case UpgradeKind::HeavyImpact:   return true;
     }
     return false;
 }
@@ -103,31 +85,32 @@ inline bool upgradeEligible(UpgradeKind k, const UpgradeCtx& c) {
 // ---- permanent meta unlocks: the skill web in the game menu ----------------
 //
 // The menu draws these as a radial graph: a central node ("Squad", +1 ball)
-// with four branches that fan out - Base (left), Ball combat (bottom),
-// Economy (top) and Special balls (right). A node can only be bought once the
-// node that gates it (`parent`) has at least one level. Most cost cores; a few
-// key nodes cost prisms (the miniboss currency).
+// with branches that fan out - Base (left), Combat (bottom), Economy (top),
+// Special balls (right) and Power-ups (upper-right). A node can only be bought
+// once the node that gates it (`parent`) has at least one level. Most cost
+// cores; the unlock nodes cost prisms (the win currency).
 //
-// The first five values keep their old order and indices so v6 saves, which
-// stored levels by index, still map cleanly.
+// v8 renumbered the enum (Aegis / Forge / Momentum / Prospector removed, a
+// Power-ups branch added), so pre-v8 saves reset their unlock levels on load.
 
 enum MetaUnlock {
-    MetaStartBalls,   // Squad     - +1 starting ball                (root)
+    MetaStartBalls,   // Squad     - +1 starting ball                      (root)
     MetaCoreHp,       // Bulwark   - +core HP at the start
-    MetaFireBall,     // Ignition  - unlocks the "ignite a ball" upgrade
-    MetaFireCap,      // Forge     - +1 to how many balls can be fire in a run
-    MetaPowerups,     // Fortune   - +1 power-up type that can drop
     MetaMend,         // Mend      - core heals more between waves
-    MetaAegis,        // Aegis     - start every run with Second Chance
+    MetaFireItem,     // Ignition  - unlocks the "ignite a ball" item
+    MetaBounty,       // Fortune   - earn cores for every enemy killed
+    MetaWindfall,     // Windfall  - chance a cleared run pays a 2nd prism
     MetaHeft,         // Heft      - balls start with +contact damage
     MetaMass,         // Mass      - balls start larger
-    MetaMomentum,     // Momentum  - start every run with Reflexes (fling momentum)
-    MetaProspector,   // Prospector- +% cores earned per run
-    MetaWindfall,     // Windfall  - +prisms per boss kill
+    MetaUplink,       // Uplink    - power-ups appear more often
+    MetaCapacitor,    // Capacitor - power-ups last longer
+    MetaDamper,       // Damper    - unlocks the SLOW MOTION power-up
+    MetaFacet,        // Facet     - unlocks the GOLDEN BOUNCE power-up
+    MetaOverload,     // Overload  - unlocks the OVERDRIVE power-up
     MetaUnlockCount
 };
 
-enum class MetaBranch { Root, Base, Combat, Eco, Special };
+enum class MetaBranch { Root, Base, Combat, Eco, Special, Pickups };
 enum class MetaCurrency { Cores, Prisms };
 
 struct MetaUnlockDef {
@@ -143,30 +126,32 @@ struct MetaUnlockDef {
 
 inline const MetaUnlockDef& metaUnlockDef(int u) {
     static const MetaUnlockDef defs[MetaUnlockCount] = {
-        /* Squad      */ {"Squad",      "start each run with one more ball",
-                          8u,  3, MetaBranch::Root,    MetaCurrency::Cores,  -1,  0.00f,  0.00f},
-        /* Bulwark    */ {"Bulwark",    "start with +40 core health",
-                          10u, 3, MetaBranch::Base,    MetaCurrency::Cores,   0, -1.00f,  0.00f},
-        /* Ignition   */ {"Ignition",   "the fire-ball upgrade can appear",
-                          2u,  1, MetaBranch::Special, MetaCurrency::Prisms,  0,  1.00f,  0.00f},
-        /* Forge      */ {"Forge",      "one more ball may be fire in a run",
-                          10u, 3, MetaBranch::Special, MetaCurrency::Cores,   2,  2.00f,  0.00f},
-        /* Fortune    */ {"Fortune",    "one more power-up type can drop",
-                          6u,  4, MetaBranch::Eco,     MetaCurrency::Cores,   0,  0.00f, -1.00f},
-        /* Mend       */ {"Mend",       "the core heals more between waves",
-                          12u, 3, MetaBranch::Base,    MetaCurrency::Cores,   1, -2.00f,  0.00f},
-        /* Aegis      */ {"Aegis",      "begin every run with Second Chance",
-                          3u,  1, MetaBranch::Base,    MetaCurrency::Prisms,  1, -2.00f,  0.95f},
-        /* Heft       */ {"Heft",       "balls start with +30% contact damage",
-                          10u, 3, MetaBranch::Combat,  MetaCurrency::Cores,   0,  0.00f,  1.00f},
-        /* Mass       */ {"Mass",       "balls start 25% larger",
-                          12u, 2, MetaBranch::Combat,  MetaCurrency::Cores,   7,  0.00f,  2.00f},
-        /* Momentum   */ {"Momentum",   "begin every run with Reflexes",
-                          3u,  1, MetaBranch::Combat,  MetaCurrency::Prisms,  7, -0.95f,  2.00f},
-        /* Prospector */ {"Prospector", "+15% cores earned per run, stacks",
-                          12u, 3, MetaBranch::Eco,     MetaCurrency::Cores,   4,  0.00f, -2.00f},
-        /* Windfall   */ {"Windfall",   "+1 prism each time you beat a boss",
-                          18u, 2, MetaBranch::Eco,     MetaCurrency::Cores,   4,  0.95f, -2.00f},
+        /* Squad     */ {"Squad",     "start each run with one more ball",
+                         8u,  2, MetaBranch::Root,    MetaCurrency::Cores,  -1,  0.00f,  0.00f},
+        /* Bulwark   */ {"Bulwark",   "start with +20 core health",
+                         10u, 3, MetaBranch::Base,    MetaCurrency::Cores,   0, -1.00f,  0.00f},
+        /* Mend      */ {"Mend",      "the core heals +3 more between waves",
+                         12u, 3, MetaBranch::Base,    MetaCurrency::Cores,   1, -2.00f,  0.00f},
+        /* Ignition  */ {"Ignition",  "the ignite-a-ball item can appear",
+                         2u,  1, MetaBranch::Special, MetaCurrency::Prisms,  0,  1.00f,  0.00f},
+        /* Fortune   */ {"Fortune",   "earn cores for every enemy you kill",
+                         6u,  3, MetaBranch::Eco,     MetaCurrency::Cores,   0,  0.00f, -1.00f},
+        /* Windfall  */ {"Windfall",  "20% chance a cleared run pays a 2nd prism",
+                         14u, 1, MetaBranch::Eco,     MetaCurrency::Cores,   4,  0.00f, -2.00f},
+        /* Heft      */ {"Heft",      "balls start with +8% contact damage",
+                         10u, 2, MetaBranch::Combat,  MetaCurrency::Cores,   0,  0.00f,  1.00f},
+        /* Mass      */ {"Mass",      "balls start 10% larger",
+                         12u, 2, MetaBranch::Combat,  MetaCurrency::Cores,   6,  0.00f,  2.00f},
+        /* Uplink    */ {"Uplink",    "power-ups appear more often",
+                         8u,  3, MetaBranch::Pickups, MetaCurrency::Cores,   0,  1.00f, -1.00f},
+        /* Capacitor */ {"Capacitor", "power-ups last longer",
+                         8u,  3, MetaBranch::Pickups, MetaCurrency::Cores,   8,  2.00f, -2.00f},
+        /* Damper    */ {"Damper",    "unlocks the Slow Motion power-up",
+                         2u,  1, MetaBranch::Pickups, MetaCurrency::Prisms,  8,  2.00f, -1.00f},
+        /* Facet     */ {"Facet",     "unlocks the Golden Bounce power-up",
+                         2u,  1, MetaBranch::Pickups, MetaCurrency::Prisms,  9,  3.00f, -3.00f},
+        /* Overload  */ {"Overload",  "unlocks the Overdrive power-up",
+                         3u,  1, MetaBranch::Pickups, MetaCurrency::Prisms,  9,  3.00f, -2.00f},
     };
     return defs[u];
 }

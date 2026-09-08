@@ -77,7 +77,7 @@ constexpr float kRingGap = 72.f;      // pixels between concentric rings
 constexpr float kNodeR = 14.f;        // branch node radius
 constexpr float kRootR = 20.f;        // centre node radius
 constexpr float kWebCenterY = 0.5f;   // * size.y
-constexpr int   kBackRings = 3;       // faint rings drawn behind the web (room to grow)
+constexpr int   kBackRings = 4;       // faint rings drawn behind the web (room to grow)
 
 const sf::Color kPrismColor = theme::puSurge;   // violet - distinct from the core-blue accent
 
@@ -87,6 +87,7 @@ sf::Color branchColor(MetaBranch b) {
         case MetaBranch::Combat:  return theme::ballFast;
         case MetaBranch::Eco:     return theme::accent;
         case MetaBranch::Special: return theme::elemFire;
+        case MetaBranch::Pickups: return theme::puPoints;
         case MetaBranch::Root:    return theme::textHi;
     }
     return theme::textHi;
@@ -104,6 +105,7 @@ const char* branchLabel(MetaBranch b) {
         case MetaBranch::Combat:  return "Ball combat";
         case MetaBranch::Eco:     return "Economy";
         case MetaBranch::Special: return "Special balls";
+        case MetaBranch::Pickups: return "Power-ups";
         case MetaBranch::Root:    return "Core";
     }
     return "";
@@ -660,9 +662,9 @@ void PlayScreen::drawDevKeys(App& app, sf::RenderWindow& w) const {
         "H   heal core",
         std::string("G   invuln: ") + (invuln ? "ON" : "off"),
         "B   add ball",
-        "U   grant next upgrade",
+        "U   grant next item",
         "C   +25 cores",
-        "TAB   upgrades taken",
+        "TAB   items taken",
     }};
     const float right = s.x - theme::margin;
     float y = theme::margin + 74.f;
@@ -712,7 +714,7 @@ void PlayScreen::drawPicks(App& app, sf::RenderWindow& w) const {
     panel.setOutlineColor(withAlpha(theme::accent, 0.35f));
     w.draw(panel);
 
-    drawCentered(w, app.font(), "Upgrades this run", theme::fsBody, {px + panelW * 0.5f, py + 18.f},
+    drawCentered(w, app.font(), "Items this run", theme::fsBody, {px + panelW * 0.5f, py + 18.f},
                  theme::textHi);
 
     if (kinds.empty()) {
@@ -751,6 +753,17 @@ int ChoiceScreen::cardAt(App& app, sf::Vector2f mouse) const {
     return -1;
 }
 
+sf::FloatRect ChoiceScreen::healRect(sf::Vector2f s) const {
+    const float wd = 360.f, ht = 34.f;
+    const float cy = s.y * 0.52f + kCardH * 0.5f + 30.f;
+    return {s.x * 0.5f - wd * 0.5f, cy - ht * 0.5f, wd, ht};
+}
+
+bool ChoiceScreen::coreHurt(App& app) const {
+    const Core& c = app.world().core();
+    return c.hp < c.maxHp - 0.5f;
+}
+
 void ChoiceScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
     if (e.type == sf::Event::KeyPressed && e.key.code >= sf::Keyboard::Num1 &&
         e.key.code < sf::Keyboard::Num1 + kChoiceCount) {
@@ -758,6 +771,10 @@ void ChoiceScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse)
         return;
     }
     if (!isLeftClick(e)) return;
+    if (coreHurt(app) && healRect(app.size()).contains(mouse)) {
+        app.repairCoreSkipItem();
+        return;
+    }
     const int c = cardAt(app, mouse);
     if (c >= 0) app.applyUpgrade(c);
 }
@@ -766,6 +783,8 @@ void ChoiceScreen::update(App& app, float dt, sf::Vector2f mouse) {
     const float k = 1.f - std::exp(-16.f * dt);
     const int c = cardAt(app, mouse);
     for (int i = 0; i < kChoiceCount; ++i) hover_[i] = lerpf(hover_[i], c == i ? 1.f : 0.f, k);
+    const bool onHeal = coreHurt(app) && healRect(app.size()).contains(mouse);
+    healHover_ = lerpf(healHover_, onHeal ? 1.f : 0.f, k);
 }
 
 void ChoiceScreen::draw(App& app, sf::RenderWindow& w) {
@@ -773,7 +792,7 @@ void ChoiceScreen::draw(App& app, sf::RenderWindow& w) {
     const float it = intro();
 
     drawDim(w, s, 0.82f * clampf(introPop(it, 0.f, 0.2f), 0.f, 1.f));
-    drawCenteredPop(w, app.font(), "Wave cleared - choose an upgrade", theme::fsTitle,
+    drawCenteredPop(w, app.font(), "Wave cleared - choose an item", theme::fsTitle,
                     {s.x * 0.5f, s.y * 0.26f}, theme::textHi, introPop(it, 0.04f, 0.3f));
 
     for (int i = 0; i < kChoiceCount; ++i) {
@@ -810,9 +829,25 @@ void ChoiceScreen::draw(App& app, sf::RenderWindow& w) {
         }
     }
 
-    drawCenteredPop(w, app.font(), "click a card or press 1-4", theme::fsSmall,
-                    {s.x * 0.5f, s.y * 0.52f + kCardH * 0.5f + 40.f}, theme::textDim,
-                    introPop(it, 0.10f + 0.07f * kChoiceCount));
+    const float hintPop = introPop(it, 0.10f + 0.07f * kChoiceCount);
+
+    if (coreHurt(app)) {
+        const sf::FloatRect r = healRect(s);
+        const float a = clampf(hintPop, 0.f, 1.f);
+        sf::RectangleShape btn({r.width, r.height});
+        btn.setPosition(r.left, r.top);
+        btn.setFillColor(withAlpha(theme::core, (0.10f + 0.16f * healHover_) * a));
+        btn.setOutlineThickness(1.5f);
+        btn.setOutlineColor(withAlpha(theme::core, (0.4f + 0.45f * healHover_) * a));
+        w.draw(btn);
+        drawCenteredPop(w, app.font(), "Repair the core instead  -  skip this item", theme::fsSmall,
+                        {s.x * 0.5f, r.top + r.height * 0.5f - 1.f}, theme::textHi, hintPop);
+        drawCenteredPop(w, app.font(), "click a card or press 1-4", theme::fsSmall,
+                        {s.x * 0.5f, r.top + r.height + 22.f}, theme::textDim, hintPop);
+    } else {
+        drawCenteredPop(w, app.font(), "click a card or press 1-4", theme::fsSmall,
+                        {s.x * 0.5f, s.y * 0.52f + kCardH * 0.5f + 40.f}, theme::textDim, hintPop);
+    }
 }
 
 // ================================================================ Pause
@@ -887,11 +922,11 @@ void HowToScreen::draw(App& app, sf::RenderWindow& w) {
                     theme::textHi, introPop(it, 0.f, 0.3f));
 
     const std::array<const char*, 5> lines = {{
-        "Enemies march on the core at the centre. Keep it alive through 10 waves.",
+        "Enemies march on the core at the centre. Keep it alive.",
         "Your ball bounces freely off the walls and the core - it tracks nothing.",
         "Grab the ball and fling it to aim it into the enemies.",
-        "After each wave, pick 1 of 4 upgrades: more balls, core buffs, a fire ball...",
-        "Clear wave 10 to win the run. Cores you earn buy permanent unlocks.",
+        "After each wave, pick 1 of 4 items - or skip one to repair the core.",
+        "Beat the miniboss at wave 10, clear wave 20 to finish the run.",
     }};
     const float y0 = s.y * 0.32f;
     for (std::size_t i = 0; i < lines.size(); ++i)
@@ -901,7 +936,7 @@ void HowToScreen::draw(App& app, sf::RenderWindow& w) {
                         introPop(it, 0.08f + 0.05f * static_cast<float>(i)));
 
     drawCenteredPop(w, app.font(),
-                    "ESC  pause      TAB  upgrades taken      F  fullscreen      M  sound",
+                    "ESC  pause      TAB  items taken      F  fullscreen      M  sound",
                     theme::fsSmall, {s.x * 0.5f, s.y * 0.72f}, theme::textLo, introPop(it, 0.36f));
     drawCenteredPop(w, app.font(), "press ESC or click to go back", theme::fsSmall,
                     {s.x * 0.5f, s.y * 0.82f}, theme::textDim, introPop(it, 0.42f));

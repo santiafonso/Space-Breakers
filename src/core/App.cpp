@@ -92,15 +92,17 @@ App::App() : window_(kLogical()), world_(kLogical()) {
 
 WorldParams App::params() const {
     const RunMods& m = data_.run.mods;
+    const int* u = data_.meta.unlock;
     WorldParams p;
     p.damageMult = 1.f + cfg::combat::heavyImpactPerPick * static_cast<float>(m.heavyImpact);
     p.wave = std::max(1, data_.run.wave);
     p.ballRadiusMult = 1.f + cfg::combat::bigBallPerPick * static_cast<float>(m.bigBall);
     p.coreBounceBoost = m.spring ? cfg::combat::springBoost : 1.f;
     p.flingDecayMult = m.flingMomentum ? cfg::combat::flingDecayMult : 1.f;
-    p.retaliate = m.retaliate;
-    p.secondChanceAvail = m.secondChance && !m.secondChanceUsed;
-    p.powerUpsUnlocked = powerUpsUnlocked();
+    p.slowField = m.slowField;
+    p.powerUpMask = powerUpMask();
+    p.pickupSpawnMult = std::max(0.15f, 1.f - 0.25f * static_cast<float>(u[MetaUplink]));
+    p.pickupDurMult = 0.5f + 0.35f * static_cast<float>(u[MetaCapacitor]);
     return p;
 }
 
@@ -113,9 +115,19 @@ float App::startCoreHp() const {
            cfg::core::hpPerBulwark * static_cast<float>(data_.meta.unlock[MetaCoreHp]);
 }
 
-int App::fireCap() const { return 1 + data_.meta.unlock[MetaFireCap]; }
+int App::fireCap() const { return 1; }   // at most one fire ball per run
 
-int App::powerUpsUnlocked() const { return 2 + data_.meta.unlock[MetaPowerups]; }
+// Which power-ups can drop: Points2x / Surge always, the rest gated by web nodes.
+unsigned App::powerUpMask() const {
+    const int* u = data_.meta.unlock;
+    unsigned mask = (1u << static_cast<int>(PowerUp::Points2x)) |
+                    (1u << static_cast<int>(PowerUp::Surge));
+    if (u[MetaDamper] > 0)   mask |= 1u << static_cast<int>(PowerUp::SlowMo);
+    if (u[MetaFacet] > 0)    mask |= 1u << static_cast<int>(PowerUp::Golden);
+    if (u[MetaOverload] > 0) mask |= 1u << static_cast<int>(PowerUp::Overdrive);
+    return mask;
+}
+
 
 // ---------------------------------------------------------------- screen stack
 
@@ -175,8 +187,6 @@ void App::newRun() {
     // Meta skill-web nodes that seed the run's mods before the world is built.
     r.mods.heavyImpact += data_.meta.unlock[MetaHeft];
     r.mods.bigBall     += data_.meta.unlock[MetaMass];
-    if (data_.meta.unlock[MetaMomentum] > 0) r.mods.flingMomentum = true;
-    if (data_.meta.unlock[MetaAegis] > 0)    r.mods.secondChance  = true;
 
     runBanked_ = false;
 
@@ -247,14 +257,12 @@ void App::rollChoices() {
     c.maxBalls = cfg::ball::maxBalls;
     c.fireBalls = fireBalls;
     c.fireCap = fireCap();
-    c.fireUnlocked = data_.meta.unlock[MetaFireBall] > 0;
-    c.coreFull = world_.core().hp >= world_.core().maxHp - 0.5f;
+    c.fireUnlocked = data_.meta.unlock[MetaFireItem] > 0;
     c.bigBallPicks = r.mods.bigBall;
+    c.heavyImpactPicks = r.mods.heavyImpact;
     c.spring = r.mods.spring;
-    c.retaliate = r.mods.retaliate;
+    c.slowField = r.mods.slowField;
     c.flingMomentum = r.mods.flingMomentum;
-    c.loot = r.mods.loot;
-    c.secondChance = r.mods.secondChance;
 
     std::vector<UpgradeKind> pool;
     for (int i = 0; i < kUpgradeKindCount; ++i) {
@@ -265,7 +273,7 @@ void App::rollChoices() {
         std::swap(pool[i - 1], pool[static_cast<std::size_t>(rng_.irange(0, static_cast<int>(i) - 1))]);
 
     for (int i = 0; i < kChoiceCount; ++i)
-        choices_[i] = pool.empty() ? UpgradeKind::CoreRepair
+        choices_[i] = pool.empty() ? UpgradeKind::CoreSpring   // inert fallback (idempotent)
                                    : pool[static_cast<std::size_t>(i) % pool.size()];
 }
 
@@ -288,19 +296,20 @@ void App::applyUpgradeKind(UpgradeKind k) {
                 if (e == static_cast<int>(Element::Plain)) { e = static_cast<int>(Element::Fire); break; }
             world_.convertOneBall(Element::Plain, Element::Fire);
             break;
-        case UpgradeKind::CoreArmor:
-            ++m.coreArmor;
-            world_.addCoreMaxHp(cfg::combat::coreArmorHp);
-            break;
-        case UpgradeKind::CoreRepair:    world_.repairCore(1e9f); break;
         case UpgradeKind::CoreSpring:    m.spring = true; break;
-        case UpgradeKind::CoreRetaliate: m.retaliate = true; break;
+        case UpgradeKind::CoreSlowField: m.slowField = true; break;
         case UpgradeKind::FlingMomentum: m.flingMomentum = true; break;
         case UpgradeKind::HeavyImpact:   ++m.heavyImpact; break;
         case UpgradeKind::BigBall:       ++m.bigBall; break;
-        case UpgradeKind::Loot:          m.loot = true; break;
-        case UpgradeKind::SecondChance:  m.secondChance = true; break;
     }
+}
+
+// "Repair core" button on the Item screen: heal to full, but forfeit the pick.
+void App::repairCoreSkipItem() {
+    world_.repairCore(1e9f);
+    audio_.purchase();
+    effects_.flash(theme::core, 0.4f);
+    back();
 }
 
 void App::applyUpgrade(int idx) {
@@ -324,19 +333,24 @@ void App::bankRun(bool won) {
     lastRunWon_ = won;
 
     int cores = r.wave * cfg::meta::coresPerWave + (won ? cfg::meta::winBonus : 0);
-    if (r.mods.loot) cores = cores * (100 + cfg::combat::lootBonusPct) / 100;
-    if (const int prospector = data_.meta.unlock[MetaProspector]; prospector > 0)
-        cores = cores * (100 + cfg::combat::prospectorPctPerLevel * prospector) / 100;
+    cores += static_cast<int>(r.bountyCores);   // "Fortune" node: cores per enemy killed
     lastRunCores_ = cores;
-    lastRunPrisms_ = won ? cfg::meta::prismsPerWin +
-                               cfg::meta::prismsPerWindfall * data_.meta.unlock[MetaWindfall]
-                         : 0;
+
+    lastRunPrisms_ = 0;
+    if (won) {
+        lastRunPrisms_ = cfg::meta::prismsPerWin;
+        if (data_.meta.unlock[MetaWindfall] > 0 &&
+            rng_.range(0.f, 1.f) < cfg::meta::windfallChance)
+            lastRunPrisms_ += 1;                 // "Windfall" node
+    }
 
     data_.meta.cores += static_cast<std::uint32_t>(cores);
     data_.meta.prisms += static_cast<std::uint32_t>(lastRunPrisms_);
     data_.meta.stats.coresEarned += static_cast<std::uint32_t>(cores);
     data_.meta.stats.bestWave =
         std::max(data_.meta.stats.bestWave, static_cast<std::uint32_t>(r.wave));
+    data_.meta.stats.bestScore =
+        std::max(data_.meta.stats.bestScore, static_cast<std::uint32_t>(r.score));
     if (won) ++data_.meta.stats.wins;
 
     save();
@@ -516,7 +530,14 @@ void App::processEvents(const FrameEvents& ev) {
         ++data_.meta.stats.enemiesKilled;
         effects_.addRing(k, 520.f, theme::enemy);
     }
-    if (!ev.kills.empty()) hitstop_ = std::max(hitstop_, cfg::app::hitstopKill);
+    if (!ev.kills.empty()) {
+        hitstop_ = std::max(hitstop_, cfg::app::hitstopKill);
+        const int n = static_cast<int>(ev.kills.size());
+        const bool dbl = world_.effect() && world_.effect()->kind == PowerUp::Points2x;
+        data_.run.score += n * cfg::score::perKill * (dbl ? 2 : 1);
+        data_.run.bountyCores += static_cast<float>(n) * cfg::meta::bountyPerKillPerLevel *
+                                 static_cast<float>(data_.meta.unlock[MetaBounty]);
+    }
     for (const BounceFx& b : ev.bounces) {
         effects_.addRing(b.pos, b.speed, b.color);
         effects_.edgeHit(b.normal);
@@ -542,18 +563,6 @@ void App::processEvents(const FrameEvents& ev) {
         hitstop_ = std::max(hitstop_, cfg::app::hitstopBossHit);
         camKick_ = std::max(camKick_, cfg::app::camKickBossHit);
     }
-    if (ev.corePulsed) {
-        effects_.addRing(ev.corePulsePos, 900.f, theme::core);
-        effects_.flash(theme::core, 0.4f);
-        audio_.comboUp(2);
-    }
-    if (ev.secondChanceUsed) {
-        data_.run.mods.secondChanceUsed = true;
-        effects_.addLabel("SECOND CHANCE", {size().x * 0.5f, size().y * 0.34f}, theme::core, 24, 1.2f);
-        effects_.flash(theme::core, 0.8f);
-        audio_.pickup();
-    }
-
     data_.meta.stats.bestCombo =
         std::max(data_.meta.stats.bestCombo, static_cast<std::uint32_t>(world_.comboStreak()));
     data_.meta.stats.maxSpeed = std::max(data_.meta.stats.maxSpeed, world_.fastestBall());
@@ -672,8 +681,8 @@ void App::update(float frameDt) {
     const Core& c = world_.core();
     const int finalWave = continueUnlocked_ ? cfg::run::finalWave : cfg::run::bossWave;
     hud_.update(frameDt, world_.wave(), finalWave, world_.enemiesLeft(),
-                c.maxHp > 0.f ? c.hp / c.maxHp : 0.f, world_.comboMultiplier(), world_.effect(),
-                world_.bossWave());
+                c.maxHp > 0.f ? c.hp / c.maxHp : 0.f, world_.comboMultiplier(),
+                data_.run.score, world_.effect(), world_.bossWave());
 }
 
 void App::render() {

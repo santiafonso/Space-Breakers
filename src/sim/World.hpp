@@ -27,7 +27,7 @@ public:
     void addBall(Element e, const WorldParams& p);
     void convertOneBall(Element from, Element to);   // "Ignite a ball" upgrade
     void repairCore(float amount);
-    void addCoreMaxHp(float delta);                  // "Reinforce core" upgrade
+    void addCoreMaxHp(float delta);                  // raise the core's max HP mid-run
 
     // ---- dev tools (no-ops unless the caller is in dev mode) ---------
     void devWinWave();                    // clear the current wave now
@@ -136,7 +136,6 @@ private:
     float spawnTimer_ = 0.f;
 
     float pickupTimer_ = cfg::pickup::spawnMin;
-    bool secondChanceSpent_ = false;
     bool invuln_ = false;  // dev: core takes no damage
 };
 

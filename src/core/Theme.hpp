@@ -39,8 +39,7 @@ inline const sf::Color puPoints{245, 200, 90};
 inline const sf::Color puSlow{130, 200, 255};
 inline const sf::Color puSurge{198, 120, 255};
 inline const sf::Color puGolden{255, 214, 120};
-inline const sf::Color puGhost{206, 228, 244};
-inline const sf::Color puFrenzy{255, 110, 150};
+inline const sf::Color puOverdrive{255, 110, 150};
 
 // Layout / type — kept compact so more can share the screen
 inline constexpr float margin = 22.f;

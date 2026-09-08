@@ -170,11 +170,39 @@ La arquitectura modular tras el refactor lo hace abordable:
 
 ---
 
-## 7. Power-ups re-tematizados (cuando toque)
+## 7. Power-ups, items y web (rework 2026-09-08)
 
-Doble Puntos → **Doble Daño** · Cámara lenta → igual (para leer el campo) ·
-Oleada de velocidad → **Sobrecarga** · Rebote dorado → **Perforante** ·
-Fase → **Fantasma** (atraviesa estructuras, a revisar) · Frenesí x3 → **Frenesí**.
+**Power-ups de arena** (`enum class PowerUp`, 5). Uno cae por vez, se agarra con
+la pelota, dura unos segundos. Salen del pool via `App::powerUpMask` (bitmask):
+
+| Power-up | Cómo se obtiene | Efecto |
+|----------|-----------------|--------|
+| DOUBLE POINTS | base | x2 **score** mientras dura (no toca daño) |
+| SPEED SURGE | base | crucero de la pelota x2 |
+| SLOW MOTION | nodo *Damper* (prismas) | enemigos a `slowMoEnemyMul` (0.45) |
+| GOLDEN BOUNCE | nodo *Facet* (prismas) | el combo sube `goldenComboRate` (2) pasos por golpe |
+| OVERDRIVE (ex-Frenesí) | nodo *Overload* (prismas) | pelota x2 daño |
+
+PHASE eliminado. Cadencia base lenta a propósito (`pickup::spawnMin/Max` 46–78 s);
+*Uplink* baja `pickupSpawnMult`, *Capacitor* sube `pickupDurMult`.
+
+**Score** (`RunState::score`): +`cfg::score::perKill` (100) por enemigo, x2 con
+DOUBLE POINTS, el boss no da. Se muestra arriba-derecha en el HUD y se guarda
+`stat.bestScore`.
+
+**Items entre oleadas** (antes "upgrades", `UpgradeKind`, 7): Extra ball, Ignite
+a ball, Spring core, **Slow field** (zona `slowFieldRadius` alrededor del núcleo,
+enemigos a `slowFieldMul`; reemplaza a Retaliate), Reflexes, Heavy impact (+8%,
+cap 3), Big ball (+10%, cap 3). Fuera: Reinforce core, Repair core, Loot, Second
+chance. En la Choice hay un botón *"Repair the core - skip this item"* cuando el
+núcleo no está full.
+
+**Web** (`MetaUnlock`, 13 nodos, renumerada — pre-v8 resetea la web al cargar):
+Squad (max 2) · Bulwark (+20 HP) · Mend (+3 heal) · Ignition (habilita el item de
+fuego) · **Fortune** (cores por kill, `bountyPerKillPerLevel`) · **Windfall** (20%
+de 2ª prisma al ganar) · Heft (+8%, max 2) · Mass (+10%, max 2) · rama
+**Power-ups**: Uplink (ratio) · Capacitor (duración) · Damper/Facet/Overload
+(desbloquean los 3 power-ups gated). Fuera: Aegis, Forge, Momentum, Prospector.
 
 ---
 
@@ -355,6 +383,32 @@ Fase → **Fantasma** (atraviesa estructuras, a revisar) · Frenesí x3 → **Fr
   - Archivos opcionales: si faltan, el juego suena igual que antes. Los
     `.m4a` no sirven (SFML no decodifica AAC) - hay que convertir a OGG.
     Ride junto al resto de `assets/` en el copy de CMake y el `install`.
+
+- **Fase 1f — rework de power-ups / items / web + score. [IMPLEMENTADO 2026-09-08]**
+  - Detalle completo en §7. Resumen:
+  - **Power-ups**: 5 (PHASE fuera, Frenesí -> OVERDRIVE). DOUBLE POINTS pasa a
+    dar score de verdad; SLOW MOTION ralentiza **enemigos**, no la pelota;
+    GOLDEN BOUNCE acelera el multiplicador de combo. Salen por `powerUpMask`
+    en vez de un contador; SlowMo/Golden/Overdrive gated por nodos de web.
+    Cadencia y duración salen de `pickupSpawnMult`/`pickupDurMult` (nodos
+    Uplink/Capacitor); base deliberadamente mala.
+  - **Score nuevo** (`RunState::score`, `cfg::score::perKill`): +100/kill, x2
+    con DOUBLE POINTS, boss 0. HUD arriba-derecha + `stat.bestScore` (fila
+    nueva en Stats).
+  - **Items** (ex "upgrades"): pool de 11 -> 7. Retaliate -> **Slow field**
+    (zona lenta, sin pulso de daño). Heavy impact +30% -> +8% cap 3; Big ball
+    +25% -> +10%. Fuera Reinforce/Repair/Loot/Second chance. Botón "reparar
+    núcleo salteando el item" en la Choice.
+  - **Web** renumerada a 13 nodos: fuera Aegis/Forge/Momentum/Prospector;
+    Fortune -> cores por kill; Windfall -> 20% de 2ª prisma; Squad max 2;
+    Bulwark +20; Mend +3; Heft/Mass reescalados (max 2). Rama nueva
+    **Power-ups** (Uplink, Capacitor, Damper, Facet, Overload).
+  - **Guardado v8**: `stat.bestScore` nuevo; al cargar un save < v8 se
+    descartan los niveles de `meta.unlock` (el renumber los dejaría mal
+    mapeados) - cores, prismas y stats se conservan.
+  - Pendiente de afinar jugando: `bountyPerKillPerLevel` (0.10, puede quedar
+    alto con ~200 kills/run), fórmulas de `pickupSpawnMult`/`pickupDurMult`,
+    `slowFieldMul`/`slowMoEnemyMul`, costos/parents de los nodos nuevos.
 
   Detalle original (Fase 0b):
   - Quitar paredes.

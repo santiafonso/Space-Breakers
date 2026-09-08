@@ -50,6 +50,7 @@ public:
     void openLoadout();     // Menu -> the game menu
     void newRun();          // Loadout "Start" -> a fresh run
     void applyUpgrade(int idx);   // Choice: pick one of the four
+    void repairCoreSkipItem();    // Choice: heal the core to full instead of taking an item
     void leaveBossWin();    // BossWin card "Back to menu" -> game menu (banks the run)
     void continuePastBoss();  // BossWin card "Continue" -> resume at wave 11
     bool bossWinCanContinue() const;  // true when the BossWin card should offer "Continue"
@@ -84,7 +85,7 @@ private:
     int startBallCount() const;
     float startCoreHp() const;
     int fireCap() const;
-    int powerUpsUnlocked() const;
+    unsigned powerUpMask() const;
     void startNextWave();
     void openChoice();
     void rollChoices();

@@ -24,7 +24,6 @@ inline constexpr int maxBalls = 8;
 // target it eases down to slowly, so a fling stays fast for a moment.
 inline constexpr float regainRate = 3.5f;
 inline constexpr float decayRate = 0.55f;
-inline constexpr float decayRateSlowMo = 1.8f;
 
 inline constexpr float minThrowSpeed = 45.f;
 inline constexpr float nudgeSpeed = 150.f;
@@ -55,21 +54,22 @@ inline constexpr float contactDamagePerCruise = 1.7f;   // + this * (speed / bas
 inline constexpr float knockback = 190.f;
 inline constexpr float hitRebound = 0.9f;               // the ball bounces off an enemy like a wall
 
-// Between-wave upgrades that touch the simulation.
+// Between-wave "items" that touch the simulation. Heft / Mass (meta web) stack
+// onto the same per-pick counters, so the maxPicks caps are the combined limit.
 inline constexpr float springBoost = 1.6f;        // "Spring": ball speed x this on a core bounce
 inline constexpr float flingDecayMult = 0.45f;    // "Reflexes": fling speed decays this much slower
-inline constexpr float heavyImpactPerPick = 0.30f;// "Heavy impact": +this contact damage per pick
-inline constexpr float bigBallPerPick = 0.25f;    // "Big ball": +this radius fraction per pick
+inline constexpr float heavyImpactPerPick = 0.08f;// "Heavy impact" / "Heft": +this contact damage each
+inline constexpr int   heavyImpactMaxPicks = 3;
+inline constexpr float bigBallPerPick = 0.10f;    // "Big ball" / "Mass": +this radius fraction each
 inline constexpr int   bigBallMaxPicks = 3;
-inline constexpr float coreArmorHp = 25.f;        // "Reinforced core" upgrade, per pick
-inline constexpr float retaliateRadius = 190.f;   // "Retaliate": pulse when an enemy hits the core
-inline constexpr float retaliateDamage = 6.f;
-inline constexpr float retaliateKnockback = 320.f;
-inline constexpr float secondChanceHp = 1.f;      // "Second chance": core survives a lethal hit at this
-inline constexpr float secondChanceHeal = 0.30f;  // ...then heals this fraction of base HP
-inline constexpr int   lootBonusPct = 20;         // "Loot": +this% cores at the end of the run
-inline constexpr int   prospectorPctPerLevel = 15;// "Prospector" meta node: +this% cores per level
+inline constexpr float slowFieldRadius = 210.f;   // "Slow field": zone around the core...
+inline constexpr float slowFieldMul = 0.55f;      // ...enemies inside move at this fraction of speed
 }  // namespace combat
+
+// Run score: arcade points, shown in the HUD and kept as a lifetime best.
+namespace score {
+inline constexpr int perKill = 100;   // per enemy killed; x2 while DOUBLE POINTS is up; boss gives 0
+}  // namespace score
 
 // Per-element behaviour for the ball types bought between waves.
 namespace element {
@@ -99,10 +99,10 @@ inline constexpr int maxProjectiles = 40;
 namespace core {
 inline constexpr float radius = 34.f;
 inline constexpr float baseHp = 60.f;
-inline constexpr float hpPerBulwark = 40.f;    // "Bulwark" meta unlock, per level
+inline constexpr float hpPerBulwark = 20.f;    // "Bulwark" meta unlock, per level
 inline constexpr float enemyDamage = 8.f;      // hp lost per enemy that reaches the core
 inline constexpr float waveHeal = 9.f;         // core repaired this much on a wave clear
-inline constexpr float mendPerLevel = 6.f;     // "Mend" meta node: + this to waveHeal per level
+inline constexpr float mendPerLevel = 3.f;     // "Mend" meta node: + this to waveHeal per level
 }  // namespace core
 
 // A run is a fixed sprint: survive to the final wave and you win.
@@ -171,18 +171,21 @@ inline constexpr float enemyRadius = 19.f;
 namespace meta {
 inline constexpr int coresPerWave = 2;   // earned at the end of a run, per wave reached
 inline constexpr int winBonus = 10;      // extra for clearing the final wave
-inline constexpr int prismsPerWin = 1;   // "prism": special currency dropped by the miniboss
-inline constexpr int prismsPerWindfall = 1;  // "Windfall" meta node: + this many prisms per boss kill, per level
+inline constexpr int prismsPerWin = 1;   // "prism": special currency for clearing the final wave
+inline constexpr float windfallChance = 0.20f;  // "Windfall" node: chance a won run pays a 2nd prism
+inline constexpr float bountyPerKillPerLevel = 0.10f;  // "Fortune" node: cores per enemy kill, per level
 }  // namespace meta
 
-// Power-up orbs still drift in and buff the balls for a few seconds.
+// Power-up orbs drift in and buff the balls for a few seconds. Spawn cadence is
+// deliberately slow at baseline; the "Uplink" web node scales p.pickupSpawnMult
+// down and "Capacitor" scales p.pickupDurMult up.
 namespace pickup {
 inline constexpr float radius = 12.f;
 inline constexpr float ttl = 14.f;
 inline constexpr float firstSpawnMin = 16.f;
 inline constexpr float firstSpawnMax = 26.f;
-inline constexpr float spawnMin = 22.f;
-inline constexpr float spawnMax = 40.f;
+inline constexpr float spawnMin = 46.f;
+inline constexpr float spawnMax = 78.f;
 inline constexpr float driftMin = 45.f;
 inline constexpr float driftMax = 80.f;
 }  // namespace pickup
@@ -192,10 +195,11 @@ inline constexpr float durPoints2x = 8.f;
 inline constexpr float durSlowMo = 6.f;
 inline constexpr float durSurge = 7.f;
 inline constexpr float durGolden = 7.f;
-inline constexpr float durGhost = 6.f;
-inline constexpr float durFrenzy = 5.f;
-inline constexpr float slowMoCruiseMul = 0.42f;
-inline constexpr float surgeCruiseMul = 2.0f;
+inline constexpr float durOverdrive = 5.f;
+inline constexpr float surgeCruiseMul = 2.0f;      // SPEED SURGE: ball cruise x this
+inline constexpr float slowMoEnemyMul = 0.45f;     // SLOW MOTION: enemies move at this fraction
+inline constexpr int   goldenComboRate = 2;        // GOLDEN BOUNCE: combo climbs this many steps per hit
+inline constexpr float overdriveDamageMul = 2.0f;  // OVERDRIVE: ball contact damage x this
 }  // namespace powerup
 
 namespace app {

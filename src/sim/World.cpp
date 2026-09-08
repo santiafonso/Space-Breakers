@@ -34,10 +34,7 @@ float World::cruiseBase(const WorldParams& p) const {
 
 float World::cruiseSpeed(const WorldParams& p) const {
     float c = cruiseBase(p);
-    if (effect_) {
-        if (effect_->kind == PowerUp::SlowMo) c *= cfg::powerup::slowMoCruiseMul;
-        else if (effect_->kind == PowerUp::Surge) c *= cfg::powerup::surgeCruiseMul;
-    }
+    if (effect_ && effect_->kind == PowerUp::Surge) c *= cfg::powerup::surgeCruiseMul;
     return c;
 }
 
@@ -116,7 +113,6 @@ void World::startRun(const WorldParams& p, const std::vector<int>& ballElements,
     runOver_ = false;
     toSpawn_ = 0;
     spawnTimer_ = 0.f;
-    secondChanceSpent_ = false;
     invuln_ = false;
     bossWave_ = false;
     boss_ = Boss{};
@@ -407,7 +403,8 @@ void World::afterBounce(Ball& b, sf::Vector2f normal, bool countHit) {
     }
 
     if (countHit) {
-        ++comboStreak_;
+        comboStreak_ += (effect_ && effect_->kind == PowerUp::Golden)
+                            ? cfg::powerup::goldenComboRate : 1;   // GOLDEN BOUNCE climbs faster
         sinceHit_ = 0.f;
     }
 }
@@ -416,11 +413,7 @@ float World::ballDamage(const Ball& b, const WorldParams& p) const {
     const float ratio = length(b.vel) / cfg::ball::baseCruise;
     float dmg = (cfg::combat::contactDamageBase + cfg::combat::contactDamagePerCruise * ratio) *
                 comboMultiplier() * p.damageMult;
-    if (effect_) {
-        if (effect_->kind == PowerUp::Points2x) dmg *= 2.f;
-        else if (effect_->kind == PowerUp::Frenzy) dmg *= 3.f;
-        else if (effect_->kind == PowerUp::Golden) dmg += 3.f;
-    }
+    if (effect_ && effect_->kind == PowerUp::Overdrive) dmg *= cfg::powerup::overdriveDamageMul;
     return dmg;
 }
 
@@ -476,7 +469,6 @@ void World::regulateSpeed(Ball& b, float dt, const WorldParams& p) {
     // to slowly, so a fling stays fast for a moment.
     const float cruiseS = cruiseSpeed(p);
     const float vMax = maxSpeed(p);
-    const bool slow = effect_ && effect_->kind == PowerUp::SlowMo;
 
     const float sp = length(b.vel);
     if (sp < 1e-3f) {
@@ -484,8 +476,7 @@ void World::regulateSpeed(Ball& b, float dt, const WorldParams& p) {
         return;
     }
     const float up = 1.f - std::exp(-cfg::ball::regainRate * dt);
-    const float decayRate =
-        (slow ? cfg::ball::decayRateSlowMo : cfg::ball::decayRate) * p.flingDecayMult;
+    const float decayRate = cfg::ball::decayRate * p.flingDecayMult;
     const float down = 1.f - std::exp(-decayRate * dt);
     const float k = (sp < cruiseS) ? up : down;
     const float ns = std::min(lerpf(sp, cruiseS, k), vMax);
@@ -664,8 +655,15 @@ void World::updateEnemies(float dt, const WorldParams& p, FrameEvents& ev) {
             const sf::Vector2f d = core_.pos - e.pos;
             const float dl = length(d);
             const sf::Vector2f steer = (dl > 1e-3f ? d / dl : sf::Vector2f{0.f, 1.f}) * e.speed;
-            e.vel += (steer - e.vel) * (1.f - std::exp(-8.f * dt));
-            e.pos += e.vel * dt;
+
+            // SLOW MOTION drags every enemy; the "Slow field" item drags only
+            // those close to the core. Both just scale this enemy's time step.
+            float edt = dt;
+            if (effect_ && effect_->kind == PowerUp::SlowMo) edt *= cfg::powerup::slowMoEnemyMul;
+            if (p.slowField && dl < cfg::combat::slowFieldRadius) edt *= cfg::combat::slowFieldMul;
+
+            e.vel += (steer - e.vel) * (1.f - std::exp(-8.f * edt));
+            e.pos += e.vel * edt;
 
             // Pushed out of any rubble in the way.
             for (const Obstacle& o : obstacles_) {
@@ -683,32 +681,11 @@ void World::updateEnemies(float dt, const WorldParams& p, FrameEvents& ev) {
             core_.hitFlash = 1.f;
             ev.coreHit = true;
 
-            if (p.retaliate) {  // "Retaliate" upgrade: blast the crowd near the core
-                ev.corePulsed = true;
-                ev.corePulsePos = core_.pos;
-                for (Enemy& o : enemies_) {
-                    const sf::Vector2f away = o.pos - core_.pos;
-                    const float ad = length(away);
-                    if (ad < cfg::combat::retaliateRadius && ad > 1e-3f) {
-                        o.hp -= cfg::combat::retaliateDamage;
-                        o.vel += (away / ad) * cfg::combat::retaliateKnockback;
-                    }
-                }
-            }
-
             it = enemies_.erase(it);
 
             if (core_.hp <= 0.f) {
-                if (p.secondChanceAvail && !secondChanceSpent_) {  // "Second chance" upgrade
-                    secondChanceSpent_ = true;
-                    core_.hp = std::min(core_.maxHp,
-                                        cfg::combat::secondChanceHp +
-                                            cfg::core::baseHp * cfg::combat::secondChanceHeal);
-                    ev.secondChanceUsed = true;
-                } else {
-                    core_.hp = 0.f;
-                    runOver_ = true;
-                }
+                core_.hp = 0.f;
+                runOver_ = true;
             }
         } else {
             ++it;
@@ -856,14 +833,19 @@ void World::updatePickups(float dt, const WorldParams& p, FrameEvents& ev) {
     if (!effect_ && pickups_.empty()) {
         pickupTimer_ -= dt;
         if (pickupTimer_ <= 0.f) {
-            Pickup pu;
-            const int kinds = std::clamp(p.powerUpsUnlocked, 1, kPowerUpCount);
-            pu.kind = static_cast<PowerUp>(rng_.irange(0, kinds - 1));
-            pu.pos = {rng_.range(size_.x * 0.15f, size_.x * 0.85f),
-                      rng_.range(size_.y * 0.15f, size_.y * 0.85f)};
-            pu.vel = rng_.direction() * rng_.range(cfg::pickup::driftMin, cfg::pickup::driftMax);
-            pickups_.push_back(pu);
-            pickupTimer_ = rng_.range(cfg::pickup::spawnMin, cfg::pickup::spawnMax);
+            int enabled[kPowerUpCount];
+            int n = 0;
+            for (int i = 0; i < kPowerUpCount; ++i)
+                if (p.powerUpMask & (1u << i)) enabled[n++] = i;
+            if (n > 0) {
+                Pickup pu;
+                pu.kind = static_cast<PowerUp>(enabled[rng_.irange(0, n - 1)]);
+                pu.pos = {rng_.range(size_.x * 0.15f, size_.x * 0.85f),
+                          rng_.range(size_.y * 0.15f, size_.y * 0.85f)};
+                pu.vel = rng_.direction() * rng_.range(cfg::pickup::driftMin, cfg::pickup::driftMax);
+                pickups_.push_back(pu);
+            }
+            pickupTimer_ = rng_.range(cfg::pickup::spawnMin, cfg::pickup::spawnMax) * p.pickupSpawnMult;
         }
     }
 
@@ -883,11 +865,11 @@ void World::updatePickups(float dt, const WorldParams& p, FrameEvents& ev) {
         bool collected = false;
         for (const Ball& b : balls_) {
             if (length(b.pos - pu.pos) < b.radius + pu.radius) {
-                const float dur = powerUpDuration(pu.kind);
+                const float dur = powerUpDuration(pu.kind) * p.pickupDurMult;
                 effect_ = ActiveEffect{pu.kind, dur, dur};
                 ev.gotPickup = true;
                 ev.pickupKind = pu.kind;
-                pickupTimer_ = rng_.range(cfg::pickup::spawnMin, cfg::pickup::spawnMax);
+                pickupTimer_ = rng_.range(cfg::pickup::spawnMin, cfg::pickup::spawnMax) * p.pickupSpawnMult;
                 collected = true;
                 break;
             }

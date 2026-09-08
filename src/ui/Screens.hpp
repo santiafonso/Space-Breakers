@@ -83,7 +83,7 @@ private:
     float bannerT_ = 999.f;    // time since the banner started (large = inactive)
 };
 
-// Overlay after a wave: pick 1 of 4 rolled upgrades.
+// Overlay after a wave: pick 1 of 4 rolled items (or skip to repair the core).
 class ChoiceScreen : public Screen {
 public:
     void handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) override;
@@ -93,7 +93,10 @@ public:
 
 private:
     int cardAt(App& app, sf::Vector2f mouse) const;  // 0..3, -1 none
+    sf::FloatRect healRect(sf::Vector2f size) const;  // "repair core" button, when the core isn't full
+    bool coreHurt(App& app) const;
     float hover_[4] = {};
+    float healHover_ = 0.f;
 };
 
 class PauseScreen : public Screen {

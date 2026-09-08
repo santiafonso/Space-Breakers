@@ -71,8 +71,9 @@ void drawStatsPanel(sf::RenderWindow& window, const sf::Font& font, sf::Vector2f
     drawCenteredPop(window, font, "Stats", theme::fsTitle, {size.x * 0.5f, size.y * 0.16f},
                     theme::textHi, introPop(intro, 0.f));
 
-    const std::array<std::pair<std::string, std::string>, 8> rows = {{
+    const std::array<std::pair<std::string, std::string>, 9> rows = {{
         {"Best wave", std::to_string(s.bestWave)},
+        {"Best score", std::to_string(s.bestScore)},
         {"Runs", std::to_string(s.runs)},
         {"Wins", std::to_string(s.wins)},
         {"Enemies defeated", std::to_string(s.enemiesKilled)},
@@ -83,7 +84,7 @@ void drawStatsPanel(sf::RenderWindow& window, const sf::Font& font, sf::Vector2f
     }};
 
     const float y0 = size.y * 0.30f;
-    const float gap = 42.f;
+    const float gap = 38.f;
     const float labelX = size.x * 0.5f - 200.f;
     const float valueX = size.x * 0.5f + 200.f;
     for (std::size_t i = 0; i < rows.size(); ++i) {

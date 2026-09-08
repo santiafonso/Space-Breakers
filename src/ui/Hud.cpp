@@ -17,11 +17,13 @@ void Hud::init(const sf::Font& font, sf::Vector2f size) {
 void Hud::pulseCombo() { comboPop_ = 1.f; }
 
 void Hud::update(float dt, int wave, int finalWave, int enemiesLeft, float coreFrac,
-                 float comboMultiplier, const std::optional<ActiveEffect>& effect, bool bossWave) {
+                 float comboMultiplier, int score, const std::optional<ActiveEffect>& effect,
+                 bool bossWave) {
     wave_ = wave;
     finalWave_ = finalWave;
     bossWave_ = bossWave;
     enemiesLeft_ = enemiesLeft;
+    score_ = score;
     coreFrac_ = clampf(coreFrac, 0.f, 1.f);
     comboMul_ = comboMultiplier;
     effect_ = effect;
@@ -45,6 +47,15 @@ void Hud::draw(sf::RenderWindow& window) const {
         combo.setScale(cs, cs);
         combo.setPosition(theme::margin, theme::margin - 2.f);
         window.draw(combo);
+    }
+
+    // Run score, top-right.
+    {
+        sf::Text sc = makeText(*font_, "SCORE  " + std::to_string(score_), 18, theme::textLo);
+        const sf::FloatRect sb = sc.getLocalBounds();
+        sc.setOrigin(sb.left + sb.width, sb.top);
+        sc.setPosition(size_.x - theme::margin, theme::margin - 2.f);
+        window.draw(sc);
     }
 
     // Wave / core-health banner, top centre.

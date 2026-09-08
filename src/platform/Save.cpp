@@ -10,7 +10,7 @@
 namespace sb {
 
 namespace {
-constexpr int kSaveVersion = 7;   // v7: meta.unlock is the 12-node skill web
+constexpr int kSaveVersion = 8;   // v8: skill web renumbered (13 nodes) + stat.bestScore
 }  // namespace
 
 bool hasSavedGame(const std::string& path) {
@@ -40,6 +40,7 @@ bool saveGame(const std::string& path, const GameData& d) {
     f << "stat.coresEarned " << m.stats.coresEarned << '\n';
     f << "stat.bestWave " << m.stats.bestWave << '\n';
     f << "stat.bestCombo " << m.stats.bestCombo << '\n';
+    f << "stat.bestScore " << m.stats.bestScore << '\n';
     f << "stat.runs " << m.stats.runs << '\n';
     f << "stat.wins " << m.stats.wins << '\n';
     f << "stat.maxSpeed " << m.stats.maxSpeed << '\n';
@@ -53,6 +54,7 @@ bool loadGame(const std::string& path, GameData& d) {
 
     MetaState& m = d.meta;
     bool sawAnything = false;
+    int fileVersion = 0;
     std::string line;
     while (std::getline(f, line)) {
         std::istringstream ls(line);
@@ -60,11 +62,15 @@ bool loadGame(const std::string& path, GameData& d) {
         if (!(ls >> key)) continue;
         sawAnything = true;
 
-        if (key == "meta.cores") ls >> m.cores;
+        if (key == "version") ls >> fileVersion;
+        else if (key == "meta.cores") ls >> m.cores;
         else if (key == "meta.prisms") ls >> m.prisms;
         else if (key == "meta.unlock") {
+            // v8 renumbered the web; older unlock allocations would land on the
+            // wrong nodes, so drop them and let the tree be re-bought.
             int i = -1, lvl = 0;
-            if (ls >> i >> lvl && i >= 0 && i < MetaUnlockCount) m.unlock[i] = lvl;
+            if (fileVersion >= 8 && ls >> i >> lvl && i >= 0 && i < MetaUnlockCount)
+                m.unlock[i] = lvl;
         }
         // v4 and earlier stored these two unlocks by name.
         else if (key == "meta.startBalls") ls >> m.unlock[MetaStartBalls];
@@ -75,6 +81,7 @@ bool loadGame(const std::string& path, GameData& d) {
         else if (key == "stat.coresEarned") ls >> m.stats.coresEarned;
         else if (key == "stat.bestWave") ls >> m.stats.bestWave;
         else if (key == "stat.bestCombo") ls >> m.stats.bestCombo;
+        else if (key == "stat.bestScore") ls >> m.stats.bestScore;
         else if (key == "stat.runs") ls >> m.stats.runs;
         else if (key == "stat.wins") ls >> m.stats.wins;
         else if (key == "stat.maxSpeed") ls >> m.stats.maxSpeed;
