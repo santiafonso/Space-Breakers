@@ -18,7 +18,7 @@ inline constexpr float radius = 18.f;
 inline constexpr float baseCruise = 300.f;       // px/s orbit speed at level 0
 inline constexpr float hardSpeedCap = 2600.f;
 inline constexpr float maxSpeedCruiseMul = 4.0f; // ceiling = cruise * this (capped by hardSpeedCap)
-inline constexpr int maxBalls = 8;
+inline constexpr int maxBalls = 16;
 
 // Speed regulation: cruise is a floor the ball climbs back to quickly and a
 // target it eases down to slowly, so a fling stays fast for a moment.
@@ -57,6 +57,9 @@ inline constexpr float hitRebound = 0.9f;               // the ball bounces off 
 // Between-wave "items" that touch the simulation. Heft / Mass (meta web) stack
 // onto the same per-pick counters, so the maxPicks caps are the combined limit.
 inline constexpr float springBoost = 1.6f;        // "Spring": ball speed x this on a core bounce
+inline constexpr float wallBounceBoost = 1.12f;   // "Wall rush": ball speed x this on a wall bounce
+inline constexpr float pairBounceBoost = 1.16f;   // "Carom": ball speed x this when it clacks another ball
+inline constexpr float flingPowerBoost = 1.4f;    // "Strong arm": a flung ball leaves your hand x this faster
 inline constexpr float flingDecayMult = 0.45f;    // "Reflexes": fling speed decays this much slower
 inline constexpr float heavyImpactPerPick = 0.08f;// "Heavy impact" / "Heft": +this contact damage each
 inline constexpr int   heavyImpactMaxPicks = 3;
@@ -64,6 +67,33 @@ inline constexpr float bigBallPerPick = 0.10f;    // "Big ball" / "Mass": +this 
 inline constexpr int   bigBallMaxPicks = 3;
 inline constexpr float slowFieldRadius = 210.f;   // "Slow field": zone around the core...
 inline constexpr float slowFieldMul = 0.55f;      // ...enemies inside move at this fraction of speed
+
+// More between-wave items (all booleans, one pick each).
+inline constexpr float ricochetWindow = 0.6f;    // "Ricochet": a wall bounce arms a damage bonus for this long
+inline constexpr float ricochetMult = 1.6f;      // ...contact damage x this while it's armed
+inline constexpr float ceilingBreakMult = 1.5f;  // "Ceiling break": raises the ball's top-speed ceiling
+inline constexpr float warmUpTime = 22.f;        // "Warm-up": cruise speed ramps up over this many seconds of a wave
+inline constexpr float warmUpBonus = 0.6f;       // ...up to + this fraction of cruise by the end
+inline constexpr float heavyKnockMult = 2.2f;    // "Heavy knock": enemy knockback x this
+inline constexpr float conductorRange = 240.f;   // "Conductor": the electric arc jumps to a 2nd enemy within this
+inline constexpr float conductorFalloff = 0.6f;  // ...for this fraction of the bolt's damage
+inline constexpr float shatterBonus = 1.8f;      // "Shatter": hitting a frozen enemy does x this damage
+inline constexpr float contagionRadius = 90.f;   // "Contagion": a poisoned enemy dying re-poisons others within this
+inline constexpr float bedrockLifeMult = 4.f;    // "Bedrock": stone rubble lasts x this long
+inline constexpr float primedMult = 1.35f;       // "Primed": +damage to an enemy already under an element effect
+inline constexpr float leadBallCruise = 1.35f;   // "Spearhead": the last-flung ball's cruise speed x this
+
+// "Ball combat" between-wave items (Fase A). No explicit prereqs - the pick pool
+// just rolls them together, so synergies fall out of what you already have:
+// Keen eye / Overkill / Battering all lean on the same speed & damage picks.
+inline constexpr float critChance = 0.15f;       // "Keen eye": chance a contact hit deals...
+inline constexpr float critMult = 2.0f;          // ...x this damage
+inline constexpr float bruiserPerCruise = 0.28f; // "Battering": + this * (speed / baseCruise) contact damage
+inline constexpr float executeThreshold = 0.30f; // "Executioner": enemies below this HP fraction...
+inline constexpr float executeMult = 2.6f;       // ...take x this contact damage
+inline constexpr float overkillFrac = 0.5f;      // "Overkill": this fraction of a kill's leftover damage...
+inline constexpr float overkillRange = 150.f;    // ...splashes onto the nearest enemy within this
+inline constexpr float tempoRecover = 0.4f;      // "Tempo": ball eases this far back toward cruise on an enemy hit
 }  // namespace combat
 
 // Run score: arcade points, shown in the HUD and kept as a lifetime best.
@@ -71,29 +101,45 @@ namespace score {
 inline constexpr int perKill = 100;   // per enemy killed; x2 while DOUBLE POINTS is up; boss gives 0
 }  // namespace score
 
-// Per-element behaviour for the ball types bought between waves.
+// Per-element behaviour. Elemental balls come from the between-wave "add a ball
+// of element X" items. Each element has a web node: level 1 unlocks its item,
+// levels 2-3 raise its potency (elemMult). Unlock order, each gating the next:
+// fire -> poison -> water -> ice -> stone -> electric.
 namespace element {
-// fire: applies a burn (damage over time) on contact
-inline constexpr float burnDuration = 3.0f;
-inline constexpr float burnDps = 2.4f;
-// wind: fires a bolt at the nearest enemy on a timer
-inline constexpr float windInterval = 1.3f;
-inline constexpr float windSpeed = 660.f;
-inline constexpr float windLife = 1.5f;
-inline constexpr float windDamage = 2.2f;
-inline constexpr float windRange = 900.f;
-// water: drips a damaging puddle along its path
-inline constexpr float waterInterval = 0.26f;
-inline constexpr float puddleRadius = 26.f;
-inline constexpr float puddleLife = 2.4f;
-inline constexpr float puddleDps = 3.4f;
-// stone: drops blocking rubble on a timer
-inline constexpr float stoneInterval = 2.0f;
-inline constexpr float obstacleRadius = 17.f;
+// fire: a heavier contact hit (used to be a burn) - scales the ball's damage
+inline constexpr float fireDamageBonus = 0.60f;   // + this * elemMult on top of normal contact damage
+// poison: stacking damage-over-time, refreshed and stacked on every hit
+inline constexpr float poisonDuration = 3.5f;
+inline constexpr float poisonDpsPerHit = 1.1f;    // each hit adds this much dps...
+inline constexpr float poisonDpsMax = 7.0f;       // ...capped here
+// ice: a hit freezes the enemy in place for a moment
+inline constexpr float freezeDuration = 1.3f;
+// "Ember" web node: fire hits also light the enemy for a short burn (fire has no
+// damage-over-time on its own). Scales with elemMult[Fire] (Ignition level) and
+// the Ember node level.
+inline constexpr float burnDuration = 2.5f;
+inline constexpr float burnDps = 2.0f;
+inline constexpr float burnPerEmberLevel = 0.5f;  // + this * (emberLevel - 1) to burn dps
+// water: drags a damaging "worm" wake that follows the ball's path and tapers
+// from head to tail
+inline constexpr float waterInterval = 0.035f;    // time between trail points laid down
+inline constexpr int   waterTrailPoints = 30;     // worm length (~1s of travel)
+inline constexpr float waterTrailWidth = 16.f;    // damage half-width at the head; tapers toward the tail
+inline constexpr float waterDps = 3.2f;
+// electric: zaps the nearest enemy inside an (invisible) radius, on a timer
+inline constexpr float boltRadius = 190.f;
+inline constexpr float boltInterval = 0.7f;
+inline constexpr float boltDamage = 2.4f;
+inline constexpr float boltLife = 0.13f;          // the arc is just a brief visual flash
+inline constexpr int   maxBolts = 24;
+// stone: drops rubble that blocks enemies AND grinds any standing in it
+inline constexpr float stoneInterval = 1.7f;
+inline constexpr float obstacleRadius = 18.f;
 inline constexpr float obstacleLife = 5.0f;
-inline constexpr int maxObstacles = 14;
-inline constexpr int maxPuddles = 60;
-inline constexpr int maxProjectiles = 40;
+inline constexpr float stoneDps = 2.2f;
+inline constexpr int maxObstacles = 16;
+// each web level past the first multiplies an element's potency by +this
+inline constexpr float powerPerLevel = 0.35f;
 }  // namespace element
 
 namespace core {
@@ -103,6 +149,8 @@ inline constexpr float hpPerBulwark = 20.f;    // "Bulwark" meta unlock, per lev
 inline constexpr float enemyDamage = 8.f;      // hp lost per enemy that reaches the core
 inline constexpr float waveHeal = 9.f;         // core repaired this much on a wave clear
 inline constexpr float mendPerLevel = 3.f;     // "Mend" meta node: + this to waveHeal per level
+inline constexpr float regenPerLevel = 1.5f;   // "Regen" meta node: core hp/s during a wave, per level
+inline constexpr float bastionPerWavePerLevel = 1.0f;  // "Bastion" meta node: + core max hp each wave, per level
 }  // namespace core
 
 // A run is a fixed sprint: survive to the final wave and you win.
@@ -111,6 +159,7 @@ inline constexpr int startBalls = 1;   // before the "Squad" meta unlock
 inline constexpr int bossWave = 10;    // the miniboss duel
 inline constexpr int finalWave = 20;   // last wave once "Continue" past the boss is unlocked
 inline constexpr float coreSlideTime = 1.4f;  // core eases left -> arena centre entering wave 11
+inline constexpr int rerollsPerLevel = 2;     // "Foresight" web node: reroll charges per run, per level
 }  // namespace run
 
 // Wave 10 is a miniboss duel in a wider arena.
@@ -174,6 +223,8 @@ inline constexpr int winBonus = 10;      // extra for clearing the final wave
 inline constexpr int prismsPerWin = 1;   // "prism": special currency for clearing the final wave
 inline constexpr float windfallChance = 0.20f;  // "Windfall" node: chance a won run pays a 2nd prism
 inline constexpr float bountyPerKillPerLevel = 0.10f;  // "Fortune" node: cores per enemy kill, per level
+inline constexpr float salvagePerKillPerLevel = 0.06f; // "Salvage" node: extra cores per enemy kill, per level
+inline constexpr float interestPerLevel = 4.f;         // "Interest" node: cores for a no-damage wave, per level
 }  // namespace meta
 
 // Power-up orbs drift in and buff the balls for a few seconds. Spawn cadence is
@@ -200,6 +251,13 @@ inline constexpr float surgeCruiseMul = 2.0f;      // SPEED SURGE: ball cruise x
 inline constexpr float slowMoEnemyMul = 0.45f;     // SLOW MOTION: enemies move at this fraction
 inline constexpr int   goldenComboRate = 2;        // GOLDEN BOUNCE: combo climbs this many steps per hit
 inline constexpr float overdriveDamageMul = 2.0f;  // OVERDRIVE: ball contact damage x this
+
+// Pickups web branch, Fase A.
+inline constexpr float reserveFillTime = 22.f;     // "Stockpile": seconds to refill the reserve slot
+inline constexpr float chargedFracPerLevel = 0.15f;// "Charged": + this fraction of duration per level
+inline constexpr float afterglowPerLevel = 1.5f;   // "Afterglow": a continuous effect fades over this many s past 0, per level
+inline constexpr float magnetAccel = 900.f;        // "Magnet": pickup steering toward the nearest ball
+inline constexpr float magnetMaxSpeed = 340.f;
 }  // namespace powerup
 
 namespace app {

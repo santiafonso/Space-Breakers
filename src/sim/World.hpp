@@ -25,9 +25,9 @@ public:
     void startPostBossWave(int wave, const WorldParams& p);  // waves 11..19: wide arena, core slides to centre
     void startFinalBossWave(const WorldParams& p);           // wave 20: the Orbital boss + shield ring
     void addBall(Element e, const WorldParams& p);
-    void convertOneBall(Element from, Element to);   // "Ignite a ball" upgrade
     void repairCore(float amount);
     void addCoreMaxHp(float delta);                  // raise the core's max HP mid-run
+    void useReserve(const WorldParams& p);           // "Stockpile": fire the held reserve power-up
 
     // ---- dev tools (no-ops unless the caller is in dev mode) ---------
     void devWinWave();                    // clear the current wave now
@@ -47,13 +47,15 @@ public:
     // ---- read-only views --------------------------------------------
     const std::vector<Ball>& balls() const { return balls_; }
     const std::vector<Enemy>& enemies() const { return enemies_; }
-    const std::vector<Projectile>& projectiles() const { return projectiles_; }
-    const std::vector<Puddle>& puddles() const { return puddles_; }
+    const std::vector<Bolt>& bolts() const { return bolts_; }
     const std::vector<Obstacle>& obstacles() const { return obstacles_; }
     const std::vector<Pickup>& pickups() const { return pickups_; }
     const Core& core() const { return core_; }
     const Boss& boss() const { return boss_; }
     const std::optional<ActiveEffect>& effect() const { return effect_; }
+    bool hasReserve() const { return hasReserve_; }          // "Stockpile"
+    PowerUp reservePu() const { return reservePu_; }
+    bool coreCleanWave() const { return !coreHitThisWave_; } // "Interest": no core damage this wave
     sf::Vector2f size() const { return size_; }
 
     // Area the camera should frame (grows for the boss wave).
@@ -88,16 +90,18 @@ private:
     void advanceCombo(float dt);
     void advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev);
     void emitElement(Ball& b, float dt, const WorldParams& p);
-    void resolveBallPairs();
-    void updateProjectiles(float dt);
-    void updatePuddles(float dt);
+    void resolveBallPairs(FrameEvents& ev, const WorldParams& p);
+    void updateBolts(float dt);
+    void updateWaterTrails(float dt, const WorldParams& p);
     void updateObstacles(float dt);
     void updateEnemies(float dt, const WorldParams& p, FrameEvents& ev);
     void updateBoss(float dt, const WorldParams& p, FrameEvents& ev);
-    void sweepDeadEnemies(FrameEvents& ev);
+    void sweepDeadEnemies(FrameEvents& ev, const WorldParams& p);
     void updateWaveSpawner(float dt, FrameEvents& ev);
     void updatePickups(float dt, const WorldParams& p, FrameEvents& ev);
-    void advanceEffect(float dt);
+    void advanceEffect(float dt, const WorldParams& p);
+    void activateEffect(PowerUp k, const WorldParams& p);   // start an effect (Charged applies here)
+    float effStrength(const WorldParams& p) const;          // 1 while live, ramps to 0 over the Afterglow tail
     void afterBounce(Ball& b, sf::Vector2f normal, bool countHit);
     void regulateSpeed(Ball& b, float dt, const WorldParams& p);
     void updateTrail(Ball& b);
@@ -107,8 +111,7 @@ private:
     sf::Vector2f size_;       // current arena (== baseSize_ except on the boss wave)
     std::vector<Ball> balls_;
     std::vector<Enemy> enemies_;
-    std::vector<Projectile> projectiles_;
-    std::vector<Puddle> puddles_;
+    std::vector<Bolt> bolts_;
     std::vector<Obstacle> obstacles_;
     std::vector<Pickup> pickups_;
     Core core_;
@@ -134,9 +137,16 @@ private:
     sf::Vector2f coreSlideTo_{0.f, 0.f};
     int toSpawn_ = 0;
     float spawnTimer_ = 0.f;
+    float waveClock_ = 0.f;   // seconds into the current wave (drives "Warm-up")
 
     float pickupTimer_ = cfg::pickup::spawnMin;
     bool invuln_ = false;  // dev: core takes no damage
+
+    int aegisChargesLeft_ = 0;      // "Aegis": hits the core still soaks this wave
+    bool coreHitThisWave_ = false;  // "Interest": did anything reach the core this wave
+    PowerUp reservePu_ = PowerUp::Points2x;   // "Stockpile"
+    bool hasReserve_ = false;
+    float reserveTimer_ = cfg::powerup::reserveFillTime;
 };
 
 }  // namespace sb

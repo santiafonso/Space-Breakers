@@ -170,7 +170,7 @@ La arquitectura modular tras el refactor lo hace abordable:
 
 ---
 
-## 7. Power-ups, items y web (rework 2026-09-08)
+## 7. Power-ups, items y web (rework 2026-09-08, elementos 2026-09-09)
 
 **Power-ups de arena** (`enum class PowerUp`, 5). Uno cae por vez, se agarra con
 la pelota, dura unos segundos. Salen del pool via `App::powerUpMask` (bitmask):
@@ -190,19 +190,107 @@ PHASE eliminado. Cadencia base lenta a propósito (`pickup::spawnMin/Max` 46–7
 DOUBLE POINTS, el boss no da. Se muestra arriba-derecha en el HUD y se guarda
 `stat.bestScore`.
 
-**Items entre oleadas** (antes "upgrades", `UpgradeKind`, 7): Extra ball, Ignite
-a ball, Spring core, **Slow field** (zona `slowFieldRadius` alrededor del núcleo,
-enemigos a `slowFieldMul`; reemplaza a Retaliate), Reflexes, Heavy impact (+8%,
-cap 3), Big ball (+10%, cap 3). Fuera: Reinforce core, Repair core, Loot, Second
-chance. En la Choice hay un botón *"Repair the core - skip this item"* cuando el
-núcleo no está full.
+**Pelotas elementales** (rework 2026-09-09, `enum class Element`, 7):
+Plain + Fire · Poison · Water · Ice · Stone · Electric. Se consiguen con los items
+**"add X ball"** entre oleadas: agregan directo una pelota de ese elemento
+(`UpgradeKind::Add*Ball`, `elementItemSlot`), elegibles solo si su nodo de web
+está desbloqueado. Efectos:
 
-**Web** (`MetaUnlock`, 13 nodos, renumerada — pre-v8 resetea la web al cargar):
-Squad (max 2) · Bulwark (+20 HP) · Mend (+3 heal) · Ignition (habilita el item de
-fuego) · **Fortune** (cores por kill, `bountyPerKillPerLevel`) · **Windfall** (20%
-de 2ª prisma al ganar) · Heft (+8%, max 2) · Mass (+10%, max 2) · rama
-**Power-ups**: Uplink (ratio) · Capacitor (duración) · Damper/Facet/Overload
-(desbloquean los 3 power-ups gated). Fuera: Aegis, Forge, Momentum, Prospector.
+| Elemento | Efecto | Config |
+|----------|--------|--------|
+| Fire     | golpe de contacto más fuerte (`+fireDamageBonus` en `ballDamage`); con el nodo **Ember** además enciende un DoT (`burn`/`burnDps`, escala con `elemMult[Fire]` y el nivel de Ember) | `fireDamageBonus`, `burnDuration`, `burnDps`, `burnPerEmberLevel` |
+| Poison   | DoT que **acumula** dps por golpe y se refresca; se limpia al vencer | `poisonDuration`, `poisonDpsPerHit`, `poisonDpsMax` |
+| Water    | **estela "gusano"**: `Ball::waterTrail` (deque de posiciones), ribbon que sigue la trayectoria, ancho de cabeza a cola; daño por distancia a los segmentos | `waterInterval`, `waterTrailPoints`, `waterTrailWidth`, `waterDps` |
+| Ice      | congela al enemigo en el lugar (sin steering, sin daño al núcleo) | `freezeDuration` |
+| Stone    | `Obstacle` que además de bloquear hace daño por contacto | `stoneInterval`, `stoneDps`, `obstacleLife` |
+| Electric | `Bolt` (arco instantáneo) al enemigo más cercano dentro de `boltRadius` (invisible), en cooldown | `boltRadius`, `boltInterval`, `boltDamage` |
+
+`WorldParams::elemMult[7]` lleva la potencia por elemento: nivel 1 del nodo de
+web desbloquea, niveles 2-3 multiplican (`powerPerLevel`). `Wind`, `Projectile` y
+`Puddle` eliminados; `Bolt` (electric) y `Ball::waterTrail` (water) los reemplazan.
+
+**Color de las pelotas:** las plain usan una rampa **gris** (`theme::speedColor`,
+solo se aclara con la velocidad); las elementales mantienen su tono a cualquier
+velocidad y se vuelven **más vívidas/saturadas** cuanto más rápido van
+(`theme::elementSpeedColor` + `vivify()`: greyer bajo el crucero, hue más
+profundo por encima — nada de blanco). Electric pasó a violeta
+(`theme::elemElectric`). El tono va en `Ball::color` (lo calcula `World`), así
+los anillos de rebote también matchean.
+
+**Sonido de rebotes (hipnótico):** cada choque —contra pared/núcleo y **entre
+pelotas** (`BounceFx::ballPair`, ahora `resolveBallPairs` empuja evento + squash)—
+toca una nota de una **escala pentatónica** (`Audio::ballHit`: más rápido = más
+agudo, ball-vs-ball sube ~una octava, leve wander). El multiplicador de daño
+(`comboTier/baseCapTier` → `harmony01`) hace entrar de a poco una capa de
+**campana** (`bell()`: seno + parciales) y, ya encadenando fuerte, notas de acorde
+cada par de golpes → suena más lleno cuanto más frenético. `Audio` sintetiza
+`noteSoft_`/`noteRich_` por grado; `kVoices` 8→16 para que las colas se solapen.
+Núcleo golpeado = `coreThud()` (golpe grave). `bounce()` eliminado.
+
+**Items entre oleadas** (`UpgradeKind`, 25; `maxBalls`=16):
+- Base: Extra ball · 6× "add X ball" (gated por nodo) · Spring core · Slow field ·
+  Reflexes · Heavy impact (+8%, cap 3) · Big ball (+10%, cap 3).
+- Velocidad (booleanos, decaen vía `regulateSpeed`): **Wall rush** (×speed por
+  rebote de pared) · **Carom** (×speed al chocar otra pelota) · **Ricochet**
+  (×daño un instante tras rebotar en pared, `Ball::ricochetT`) · **Ceiling
+  break** (`maxSpeedMult`, sube el techo) · **Warm-up** (crucero sube con
+  `waveClock_` a lo largo de la oleada) · **Strong arm** (flingás más fuerte,
+  en `PlayScreen::release`) · **Spearhead** (`Ball::lead`, la última pelota
+  lanzada cruza más rápido; se dibuja **dorada** — tinte + contorno + halo — para
+  distinguirla).
+- Combate: **Heavy knock** (`knockbackMult`).
+- Sinergia elemental (gated por el nodo del elemento): **Conductor** (arco a un
+  2º enemigo, electric) · **Shatter** (×daño a congelados, ice) · **Contagion**
+  (un envenenado que muere contagia, poison; en `sweepDeadEnemies`) · **Bedrock**
+  (rubble dura ×`bedrockLifeMult`, stone) · **Primed** (×daño a enemigos bajo
+  cualquier efecto, cualquier elemento).
+
+Botón *"Repair the core - skip this item"* (ahora también avanza de oleada — antes
+se quedaba colgado) + **botón "reroll" por carta** en la Choice: cambia esa carta
+por otro item elegible que no esté en la mesa, gasta una carga de
+`RunState::rerollsLeft` (nodo **Foresight**, `rerollsPerLevel`/nivel).
+
+**Fase A (2026-09-10) — tanda de items de combate + nodos de web.** Los 6
+primeros son items de partida; el resto, nodos de web (append-only, `save v11`,
+32 nodos). Sinergias implícitas: el pool tira 4 al azar, no hay prerequisitos.
+- Items (`UpgradeKind` 25 → 31): **Cleave** (atraviesa al matar) · **Keen eye**
+  (`critChance`/`critMult`) · **Battering** (`bruiserPerCruise`, daño ∝ velocidad)
+  · **Executioner** (`executeThreshold`/`executeMult` vs enemigos bajos) ·
+  **Overkill** (`overkillFrac`/`overkillRange`, el daño sobrante salpica) ·
+  **Tempo** (`tempoRecover`, recupera crucero tras pegar). Toda la lógica cuelga
+  de `World::ballDamage` y el bloque de contacto bola-enemigo (guard nuevo
+  `e.hp <= 0 → continue` para no re-pegar/re-salpicar a un muerto sin barrer).
+- Nodos de web: **Aegis** (`aegisHits`, el core aguanta N golpes/oleada) ·
+  **Regen** (`coreRegenPerSec`) · **Bastion** (`bastionPerWavePerLevel`, +HP máx
+  por oleada, vía `addCoreMaxHp` en `startNextWave`) · **Salvage**
+  (`salvagePerKillPerLevel`, cores por kill, independiente de Fortune) ·
+  **Interest** (`interestPerLevel`, bonus si `World::coreCleanWave()`) ·
+  **Prospector** (recarga de reroll al saltear un pick) · **Stockpile**
+  (`reserveFillTime`; reserva un power-up al azar, se activa con **Q** →
+  `App::useReserve`/`World::useReserve`; HUD arriba-derecha) · **Magnet**
+  (`magnetAccel`/`magnetMaxSpeed`, los pickups van a la pelota más cercana) ·
+  **Afterglow** (`afterglowPerLevel`; los efectos continuos —Surge/Overdrive/
+  SlowMo— se desvanecen vía `World::effStrength`, no cortan; Points/Golden sí
+  cortan, guard `remaining > 0`) · **Charged** (`chargedFracPerLevel`, +duración
+  ya cargada, en `World::activateEffect`) · **Ember** (ver arriba).
+- **Web más compacta:** `Screens.cpp` `kRingGap` 72→50, `kNodeR` 14→10, `kRootR`
+  20→15, `kBackRings` 5→9 — sitio para muchos más nodos.
+- Pendiente Fase B: **Appraiser** (5 cartas, toca layout de `ChoiceScreen`) y los
+  sub-nodos de elementos (Plague, Undertow, Permafrost, Avalanche, Tesla,
+  Alchemy). Tuning de todos los `cfg::combat`/`cfg::powerup` nuevos.
+
+**Web** (`MetaUnlock`, 32 nodos — pre-v9 resetea la web; v9→v11 es append-only,
+no resetea):
+Squad (max 2) · Bulwark (+20 HP) · Mend (+3 heal) · rama **Special balls** en
+cadena: Ignition → Venom → Tide → Frost → Quarry → Arc (prismas, cada uno gatea
+al siguiente, `maxLevel 3`: nivel 1 desbloquea el item "add X ball", 2-3 suben
+`elemMult`) · Fortune (cores por kill) · Windfall (20% de 2ª prisma) ·
+**Foresight** (cargas de reroll por run) · Heft (+8%, max 2) · Mass (+10%, max 2)
+· rama **Power-ups**: Uplink · Capacitor · Damper/Facet/Overload · **Ledger** y
+**Kinetics** (nuevos: ahora *todos* los power-ups son de web — un save nuevo no
+tiene ninguno hasta comprarlos; `powerUpMask()` gatea los 5).
+Fase A añade (append, indices 21-31): Aegis · Regen · Bastion · Salvage ·
+Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
 
 ---
 
@@ -424,6 +512,46 @@ de 2ª prisma al ganar) · Heft (+8%, max 2) · Mass (+10%, max 2) · rama
   - **Nueva run** desde arena 1 con los unlocks aplicados.
   - Guardado v3 (solo meta entre sesiones; run en curso reanudable).
   - Debe compilar y ser jugable en bucle completo.
+- **Fase 1g — 6 pelotas elementales + afinidad. [IMPLEMENTADO 2026-09-09]**
+  - Detalle en §7. `Element` pasa a 7 (Plain + Fire/Poison/Water/Ice/Stone/
+    Electric); `Wind`/`Projectile` fuera, `Bolt` (arco electrico) nuevo.
+  - Fuego: de DoT a golpe de contacto reforzado. Nuevos: Poison (DoT que
+    acumula), Ice (congela), Electric (arco a rango invisible). Water = estela
+    "gusano" (`Ball::waterTrail`, ribbon que sigue la trayectoria); Stone =
+    rubble que ahora hace dano.
+  - Items entre oleadas: 6 items **"add X ball"** que agregan directo una pelota
+    de ese elemento, gated por su nodo (se probo un modelo de "afinidad" por
+    probabilidad y se descarto — mejor añadir la pelota). Pool 7 -> 12.
+    `BallToFire` eliminado.
+  - Web: rama Special pasa a una **cadena de 6** (Ignition -> Venom -> Tide ->
+    Frost -> Quarry -> Arc), prismas, `maxLevel 3` (1 desbloquea, 2-3 suben
+    `elemMult`). 13 -> 18 nodos, cada uno sobre un anillo (eje dominante entero).
+    Guardado **v9** (indices corridos: pre-v9 resetea la web, conserva
+    cores/prismas/stats).
+  - Dev overlay: cheat-sheet de teclas fijo arriba a la derecha en `SB_DEV`
+    (`App::drawDevOverlay`); en el menu/web la tecla `C` da 999999 cores+prismas.
+  - Colores: plain = gris, elementales mantienen su tono al acelerar, electric
+    violeta (ver §7).
+  - Sonido de rebotes rehecho: notas pentatónicas por choque (pared + entre
+    pelotas), el combo hace crecer la armonía/campana (ver §7).
+  - `maxBalls` 8→16. Tanda grande de items nuevos + reroll por carta + power-ups
+    movidos a la web (ver §7). Save **v10** (append-only sobre v9).
+  - Pendiente: TODO el tuning de los items nuevos (multiplicadores en
+    `cfg::combat`, se apilan y empujan al `hardSpeedCap` con 16 pelotas), costos
+    de Ledger/Kinetics/Foresight, layout de la web (3 nodos nuevos, sigue
+    apretada — repasar legibilidad), `cfg::element::*`, `Audio::ballHit`.
+
+- **Fase A — tanda de items de combate + nodos de web + web compacta. [IMPLEMENTADO 2026-09-10]**
+  - Detalle en §7. `save v11` (append-only, 32 nodos). Web comprimida en
+    `Screens.cpp` (`kRingGap` 72→50, nodos y raíz más chicos, `kBackRings` 5→9).
+  - 6 items nuevos (Cleave, Keen eye, Battering, Executioner, Overkill, Tempo);
+    11 nodos nuevos (Aegis, Regen, Bastion, Salvage, Interest, Prospector,
+    Stockpile+tecla Q, Magnet, Afterglow, Charged, Ember). Ember devuelve el DoT
+    al fuego. Bugfix: "Repair the core - skip" ahora avanza de oleada.
+  - Pendiente Fase B: Appraiser (5 cartas) y sub-nodos de elementos (Plague,
+    Undertow, Permafrost, Avalanche, Tesla, Alchemy). Tuning de `cfg::combat` /
+    `cfg::powerup` / `cfg::core` nuevos.
+
 - **Fase 2 — Jefe tras la oleada 10.** Da upgrades de pelota (viento/agua/
   piedra). Extiende la run mas alla de 10 en "modo infinito" opcional.
 - **Fase 3 — Variedad.** Repulsor, bumper, rampa. Corredor, tanque, escindido.

@@ -24,13 +24,32 @@ void WorldRenderer::drawCore(sf::RenderWindow& window, const Core& c) const {
     window.draw(hp);
 }
 
-void WorldRenderer::drawPuddle(sf::RenderWindow& window, const Puddle& p) const {
-    const float f = p.maxLife > 0.f ? clampf(p.life / p.maxLife, 0.f, 1.f) : 0.f;
-    sf::CircleShape s(p.radius, 20);
-    s.setOrigin(p.radius, p.radius);
-    s.setPosition(p.pos);
-    s.setFillColor(withAlpha(theme::elemWater, 0.10f + 0.16f * f));
-    window.draw(s);
+// The water ball's "worm" wake: a tapering ribbon along its recent path, widest
+// at the head (by the ball), fading to nothing at the tail.
+void WorldRenderer::drawWaterTrail(sf::RenderWindow& window, const Ball& b) const {
+    const auto& pts = b.waterTrail;
+    const int n = static_cast<int>(pts.size());
+    if (n < 2) return;
+    const float w0 = cfg::element::waterTrailWidth;
+
+    sf::VertexArray ribbon(sf::TriangleStrip, static_cast<std::size_t>(n) * 2);
+    for (int i = 0; i < n; ++i) {
+        const sf::Vector2f prev = pts[i > 0 ? i - 1 : i];
+        const sf::Vector2f next = pts[i < n - 1 ? i + 1 : i];
+        sf::Vector2f dir = next - prev;
+        const float dl = std::sqrt(dir.x * dir.x + dir.y * dir.y);
+        dir = dl > 1e-4f ? dir / dl : sf::Vector2f{1.f, 0.f};
+        const sf::Vector2f nrm{-dir.y, dir.x};
+
+        const float taper = static_cast<float>(i + 1) / static_cast<float>(n);  // 0 tail -> ~1 head
+        const float half = w0 * taper;
+        const sf::Color col = withAlpha(theme::elemWater, (0.10f + 0.28f * taper));
+        ribbon[static_cast<std::size_t>(i) * 2].position = pts[i] + nrm * half;
+        ribbon[static_cast<std::size_t>(i) * 2].color = col;
+        ribbon[static_cast<std::size_t>(i) * 2 + 1].position = pts[i] - nrm * half;
+        ribbon[static_cast<std::size_t>(i) * 2 + 1].color = col;
+    }
+    window.draw(ribbon);
 }
 
 void WorldRenderer::drawObstacle(sf::RenderWindow& window, const Obstacle& o) const {
@@ -45,12 +64,23 @@ void WorldRenderer::drawObstacle(sf::RenderWindow& window, const Obstacle& o) co
     window.draw(s);
 }
 
-void WorldRenderer::drawProjectile(sf::RenderWindow& window, const Projectile& pr) const {
-    sf::CircleShape s(3.5f, 10);
-    s.setOrigin(s.getRadius(), s.getRadius());
-    s.setPosition(pr.pos);
-    s.setFillColor(theme::elemWind);
-    window.draw(s);
+void WorldRenderer::drawBolt(sf::RenderWindow& window, const Bolt& bo) const {
+    const float f = bo.maxLife > 0.f ? clampf(bo.life / bo.maxLife, 0.f, 1.f) : 0.f;
+    const sf::Color col = withAlpha(theme::elemElectric, 0.35f + 0.55f * f);
+
+    // A jagged 3-segment arc between the two endpoints.
+    const sf::Vector2f d = bo.b - bo.a;
+    const sf::Vector2f n = normalized({-d.y, d.x});
+    sf::VertexArray arc(sf::LineStrip, 4);
+    for (int i = 0; i < 4; ++i) {
+        const float t = static_cast<float>(i) / 3.f;
+        float off = 0.f;
+        if (i == 1) off = 7.f;
+        else if (i == 2) off = -6.f;
+        arc[i].position = bo.a + d * t + n * off;
+        arc[i].color = col;
+    }
+    window.draw(arc);
 }
 
 void WorldRenderer::drawBoss(sf::RenderWindow& window, const Boss& b, sf::Vector2f corePos) const {
@@ -117,7 +147,9 @@ void WorldRenderer::drawBoss(sf::RenderWindow& window, const Boss& b, sf::Vector
 void WorldRenderer::drawEnemy(sf::RenderWindow& window, const Enemy& e) const {
     const float frac = e.maxHp > 0.f ? clampf(e.hp / e.maxHp, 0.f, 1.f) : 0.f;
     sf::Color fill = lerpColor(theme::enemy, sf::Color::White, e.hitFlash);
-    if (e.burn > 0.f) fill = lerpColor(fill, theme::elemFire, 0.5f);
+    if (e.poison > 0.f) fill = lerpColor(fill, theme::elemPoison, 0.5f);
+    if (e.burn > 0.f)   fill = lerpColor(fill, theme::elemFire, 0.5f);
+    if (e.frozen > 0.f) fill = lerpColor(fill, theme::elemIce, 0.65f);
 
     sf::CircleShape body(e.radius, 24);
     body.setOrigin(e.radius, e.radius);
@@ -163,10 +195,10 @@ void WorldRenderer::drawPickup(sf::RenderWindow& window, const Pickup& pu) const
 
 void WorldRenderer::drawBall(sf::RenderWindow& window, const Ball& b,
                              const std::optional<ActiveEffect>& effect) const {
-    sf::Color col = b.element == Element::Plain ? b.color
-                                               : lerpColor(b.color, elementColor(b.element), 0.7f);
+    sf::Color col = b.color;   // World bakes the element hue into b.color (see elementSpeedColor)
     float alpha = 1.f;
     if (effect && effect->kind == PowerUp::Golden) col = lerpColor(col, theme::puGolden, 0.85f);
+    if (b.lead) col = lerpColor(col, theme::puGolden, 0.7f);   // "Spearhead": stays gold so you can pick it out
 
     if (!b.held && !b.trail.empty()) {
         const int n = static_cast<int>(b.trail.size());
@@ -191,7 +223,8 @@ void WorldRenderer::drawBall(sf::RenderWindow& window, const Ball& b,
     c.setScale(lerpf(perpS, along, ax), lerpf(perpS, along, ay));
     c.setFillColor(withAlpha(col, alpha));
     c.setOutlineThickness(2.f);
-    c.setOutlineColor(withAlpha(sf::Color::White, (b.held ? 0.85f : 0.16f) * alpha));
+    c.setOutlineColor(withAlpha(b.lead ? theme::puGolden : sf::Color::White,
+                                (b.held ? 0.85f : (b.lead ? 0.9f : 0.16f)) * alpha));
     window.draw(c);
 
     if (b.held) {
@@ -202,16 +235,26 @@ void WorldRenderer::drawBall(sf::RenderWindow& window, const Ball& b,
         ring.setOutlineThickness(2.f);
         ring.setOutlineColor(withAlpha(theme::accent, 0.7f));
         window.draw(ring);
+    } else if (b.lead) {
+        // A steady gold halo so the Spearhead ball is unmistakable among many.
+        sf::CircleShape ring(b.radius + 5.f, 40);
+        ring.setOrigin(ring.getRadius(), ring.getRadius());
+        ring.setPosition(b.pos);
+        ring.setFillColor(sf::Color::Transparent);
+        ring.setOutlineThickness(2.f);
+        ring.setOutlineColor(withAlpha(theme::puGolden, 0.55f * alpha));
+        window.draw(ring);
     }
 }
 
 void WorldRenderer::draw(sf::RenderWindow& window, const World& world) const {
-    for (const Puddle& p : world.puddles()) drawPuddle(window, p);
+    for (const Ball& b : world.balls())
+        if (b.element == Element::Water) drawWaterTrail(window, b);
     for (const Obstacle& o : world.obstacles()) drawObstacle(window, o);
     drawCore(window, world.core());
     drawBoss(window, world.boss(), world.core().pos);
     for (const Enemy& e : world.enemies()) drawEnemy(window, e);
-    for (const Projectile& pr : world.projectiles()) drawProjectile(window, pr);
+    for (const Bolt& bo : world.bolts()) drawBolt(window, bo);
     for (const Pickup& pu : world.pickups()) drawPickup(window, pu);
     for (const Ball& b : world.balls()) drawBall(window, b, world.effect());
 }

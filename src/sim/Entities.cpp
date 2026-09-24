@@ -37,22 +37,26 @@ float powerUpDuration(PowerUp p) {
 
 const char* elementName(Element e) {
     switch (e) {
-        case Element::Plain: return "Plain";
-        case Element::Fire:  return "Fire";
-        case Element::Wind:  return "Wind";
-        case Element::Water: return "Water";
-        case Element::Stone: return "Stone";
+        case Element::Plain:    return "Plain";
+        case Element::Fire:     return "Fire";
+        case Element::Poison:   return "Poison";
+        case Element::Water:    return "Water";
+        case Element::Ice:      return "Ice";
+        case Element::Stone:    return "Stone";
+        case Element::Electric: return "Electric";
     }
     return "Plain";
 }
 
 sf::Color elementColor(Element e) {
     switch (e) {
-        case Element::Plain: return theme::ballMid;
-        case Element::Fire:  return theme::elemFire;
-        case Element::Wind:  return theme::elemWind;
-        case Element::Water: return theme::elemWater;
-        case Element::Stone: return theme::elemStone;
+        case Element::Plain:    return theme::textLo;   // neutral grey - see theme::speedColor
+        case Element::Fire:     return theme::elemFire;
+        case Element::Poison:   return theme::elemPoison;
+        case Element::Water:    return theme::elemWater;
+        case Element::Ice:      return theme::elemIce;
+        case Element::Stone:    return theme::elemStone;
+        case Element::Electric: return theme::elemElectric;
     }
     return theme::ballMid;
 }

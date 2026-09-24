@@ -68,7 +68,6 @@ private:
     void release(App& app);
     sf::Vector2f pointerVelocity() const;
     void drawPicks(App& app, sf::RenderWindow& w) const;
-    void drawDevKeys(App& app, sf::RenderWindow& w) const;
 
     void drawWaveBanner(App& app, sf::RenderWindow& w) const;
 
@@ -94,8 +93,10 @@ public:
 private:
     int cardAt(App& app, sf::Vector2f mouse) const;  // 0..3, -1 none
     sf::FloatRect healRect(sf::Vector2f size) const;  // "repair core" button, when the core isn't full
+    sf::FloatRect rerollRect(sf::Vector2f size, int i) const;  // "reroll" strip under card i
     bool coreHurt(App& app) const;
     float hover_[4] = {};
+    float rerollHover_[4] = {};
     float healHover_ = 0.f;
 };
 

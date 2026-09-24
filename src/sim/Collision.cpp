@@ -54,11 +54,11 @@ Contact circleVsSolidCircle(Ball& b, sf::Vector2f center, float radius, float re
     return c;
 }
 
-void resolveBallPair(Ball& a, Ball& b) {
+bool resolveBallPair(Ball& a, Ball& b) {
     const sf::Vector2f d = b.pos - a.pos;
     const float dist = length(d);
     const float minDist = a.radius + b.radius;
-    if (dist <= 1e-4f || dist >= minDist) return;
+    if (dist <= 1e-4f || dist >= minDist) return false;
 
     const sf::Vector2f n = d / dist;
     const float push = (minDist - dist) * 0.5f;
@@ -70,7 +70,9 @@ void resolveBallPair(Ball& a, Ball& b) {
     if (vb - va < 0.f) {
         a.vel += (vb - va) * n;
         b.vel += (va - vb) * n;
+        return true;
     }
+    return false;
 }
 
 }  // namespace sb::collision

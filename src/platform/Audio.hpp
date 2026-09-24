@@ -26,7 +26,12 @@ public:
     void setTrack(Track t);   // idempotent: cross to the given looping track
     Track track() const { return track_; }
 
-    void bounce(float speed01);
+    // A ball clacked off a wall / core / another ball. Plays a note from a
+    // pentatonic set (higher = faster, ball-vs-ball rings up an octave); as
+    // `harmony01` (the damage combo, 0..1) climbs, a bell layer and chord tones
+    // bloom in, so a long frantic chain sounds richer and fuller.
+    void ballHit(float speed01, float harmony01, bool ballPair);
+    void coreThud();          // an enemy reached the core: a low, dull knock
     void pickup();
     void purchase();
     void comboUp(int tier);
@@ -38,13 +43,16 @@ private:
 
     bool ok_ = false;
     bool enabled_ = true;
-    sf::SoundBuffer bounce_;
+    std::vector<sf::SoundBuffer> noteSoft_;   // pure sine, one per pentatonic degree
+    std::vector<sf::SoundBuffer> noteRich_;   // bell (sine + partials), fades in with the combo
+    sf::SoundBuffer thud_;
     sf::SoundBuffer pickup_;
     sf::SoundBuffer purchase_;
     sf::SoundBuffer combo_;
     sf::SoundBuffer throw_;
     std::vector<sf::Sound> pool_;
     std::size_t next_ = 0;
+    unsigned hitTick_ = 0;    // rolls forward per ball hit, for subtle note / pitch wander
 
     Track track_ = Track::None;
     sf::Music menuMusic_;

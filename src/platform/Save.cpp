@@ -10,7 +10,7 @@
 namespace sb {
 
 namespace {
-constexpr int kSaveVersion = 8;   // v8: skill web renumbered (13 nodes) + stat.bestScore
+constexpr int kSaveVersion = 11;  // v11: appended Aegis..Ember (32 nodes); append-only, v9/v10 load fine
 }  // namespace
 
 bool hasSavedGame(const std::string& path) {
@@ -66,10 +66,11 @@ bool loadGame(const std::string& path, GameData& d) {
         else if (key == "meta.cores") ls >> m.cores;
         else if (key == "meta.prisms") ls >> m.prisms;
         else if (key == "meta.unlock") {
-            // v8 renumbered the web; older unlock allocations would land on the
-            // wrong nodes, so drop them and let the tree be re-bought.
+            // v9 inserted nodes and shifted indices; older unlock allocations
+            // would land on the wrong nodes, so drop them and let the tree be
+            // re-bought. Cores / prisms / stats are kept.
             int i = -1, lvl = 0;
-            if (fileVersion >= 8 && ls >> i >> lvl && i >= 0 && i < MetaUnlockCount)
+            if (fileVersion >= 9 && ls >> i >> lvl && i >= 0 && i < MetaUnlockCount)
                 m.unlock[i] = lvl;
         }
         // v4 and earlier stored these two unlocks by name.

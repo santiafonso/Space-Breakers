@@ -98,11 +98,50 @@ WorldParams App::params() const {
     p.wave = std::max(1, data_.run.wave);
     p.ballRadiusMult = 1.f + cfg::combat::bigBallPerPick * static_cast<float>(m.bigBall);
     p.coreBounceBoost = m.spring ? cfg::combat::springBoost : 1.f;
+    p.wallBounceBoost = m.wallRush ? cfg::combat::wallBounceBoost : 1.f;
+    p.pairBounceBoost = m.carom ? cfg::combat::pairBounceBoost : 1.f;
     p.flingDecayMult = m.flingMomentum ? cfg::combat::flingDecayMult : 1.f;
     p.slowField = m.slowField;
+    p.ricochet = m.ricochet;
+    p.maxSpeedMult = m.ceilingBreak ? cfg::combat::ceilingBreakMult : 1.f;
+    p.warmUp = m.warmUp;
+    p.knockbackMult = m.heavyKnock ? cfg::combat::heavyKnockMult : 1.f;
+    p.conductor = m.conductor;
+    p.shatter = m.shatter;
+    p.contagion = m.contagion;
+    p.bedrock = m.bedrock;
+    p.primed = m.primed;
+    p.leadBallCruise = m.spearhead ? cfg::combat::leadBallCruise : 1.f;
+
+    // "Ball combat" items (Fase A).
+    p.crit = m.crit;
+    p.bruiser = m.bruiser;
+    p.executioner = m.executioner;
+    p.overkill = m.overkill;
+    p.cleave = m.cleave;
+    p.tempo = m.tempo;
+
+    // Meta web (Fase A).
+    p.emberLevel = u[MetaEmber];
+    p.aegisHits = u[MetaAegis];
+    p.coreRegenPerSec = cfg::core::regenPerLevel * static_cast<float>(u[MetaRegen]);
+    p.stockpile = u[MetaStockpile] > 0;
+    p.magnetPickups = u[MetaMagnet] > 0;
+    p.afterglowLevel = u[MetaAfterglow];
+    p.chargedFrac = cfg::powerup::chargedFracPerLevel * static_cast<float>(u[MetaCharged]);
+
     p.powerUpMask = powerUpMask();
     p.pickupSpawnMult = std::max(0.15f, 1.f - 0.25f * static_cast<float>(u[MetaUplink]));
     p.pickupDurMult = 0.5f + 0.35f * static_cast<float>(u[MetaCapacitor]);
+
+    // Per-element potency: web level 1 unlocks the element, levels past that
+    // raise elemMult. Index 1..6 = Fire..Electric (see enum Element).
+    static const int kElemNode[kElementItemCount] = {MetaFireItem, MetaVenom, MetaTide,
+                                                     MetaFrost, MetaQuarry, MetaArc};
+    for (int i = 0; i < kElementItemCount; ++i) {
+        const int lvl = u[kElemNode[i]];
+        p.elemMult[i + 1] = 1.f + cfg::element::powerPerLevel * static_cast<float>(std::max(0, lvl - 1));
+    }
     return p;
 }
 
@@ -115,13 +154,13 @@ float App::startCoreHp() const {
            cfg::core::hpPerBulwark * static_cast<float>(data_.meta.unlock[MetaCoreHp]);
 }
 
-int App::fireCap() const { return 1; }   // at most one fire ball per run
-
-// Which power-ups can drop: Points2x / Surge always, the rest gated by web nodes.
+// Which power-ups can drop: every one is gated by its web node now, so a fresh
+// run has none until the Pickups branch is bought into.
 unsigned App::powerUpMask() const {
     const int* u = data_.meta.unlock;
-    unsigned mask = (1u << static_cast<int>(PowerUp::Points2x)) |
-                    (1u << static_cast<int>(PowerUp::Surge));
+    unsigned mask = 0;
+    if (u[MetaLedger] > 0)   mask |= 1u << static_cast<int>(PowerUp::Points2x);
+    if (u[MetaKinetics] > 0) mask |= 1u << static_cast<int>(PowerUp::Surge);
     if (u[MetaDamper] > 0)   mask |= 1u << static_cast<int>(PowerUp::SlowMo);
     if (u[MetaFacet] > 0)    mask |= 1u << static_cast<int>(PowerUp::Golden);
     if (u[MetaOverload] > 0) mask |= 1u << static_cast<int>(PowerUp::Overdrive);
@@ -187,6 +226,7 @@ void App::newRun() {
     // Meta skill-web nodes that seed the run's mods before the world is built.
     r.mods.heavyImpact += data_.meta.unlock[MetaHeft];
     r.mods.bigBall     += data_.meta.unlock[MetaMass];
+    r.rerollsLeft = data_.meta.unlock[MetaReroll] * cfg::run::rerollsPerLevel;
 
     runBanked_ = false;
 
@@ -233,6 +273,8 @@ void App::startNextWave() {
     waveIntro_ = cfg::app::waveIntroTime;   // ease the sim in instead of snapping
     world_.repairCore(cfg::core::waveHeal +
                       cfg::core::mendPerLevel * static_cast<float>(data_.meta.unlock[MetaMend]));
+    if (const int bastion = data_.meta.unlock[MetaBastion]; bastion > 0)   // "Bastion": max HP grows each wave
+        world_.addCoreMaxHp(cfg::core::bastionPerWavePerLevel * static_cast<float>(bastion));
     const int w = data_.run.wave;
     if (w == cfg::run::bossWave)
         world_.startBossWave(params());              // wave 10: Charger miniboss
@@ -246,24 +288,44 @@ void App::startNextWave() {
         std::max(data_.meta.stats.bestWave, static_cast<std::uint32_t>(data_.run.wave));
 }
 
-void App::rollChoices() {
+UpgradeCtx App::buildUpgradeCtx() const {
     const RunState& r = data_.run;
-    int fireBalls = 0;
-    for (int e : r.balls)
-        if (e == static_cast<int>(Element::Fire)) ++fireBalls;
-
     UpgradeCtx c;
     c.ballCount = runBallCount();
     c.maxBalls = cfg::ball::maxBalls;
-    c.fireBalls = fireBalls;
-    c.fireCap = fireCap();
-    c.fireUnlocked = data_.meta.unlock[MetaFireItem] > 0;
+    static const int kElemNode[kElementItemCount] = {MetaFireItem, MetaVenom, MetaTide,
+                                                     MetaFrost, MetaQuarry, MetaArc};
+    for (int i = 0; i < kElementItemCount; ++i)
+        c.elemUnlocked[i] = data_.meta.unlock[kElemNode[i]] > 0;
     c.bigBallPicks = r.mods.bigBall;
     c.heavyImpactPicks = r.mods.heavyImpact;
     c.spring = r.mods.spring;
     c.slowField = r.mods.slowField;
     c.flingMomentum = r.mods.flingMomentum;
+    c.wallRush = r.mods.wallRush;
+    c.carom = r.mods.carom;
+    c.strongArm = r.mods.strongArm;
+    c.ricochet = r.mods.ricochet;
+    c.ceilingBreak = r.mods.ceilingBreak;
+    c.warmUp = r.mods.warmUp;
+    c.heavyKnock = r.mods.heavyKnock;
+    c.conductor = r.mods.conductor;
+    c.shatter = r.mods.shatter;
+    c.contagion = r.mods.contagion;
+    c.bedrock = r.mods.bedrock;
+    c.primed = r.mods.primed;
+    c.spearhead = r.mods.spearhead;
+    c.crit = r.mods.crit;
+    c.bruiser = r.mods.bruiser;
+    c.executioner = r.mods.executioner;
+    c.overkill = r.mods.overkill;
+    c.cleave = r.mods.cleave;
+    c.tempo = r.mods.tempo;
+    return c;
+}
 
+void App::rollChoices() {
+    const UpgradeCtx c = buildUpgradeCtx();
     std::vector<UpgradeKind> pool;
     for (int i = 0; i < kUpgradeKindCount; ++i) {
         const auto k = static_cast<UpgradeKind>(i);
@@ -277,6 +339,27 @@ void App::rollChoices() {
                                    : pool[static_cast<std::size_t>(i) % pool.size()];
 }
 
+// "reroll" button under a Choice card: swap that one card for a different
+// eligible item that isn't already on the table. Costs one Foresight charge.
+void App::rerollChoice(int idx) {
+    if (idx < 0 || idx >= kChoiceCount || data_.run.rerollsLeft <= 0) return;
+    const UpgradeCtx c = buildUpgradeCtx();
+    std::vector<UpgradeKind> pool;
+    for (int i = 0; i < kUpgradeKindCount; ++i) {
+        const auto k = static_cast<UpgradeKind>(i);
+        if (!upgradeEligible(k, c)) continue;
+        bool shown = false;
+        for (int j = 0; j < kChoiceCount; ++j)
+            if (choices_[j] == k) shown = true;
+        if (!shown) pool.push_back(k);
+    }
+    if (pool.empty()) return;   // nothing new to offer - keep the charge
+    choices_[idx] = pool[static_cast<std::size_t>(rng_.irange(0, static_cast<int>(pool.size()) - 1))];
+    --data_.run.rerollsLeft;
+    audio_.purchase();
+    effects_.flash(theme::accent, 0.25f);
+}
+
 void App::openChoice() {
     rollChoices();
     push(ScreenId::Choice);
@@ -286,30 +369,62 @@ void App::applyUpgradeKind(UpgradeKind k) {
     RunState& r = data_.run;
     RunMods& m = r.mods;
     r.picks.push_back(static_cast<int>(k));
+    if (const int s = elementItemSlot(k); s >= 0) {
+        const Element e = static_cast<Element>(s + 1);   // slot 0..5 -> Fire..Electric
+        world_.addBall(e, params());
+        r.balls.push_back(static_cast<int>(e));
+        return;
+    }
     switch (k) {
         case UpgradeKind::AddBall:
             world_.addBall(Element::Plain, params());
             r.balls.push_back(static_cast<int>(Element::Plain));
             break;
-        case UpgradeKind::BallToFire:
-            for (int& e : r.balls)
-                if (e == static_cast<int>(Element::Plain)) { e = static_cast<int>(Element::Fire); break; }
-            world_.convertOneBall(Element::Plain, Element::Fire);
-            break;
         case UpgradeKind::CoreSpring:    m.spring = true; break;
         case UpgradeKind::CoreSlowField: m.slowField = true; break;
         case UpgradeKind::FlingMomentum: m.flingMomentum = true; break;
+        case UpgradeKind::WallRush:      m.wallRush = true; break;
+        case UpgradeKind::Carom:         m.carom = true; break;
+        case UpgradeKind::StrongArm:     m.strongArm = true; break;
+        case UpgradeKind::Ricochet:      m.ricochet = true; break;
+        case UpgradeKind::CeilingBreak:  m.ceilingBreak = true; break;
+        case UpgradeKind::WarmUp:        m.warmUp = true; break;
+        case UpgradeKind::HeavyKnock:    m.heavyKnock = true; break;
+        case UpgradeKind::Conductor:     m.conductor = true; break;
+        case UpgradeKind::Shatter:       m.shatter = true; break;
+        case UpgradeKind::Contagion:     m.contagion = true; break;
+        case UpgradeKind::Bedrock:       m.bedrock = true; break;
+        case UpgradeKind::Primed:        m.primed = true; break;
+        case UpgradeKind::Spearhead:     m.spearhead = true; break;
         case UpgradeKind::HeavyImpact:   ++m.heavyImpact; break;
         case UpgradeKind::BigBall:       ++m.bigBall; break;
+        case UpgradeKind::Cleave:        m.cleave = true; break;
+        case UpgradeKind::Crit:          m.crit = true; break;
+        case UpgradeKind::Bruiser:       m.bruiser = true; break;
+        case UpgradeKind::Executioner:   m.executioner = true; break;
+        case UpgradeKind::Overkill:      m.overkill = true; break;
+        case UpgradeKind::Tempo:         m.tempo = true; break;
+        default: break;
     }
 }
 
 // "Repair core" button on the Item screen: heal to full, but forfeit the pick.
 void App::repairCoreSkipItem() {
     world_.repairCore(1e9f);
+    if (const int prospector = data_.meta.unlock[MetaProspector]; prospector > 0)
+        data_.run.rerollsLeft += prospector;   // "Prospector": skipping refunds reroll charges
     audio_.purchase();
     effects_.flash(theme::core, 0.4f);
     back();
+    startNextWave();
+}
+
+// "Stockpile" web node: fire the reserved power-up (Q during play).
+void App::useReserve() {
+    if (!world_.hasReserve()) return;
+    world_.useReserve(params());
+    audio_.pickup();
+    effects_.flash(theme::accent, 0.5f);
 }
 
 void App::applyUpgrade(int idx) {
@@ -427,6 +542,14 @@ void App::devGrantCores(int n) {
     effects_.flash(theme::accent, 0.3f);
 }
 
+void App::devGrantCurrency() {
+    if (!devMode()) return;
+    data_.meta.cores = std::max(data_.meta.cores, 999999u);
+    data_.meta.prisms = std::max(data_.meta.prisms, 999999u);
+    effects_.flash(theme::accent, 0.4f);
+    save();
+}
+
 void App::devHealCore() {
     if (!devMode() || !data_.run.active) return;
     world_.repairCore(1e9f);
@@ -533,15 +656,21 @@ void App::processEvents(const FrameEvents& ev) {
     if (!ev.kills.empty()) {
         hitstop_ = std::max(hitstop_, cfg::app::hitstopKill);
         const int n = static_cast<int>(ev.kills.size());
-        const bool dbl = world_.effect() && world_.effect()->kind == PowerUp::Points2x;
+        const auto& eff = world_.effect();
+        const bool dbl = eff && eff->kind == PowerUp::Points2x && eff->remaining > 0.f;
         data_.run.score += n * cfg::score::perKill * (dbl ? 2 : 1);
-        data_.run.bountyCores += static_cast<float>(n) * cfg::meta::bountyPerKillPerLevel *
-                                 static_cast<float>(data_.meta.unlock[MetaBounty]);
+        data_.run.bountyCores += static_cast<float>(n) *
+            (cfg::meta::bountyPerKillPerLevel * static_cast<float>(data_.meta.unlock[MetaBounty]) +
+             cfg::meta::salvagePerKillPerLevel * static_cast<float>(data_.meta.unlock[MetaSalvage]));
     }
+    // The combo tier drives how "harmonic" the bounce notes get (0..1).
+    const float harmony = cfg::combo::baseCapTier > 0
+        ? static_cast<float>(ev.comboTier) / static_cast<float>(cfg::combo::baseCapTier)
+        : 0.f;
     for (const BounceFx& b : ev.bounces) {
         effects_.addRing(b.pos, b.speed, b.color);
-        effects_.edgeHit(b.normal);
-        audio_.bounce(clampf(b.speed / 900.f, 0.f, 1.f));
+        if (!b.ballPair) effects_.edgeHit(b.normal);   // edge flash only for wall / core hits
+        audio_.ballHit(clampf(b.speed / 900.f, 0.f, 1.f), harmony, b.ballPair);
     }
     if (ev.comboTierUp) {
         hud_.pulseCombo();
@@ -555,7 +684,7 @@ void App::processEvents(const FrameEvents& ev) {
     }
     if (ev.coreHit) {
         effects_.flash(theme::coreLow, 0.55f);
-        audio_.bounce(0.15f);
+        audio_.coreThud();
         hitstop_ = std::max(hitstop_, cfg::app::hitstopCoreHit);
         camKick_ = std::max(camKick_, cfg::app::camKickCoreHit);
     }
@@ -573,6 +702,9 @@ void App::processEvents(const FrameEvents& ev) {
         return;
     }
     if (ev.waveCleared) {
+        if (const int interest = data_.meta.unlock[MetaInterest];   // "Interest": reward a clean wave
+            interest > 0 && world_.coreCleanWave())
+            data_.run.bountyCores += cfg::meta::interestPerLevel * static_cast<float>(interest);
         const int w = data_.run.wave;
         if (w == cfg::run::bossWave) {
             // Miniboss down. First win ever: bank it now, card offers only "Back".
@@ -682,7 +814,8 @@ void App::update(float frameDt) {
     const int finalWave = continueUnlocked_ ? cfg::run::finalWave : cfg::run::bossWave;
     hud_.update(frameDt, world_.wave(), finalWave, world_.enemiesLeft(),
                 c.maxHp > 0.f ? c.hp / c.maxHp : 0.f, world_.comboMultiplier(),
-                data_.run.score, world_.effect(), world_.bossWave());
+                data_.run.score, world_.effect(), world_.bossWave(),
+                world_.hasReserve(), world_.reservePu());
 }
 
 void App::render() {
@@ -702,7 +835,38 @@ void App::render() {
 
     effects_.drawOverlay(w);
     if (fade_ > 0.01f) drawDim(w, size(), fade_ * 0.5f);
+    if (devMode()) drawDevOverlay(w);
     w.display();
+}
+
+// A fixed cheat-sheet of the dev keys, top-right on every screen, so there's no
+// need to remember which key does what. Keys are screen-specific: the "run" ones
+// only do anything on the Play screen, "menu" ones on the game menu.
+void App::drawDevOverlay(sf::RenderWindow& w) const {
+    const bool invuln = world_.devInvuln();
+    const std::array<std::pair<const char*, bool>, 10> lines = {{
+        {"- DEV -", true},
+        {"menu / web:", false},
+        {"  C   +999999 cores & prisms", false},
+        {"in a run:", false},
+        {"  N win wave   H heal core", false},
+        {invuln ? "  G invuln: ON   B add ball" : "  G invuln: off   B add ball", invuln},
+        {"  U grant next item   C +25 cores", false},
+        {"  TAB   items taken", false},
+        {"env (on Start):", false},
+        {"  SB_WAVE  SB_BALLS  SB_UPGRADES", false},
+    }};
+    const float right = size().x - theme::margin;
+    float y = theme::margin;
+    for (const auto& [text, hot] : lines) {
+        sf::Text t = makeText(font_, text, theme::fsSmall,
+                              hot ? theme::core : theme::accent);
+        const sf::FloatRect b = t.getLocalBounds();
+        t.setOrigin(b.left + b.width, b.top);
+        t.setPosition(right, y);
+        w.draw(t);
+        y += 16.f;
+    }
 }
 
 int App::run() {

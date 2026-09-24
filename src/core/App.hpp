@@ -41,6 +41,7 @@ public:
     WorldParams params() const;
 
     int runBallCount() const { return static_cast<int>(data_.run.balls.size()); }
+    int rerollsLeft() const { return data_.run.rerollsLeft; }
     int lastRunWave() const { return lastRunWave_; }
     int lastRunCores() const { return lastRunCores_; }
     int lastRunPrisms() const { return lastRunPrisms_; }
@@ -50,7 +51,9 @@ public:
     void openLoadout();     // Menu -> the game menu
     void newRun();          // Loadout "Start" -> a fresh run
     void applyUpgrade(int idx);   // Choice: pick one of the four
+    void rerollChoice(int idx);   // Choice: swap card `idx` for another item (costs a Foresight charge)
     void repairCoreSkipItem();    // Choice: heal the core to full instead of taking an item
+    void useReserve();            // Play: fire the "Stockpile" reserve power-up (key Q)
     void leaveBossWin();    // BossWin card "Back to menu" -> game menu (banks the run)
     void continuePastBoss();  // BossWin card "Continue" -> resume at wave 11
     bool bossWinCanContinue() const;  // true when the BossWin card should offer "Continue"
@@ -61,6 +64,7 @@ public:
     bool devMode() const;
     void devWinWave();
     void devGrantCores(int n);
+    void devGrantCurrency();   // top cores + prisms up to a huge pile (game-menu web testing)
     void devHealCore();
     void devToggleInvuln();
     void devAddBall();
@@ -84,10 +88,10 @@ private:
 
     int startBallCount() const;
     float startCoreHp() const;
-    int fireCap() const;
     unsigned powerUpMask() const;
     void startNextWave();
     void openChoice();
+    UpgradeCtx buildUpgradeCtx() const;   // shared by rollChoices / rerollChoice
     void rollChoices();
     void applyUpgradeKind(UpgradeKind k);
     void bankRun(bool won);   // pay out cores/prisms/stats for the run; no navigation
@@ -96,6 +100,7 @@ private:
     void handleEvent(const sf::Event& e);
     void update(float frameDt);
     void render();
+    void drawDevOverlay(sf::RenderWindow& w) const;   // dev key cheat-sheet, always top-right in SB_DEV
     void processEvents(const FrameEvents& ev);
 
     Window window_;

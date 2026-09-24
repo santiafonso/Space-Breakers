@@ -21,7 +21,8 @@ Contact circleVsBounds(Ball& b, sf::Vector2f size);
 // (1 = elastic, 0 = the ball just grazes past).
 Contact circleVsSolidCircle(Ball& b, sf::Vector2f center, float radius, float rebound);
 
-// Equal-mass elastic response for a pair of overlapping balls.
-void resolveBallPair(Ball& a, Ball& b);
+// Equal-mass elastic response for a pair of overlapping balls. Returns true when
+// the two were actually approaching and an impulse was applied (a real clack).
+bool resolveBallPair(Ball& a, Ball& b);
 
 }  // namespace sb::collision

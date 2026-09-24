@@ -15,7 +15,7 @@ public:
     void init(const sf::Font& font, sf::Vector2f size);
     void update(float dt, int wave, int finalWave, int enemiesLeft, float coreFrac,
                 float comboMultiplier, int score, const std::optional<ActiveEffect>& effect,
-                bool bossWave);
+                bool bossWave, bool hasReserve, PowerUp reservePu);
     void pulseCombo();
     void draw(sf::RenderWindow& window) const;
 
@@ -32,6 +32,8 @@ private:
     float comboPop_ = 0.f;
     float effectAlpha_ = 0.f;
     std::optional<ActiveEffect> effect_;
+    bool hasReserve_ = false;
+    PowerUp reservePu_ = PowerUp::Points2x;
 };
 
 }  // namespace sb

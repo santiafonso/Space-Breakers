@@ -18,7 +18,7 @@ void Hud::pulseCombo() { comboPop_ = 1.f; }
 
 void Hud::update(float dt, int wave, int finalWave, int enemiesLeft, float coreFrac,
                  float comboMultiplier, int score, const std::optional<ActiveEffect>& effect,
-                 bool bossWave) {
+                 bool bossWave, bool hasReserve, PowerUp reservePu) {
     wave_ = wave;
     finalWave_ = finalWave;
     bossWave_ = bossWave;
@@ -27,6 +27,8 @@ void Hud::update(float dt, int wave, int finalWave, int enemiesLeft, float coreF
     coreFrac_ = clampf(coreFrac, 0.f, 1.f);
     comboMul_ = comboMultiplier;
     effect_ = effect;
+    hasReserve_ = hasReserve;
+    reservePu_ = reservePu;
 
     comboPop_ *= std::exp(-7.f * dt);
     const float target = effect ? 1.f : 0.f;
@@ -56,6 +58,17 @@ void Hud::draw(sf::RenderWindow& window) const {
         sc.setOrigin(sb.left + sb.width, sb.top);
         sc.setPosition(size_.x - theme::margin, theme::margin - 2.f);
         window.draw(sc);
+    }
+
+    // "Stockpile" reserve power-up, just under the score.
+    if (hasReserve_) {
+        const sf::Color col = powerUpColor(reservePu_);
+        sf::Text rs = makeText(*font_, std::string("[Q] ") + powerUpName(reservePu_),
+                               theme::fsSmall, col);
+        const sf::FloatRect rb = rs.getLocalBounds();
+        rs.setOrigin(rb.left + rb.width, rb.top);
+        rs.setPosition(size_.x - theme::margin, theme::margin + 22.f);
+        window.draw(rs);
     }
 
     // Wave / core-health banner, top centre.

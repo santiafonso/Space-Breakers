@@ -73,11 +73,14 @@ std::string currencyLine(const MetaState& m) {
 // Polar layout: a node's (gx,gy) is a direction plus a ring index
 // (ring = max(|gx|,|gy|)), so every node sits exactly on a background ring.
 // Kept small on purpose - the web will gain many more nodes later.
-constexpr float kRingGap = 72.f;      // pixels between concentric rings
-constexpr float kNodeR = 14.f;        // branch node radius
-constexpr float kRootR = 20.f;        // centre node radius
+// The web is drawn small on purpose: it will grow to many more nodes and levels,
+// so every element (ring gap, node radius, label offsets, hit radius) is kept
+// tight to fit the graph into the middle of the screen.
+constexpr float kRingGap = 36.f;      // pixels between concentric rings
+constexpr float kNodeR = 7.f;         // branch node radius
+constexpr float kRootR = 10.f;        // centre node radius
 constexpr float kWebCenterY = 0.5f;   // * size.y
-constexpr int   kBackRings = 4;       // faint rings drawn behind the web (room to grow)
+constexpr int   kBackRings = 13;      // faint rings drawn behind the web (room to grow)
 
 const sf::Color kPrismColor = theme::puSurge;   // violet - distinct from the core-blue accent
 
@@ -217,7 +220,7 @@ sf::Vector2f LoadoutScreen::nodePos(App& app, int i) const {
 
 int LoadoutScreen::nodeAt(App& app, sf::Vector2f mouse) const {
     for (int i = 0; i < MetaUnlockCount; ++i) {
-        const float r = (i == 0 ? kRootR : kNodeR) + 10.f;
+        const float r = (i == 0 ? kRootR : kNodeR) + 9.f;   // generous but < half the ring gap
         const sf::Vector2f d = mouse - nodePos(app, i);
         if (d.x * d.x + d.y * d.y <= r * r) return i;
     }
@@ -251,6 +254,7 @@ void LoadoutScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse
             case sf::Keyboard::Up:    moveSelection(app, 0, -1); return;
             case sf::Keyboard::Down:  moveSelection(app, 0, 1);  return;
             case sf::Keyboard::E:     app.buyMetaUnlock(selNode_); return;
+            case sf::Keyboard::C:     if (app.devMode()) { app.devGrantCurrency(); return; } break;
             default: break;
         }
     }
@@ -385,7 +389,7 @@ void LoadoutScreen::draw(App& app, sf::RenderWindow& w) {
         halo.setFillColor(sf::Color::Transparent);
         halo.setOutlineThickness(1.f);
         halo.setOutlineColor(withAlpha(theme::arenaEdge,
-                                       (0.26f - 0.05f * static_cast<float>(ring - 1)) * ringsA));
+                                       std::max(0.04f, 0.26f - 0.03f * static_cast<float>(ring - 1)) * ringsA));
         w.draw(halo);
     }
 
@@ -494,9 +498,6 @@ void LoadoutScreen::draw(App& app, sf::RenderWindow& w) {
     menu_.draw(w, it);
     drawCenteredPop(w, app.font(), "Enter starts the run      Esc goes back", theme::fsSmall,
                     {s.x * 0.5f, s.y * 0.95f}, theme::textDim, introPop(it, 0.28f));
-    if (app.devMode())
-        drawCentered(w, app.font(), "DEV: env SB_WAVE / SB_BALLS / SB_UPGRADES apply on Start",
-                     theme::fsSmall, {s.x * 0.5f, s.y * 0.975f}, theme::accent);
 }
 
 // ================================================================ Play
@@ -530,7 +531,8 @@ void PlayScreen::grab(App& app, sf::Vector2f mouse) {
 
 void PlayScreen::release(App& app) {
     if (!dragging_) return;
-    const sf::Vector2f v = pointerVelocity() * cfg::app::throwVelScale;
+    const float power = app.data().run.mods.strongArm ? cfg::combat::flingPowerBoost : 1.f;
+    const sf::Vector2f v = pointerVelocity() * cfg::app::throwVelScale * power;
     app.world().releaseHeld(v);
     if (app.world().grabbedKind() == Grabbed::None) app.audio().thrown(clampf(length(v) / 900.f, 0.f, 1.f));
     dragging_ = false;
@@ -540,6 +542,7 @@ void PlayScreen::release(App& app) {
 void PlayScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
     if (isKey(e, sf::Keyboard::Escape)) { app.openPause(); return; }
     if (isKey(e, sf::Keyboard::M)) { app.toggleSound(); return; }
+    if (isKey(e, sf::Keyboard::Q)) { app.useReserve(); return; }   // "Stockpile" reserve power-up
     if (isKey(e, sf::Keyboard::Tab)) { showPicks_ = true; return; }
     if (e.type == sf::Event::KeyReleased && e.key.code == sf::Keyboard::Tab) {
         showPicks_ = false;
@@ -611,7 +614,6 @@ void PlayScreen::draw(App& app, sf::RenderWindow& w) {
     drawCentered(w, app.font(), "hold TAB for upgrades", theme::fsSmall,
                  {theme::margin + 60.f, s.y - theme::margin - 56.f}, theme::textDim);
 
-    if (app.devMode()) drawDevKeys(app, w);
     if (showPicks_) drawPicks(app, w);
 
     drawWaveBanner(app, w);
@@ -651,33 +653,6 @@ void PlayScreen::drawWaveBanner(App& app, sf::RenderWindow& w) const {
     bar.setPosition(c.x, c.y + static_cast<float>(theme::fsTitle) * 0.55f + 10.f);
     bar.setFillColor(withAlpha(theme::accent, a));
     w.draw(bar);
-}
-
-void PlayScreen::drawDevKeys(App& app, sf::RenderWindow& w) const {
-    const sf::Vector2f s = app.size();
-    const bool invuln = app.world().devInvuln();
-    const std::array<std::string, 8> lines = {{
-        "- DEV -",
-        "N   win wave",
-        "H   heal core",
-        std::string("G   invuln: ") + (invuln ? "ON" : "off"),
-        "B   add ball",
-        "U   grant next item",
-        "C   +25 cores",
-        "TAB   items taken",
-    }};
-    const float right = s.x - theme::margin;
-    float y = theme::margin + 74.f;
-    for (std::size_t i = 0; i < lines.size(); ++i) {
-        const sf::Color col = i == 0 ? theme::accent
-                                     : (invuln && i == 3 ? theme::core : theme::textDim);
-        sf::Text t = makeText(app.font(), lines[i], theme::fsSmall, col);
-        const sf::FloatRect b = t.getLocalBounds();
-        t.setOrigin(b.left + b.width, b.top);
-        t.setPosition(right, y);
-        w.draw(t);
-        y += 17.f;
-    }
 }
 
 void PlayScreen::drawPicks(App& app, sf::RenderWindow& w) const {
@@ -759,6 +734,14 @@ sf::FloatRect ChoiceScreen::healRect(sf::Vector2f s) const {
     return {s.x * 0.5f - wd * 0.5f, cy - ht * 0.5f, wd, ht};
 }
 
+// A "reroll" strip along the bottom edge of card i (inside it, above the heal button).
+sf::FloatRect ChoiceScreen::rerollRect(sf::Vector2f s, int i) const {
+    const sf::Vector2f c = cardCenter(s, i);
+    const float wd = kCardW - 28.f, ht = 22.f;
+    const float cy = c.y + kCardH * 0.5f - 15.f;
+    return {c.x - wd * 0.5f, cy - ht * 0.5f, wd, ht};
+}
+
 bool ChoiceScreen::coreHurt(App& app) const {
     const Core& c = app.world().core();
     return c.hp < c.maxHp - 0.5f;
@@ -771,6 +754,10 @@ void ChoiceScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse)
         return;
     }
     if (!isLeftClick(e)) return;
+    if (app.rerollsLeft() > 0) {
+        for (int i = 0; i < kChoiceCount; ++i)
+            if (rerollRect(app.size(), i).contains(mouse)) { app.rerollChoice(i); return; }
+    }
     if (coreHurt(app) && healRect(app.size()).contains(mouse)) {
         app.repairCoreSkipItem();
         return;
@@ -782,7 +769,12 @@ void ChoiceScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse)
 void ChoiceScreen::update(App& app, float dt, sf::Vector2f mouse) {
     const float k = 1.f - std::exp(-16.f * dt);
     const int c = cardAt(app, mouse);
-    for (int i = 0; i < kChoiceCount; ++i) hover_[i] = lerpf(hover_[i], c == i ? 1.f : 0.f, k);
+    const bool canReroll = app.rerollsLeft() > 0;
+    for (int i = 0; i < kChoiceCount; ++i) {
+        hover_[i] = lerpf(hover_[i], c == i ? 1.f : 0.f, k);
+        const bool onR = canReroll && rerollRect(app.size(), i).contains(mouse);
+        rerollHover_[i] = lerpf(rerollHover_[i], onR ? 1.f : 0.f, k);
+    }
     const bool onHeal = coreHurt(app) && healRect(app.size()).contains(mouse);
     healHover_ = lerpf(healHover_, onHeal ? 1.f : 0.f, k);
 }
@@ -822,14 +814,32 @@ void ChoiceScreen::draw(App& app, sf::RenderWindow& w) {
         const std::vector<std::string> desc =
             wrapText(app.font(), info.desc, theme::fsSmall, kCardW - 28.f);
         const float lineH = 18.f;
-        float dy = c.y + 24.f - lineH * 0.5f * static_cast<float>(desc.size() - 1);
+        float dy = c.y + 22.f - lineH * 0.5f * static_cast<float>(desc.size() - 1);
         for (const std::string& dl : desc) {
             drawCenteredPop(w, app.font(), dl, theme::fsSmall, {c.x, dy}, theme::textLo, cp);
             dy += lineH;
         }
+
+        if (app.rerollsLeft() > 0) {   // "reroll this card" strip along the card's bottom edge
+            const float wd = kCardW - 28.f, ht = 22.f;
+            const float rh = rerollHover_[i];
+            const float ry = c.y + kCardH * 0.5f - 15.f;
+            sf::RectangleShape rb({wd, ht});
+            rb.setOrigin(wd * 0.5f, ht * 0.5f);
+            rb.setPosition(c.x, ry);
+            rb.setFillColor(withAlpha(theme::textLo, (0.06f + 0.12f * rh) * ca));
+            rb.setOutlineThickness(1.f);
+            rb.setOutlineColor(withAlpha(theme::accent, (0.22f + 0.4f * rh) * ca));
+            w.draw(rb);
+            drawCenteredPop(w, app.font(), "reroll", theme::fsSmall, {c.x, ry - 1.f},
+                            theme::textLo, cp);
+        }
     }
 
     const float hintPop = introPop(it, 0.10f + 0.07f * kChoiceCount);
+    std::string hint = "click a card or press 1-4";
+    if (app.rerollsLeft() > 0)
+        hint += "      rerolls left: " + std::to_string(app.rerollsLeft());
 
     if (coreHurt(app)) {
         const sf::FloatRect r = healRect(s);
@@ -842,10 +852,10 @@ void ChoiceScreen::draw(App& app, sf::RenderWindow& w) {
         w.draw(btn);
         drawCenteredPop(w, app.font(), "Repair the core instead  -  skip this item", theme::fsSmall,
                         {s.x * 0.5f, r.top + r.height * 0.5f - 1.f}, theme::textHi, hintPop);
-        drawCenteredPop(w, app.font(), "click a card or press 1-4", theme::fsSmall,
+        drawCenteredPop(w, app.font(), hint, theme::fsSmall,
                         {s.x * 0.5f, r.top + r.height + 22.f}, theme::textDim, hintPop);
     } else {
-        drawCenteredPop(w, app.font(), "click a card or press 1-4", theme::fsSmall,
+        drawCenteredPop(w, app.font(), hint, theme::fsSmall,
                         {s.x * 0.5f, s.y * 0.52f + kCardH * 0.5f + 40.f}, theme::textDim, hintPop);
     }
 }
