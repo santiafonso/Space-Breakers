@@ -92,8 +92,17 @@ struct Ball {
     std::deque<sf::Vector2f> waterTrail;   // water ball only: the damaging "worm" wake
 };
 
+// Grunt = the plain walker. The rest each want a different answer (cfg::enemy).
+enum class EnemyKind { Grunt, Runner, Tank, Splitter, Shard, Shielded };
+
+const char* enemyName(EnemyKind k);
+const char* enemyDesc(EnemyKind k);
+
 // An enemy walks straight at the core. Balls damage it on contact.
 struct Enemy {
+    EnemyKind kind = EnemyKind::Grunt;
+    float knockTaken = 1.f;                     // Tank: barely moves when hit
+    float coreDamage = cfg::core::enemyDamage;  // hp the core loses if it arrives
     sf::Vector2f pos;
     sf::Vector2f vel;
     float radius = cfg::wave::enemyRadius;
@@ -195,6 +204,7 @@ struct FrameEvents {
     bool gotPickup = false;
     PowerUp pickupKind = PowerUp::Points2x;
     bool coreHit = false;
+    bool shieldBlock = false;             // a hit bounced off a Shielded enemy's shield
     bool bossHit = false;                 // a ball landed on the miniboss this step
     bool waveCleared = false;
     bool runOver = false;

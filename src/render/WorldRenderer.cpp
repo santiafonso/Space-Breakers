@@ -144,9 +144,15 @@ void WorldRenderer::drawBoss(sf::RenderWindow& window, const Boss& b, sf::Vector
     window.draw(hp);
 }
 
-void WorldRenderer::drawEnemy(sf::RenderWindow& window, const Enemy& e) const {
+void WorldRenderer::drawEnemy(sf::RenderWindow& window, const Enemy& e, sf::Vector2f corePos) const {
     const float frac = e.maxHp > 0.f ? clampf(e.hp / e.maxHp, 0.f, 1.f) : 0.f;
-    sf::Color fill = lerpColor(theme::enemy, sf::Color::White, e.hitFlash);
+    // Each kind keeps the enemy red but reads differently: runners/shards
+    // lighter and smaller, tanks darker with a heavy rim, splitters cracked,
+    // shielded ones carry a bright arc on the side facing the core.
+    sf::Color base = theme::enemy;
+    if (e.kind == EnemyKind::Runner || e.kind == EnemyKind::Shard) base = lerpColor(theme::enemy, theme::ballFast, 0.35f);
+    if (e.kind == EnemyKind::Tank) base = lerpColor(theme::enemy, theme::bg, 0.3f);
+    sf::Color fill = lerpColor(base, sf::Color::White, e.hitFlash);
     if (e.poison > 0.f) fill = lerpColor(fill, theme::elemPoison, 0.5f);
     if (e.burn > 0.f)   fill = lerpColor(fill, theme::elemFire, 0.5f);
     if (e.frozen > 0.f) fill = lerpColor(fill, theme::elemIce, 0.65f);
@@ -155,10 +161,38 @@ void WorldRenderer::drawEnemy(sf::RenderWindow& window, const Enemy& e) const {
     body.setOrigin(e.radius, e.radius);
     body.setPosition(e.pos);
     body.setFillColor(withAlpha(fill, 0.9f));
-    body.setOutlineThickness(e.mark > 0.f ? 3.f : 2.f);   // marked by a Support: brighter rim
+    body.setOutlineThickness(e.kind == EnemyKind::Tank ? 4.f : (e.mark > 0.f ? 3.f : 2.f));   // marked: brighter rim
     body.setOutlineColor(withAlpha(sf::Color::White,
                                    (e.mark > 0.f ? 0.7f : 0.15f) + 0.3f * e.hitFlash));
     window.draw(body);
+
+    if (e.kind == EnemyKind::Splitter) {   // a crack across the middle
+        sf::RectangleShape crack({e.radius * 1.6f, 2.f});
+        crack.setOrigin(e.radius * 0.8f, 1.f);
+        crack.setPosition(e.pos);
+        crack.setRotation(35.f);
+        crack.setFillColor(withAlpha(theme::bg, 0.8f));
+        window.draw(crack);
+    }
+    if (e.kind == EnemyKind::Shielded) {   // the shield arc, facing the core
+        const float face = std::atan2(corePos.y - e.pos.y, corePos.x - e.pos.x);
+        const float arc = cfg::enemy::shieldArc;
+        const int segs = 10;
+        const float rr = e.radius + 5.f;
+        for (int i = 0; i < segs; ++i) {
+            const float a0 = face - arc + 2.f * arc * static_cast<float>(i) / segs;
+            const float a1 = face - arc + 2.f * arc * static_cast<float>(i + 1) / segs;
+            const sf::Vector2f p0 = e.pos + sf::Vector2f{std::cos(a0), std::sin(a0)} * rr;
+            const sf::Vector2f p1 = e.pos + sf::Vector2f{std::cos(a1), std::sin(a1)} * rr;
+            const sf::Vector2f d = p1 - p0;
+            sf::RectangleShape seg({length(d) + 1.f, 3.5f});
+            seg.setOrigin(0.f, 1.75f);
+            seg.setPosition(p0);
+            seg.setRotation(std::atan2(d.y, d.x) * 180.f / kPi);
+            seg.setFillColor(withAlpha(e.frozen > 0.f ? theme::elemIce : theme::textHi, 0.85f));
+            window.draw(seg);
+        }
+    }
 
     sf::CircleShape hpDot(e.radius * 0.5f * frac + 1.f, 16);
     hpDot.setOrigin(hpDot.getRadius(), hpDot.getRadius());
@@ -264,7 +298,7 @@ void WorldRenderer::draw(sf::RenderWindow& window, const World& world) const {
     for (const Obstacle& o : world.obstacles()) drawObstacle(window, o);
     drawCore(window, world.core());
     drawBoss(window, world.boss(), world.core().pos);
-    for (const Enemy& e : world.enemies()) drawEnemy(window, e);
+    for (const Enemy& e : world.enemies()) drawEnemy(window, e, world.core().pos);
     for (const Bolt& bo : world.bolts()) drawBolt(window, bo);
     for (const Pickup& pu : world.pickups()) drawPickup(window, pu);
     for (const Ball& b : world.balls()) drawBall(window, b, world.effect());

@@ -646,6 +646,20 @@ Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
   - **Multi-kill**: ≥3 kills dentro de `multiKillWindow` → cartel "xN MULTI-KILL"
     + oro extra + monedas. **Oleada limpia** (sin daño al núcleo) → bonus de oro.
 
+- **Fase F — tipos de enemigo. [IMPLEMENTADO 2026-09-23]**
+  - `enum class EnemyKind` + `cfg::enemy`. Cada tipo pide otra respuesta:
+    **Runner** (rápido, frágil, chico) · **Tank** (lento, x3.6 vida, grande,
+    casi no se empuja, pega x2 al núcleo) · **Splitter** (al morir suelta 2
+    **Shards**) · **Shielded** (escudo del lado del núcleo, `shieldArc`: los
+    golpes de frente rebotan sin daño; hay que pegarle de costado/atrás; la
+    **Guardiana lo atraviesa**, congelado no se cubre) · **Grunt** (el de siempre).
+  - Aparecen de a poco (`runnerWave` 2, `splitterWave` 4, `tankWave` 5,
+    `shieldWave` 6) con pesos por spawn; las élites suman tanques y blindados.
+    Los adds del Charger siguen siendo grunts.
+  - Dibujo: runner/shard más claros y chicos, tank oscuro con borde grueso,
+    splitter con una grieta, shielded con un arco brillante hacia el núcleo.
+    Tooltip al pasar el cursor por un enemigo (nombre + qué hacer).
+
 - **Fase 2 — Jefe tras la oleada 10.** Da upgrades de pelota (viento/agua/
   piedra). Extiende la run mas alla de 10 en "modo infinito" opcional.
 - **Fase 3 — Variedad.** Repulsor, bumper, rampa. Corredor, tanque, escindido.

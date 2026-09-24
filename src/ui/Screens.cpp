@@ -545,6 +545,7 @@ void PlayScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
 
 void PlayScreen::update(App& app, float dt, sf::Vector2f mouse) {
     clock_ += dt;
+    worldMouse_ = mouse;
     sceneIn_ += dt;
     bannerT_ += dt;
     if (const int wv = app.data().run.wave; wv > 0 && wv != bannerWave_) {
@@ -599,8 +600,13 @@ void PlayScreen::draw(App& app, sf::RenderWindow& w) {
         const sf::Vector2f um = app.uiMouse();
         std::string tt, td;
         sf::Color tc = theme::textHi;
+        const Enemy* hovered = nullptr;
+        for (const Enemy& e : app.world().enemies())
+            if (length(e.pos - worldMouse_) < e.radius + 6.f) hovered = &e;
         if (app.hud().tooltipAt(um, tt, td, tc)) {
             drawTooltip(w, app.font(), um, s, tt, td, tc);
+        } else if (hovered) {
+            drawTooltip(w, app.font(), um, s, enemyName(hovered->kind), enemyDesc(hovered->kind), theme::enemy);
         } else if (sf::FloatRect(theme::margin - 4.f, s.y - theme::margin - 64.f, 180.f, 64.f).contains(um)) {
             drawTooltip(w, app.font(), um, s, "Your balls",
                         "grab one and fling it into enemies. Hold TAB to see each ball's role, items and modifiers.");

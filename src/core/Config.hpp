@@ -295,6 +295,30 @@ inline constexpr float speedMax = 165.f;
 inline constexpr float enemyRadius = 19.f;
 }  // namespace wave
 
+// Enemy kinds. Each asks for a different answer; they phase in over the run
+// (unlock wave), rolled per spawn from weights. Multipliers are vs a plain
+// enemy of that wave (cfg::wave).
+namespace enemy {
+// Runner: fast, fragile, small.
+inline constexpr float runnerSpeed = 1.9f, runnerHp = 0.45f, runnerRadius = 0.75f;
+// Tank: slow, very tough, big, barely knocked back, hits the core twice as hard.
+inline constexpr float tankSpeed = 0.55f, tankHp = 3.6f, tankRadius = 1.5f;
+inline constexpr float tankKnock = 0.3f, tankCoreDamage = 2.f;
+// Splitter: bursts into shards when it dies.
+inline constexpr float splitterHp = 1.2f;
+inline constexpr int   shardCount = 2;
+inline constexpr float shardHp = 0.35f, shardSpeed = 1.4f, shardRadius = 0.65f;
+// Shielded: a shield on the side facing the core blocks hits from within
+// shieldArc (radians either side of "straight at the core") - hit it from the
+// flank or behind.
+inline constexpr float shieldArc = 1.05f;
+inline constexpr float shieldHp = 1.3f;
+// First wave each kind can show up, and its roll weight (grunts fill the rest).
+inline constexpr int runnerWave = 2, splitterWave = 4, tankWave = 5, shieldWave = 6;
+inline constexpr int wGrunt = 50, wRunner = 20, wSplitter = 14, wTank = 10, wShield = 12;
+inline constexpr int eliteTankBonus = 10, eliteShieldBonus = 8;   // elites lean on the tough ones
+}  // namespace enemy
+
 namespace meta {
 inline constexpr int coresPerWave = 2;   // earned at the end of a run, per wave reached
 inline constexpr int winBonus = 10;      // extra for clearing the final wave

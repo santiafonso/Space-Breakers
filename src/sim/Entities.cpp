@@ -82,12 +82,36 @@ const char* roleName(BallRole r) {
     return "Normal";
 }
 
+const char* enemyName(EnemyKind k) {
+    switch (k) {
+        case EnemyKind::Grunt:    return "Grunt";
+        case EnemyKind::Runner:   return "Runner";
+        case EnemyKind::Tank:     return "Tank";
+        case EnemyKind::Splitter: return "Splitter";
+        case EnemyKind::Shard:    return "Shard";
+        case EnemyKind::Shielded: return "Shielded";
+    }
+    return "";
+}
+
+const char* enemyDesc(EnemyKind k) {
+    switch (k) {
+        case EnemyKind::Grunt:    return "walks straight at the core";
+        case EnemyKind::Runner:   return "fast and fragile - ice and support marks catch it";
+        case EnemyKind::Tank:     return "slow, very tough, hard to push; hits the core twice as hard";
+        case EnemyKind::Splitter: return "bursts into two shards when it dies";
+        case EnemyKind::Shard:    return "a splitter's fragment - weak but quick";
+        case EnemyKind::Shielded: return "its shield faces the core and blocks hits - strike it from the side or behind";
+    }
+    return "";
+}
+
 const char* roleDesc(BallRole r) {
     switch (r) {
         case BallRole::Normal:   return "no role yet - a ROLE pick gives it one";
         case BallRole::Striker:  return "hits far harder when flung fast - the one to throw";
         case BallRole::Support:  return "weak hits, but marks enemies so every ball hits them harder";
-        case BallRole::Guardian: return "big; bounces toward the closest threat, shoves and staggers it";
+        case BallRole::Guardian: return "big; bounces toward the closest threat, shoves and staggers it, smashes through shields";
     }
     return "";
 }

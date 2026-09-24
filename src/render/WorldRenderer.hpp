@@ -13,7 +13,7 @@ public:
 private:
     void drawCore(sf::RenderWindow& window, const Core& c) const;
     void drawBoss(sf::RenderWindow& window, const Boss& b, sf::Vector2f corePos) const;
-    void drawEnemy(sf::RenderWindow& window, const Enemy& e) const;
+    void drawEnemy(sf::RenderWindow& window, const Enemy& e, sf::Vector2f corePos) const;
     void drawWaterTrail(sf::RenderWindow& window, const Ball& b) const;
     void drawObstacle(sf::RenderWindow& window, const Obstacle& o) const;
     void drawBolt(sf::RenderWindow& window, const Bolt& bo) const;

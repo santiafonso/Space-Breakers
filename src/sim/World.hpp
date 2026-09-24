@@ -92,6 +92,9 @@ private:
     void boostSpeed(Ball& b, float mult, const WorldParams& p);        // bounce boosts, capped
     void spawnEnemy();
     void spawnOrbiter(float phase);   // one shield enemy on the wave-20 ring
+    EnemyKind rollEnemyKind();        // weighted by wave (kinds phase in) and elite
+    static void setEnemyKind(Enemy& e, EnemyKind k, float hp, float speed);
+    static bool shieldBlocks(const Enemy& e, sf::Vector2f from, sf::Vector2f corePos);
     void carryBalls(const WorldParams& p);   // keep balls in place across a wave change
     sf::Vector2f wideArenaSize() const;      // the pulled-back arena used from the boss wave on
     void updateCoreSlide(float dt);          // ease the core left -> centre entering wave 11
@@ -148,6 +151,7 @@ private:
     float spawnTimer_ = 0.f;
     float waveClock_ = 0.f;   // seconds into the current wave (drives "Warm-up")
     float waveHpMul_ = 1.f;   // Elite wave: enemy HP multiplier
+    bool eliteWave_ = false;
 
     float pickupTimer_ = cfg::pickup::spawnMin;
     bool invuln_ = false;  // dev: core takes no damage

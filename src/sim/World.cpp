@@ -202,6 +202,7 @@ void World::startWave(int wave, const WorldParams& p, bool elite) {
     toSpawn_ = waveEnemyCount(wave);
     if (elite) toSpawn_ = static_cast<int>(std::lround(static_cast<float>(toSpawn_) * cfg::map::eliteCountMul));
     waveHpMul_ = elite ? cfg::map::eliteHpMul : 1.f;
+    eliteWave_ = elite;
     spawnTimer_ = cfg::wave::introDelay;
     waveRunning_ = true;
     bolts_.clear();
@@ -234,6 +235,7 @@ void World::startPostBossWave(int wave, const WorldParams& p, bool elite) {
     toSpawn_ = waveEnemyCount(wave);
     if (elite) toSpawn_ = static_cast<int>(std::lround(static_cast<float>(toSpawn_) * cfg::map::eliteCountMul));
     waveHpMul_ = elite ? cfg::map::eliteHpMul : 1.f;
+    eliteWave_ = elite;
     spawnTimer_ = cfg::wave::introDelay;
     waveRunning_ = true;
     bolts_.clear();
@@ -252,6 +254,7 @@ void World::updateCoreSlide(float dt) {
 void World::startBossWave(const WorldParams& p) {
     bossWave_ = true;
     waveHpMul_ = 1.f;
+    eliteWave_ = false;
     wave_ = cfg::run::bossWave;
     waveRunning_ = true;
     toSpawn_ = 0;
@@ -280,6 +283,7 @@ void World::startBossWave(const WorldParams& p) {
 void World::startFinalBossWave(const WorldParams& p) {
     bossWave_ = true;
     waveHpMul_ = 1.f;
+    eliteWave_ = false;
     wave_ = cfg::run::finalWave;
     waveRunning_ = true;
     toSpawn_ = 0;
@@ -326,6 +330,60 @@ void World::spawnOrbiter(float phase) {
     enemies_.push_back(e);
 }
 
+EnemyKind World::rollEnemyKind() {
+    namespace E = cfg::enemy;
+    const int w = wave_;
+    struct Wt { EnemyKind k; int w; };
+    const Wt table[] = {
+        {EnemyKind::Grunt,    E::wGrunt},
+        {EnemyKind::Runner,   w >= E::runnerWave ? E::wRunner : 0},
+        {EnemyKind::Splitter, w >= E::splitterWave ? E::wSplitter : 0},
+        {EnemyKind::Tank,     w >= E::tankWave ? E::wTank + (eliteWave_ ? E::eliteTankBonus : 0) : 0},
+        {EnemyKind::Shielded, w >= E::shieldWave ? E::wShield + (eliteWave_ ? E::eliteShieldBonus : 0) : 0},
+    };
+    int total = 0;
+    for (const Wt& t : table) total += t.w;
+    int pick = rng_.irange(0, total - 1);
+    for (const Wt& t : table) {
+        if (pick < t.w) return t.k;
+        pick -= t.w;
+    }
+    return EnemyKind::Grunt;
+}
+
+// Stamp a kind's shape onto an enemy built from the wave's plain hp / speed.
+void World::setEnemyKind(Enemy& e, EnemyKind k, float hp, float speed) {
+    namespace E = cfg::enemy;
+    float hpMul = 1.f, spMul = 1.f, rMul = 1.f;
+    e.kind = k;
+    e.knockTaken = 1.f;
+    e.coreDamage = cfg::core::enemyDamage;
+    switch (k) {
+        case EnemyKind::Grunt: break;
+        case EnemyKind::Runner:   hpMul = E::runnerHp; spMul = E::runnerSpeed; rMul = E::runnerRadius; break;
+        case EnemyKind::Tank:
+            hpMul = E::tankHp; spMul = E::tankSpeed; rMul = E::tankRadius;
+            e.knockTaken = E::tankKnock;
+            e.coreDamage = cfg::core::enemyDamage * E::tankCoreDamage;
+            break;
+        case EnemyKind::Splitter: hpMul = E::splitterHp; break;
+        case EnemyKind::Shard:    hpMul = E::shardHp; spMul = E::shardSpeed; rMul = E::shardRadius; break;
+        case EnemyKind::Shielded: hpMul = E::shieldHp; break;
+    }
+    e.maxHp = e.hp = hp * hpMul;
+    e.speed = speed * spMul;
+    e.radius = cfg::wave::enemyRadius * rMul;
+}
+
+// A Shielded enemy's shield faces the core: a ball arriving from within the
+// arc around "straight toward the core" bounces off without doing damage.
+bool World::shieldBlocks(const Enemy& e, sf::Vector2f from, sf::Vector2f corePos) {
+    if (e.kind != EnemyKind::Shielded || e.frozen > 0.f) return false;   // a frozen one can't guard
+    const sf::Vector2f facing = normalized(corePos - e.pos, {1.f, 0.f});
+    const sf::Vector2f dir = normalized(from - e.pos, {0.f, 0.f});
+    return dot(facing, dir) > std::cos(cfg::enemy::shieldArc);
+}
+
 void World::spawnEnemy() {
     const float r = cfg::wave::enemyRadius;
     const bool chargerWave = bossWave_ && boss_.kind == BossKind::Charger;
@@ -357,9 +415,11 @@ void World::spawnEnemy() {
     if (orbitalWave) {   // softer than a plain wave-20 enemy - the shield is the fight
         e.maxHp = e.hp = cfg::finalBoss::addHp;
         e.speed = cfg::finalBoss::addSpeed;
-    } else {
+    } else if (bossWave_) {   // Charger adds: plain grunts
         e.maxHp = e.hp = waveEnemyHp(wave_) * waveHpMul_;
         e.speed = waveEnemySpeed(wave_);
+    } else {
+        setEnemyKind(e, rollEnemyKind(), waveEnemyHp(wave_) * waveHpMul_, waveEnemySpeed(wave_));
     }
     e.vel = normalized(core_.pos - pos) * e.speed;
     enemies_.push_back(e);
@@ -649,6 +709,15 @@ void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
             collision::Contact c =
                 collision::circleVsSolidCircle(b, e.pos, e.radius, cfg::combat::hitRebound);
             if (!c.hit) continue;
+            // Off the shield: a bounce, no damage. A Guardian is heavy enough to
+            // smash straight through it.
+            if (b.role != BallRole::Guardian && shieldBlocks(e, b.pos, core_.pos)) {
+                afterBounce(b, c.normal, false);
+                aimBounce(b, c.normal, &e);
+                ev.shieldBlock = true;
+                pushFx(c);
+                continue;
+            }
             float dmg = ballDamage(b, p);   // fire / ricochet / Battering bonuses are baked into ballDamage
             const bool afflicted = e.poison > 0.f || e.frozen > 0.f || e.burn > 0.f;
             if (p.primed && afflicted) dmg *= cfg::combat::primedMult;   // "Primed"
@@ -678,7 +747,7 @@ void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
             e.hitFlash = 1.f;
             const float knock = cfg::combat::knockback * b.mods.knockMult *   // "Heavy knock"
                                 (b.role == BallRole::Guardian ? cfg::role::guardianKnockMul : 1.f);
-            e.vel += -c.normal * knock;
+            e.vel += -c.normal * knock * e.knockTaken;
             if (b.role == BallRole::Support) e.mark = cfg::role::markDuration;
             if (b.role == BallRole::Guardian) e.stagger = cfg::role::staggerDuration;
             const float pot = elemPotency(b, p);
@@ -891,7 +960,7 @@ void World::updateEnemies(float dt, const WorldParams& p, FrameEvents& ev) {
         if (dist <= core_.radius + e.radius) {
             if (!invuln_) {
                 if (aegisChargesLeft_ > 0) --aegisChargesLeft_;   // "Aegis" soaks the hit
-                else core_.hp -= cfg::core::enemyDamage;
+                else core_.hp -= e.coreDamage;
             }
             core_.hitFlash = 1.f;
             coreHitThisWave_ = true;   // "Interest" is off for this wave now
@@ -913,8 +982,23 @@ void World::updateEnemies(float dt, const WorldParams& p, FrameEvents& ev) {
 }
 
 void World::sweepDeadEnemies(FrameEvents& ev, const WorldParams& p) {
+    std::vector<Enemy> shards;   // Splitters burst after the sweep (can't grow the vector mid-loop)
     for (auto it = enemies_.begin(); it != enemies_.end();) {
         if (it->hp <= 0.f) {
+            if (it->kind == EnemyKind::Splitter) {
+                const float baseHp = it->maxHp / cfg::enemy::splitterHp;
+                const float baseSpeed = it->speed;
+                for (int i = 0; i < cfg::enemy::shardCount; ++i) {
+                    Enemy s;
+                    setEnemyKind(s, EnemyKind::Shard, baseHp, baseSpeed);
+                    const float a = rng_.range(0.f, 2.f * kPi);
+                    const sf::Vector2f d{std::cos(a), std::sin(a)};
+                    s.pos = it->pos + d * (it->radius * 0.6f);
+                    s.vel = d * 160.f;   // flung apart, then they turn for the core
+                    s.stagger = 0.25f;
+                    shards.push_back(s);
+                }
+            }
             if (p.contagion && it->poison > 0.f) {   // "Contagion": spread the poison on death
                 const float dps = cfg::element::poisonDpsPerHit *
                                   p.elemMult[static_cast<int>(Element::Poison)];
@@ -932,6 +1016,7 @@ void World::sweepDeadEnemies(FrameEvents& ev, const WorldParams& p) {
             ++it;
         }
     }
+    for (Enemy& s : shards) enemies_.push_back(s);
 }
 
 void World::updateBoss(float dt, const WorldParams& p, FrameEvents& ev) {

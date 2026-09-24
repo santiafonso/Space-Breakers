@@ -74,6 +74,7 @@ private:
     WorldRenderer renderer_;
     bool dragging_ = false;
     bool showPicks_ = false;   // Tab held: show the balls' loadouts + relics
+    sf::Vector2f worldMouse_;  // pointer in arena units (enemy hover help)
     float clock_ = 0.f;
     std::deque<std::pair<float, sf::Vector2f>> samples_;
 
