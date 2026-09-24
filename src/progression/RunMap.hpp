@@ -92,9 +92,10 @@ inline MapNodeType rollNodeType(Rng& rng, int row) {
 
 }  // namespace detail
 
-// Build an act's map: each row picks 2..lanes lanes, nodes link to the nodes in
-// the next row within one lane of theirs, and every node gets at least one way
-// in and one way out. All last-row nodes feed the boss.
+// Build an act's map: row 1 is a single fight (the trunk) linked to every node
+// of row 2; after that each row picks 2..lanes lanes, nodes link to the nodes
+// in the next row within one lane of theirs, and every node gets at least one
+// way in and one way out. All last-row nodes feed the boss.
 inline RunMap generateMap(Rng& rng, int act) {
     RunMap m;
     m.act = act;
@@ -105,9 +106,12 @@ inline RunMap generateMap(Rng& rng, int act) {
         std::vector<int> lanes(static_cast<std::size_t>(L));
         for (int i = 0; i < L; ++i) lanes[static_cast<std::size_t>(i)] = i;
         for (int i = L - 1; i > 0; --i) std::swap(lanes[static_cast<std::size_t>(i)], lanes[static_cast<std::size_t>(rng.irange(0, i))]);
-        const int count = rng.irange(cfg::map::minPerRow, L);
+        // Row 1 is the trunk: one fight, drawn centred (lane -1), that every
+        // path starts from.
+        const int count = r == 1 ? 1 : rng.irange(cfg::map::minPerRow, L);
         lanes.resize(static_cast<std::size_t>(count));
         std::sort(lanes.begin(), lanes.end());
+        if (r == 1) lanes[0] = -1;
 
         std::vector<int> ids;
         for (int lane : lanes) {
@@ -145,7 +149,8 @@ inline RunMap generateMap(Rng& rng, int act) {
         };
         for (int a : cur)
             for (int b : nxt)
-                if (std::abs(m.nodes[static_cast<std::size_t>(a)].lane -
+                if (r == 0 ||   // the trunk opens onto every branch of row 2
+                    std::abs(m.nodes[static_cast<std::size_t>(a)].lane -
                              m.nodes[static_cast<std::size_t>(b)].lane) <= 1)
                     link(a, b);
         for (int a : cur)   // a way out for everyone
