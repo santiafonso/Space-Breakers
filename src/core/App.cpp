@@ -94,32 +94,13 @@ WorldParams App::params() const {
     const RunMods& m = data_.run.mods;
     const int* u = data_.meta.unlock;
     WorldParams p;
-    p.damageMult = 1.f + cfg::combat::heavyImpactPerPick * static_cast<float>(m.heavyImpact);
+    p.damageMult = 1.f + cfg::combat::heftPerLevel * static_cast<float>(u[MetaHeft]);
     p.wave = std::max(1, data_.run.wave);
-    p.ballRadiusMult = 1.f + cfg::combat::bigBallPerPick * static_cast<float>(m.bigBall);
+    p.ballRadiusMult = 1.f + cfg::combat::massPerLevel * static_cast<float>(u[MetaMass]);
     p.coreBounceBoost = m.spring ? cfg::combat::springBoost : 1.f;
-    p.wallBounceBoost = m.wallRush ? cfg::combat::wallBounceBoost : 1.f;
-    p.pairBounceBoost = m.carom ? cfg::combat::pairBounceBoost : 1.f;
-    p.flingDecayMult = m.flingMomentum ? cfg::combat::flingDecayMult : 1.f;
     p.slowField = m.slowField;
-    p.ricochet = m.ricochet;
-    p.maxSpeedMult = m.ceilingBreak ? cfg::combat::ceilingBreakMult : 1.f;
-    p.warmUp = m.warmUp;
-    p.knockbackMult = m.heavyKnock ? cfg::combat::heavyKnockMult : 1.f;
-    p.conductor = m.conductor;
-    p.shatter = m.shatter;
     p.contagion = m.contagion;
-    p.bedrock = m.bedrock;
     p.primed = m.primed;
-    p.leadBallCruise = m.spearhead ? cfg::combat::leadBallCruise : 1.f;
-
-    // "Ball combat" items (Fase A).
-    p.crit = m.crit;
-    p.bruiser = m.bruiser;
-    p.executioner = m.executioner;
-    p.overkill = m.overkill;
-    p.cleave = m.cleave;
-    p.tempo = m.tempo;
 
     // Meta web (Fase A).
     p.emberLevel = u[MetaEmber];
@@ -144,6 +125,50 @@ WorldParams App::params() const {
     }
     return p;
 }
+
+// Fold one ball's gear into the numbers the sim uses. A forge level past the
+// first scales the gear's bonus by cfg::combat::gearLevelBonus per level.
+BallSpec App::ballSpec(const BallLoadout& L) const {
+    BallSpec s;
+    s.role = L.role;
+    s.element = L.element();
+    BallMods& m = s.mods;
+    for (int i = 0; i < kBallSlots; ++i) {
+        if (L.gear[i] < 0) continue;
+        const float lv = 1.f + cfg::combat::gearLevelBonus * static_cast<float>(std::max(0, L.gearLvl[i] - 1));
+        auto boost = [lv](float mult) { return 1.f + (mult - 1.f) * lv; };
+        switch (static_cast<UpgradeKind>(L.gear[i])) {
+            case UpgradeKind::HeavyImpact:   m.damageMult *= 1.f + cfg::combat::heavyImpactGear * lv; break;
+            case UpgradeKind::BigBall:       m.radiusMult *= 1.f + cfg::combat::bigBallGear * lv; break;
+            case UpgradeKind::WallRush:      m.wallBoost = boost(cfg::combat::wallBounceBoost); break;
+            case UpgradeKind::Carom:         m.pairBoost = boost(cfg::combat::pairBounceBoost); break;
+            case UpgradeKind::Ricochet:      m.ricochet = true; break;
+            case UpgradeKind::CeilingBreak:  m.maxSpeedMult = boost(cfg::combat::ceilingBreakMult); break;
+            case UpgradeKind::WarmUp:        m.warmUp = true; break;
+            case UpgradeKind::HeavyKnock:    m.knockMult = boost(cfg::combat::heavyKnockMult); break;
+            case UpgradeKind::FlingMomentum: m.flingDecay = cfg::combat::flingDecayMult / lv; break;
+            case UpgradeKind::Cleave:        m.cleave = true; break;
+            case UpgradeKind::Crit:          m.critChance = cfg::combat::critChance * lv; break;
+            case UpgradeKind::Bruiser:       m.bruiser = true; break;
+            case UpgradeKind::Executioner:   m.executioner = true; break;
+            case UpgradeKind::Overkill:      m.overkill = true; break;
+            case UpgradeKind::Tempo:         m.tempo = true; break;
+            case UpgradeKind::Shatter:       m.shatter = true; break;
+            case UpgradeKind::Conductor:     m.conductor = true; break;
+            case UpgradeKind::Bedrock:       m.bedrock = true; break;
+            default: break;
+        }
+    }
+    return s;
+}
+
+std::vector<BallSpec> App::ballSpecs() const {
+    std::vector<BallSpec> v;
+    for (const BallLoadout& b : data_.run.balls) v.push_back(ballSpec(b));
+    return v;
+}
+
+void App::syncWorldBalls() { world_.syncBalls(ballSpecs(), params()); }
 
 int App::startBallCount() const {
     return cfg::run::startBalls + data_.meta.unlock[MetaStartBalls];
@@ -220,12 +245,20 @@ void App::newRun() {
     r.wave = 0;
     r.coreMaxHp = startCoreHp();
     r.coreHp = r.coreMaxHp;
-    r.balls.assign(static_cast<std::size_t>(startBallCount()), static_cast<int>(Element::Plain));
+    // Start with a Striker; "Squad" adds a Guardian, then a Support.
+    static const BallRole kStartRoles[] = {BallRole::Striker, BallRole::Guardian, BallRole::Support};
+    auto startLoadout = [](int n) {
+        std::vector<BallLoadout> v;
+        for (int i = 0; i < n; ++i) {
+            BallLoadout b;
+            b.role = kStartRoles[i % kBallRoleCount];
+            v.push_back(b);
+        }
+        return v;
+    };
+    r.balls = startLoadout(startBallCount());
     ++data_.meta.stats.runs;
 
-    // Meta skill-web nodes that seed the run's mods before the world is built.
-    r.mods.heavyImpact += data_.meta.unlock[MetaHeft];
-    r.mods.bigBall     += data_.meta.unlock[MetaMass];
     r.rerollsLeft = data_.meta.unlock[MetaReroll] * cfg::run::rerollsPerLevel;
 
     runBanked_ = false;
@@ -234,9 +267,7 @@ void App::newRun() {
     int startWave = 1;
     if (devMode()) {
         const int nb = envInt("SB_BALLS", 0);
-        if (nb > 0)
-            r.balls.assign(static_cast<std::size_t>(std::min(nb, cfg::ball::maxBalls)),
-                           static_cast<int>(Element::Plain));
+        if (nb > 0) r.balls = startLoadout(std::min(nb, cfg::ball::maxBalls));
         startWave = std::clamp(envInt("SB_WAVE", 1), 1, cfg::run::finalWave);
     }
 
@@ -244,7 +275,7 @@ void App::newRun() {
     // (or when a dev shortcut drops us past the boss already).
     continueUnlocked_ = data_.meta.stats.wins > 0 || startWave > cfg::run::bossWave;
 
-    world_.startRun(params(), r.balls, r.coreHp, r.coreMaxHp);
+    world_.startRun(params(), ballSpecs(), r.coreHp, r.coreMaxHp);
     effects_.clear();
     hitstop_ = 0.f;
     camKick_ = 0.f;
@@ -291,36 +322,17 @@ void App::startNextWave() {
 UpgradeCtx App::buildUpgradeCtx() const {
     const RunState& r = data_.run;
     UpgradeCtx c;
-    c.ballCount = runBallCount();
+    c.balls = &r.balls;
     c.maxBalls = cfg::ball::maxBalls;
     static const int kElemNode[kElementItemCount] = {MetaFireItem, MetaVenom, MetaTide,
                                                      MetaFrost, MetaQuarry, MetaArc};
     for (int i = 0; i < kElementItemCount; ++i)
         c.elemUnlocked[i] = data_.meta.unlock[kElemNode[i]] > 0;
-    c.bigBallPicks = r.mods.bigBall;
-    c.heavyImpactPicks = r.mods.heavyImpact;
     c.spring = r.mods.spring;
     c.slowField = r.mods.slowField;
-    c.flingMomentum = r.mods.flingMomentum;
-    c.wallRush = r.mods.wallRush;
-    c.carom = r.mods.carom;
     c.strongArm = r.mods.strongArm;
-    c.ricochet = r.mods.ricochet;
-    c.ceilingBreak = r.mods.ceilingBreak;
-    c.warmUp = r.mods.warmUp;
-    c.heavyKnock = r.mods.heavyKnock;
-    c.conductor = r.mods.conductor;
-    c.shatter = r.mods.shatter;
     c.contagion = r.mods.contagion;
-    c.bedrock = r.mods.bedrock;
     c.primed = r.mods.primed;
-    c.spearhead = r.mods.spearhead;
-    c.crit = r.mods.crit;
-    c.bruiser = r.mods.bruiser;
-    c.executioner = r.mods.executioner;
-    c.overkill = r.mods.overkill;
-    c.cleave = r.mods.cleave;
-    c.tempo = r.mods.tempo;
     return c;
 }
 
@@ -335,7 +347,7 @@ void App::rollChoices() {
         std::swap(pool[i - 1], pool[static_cast<std::size_t>(rng_.irange(0, static_cast<int>(i) - 1))]);
 
     for (int i = 0; i < kChoiceCount; ++i)
-        choices_[i] = pool.empty() ? UpgradeKind::CoreSpring   // inert fallback (idempotent)
+        choices_[i] = pool.empty() ? UpgradeKind::CoreSpring   // inert fallback (idempotent relic)
                                    : pool[static_cast<std::size_t>(i) % pool.size()];
 }
 
@@ -365,45 +377,49 @@ void App::openChoice() {
     push(ScreenId::Choice);
 }
 
-void App::applyUpgradeKind(UpgradeKind k) {
+// First ball the pick fits, preferring one with a free slot (dev tools use
+// this; the Choice screen normally asks).
+bool App::autoTarget(UpgradeKind k, int& ball, int& slot) const {
+    const auto& balls = data_.run.balls;
+    ball = slot = -1;
+    for (int i = 0; i < static_cast<int>(balls.size()); ++i) {
+        if (!upgradeFitsBall(k, balls[i])) continue;
+        const int sl = defaultSlot(k, balls[i]);
+        const bool free = balls[i].gear[sl] < 0;
+        if (ball < 0 || free) { ball = i; slot = sl; }
+        if (free) break;
+    }
+    return ball >= 0;
+}
+
+void App::applyUpgradeKind(UpgradeKind k, int ball, int slot) {
     RunState& r = data_.run;
     RunMods& m = r.mods;
-    r.picks.push_back(static_cast<int>(k));
-    if (const int s = elementItemSlot(k); s >= 0) {
-        const Element e = static_cast<Element>(s + 1);   // slot 0..5 -> Fire..Electric
-        world_.addBall(e, params());
-        r.balls.push_back(static_cast<int>(e));
+    if (upgradeNeedsTarget(k)) {
+        if (ball < 0 && !autoTarget(k, ball, slot)) return;
+        if (ball >= static_cast<int>(r.balls.size()) || !upgradeFitsBall(k, r.balls[ball])) return;
+        BallLoadout& b = r.balls[ball];
+        // One element per ball: a new element always replaces the current one.
+        if (elementItemSlot(k) >= 0 && b.elementSlot() >= 0) slot = b.elementSlot();
+        slot = std::clamp(slot, 0, kBallSlots - 1);
+        b.gear[slot] = static_cast<int>(k);
+        b.gearLvl[slot] = 1;
+        syncWorldBalls();
         return;
     }
     switch (k) {
-        case UpgradeKind::AddBall:
-            world_.addBall(Element::Plain, params());
-            r.balls.push_back(static_cast<int>(Element::Plain));
+        case UpgradeKind::RecruitStriker:
+        case UpgradeKind::RecruitSupport:
+        case UpgradeKind::RecruitGuardian:
+            if (static_cast<int>(r.balls.size()) >= cfg::ball::maxBalls) return;
+            r.balls.push_back(BallLoadout{recruitRole(k)});
+            syncWorldBalls();
             break;
         case UpgradeKind::CoreSpring:    m.spring = true; break;
         case UpgradeKind::CoreSlowField: m.slowField = true; break;
-        case UpgradeKind::FlingMomentum: m.flingMomentum = true; break;
-        case UpgradeKind::WallRush:      m.wallRush = true; break;
-        case UpgradeKind::Carom:         m.carom = true; break;
         case UpgradeKind::StrongArm:     m.strongArm = true; break;
-        case UpgradeKind::Ricochet:      m.ricochet = true; break;
-        case UpgradeKind::CeilingBreak:  m.ceilingBreak = true; break;
-        case UpgradeKind::WarmUp:        m.warmUp = true; break;
-        case UpgradeKind::HeavyKnock:    m.heavyKnock = true; break;
-        case UpgradeKind::Conductor:     m.conductor = true; break;
-        case UpgradeKind::Shatter:       m.shatter = true; break;
         case UpgradeKind::Contagion:     m.contagion = true; break;
-        case UpgradeKind::Bedrock:       m.bedrock = true; break;
         case UpgradeKind::Primed:        m.primed = true; break;
-        case UpgradeKind::Spearhead:     m.spearhead = true; break;
-        case UpgradeKind::HeavyImpact:   ++m.heavyImpact; break;
-        case UpgradeKind::BigBall:       ++m.bigBall; break;
-        case UpgradeKind::Cleave:        m.cleave = true; break;
-        case UpgradeKind::Crit:          m.crit = true; break;
-        case UpgradeKind::Bruiser:       m.bruiser = true; break;
-        case UpgradeKind::Executioner:   m.executioner = true; break;
-        case UpgradeKind::Overkill:      m.overkill = true; break;
-        case UpgradeKind::Tempo:         m.tempo = true; break;
         default: break;
     }
 }
@@ -427,13 +443,33 @@ void App::useReserve() {
     effects_.flash(theme::accent, 0.5f);
 }
 
-void App::applyUpgrade(int idx) {
-    if (idx < 0 || idx >= kChoiceCount) return;
-    applyUpgradeKind(choices_[idx]);
+void App::finishChoice() {
     audio_.purchase();
     effects_.flash(theme::accent, 0.4f);
     back();
     startNextWave();
+}
+
+void App::applyUpgrade(int idx) {
+    if (idx < 0 || idx >= kChoiceCount) return;
+    applyUpgradeKind(choices_[idx]);
+    finishChoice();
+}
+
+void App::applyUpgradeTo(int idx, int ball, int slot) {
+    if (idx < 0 || idx >= kChoiceCount || !choiceFitsBall(idx, ball)) return;
+    applyUpgradeKind(choices_[idx], ball, slot);
+    finishChoice();
+}
+
+bool App::choiceNeedsTarget(int idx) const {
+    return idx >= 0 && idx < kChoiceCount && upgradeNeedsTarget(choices_[idx]);
+}
+
+bool App::choiceFitsBall(int idx, int ball) const {
+    return idx >= 0 && idx < kChoiceCount && ball >= 0 &&
+           ball < static_cast<int>(data_.run.balls.size()) &&
+           upgradeFitsBall(choices_[idx], data_.run.balls[ball]);
 }
 
 // Pay out the run: cores, prisms and lifetime stats. No navigation - the caller
@@ -565,8 +601,8 @@ void App::devToggleInvuln() {
 void App::devAddBall() {
     if (!devMode() || !data_.run.active) return;
     if (runBallCount() >= cfg::ball::maxBalls) return;
-    world_.addBall(Element::Plain, params());
-    data_.run.balls.push_back(static_cast<int>(Element::Plain));
+    data_.run.balls.push_back(BallLoadout{static_cast<BallRole>(runBallCount() % kBallRoleCount)});
+    syncWorldBalls();
 }
 
 void App::devCycleGrant() {

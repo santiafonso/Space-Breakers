@@ -73,7 +73,7 @@ private:
 
     WorldRenderer renderer_;
     bool dragging_ = false;
-    bool showPicks_ = false;   // Tab held: list upgrades taken this run
+    bool showPicks_ = false;   // Tab held: show the balls' loadouts + relics
     float clock_ = 0.f;
     std::deque<std::pair<float, sf::Vector2f>> samples_;
 
@@ -83,6 +83,7 @@ private:
 };
 
 // Overlay after a wave: pick 1 of 4 rolled items (or skip to repair the core).
+// Gear and infusions then ask which ball (and, for gear, which slot) they go on.
 class ChoiceScreen : public Screen {
 public:
     void handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) override;
@@ -95,9 +96,18 @@ private:
     sf::FloatRect healRect(sf::Vector2f size) const;  // "repair core" button, when the core isn't full
     sf::FloatRect rerollRect(sf::Vector2f size, int i) const;  // "reroll" strip under card i
     bool coreHurt(App& app) const;
+    void pickCard(App& app, int idx);                 // recruit / relic apply now; others enter target mode
+    // Target mode: which ball panel / slot the pointer is on (-1 none).
+    void targetAt(App& app, sf::Vector2f mouse, int& ball, int& slot) const;
+    void drawTargets(App& app, sf::RenderWindow& w);
+
     float hover_[4] = {};
     float rerollHover_[4] = {};
     float healHover_ = 0.f;
+    int target_ = -1;          // card being placed on a ball, -1 = picking a card
+    float targetT_ = 0.f;      // time since target mode opened (intro)
+    int hoverBall_ = -1;
+    int hoverSlot_ = -1;
 };
 
 class PauseScreen : public Screen {

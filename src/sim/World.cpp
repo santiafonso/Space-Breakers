@@ -36,16 +36,41 @@ float World::cruiseSpeed(const WorldParams& p) const {
     float c = cruiseBase(p);
     if (effect_ && effect_->kind == PowerUp::Surge)
         c *= 1.f + (cfg::powerup::surgeCruiseMul - 1.f) * effStrength(p);   // fades out under "Afterglow"
-    if (p.warmUp) {   // "Warm-up": cruise climbs over the course of a wave
+    return c;
+}
+
+float World::ballBaseCruise(const Ball& b, const WorldParams& p) const {
+    return cruiseBase(p) * (b.role == BallRole::Guardian ? cfg::role::guardianCruiseMul : 1.f);
+}
+
+float World::ballCruise(const Ball& b, const WorldParams& p) const {
+    float c = cruiseSpeed(p) * (b.role == BallRole::Guardian ? cfg::role::guardianCruiseMul : 1.f);
+    if (b.mods.warmUp) {   // "Warm-up": cruise climbs over the course of a wave
         const float t = clampf(waveClock_ / cfg::combat::warmUpTime, 0.f, 1.f);
         c *= 1.f + t * cfg::combat::warmUpBonus;
     }
     return c;
 }
 
-float World::maxSpeed(const WorldParams& p) const {
-    return std::min(cruiseBase(p) * cfg::ball::maxSpeedCruiseMul * p.maxSpeedMult,
+float World::ballMaxSpeed(const Ball& b, const WorldParams& p) const {
+    return std::min(cruiseBase(p) * cfg::ball::maxSpeedCruiseMul * b.mods.maxSpeedMult,
                     cfg::ball::hardSpeedCap);
+}
+
+float World::ballRadius(const Ball& b, const WorldParams& p) const {
+    return cfg::ball::radius * p.ballRadiusMult * b.mods.radiusMult *
+           (b.role == BallRole::Guardian ? cfg::role::guardianRadiusMul : 1.f);
+}
+
+float World::elemPotency(const Ball& b, const WorldParams& p) const {
+    return p.elemMult[static_cast<int>(b.element)] *
+           (b.role == BallRole::Support ? cfg::role::supportElemMul : 1.f);
+}
+
+void World::boostSpeed(Ball& b, float mult, const WorldParams& p) {
+    if (mult <= 1.f) return;
+    const float sp = length(b.vel);
+    if (sp > 1e-3f) b.vel *= std::min(sp * mult, ballMaxSpeed(b, p)) / sp;
 }
 
 float World::fastestBall() const {
@@ -56,13 +81,15 @@ float World::fastestBall() const {
 
 // ---------------------------------------------------------------- lifecycle
 
-void World::spawnBall(Element e, const WorldParams& p) {
+void World::spawnBall(const BallSpec& spec, const WorldParams& p) {
     Ball b;
-    b.element = e;
-    b.radius = cfg::ball::radius * p.ballRadiusMult;
+    b.role = spec.role;
+    b.element = spec.element;
+    b.mods = spec.mods;
+    b.radius = ballRadius(b, p);
     const float a = rng_.range(0.f, 2.f * kPi);
     b.pos = core_.pos + sf::Vector2f{std::cos(a), std::sin(a)} * (core_.radius + b.radius + 20.f);
-    b.vel = rng_.direction() * cruiseBase(p);  // straight line, random heading
+    b.vel = rng_.direction() * ballBaseCruise(b, p);  // straight line, random heading
     b.color = b.element == Element::Plain
                   ? theme::speedColor(length(b.vel), cruiseBase(p))
                   : theme::elementSpeedColor(elementColor(b.element), length(b.vel), cruiseBase(p));
@@ -70,9 +97,23 @@ void World::spawnBall(Element e, const WorldParams& p) {
     balls_.push_back(b);
 }
 
-void World::addBall(Element e, const WorldParams& p) {
-    if (static_cast<int>(balls_.size()) >= cfg::ball::maxBalls) return;
-    spawnBall(e, p);
+void World::syncBalls(const std::vector<BallSpec>& specs, const WorldParams& p) {
+    const std::size_t n = std::min<std::size_t>(specs.size(), cfg::ball::maxBalls);
+    for (std::size_t i = 0; i < n; ++i) {
+        if (i >= balls_.size()) {
+            spawnBall(specs[i], p);
+            continue;
+        }
+        Ball& b = balls_[i];
+        if (b.element != specs[i].element) {
+            b.waterTrail.clear();
+            b.cooldown = 0.f;
+        }
+        b.role = specs[i].role;
+        b.element = specs[i].element;
+        b.mods = specs[i].mods;
+        b.radius = ballRadius(b, p);
+    }
 }
 
 void World::repairCore(float amount) {
@@ -91,7 +132,7 @@ void World::devWinWave() {
     if (bossWave_ && boss_.alive) boss_.hp = 0.f;  // updateBoss clears it -> waveCleared
 }
 
-void World::startRun(const WorldParams& p, const std::vector<int>& ballElements,
+void World::startRun(const WorldParams& p, const std::vector<BallSpec>& balls,
                      float coreHp, float coreMaxHp) {
     balls_.clear();
     enemies_.clear();
@@ -126,11 +167,8 @@ void World::startRun(const WorldParams& p, const std::vector<int>& ballElements,
     core_.hp = std::min(coreHp, coreMaxHp);
     core_.hitFlash = 0.f;
 
-    if (ballElements.empty()) {
-        spawnBall(Element::Plain, p);
-    } else {
-        for (int e : ballElements) spawnBall(static_cast<Element>(std::clamp(e, 0, kElementCount - 1)), p);
-    }
+    if (balls.empty()) spawnBall(BallSpec{}, p);
+    else syncBalls(balls, p);
     pickupTimer_ = rng_.range(cfg::pickup::firstSpawnMin, cfg::pickup::firstSpawnMax);
 }
 
@@ -141,7 +179,7 @@ void World::carryBalls(const WorldParams& p) {
     for (Ball& b : balls_) {
         b.held = false;
         if (length(b.vel) < cfg::ball::minThrowSpeed)
-            b.vel = rng_.direction() * cruiseBase(p);
+            b.vel = rng_.direction() * ballBaseCruise(b, p);
     }
     heldGrabOffset_ = {0.f, 0.f};
     grabbed_ = Grabbed::None;
@@ -361,12 +399,11 @@ void World::releaseHeld(sf::Vector2f throwVel) {
     Ball& b = balls_[heldIndex_];
     b.held = false;
     heldGrabOffset_ = {0.f, 0.f};
+    if (b.role == BallRole::Striker) throwVel *= cfg::role::strikerFlingMult;   // built to be flung
     const float s = length(throwVel);
     if (s < cfg::ball::minThrowSpeed) b.vel = rng_.direction() * cfg::ball::nudgeSpeed;
     else if (s > cfg::ball::hardSpeedCap) b.vel = throwVel * (cfg::ball::hardSpeedCap / s);
     else b.vel = throwVel;
-    for (Ball& bb : balls_) bb.lead = false;   // "Spearhead" follows the ball you flung last
-    b.lead = true;
     grabbed_ = Grabbed::None;
     heldIndex_ = -1;
 }
@@ -417,16 +454,47 @@ void World::afterBounce(Ball& b, sf::Vector2f normal, bool countHit) {
     }
 }
 
+// Re-aim a Guardian's bounce at the enemy nearest the core (ignoring `skip`,
+// the one it just hit, and anything already staggered and drifting away). The
+// new heading must still leave the surface it hit, or the plain bounce stands.
+void World::aimBounce(Ball& b, sf::Vector2f normal, const Enemy* skip) {
+    if (!cfg::role::guardianAimsBounces || b.role != BallRole::Guardian) return;
+    const Enemy* target = nullptr;
+    float best = 1e18f;
+    for (const Enemy& e : enemies_) {
+        if (&e == skip || e.hp <= 0.f || e.stagger > 0.f) continue;
+        const float d2 = dot(e.pos - core_.pos, e.pos - core_.pos);
+        if (d2 < best) { best = d2; target = &e; }
+    }
+    if (!target) return;
+    const sf::Vector2f d = normalized(target->pos - b.pos, {0.f, 0.f});
+    if (dot(d, normal) <= 0.05f) return;   // would drive back into the wall / core
+    const float sp = length(b.vel);
+    const float ang = std::atan2(d.y, d.x) +
+                      rng_.range(-cfg::role::guardianAimJitter, cfg::role::guardianAimJitter);
+    b.vel = sf::Vector2f{std::cos(ang), std::sin(ang)} * sp;
+}
+
 float World::ballDamage(const Ball& b, const WorldParams& p) const {
-    const float ratio = length(b.vel) / cfg::ball::baseCruise;
+    const float speed = length(b.vel);
+    const float ratio = speed / cfg::ball::baseCruise;
     float dmg = (cfg::combat::contactDamageBase + cfg::combat::contactDamagePerCruise * ratio) *
-                comboMultiplier() * p.damageMult;
+                comboMultiplier() * p.damageMult * b.mods.damageMult;
+    switch (b.role) {
+        case BallRole::Striker: {   // pays off when flung: scales hard above its cruise speed
+            const float over = speed / std::max(1.f, ballCruise(b, p)) - 1.f;
+            if (over > 0.f) dmg *= 1.f + cfg::role::strikerSpeedDamage * over;
+            break;
+        }
+        case BallRole::Support:  dmg *= cfg::role::supportDamageMul; break;
+        case BallRole::Guardian: dmg *= cfg::role::guardianDamageMul; break;
+    }
     if (effect_ && effect_->kind == PowerUp::Overdrive)
         dmg *= 1.f + (cfg::powerup::overdriveDamageMul - 1.f) * effStrength(p);   // fades under "Afterglow"
-    if (p.bruiser)   // "Battering": the faster it flies, the harder it hits
+    if (b.mods.bruiser)   // "Battering": the faster it flies, the harder it hits
         dmg *= 1.f + cfg::combat::bruiserPerCruise * ratio;
     if (b.element == Element::Fire)   // fire is a heavier hit; the burn DoT is the "Ember" node
-        dmg *= 1.f + cfg::element::fireDamageBonus * p.elemMult[static_cast<int>(Element::Fire)];
+        dmg *= 1.f + cfg::element::fireDamageBonus * elemPotency(b, p);
     if (b.ricochetT > 0.f) dmg *= cfg::combat::ricochetMult;   // "Ricochet": fresh off a wall
     return dmg;
 }
@@ -453,7 +521,7 @@ void World::emitElement(Ball& b, float dt, const WorldParams& p) {
             b.cooldown = cfg::element::stoneInterval;
             if (static_cast<int>(obstacles_.size()) < cfg::element::maxObstacles) {
                 const float life = cfg::element::obstacleLife *
-                                   (p.bedrock ? cfg::combat::bedrockLifeMult : 1.f);   // "Bedrock"
+                                   (b.mods.bedrock ? cfg::combat::bedrockLifeMult : 1.f);   // "Bedrock"
                 obstacles_.push_back(Obstacle{b.pos, cfg::element::obstacleRadius, life, life});
             }
             break;
@@ -471,15 +539,15 @@ void World::emitElement(Ball& b, float dt, const WorldParams& p) {
                 b.cooldown = 0.15f;   // nothing in range: check again soon
                 break;
             }
-            const float zap = cfg::element::boltDamage * p.damageMult *
-                              p.elemMult[static_cast<int>(Element::Electric)];
-            target->hp -= zap;
+            const float zap = cfg::element::boltDamage * p.damageMult * b.mods.damageMult *
+                              elemPotency(b, p);
+            target->hp -= zap * (target->mark > 0.f ? cfg::role::markDamageMul : 1.f);
             target->hitFlash = 1.f;
             if (static_cast<int>(bolts_.size()) < cfg::element::maxBolts)
                 bolts_.push_back(Bolt{b.pos, target->pos,
                                       cfg::element::boltLife, cfg::element::boltLife});
 
-            if (p.conductor) {   // "Conductor": arc jumps on to a second enemy
+            if (b.mods.conductor) {   // "Conductor": arc jumps on to a second enemy
                 Enemy* next = nullptr;
                 float nd2 = cfg::combat::conductorRange * cfg::combat::conductorRange;
                 for (Enemy& e : enemies_) {
@@ -506,9 +574,8 @@ void World::emitElement(Ball& b, float dt, const WorldParams& p) {
 void World::regulateSpeed(Ball& b, float dt, const WorldParams& p) {
     // Cruise is a floor the ball climbs back to fast and a target it eases down
     // to slowly, so a fling stays fast for a moment.
-    float cruiseS = cruiseSpeed(p);
-    if (b.lead) cruiseS *= p.leadBallCruise;   // "Spearhead": the last-flung ball cruises faster
-    const float vMax = maxSpeed(p);
+    const float cruiseS = ballCruise(b, p);
+    const float vMax = ballMaxSpeed(b, p);
 
     const float sp = length(b.vel);
     if (sp < 1e-3f) {
@@ -516,7 +583,8 @@ void World::regulateSpeed(Ball& b, float dt, const WorldParams& p) {
         return;
     }
     const float up = 1.f - std::exp(-cfg::ball::regainRate * dt);
-    const float decayRate = cfg::ball::decayRate * p.flingDecayMult;
+    const float decayRate = cfg::ball::decayRate * b.mods.flingDecay *
+                            (b.role == BallRole::Striker ? cfg::role::strikerFlingDecay : 1.f);
     const float down = 1.f - std::exp(-decayRate * dt);
     const float k = (sp < cruiseS) ? up : down;
     const float ns = std::min(lerpf(sp, cruiseS, k), vMax);
@@ -531,7 +599,7 @@ void World::updateTrail(Ball& b) {
 }
 
 void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev) {
-    b.radius = cfg::ball::radius * p.ballRadiusMult;  // "Big ball" upgrade
+    b.radius = ballRadius(b, p);   // role, "Big ball" gear, "Mass" web
 
     const float speed = length(b.vel);
     const int steps = std::clamp(
@@ -553,12 +621,9 @@ void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
 
         if (collision::Contact c = collision::circleVsBounds(b, size_); c.hit) {
             afterBounce(b, c.normal, false);
-            if (p.wallBounceBoost > 1.f) {  // "Wall rush" upgrade
-                const float sp = length(b.vel);
-                if (sp > 1e-3f)
-                    b.vel *= std::min(sp * p.wallBounceBoost, maxSpeed(p)) / sp;
-            }
-            if (p.ricochet) b.ricochetT = cfg::combat::ricochetWindow;   // "Ricochet"
+            aimBounce(b, c.normal, nullptr);
+            boostSpeed(b, b.mods.wallBoost, p);   // "Wall rush"
+            if (b.mods.ricochet) b.ricochetT = cfg::combat::ricochetWindow;   // "Ricochet"
             pushFx(c);
         }
         // The core is solid: balls bounce off it (no damage to the core).
@@ -566,11 +631,8 @@ void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
                 collision::circleVsSolidCircle(b, core_.pos, core_.radius, 1.f);
             c.hit) {
             afterBounce(b, c.normal, false);
-            if (p.coreBounceBoost > 1.f) {  // "Spring core" upgrade
-                const float sp = length(b.vel);
-                if (sp > 1e-3f)
-                    b.vel *= std::min(sp * p.coreBounceBoost, maxSpeed(p)) / sp;
-            }
+            aimBounce(b, c.normal, nullptr);
+            boostSpeed(b, p.coreBounceBoost, p);   // "Spring core" relic
             pushFx(c);
         }
         for (Enemy& e : enemies_) {
@@ -581,14 +643,15 @@ void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
             float dmg = ballDamage(b, p);   // fire / ricochet / Battering bonuses are baked into ballDamage
             const bool afflicted = e.poison > 0.f || e.frozen > 0.f || e.burn > 0.f;
             if (p.primed && afflicted) dmg *= cfg::combat::primedMult;   // "Primed"
-            if (p.shatter && e.frozen > 0.f) dmg *= cfg::combat::shatterBonus;  // "Shatter" (stacks)
-            if (p.crit && rng_.range(0.f, 1.f) < cfg::combat::critChance)       // "Keen eye"
+            if (b.mods.shatter && e.frozen > 0.f) dmg *= cfg::combat::shatterBonus;  // "Shatter" (stacks)
+            if (e.mark > 0.f) dmg *= cfg::role::markDamageMul;                     // marked by a Support
+            if (b.mods.critChance > 0.f && rng_.range(0.f, 1.f) < b.mods.critChance)   // "Keen eye"
                 dmg *= cfg::combat::critMult;
-            if (p.executioner && e.hp < e.maxHp * cfg::combat::executeThreshold)  // "Executioner"
+            if (b.mods.executioner && e.hp < e.maxHp * cfg::combat::executeThreshold)  // "Executioner"
                 dmg *= cfg::combat::executeMult;
 
             const bool kill = dmg >= e.hp;
-            if (p.overkill && kill) {   // "Overkill": leftover damage splashes to a neighbour
+            if (b.mods.overkill && kill) {   // "Overkill": leftover damage splashes to a neighbour
                 const float leftover = (dmg - e.hp) * cfg::combat::overkillFrac;
                 if (leftover > 0.f) {
                     Enemy* nb = nullptr;
@@ -604,30 +667,32 @@ void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
 
             e.hp -= dmg;
             e.hitFlash = 1.f;
-            e.vel += -c.normal * cfg::combat::knockback * p.knockbackMult;   // "Heavy knock"
+            const float knock = cfg::combat::knockback * b.mods.knockMult *   // "Heavy knock"
+                                (b.role == BallRole::Guardian ? cfg::role::guardianKnockMul : 1.f);
+            e.vel += -c.normal * knock;
+            if (b.role == BallRole::Support) e.mark = cfg::role::markDuration;
+            if (b.role == BallRole::Guardian) e.stagger = cfg::role::staggerDuration;
+            const float pot = elemPotency(b, p);
             if (b.element == Element::Poison) {
                 e.poison = cfg::element::poisonDuration;
-                e.poisonDps = std::min(
-                    e.poisonDps + cfg::element::poisonDpsPerHit *
-                                      p.elemMult[static_cast<int>(Element::Poison)],
-                    cfg::element::poisonDpsMax * p.elemMult[static_cast<int>(Element::Poison)]);
+                e.poisonDps = std::min(e.poisonDps + cfg::element::poisonDpsPerHit * pot,
+                                       cfg::element::poisonDpsMax * pot);
             } else if (b.element == Element::Ice) {
-                e.frozen = std::max(e.frozen, cfg::element::freezeDuration *
-                                                  p.elemMult[static_cast<int>(Element::Ice)]);
+                e.frozen = std::max(e.frozen, cfg::element::freezeDuration * pot);
             } else if (b.element == Element::Fire && p.emberLevel > 0) {   // "Ember": light it up
                 e.burn = cfg::element::burnDuration;
-                e.burnDps = cfg::element::burnDps *
-                            p.elemMult[static_cast<int>(Element::Fire)] *
+                e.burnDps = cfg::element::burnDps * pot *
                             (1.f + cfg::element::burnPerEmberLevel *
                                        static_cast<float>(p.emberLevel - 1));
             }
-            if (p.tempo) {   // "Tempo": snap back toward cruise faster after a hit
-                const float cs = cruiseSpeed(p);
+            if (b.mods.tempo) {   // "Tempo": snap back toward cruise faster after a hit
+                const float cs = ballCruise(b, p);
                 const float sp = length(b.vel);
                 if (sp > 1e-3f && sp < cs) b.vel *= lerpf(sp, cs, cfg::combat::tempoRecover) / sp;
             }
-            if (p.cleave && kill) { pushFx(c); continue; }   // "Cleave": pass straight through
+            if (b.mods.cleave && kill) { pushFx(c); continue; }   // "Cleave": pass straight through
             afterBounce(b, c.normal, true);
+            aimBounce(b, c.normal, &e);
             pushFx(c);
         }
 
@@ -640,7 +705,7 @@ void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
                     b, boss_.pos, boss_.radius, cfg::combat::hitRebound);
                 c.hit) {
                 if (boss_.intro <= 0.f && boss_.hitCd <= 0.f &&
-                    length(b.vel) >= cruiseBase(p) * cfg::boss::minHitCruiseFrac) {
+                    length(b.vel) >= ballBaseCruise(b, p) * cfg::boss::minHitCruiseFrac) {
                     boss_.hp -= ballDamage(b, p);
                     boss_.hitFlash = 1.f;
                     boss_.hitCd = cfg::boss::hitCooldown;
@@ -671,13 +736,8 @@ void World::resolveBallPairs(FrameEvents& ev, const WorldParams& p) {
             Ball& b = balls_[j];
             if (!collision::resolveBallPair(a, b)) continue;
 
-            if (p.pairBounceBoost > 1.f) {  // "Carom" upgrade
-                for (Ball* bb : {&a, &b}) {
-                    const float sp = length(bb->vel);
-                    if (sp > 1e-3f)
-                        bb->vel *= std::min(sp * p.pairBounceBoost, maxSpeed(p)) / sp;
-                }
-            }
+            boostSpeed(a, a.mods.pairBoost, p);   // "Carom"
+            boostSpeed(b, b.mods.pairBoost, p);
 
             const sf::Vector2f n = normalized(b.pos - a.pos);
             a.squash = b.squash = 1.f;
@@ -707,9 +767,9 @@ void World::updateBolts(float dt) {
 // it take damage; the worm is widest at the head (nearest the ball) and tapers
 // to nothing at the tail.
 void World::updateWaterTrails(float dt, const WorldParams& p) {
-    const float w0 = cfg::element::waterTrailWidth * p.elemMult[static_cast<int>(Element::Water)];
     for (const Ball& b : balls_) {
         if (b.element != Element::Water) continue;
+        const float w0 = cfg::element::waterTrailWidth * elemPotency(b, p);
         const auto& pts = b.waterTrail;
         const int n = static_cast<int>(pts.size());
         if (n < 2) continue;
@@ -758,6 +818,7 @@ void World::updateEnemies(float dt, const WorldParams& p, FrameEvents& ev) {
             e.hp -= e.burnDps * dt;
             if (e.burn <= 0.f) e.burnDps = 0.f;
         }
+        e.mark = std::max(0.f, e.mark - dt);
 
         // Wave-20 shield orbiters are locked rigidly onto the spinning ring
         // around the boss - position set outright every frame so the ring stays
@@ -786,7 +847,13 @@ void World::updateEnemies(float dt, const WorldParams& p, FrameEvents& ev) {
             continue;
         }
 
-        {
+        if (e.stagger > 0.f) {
+            // Staggered by a Guardian: no steering - it just drifts on the
+            // knockback, bleeding speed, so it gets shoved clear of the core.
+            e.stagger -= dt;
+            e.vel *= std::exp(-cfg::role::staggerDrag * dt);
+            e.pos += e.vel * dt;
+        } else {
             const sf::Vector2f d = core_.pos - e.pos;
             const float dl = length(d);
             const sf::Vector2f steer = (dl > 1e-3f ? d / dl : sf::Vector2f{0.f, 1.f}) * e.speed;

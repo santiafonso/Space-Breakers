@@ -552,6 +552,49 @@ Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
     Undertow, Permafrost, Avalanche, Tesla, Alchemy). Tuning de `cfg::combat` /
     `cfg::powerup` / `cfg::core` nuevos.
 
+- **Fase C — pelotas como personajes: roles + 2 slots. [IMPLEMENTADO 2026-09-23]**
+  - Motivo (playtest del usuario): tirar era obligatorio porque las pelotas solas
+    casi no matan (sim headless: sin input, los 4 enemigos de la oleada 1 llegan
+    al núcleo), y "elegir 1 de 4 pelotas/items" daba poca decisión.
+  - `cfg::ball::maxBalls` 16 → **5**. Cada pelota = **rol + 2 slots de equipo**
+    (`BallLoadout` en `Offers.hpp`; `RunState::balls` = un loadout por pelota,
+    mismo orden que `World::balls()`).
+  - **Roles** (`enum class BallRole`, `cfg::role`):
+    - *Striker* — la que conviene flinguear: daño × (1 + `strikerSpeedDamage` ×
+      exceso sobre su crucero), sale de la mano × `strikerFlingMult`, el fling
+      decae más lento.
+    - *Support* — pega poco (× `supportDamageMul`) pero **marca** (`Enemy::mark`):
+      todas las pelotas y los zaps le hacen × `markDamageMul`. Su elemento rinde ×
+      `supportElemMul`. Se dibuja con un anillo interior.
+    - *Guardian* — grande, empuja × `guardianKnockMul` y **aturde**
+      (`Enemy::stagger`: deriva con el knockback, no avanza). **Rebotes
+      apuntados** (`World::aimBounce`, `guardianAimsBounces`): cada rebote sale en
+      línea recta hacia el enemigo más cercano al núcleo. No es homing (nunca
+      curva en el aire). Borde grueso.
+    - Arranque: Striker; Squad suma Guardian y después Support.
+  - **Picks entre oleadas** (`UpgradeCat`, 32 kinds): *NEW BALL* (recluta de un
+    rol) · *ELEMENT* (Fire..Electric son **equipo**: la pelota es de ese
+    elemento mientras lo tenga equipado; uno por pelota, ocupa slot → elemental
+    vs 2 items de combate; gated por su nodo) · *BALL GEAR* (los items de
+    combate, ahora por pelota; Conductor/Bedrock solo con su elemento) ·
+    *RELIC* (globales: Spring core, Slow field, Strong arm, Contagion, Primed).
+    Spearhead eliminado (lo cubre el Striker).
+  - Gear/elemento → la Choice pasa a **modo destino**: paneles de las pelotas con
+    sus 2 slots; click en slot (uno lleno se reemplaza), 1-5 por teclado, Esc
+    vuelve. TAB en juego muestra el loadout + reliquias.
+  - Sim: `BallMods` por pelota (`App::ballSpec` suma el equipo; nivel de forja
+    ya previsto en `gearLvl` / `gearLevelBonus`), `World::syncBalls` refresca
+    las pelotas en el lugar. `WorldParams` quedó con lo global (Heft/Mass web,
+    reliquias, web). Heavy impact +25% / Big ball +20% por pelota.
+  - Sim headless sin input: 1 guardian limpia la oleada 1 sin daño; str+guard+supp
+    llega a ~4-5; 5 pelotas equipadas a ~7. Falta playtest y tuning.
+  - **Próximos pasos acordados (en orden):** mapa de caminos por acto (combate /
+    élite / tienda / forja / descanso, oro de partida) → feedback y recompensa por
+    combo (fondo que se tiñe, monedas que saltan, más oro por jugar bien) → 4
+    tipos de enemigo (corredor, tanque, escindido, blindado de frente) → rehacer
+    el fling + opción de **auto-fling** para quien no quiera tirar tanto.
+    Fase B (Appraiser, sub-nodos de elementos) queda en pausa.
+
 - **Fase 2 — Jefe tras la oleada 10.** Da upgrades de pelota (viento/agua/
   piedra). Extiende la run mas alla de 10 en "modo infinito" opcional.
 - **Fase 3 — Variedad.** Repulsor, bumper, rampa. Corredor, tanque, escindido.

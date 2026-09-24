@@ -18,7 +18,7 @@ inline constexpr float radius = 18.f;
 inline constexpr float baseCruise = 300.f;       // px/s orbit speed at level 0
 inline constexpr float hardSpeedCap = 2600.f;
 inline constexpr float maxSpeedCruiseMul = 4.0f; // ceiling = cruise * this (capped by hardSpeedCap)
-inline constexpr int maxBalls = 16;
+inline constexpr int maxBalls = 5;   // few balls, each one a built-up "character" (role + element + 2 gear slots)
 
 // Speed regulation: cruise is a floor the ball climbs back to quickly and a
 // target it eases down to slowly, so a fling stays fast for a moment.
@@ -54,17 +54,19 @@ inline constexpr float contactDamagePerCruise = 1.7f;   // + this * (speed / bas
 inline constexpr float knockback = 190.f;
 inline constexpr float hitRebound = 0.9f;               // the ball bounces off an enemy like a wall
 
-// Between-wave "items" that touch the simulation. Heft / Mass (meta web) stack
-// onto the same per-pick counters, so the maxPicks caps are the combined limit.
+// Between-wave items. Most are ball GEAR now: equipped into one of a ball's
+// two slots, so they only affect that ball. A gear's forge level scales its
+// bonus by gearLevelBonus per level past the first.
+inline constexpr float gearLevelBonus = 0.5f;
 inline constexpr float springBoost = 1.6f;        // "Spring": ball speed x this on a core bounce
 inline constexpr float wallBounceBoost = 1.12f;   // "Wall rush": ball speed x this on a wall bounce
 inline constexpr float pairBounceBoost = 1.16f;   // "Carom": ball speed x this when it clacks another ball
 inline constexpr float flingPowerBoost = 1.4f;    // "Strong arm": a flung ball leaves your hand x this faster
 inline constexpr float flingDecayMult = 0.45f;    // "Reflexes": fling speed decays this much slower
-inline constexpr float heavyImpactPerPick = 0.08f;// "Heavy impact" / "Heft": +this contact damage each
-inline constexpr int   heavyImpactMaxPicks = 3;
-inline constexpr float bigBallPerPick = 0.10f;    // "Big ball" / "Mass": +this radius fraction each
-inline constexpr int   bigBallMaxPicks = 3;
+inline constexpr float heavyImpactGear = 0.25f;   // "Heavy impact" gear: + this contact damage on that ball
+inline constexpr float bigBallGear = 0.20f;       // "Big ball" gear: + this radius on that ball
+inline constexpr float heftPerLevel = 0.08f;      // "Heft" web node: + this contact damage, every ball
+inline constexpr float massPerLevel = 0.10f;      // "Mass" web node: + this radius, every ball
 inline constexpr float slowFieldRadius = 210.f;   // "Slow field": zone around the core...
 inline constexpr float slowFieldMul = 0.55f;      // ...enemies inside move at this fraction of speed
 
@@ -81,7 +83,6 @@ inline constexpr float shatterBonus = 1.8f;      // "Shatter": hitting a frozen 
 inline constexpr float contagionRadius = 90.f;   // "Contagion": a poisoned enemy dying re-poisons others within this
 inline constexpr float bedrockLifeMult = 4.f;    // "Bedrock": stone rubble lasts x this long
 inline constexpr float primedMult = 1.35f;       // "Primed": +damage to an enemy already under an element effect
-inline constexpr float leadBallCruise = 1.35f;   // "Spearhead": the last-flung ball's cruise speed x this
 
 // "Ball combat" between-wave items (Fase A). No explicit prereqs - the pick pool
 // just rolls them together, so synergies fall out of what you already have:
@@ -95,6 +96,35 @@ inline constexpr float overkillFrac = 0.5f;      // "Overkill": this fraction of
 inline constexpr float overkillRange = 150.f;    // ...splashes onto the nearest enemy within this
 inline constexpr float tempoRecover = 0.4f;      // "Tempo": ball eases this far back toward cruise on an enemy hit
 }  // namespace combat
+
+// Ball roles. Every ball is one of three; the role shapes how it wants to be
+// played more than any single gear does.
+namespace role {
+// Striker: the one worth flinging. Above its cruise speed every hit scales up
+// hard, it leaves your hand harder and holds a fling longer.
+inline constexpr float strikerSpeedDamage = 0.7f;  // contact dmg x (1 + this * (speed / cruise - 1)) above cruise
+inline constexpr float strikerFlingMult = 1.25f;   // throw velocity x this
+inline constexpr float strikerFlingDecay = 0.6f;   // fling speed decays at this fraction of the normal rate
+// Support: weak hits, but marks what it touches - every ball hits a marked
+// enemy harder - and its element is stronger.
+inline constexpr float supportDamageMul = 0.6f;
+inline constexpr float supportElemMul = 1.4f;      // poison / freeze / wake / zap potency on a support ball
+inline constexpr float markDuration = 3.0f;
+inline constexpr float markDamageMul = 1.35f;      // any ball (and zaps) vs a marked enemy
+// Guardian: big and heavy, keeps the core clear. Hits shove enemies back hard
+// and stagger them (no advancing) for a moment.
+inline constexpr float guardianRadiusMul = 1.3f;
+inline constexpr float guardianDamageMul = 0.75f;
+inline constexpr float guardianKnockMul = 2.0f;
+inline constexpr float guardianCruiseMul = 0.9f;
+inline constexpr float staggerDuration = 0.7f;     // enemy drifts on its knockback, not toward the core
+inline constexpr float staggerDrag = 3.5f;         // knockback bleed-off per second while staggered
+// A Guardian "reads" the threat: every bounce (wall, core, enemy) sends it off
+// in a straight line toward the enemy closest to the core. Not homing - it
+// never curves mid-flight; only its bounce angle is chosen.
+inline constexpr bool  guardianAimsBounces = true;
+inline constexpr float guardianAimJitter = 0.06f;  // rad of wobble so it isn't robotic
+}  // namespace role
 
 // Run score: arcade points, shown in the HUD and kept as a lifetime best.
 namespace score {

@@ -155,8 +155,9 @@ void WorldRenderer::drawEnemy(sf::RenderWindow& window, const Enemy& e) const {
     body.setOrigin(e.radius, e.radius);
     body.setPosition(e.pos);
     body.setFillColor(withAlpha(fill, 0.9f));
-    body.setOutlineThickness(2.f);
-    body.setOutlineColor(withAlpha(sf::Color::White, 0.15f + 0.5f * e.hitFlash));
+    body.setOutlineThickness(e.mark > 0.f ? 3.f : 2.f);   // marked by a Support: brighter rim
+    body.setOutlineColor(withAlpha(sf::Color::White,
+                                   (e.mark > 0.f ? 0.7f : 0.15f) + 0.3f * e.hitFlash));
     window.draw(body);
 
     sf::CircleShape hpDot(e.radius * 0.5f * frac + 1.f, 16);
@@ -198,7 +199,6 @@ void WorldRenderer::drawBall(sf::RenderWindow& window, const Ball& b,
     sf::Color col = b.color;   // World bakes the element hue into b.color (see elementSpeedColor)
     float alpha = 1.f;
     if (effect && effect->kind == PowerUp::Golden) col = lerpColor(col, theme::puGolden, 0.85f);
-    if (b.lead) col = lerpColor(col, theme::puGolden, 0.7f);   // "Spearhead": stays gold so you can pick it out
 
     if (!b.held && !b.trail.empty()) {
         const int n = static_cast<int>(b.trail.size());
@@ -222,10 +222,23 @@ void WorldRenderer::drawBall(sf::RenderWindow& window, const Ball& b,
     c.setPosition(b.pos);
     c.setScale(lerpf(perpS, along, ax), lerpf(perpS, along, ay));
     c.setFillColor(withAlpha(col, alpha));
-    c.setOutlineThickness(2.f);
-    c.setOutlineColor(withAlpha(b.lead ? theme::puGolden : sf::Color::White,
-                                (b.held ? 0.85f : (b.lead ? 0.9f : 0.16f)) * alpha));
+    // Role marks, kept minimal: a Guardian has a heavy rim, a Support a small
+    // inner ring, a Striker is the plain ball.
+    const bool guardian = b.role == BallRole::Guardian;
+    c.setOutlineThickness(guardian ? 4.f : 2.f);
+    c.setOutlineColor(withAlpha(sf::Color::White,
+                                (b.held ? 0.85f : (guardian ? 0.5f : 0.16f)) * alpha));
     window.draw(c);
+    if (b.role == BallRole::Support) {
+        const float ir = b.radius * 0.45f;
+        sf::CircleShape inner(ir, 24);
+        inner.setOrigin(ir, ir);
+        inner.setPosition(b.pos);
+        inner.setFillColor(sf::Color::Transparent);
+        inner.setOutlineThickness(2.f);
+        inner.setOutlineColor(withAlpha(sf::Color::White, 0.65f * alpha));
+        window.draw(inner);
+    }
 
     if (b.held) {
         sf::CircleShape ring(b.radius + 7.f, 40);
@@ -234,15 +247,6 @@ void WorldRenderer::drawBall(sf::RenderWindow& window, const Ball& b,
         ring.setFillColor(sf::Color::Transparent);
         ring.setOutlineThickness(2.f);
         ring.setOutlineColor(withAlpha(theme::accent, 0.7f));
-        window.draw(ring);
-    } else if (b.lead) {
-        // A steady gold halo so the Spearhead ball is unmistakable among many.
-        sf::CircleShape ring(b.radius + 5.f, 40);
-        ring.setOrigin(ring.getRadius(), ring.getRadius());
-        ring.setPosition(b.pos);
-        ring.setFillColor(sf::Color::Transparent);
-        ring.setOutlineThickness(2.f);
-        ring.setOutlineColor(withAlpha(theme::puGolden, 0.55f * alpha));
         window.draw(ring);
     }
 }

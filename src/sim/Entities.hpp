@@ -30,6 +30,45 @@ inline constexpr int kElementCount = 7;
 const char* elementName(Element e);
 sf::Color elementColor(Element e);
 
+// ---------------------------------------------------------------- ball roles
+
+// Striker = worth flinging, Support = marks enemies + stronger element,
+// Guardian = big, shoves and staggers (see cfg::role).
+enum class BallRole { Striker, Support, Guardian };
+inline constexpr int kBallRoleCount = 3;
+
+const char* roleName(BallRole r);
+
+// What a ball's equipped gear adds up to. Built by App from the run loadout and
+// pushed into the World (World::syncBalls) - the sim never sees gear kinds.
+struct BallMods {
+    float damageMult = 1.f;    // Heavy impact
+    float radiusMult = 1.f;    // Big ball
+    float wallBoost = 1.f;     // Wall rush: speed x this per wall bounce
+    float pairBoost = 1.f;     // Carom: speed x this per ball-vs-ball clack
+    float flingDecay = 1.f;    // Reflexes (< 1 keeps a fling's speed longer)
+    float maxSpeedMult = 1.f;  // Ceiling break
+    float knockMult = 1.f;     // Heavy knock
+    float critChance = 0.f;    // Keen eye
+    bool ricochet = false;
+    bool warmUp = false;
+    bool cleave = false;
+    bool bruiser = false;
+    bool executioner = false;
+    bool overkill = false;
+    bool tempo = false;
+    bool shatter = false;
+    bool conductor = false;    // only acts on an electric ball
+    bool bedrock = false;      // only acts on a stone ball
+};
+
+// Everything the World needs to build / refresh one ball.
+struct BallSpec {
+    BallRole role = BallRole::Striker;
+    Element element = Element::Plain;
+    BallMods mods;
+};
+
 // ---------------------------------------------------------------- entities
 
 struct Ball {
@@ -37,8 +76,9 @@ struct Ball {
     sf::Vector2f vel;
     float radius = cfg::ball::radius;
     bool held = false;
-    bool lead = false;      // "Spearhead": the most recently flung ball, cruises faster
+    BallRole role = BallRole::Striker;
     Element element = Element::Plain;
+    BallMods mods;          // this ball's gear
     float cooldown = 0.f;   // water drip / stone drop / electric zap timer
     float squash = 0.f;
     sf::Vector2f squashAxis{1.f, 0.f};
@@ -62,6 +102,8 @@ struct Enemy {
     float frozen = 0.f;     // seconds left frozen in place (from an ice ball)
     float burn = 0.f;       // seconds of burn remaining ("Ember": fire ball DoT)
     float burnDps = 0.f;    // current burn damage/s while it lasts
+    float mark = 0.f;       // seconds left marked by a Support ball (takes more damage)
+    float stagger = 0.f;    // seconds left staggered by a Guardian (drifts, doesn't advance)
     bool orbiter = false;   // wave-20 shield: orbits the boss instead of seeking the core
     float orbitPhase = 0.f; // its slot angle on the ring
 };
@@ -157,36 +199,15 @@ struct FrameEvents {
 // Per-step tuning handed to the simulation: the wave number plus whatever
 // between-wave upgrades the player has picked this run.
 struct WorldParams {
-    float damageMult = 1.f;       // Heavy impact
+    float damageMult = 1.f;       // Heft (web): every ball
     float cruiseMult = 1.f;
     int wave = 1;
-    float ballRadiusMult = 1.f;   // Big ball
-    float coreBounceBoost = 1.f;  // Spring
-    float wallBounceBoost = 1.f;  // Wall rush
-    float pairBounceBoost = 1.f;  // Carom (ball-vs-ball)
-    float flingDecayMult = 1.f;   // Reflexes (< 1 keeps fling speed longer)
-    bool slowField = false;       // Slow field: a zone around the core slows enemies
+    float ballRadiusMult = 1.f;   // Mass (web): every ball
+    float coreBounceBoost = 1.f;  // Spring core (relic)
+    bool slowField = false;       // Slow field (relic): a zone around the core slows enemies
+    bool contagion = false;       // Contagion (relic): a poisoned enemy dying re-poisons nearby
+    bool primed = false;          // Primed (relic): +damage vs enemies already under an element effect
     float elemMult[kElementCount] = {1.f, 1.f, 1.f, 1.f, 1.f, 1.f, 1.f};  // per-element potency (web levels)
-
-    // More item toggles.
-    bool ricochet = false;        // Ricochet: wall bounce arms a brief damage bonus
-    float maxSpeedMult = 1.f;     // Ceiling break: multiplies the top-speed ceiling
-    bool warmUp = false;          // Warm-up: cruise speed ramps up over the wave
-    float knockbackMult = 1.f;    // Heavy knock
-    bool conductor = false;       // Conductor: electric arc jumps to a 2nd enemy
-    bool shatter = false;         // Shatter: bonus damage vs frozen enemies
-    bool contagion = false;       // Contagion: a poisoned enemy dying re-poisons nearby
-    bool bedrock = false;         // Bedrock: stone rubble lasts far longer
-    bool primed = false;          // Primed: +damage vs enemies already under an element effect
-    float leadBallCruise = 1.f;   // Spearhead: cruise-speed multiplier for the lead ball
-
-    // "Ball combat" items (Fase A) - all lean on speed / damage picks for synergy.
-    bool crit = false;            // Keen eye: chance of a double-damage contact hit
-    bool bruiser = false;         // Battering: contact damage scales with ball speed
-    bool executioner = false;     // Executioner: huge damage to low-HP enemies
-    bool overkill = false;        // Overkill: a kill's leftover damage splashes to a neighbour
-    bool cleave = false;          // Cleave: the ball passes through an enemy it kills
-    bool tempo = false;           // Tempo: ball recovers cruise speed faster after an enemy hit
     int  emberLevel = 0;          // Ember web node: fire hits apply a burn DoT
 
     // Meta web (Fase A).

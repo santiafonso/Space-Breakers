@@ -18,13 +18,15 @@ public:
     explicit World(sf::Vector2f size);
 
     // ---- run / wave lifecycle -----------------------------------------
-    void startRun(const WorldParams& p, const std::vector<int>& ballElements,
+    void startRun(const WorldParams& p, const std::vector<BallSpec>& balls,
                   float coreHp, float coreMaxHp);
     void startWave(int wave, const WorldParams& p);
     void startBossWave(const WorldParams& p);   // the wave-10 miniboss duel (Charger)
     void startPostBossWave(int wave, const WorldParams& p);  // waves 11..19: wide arena, core slides to centre
     void startFinalBossWave(const WorldParams& p);           // wave 20: the Orbital boss + shield ring
-    void addBall(Element e, const WorldParams& p);
+    // Match the balls to the run loadout: refresh role / element / gear of the
+    // existing ones in place (they keep flying) and spawn any new ones.
+    void syncBalls(const std::vector<BallSpec>& specs, const WorldParams& p);
     void repairCore(float amount);
     void addCoreMaxHp(float delta);                  // raise the core's max HP mid-run
     void useReserve(const WorldParams& p);           // "Stockpile": fire the held reserve power-up
@@ -70,7 +72,6 @@ public:
 
     float cruiseBase(const WorldParams& p) const;
     float cruiseSpeed(const WorldParams& p) const;
-    float maxSpeed(const WorldParams& p) const;
     int comboStreak() const { return comboStreak_; }
     int comboTier() const {
         return std::min(comboStreak_ / cfg::combo::bouncesPerTier, comboCapTier_);
@@ -81,7 +82,13 @@ public:
     float fastestBall() const;
 
 private:
-    void spawnBall(Element e, const WorldParams& p);
+    void spawnBall(const BallSpec& spec, const WorldParams& p);
+    float ballBaseCruise(const Ball& b, const WorldParams& p) const;   // role-scaled cruise, no buffs
+    float ballCruise(const Ball& b, const WorldParams& p) const;       // + Surge / Warm-up
+    float ballMaxSpeed(const Ball& b, const WorldParams& p) const;
+    float ballRadius(const Ball& b, const WorldParams& p) const;
+    float elemPotency(const Ball& b, const WorldParams& p) const;      // web level x Support bonus
+    void boostSpeed(Ball& b, float mult, const WorldParams& p);        // bounce boosts, capped
     void spawnEnemy();
     void spawnOrbiter(float phase);   // one shield enemy on the wave-20 ring
     void carryBalls(const WorldParams& p);   // keep balls in place across a wave change
@@ -103,6 +110,7 @@ private:
     void activateEffect(PowerUp k, const WorldParams& p);   // start an effect (Charged applies here)
     float effStrength(const WorldParams& p) const;          // 1 while live, ramps to 0 over the Afterglow tail
     void afterBounce(Ball& b, sf::Vector2f normal, bool countHit);
+    void aimBounce(Ball& b, sf::Vector2f normal, const Enemy* skip);   // Guardian: bounce toward the threat
     void regulateSpeed(Ball& b, float dt, const WorldParams& p);
     void updateTrail(Ball& b);
     float ballDamage(const Ball& b, const WorldParams& p) const;

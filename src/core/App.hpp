@@ -50,7 +50,10 @@ public:
 
     void openLoadout();     // Menu -> the game menu
     void newRun();          // Loadout "Start" -> a fresh run
-    void applyUpgrade(int idx);   // Choice: pick one of the four
+    void applyUpgrade(int idx);   // Choice: pick one of the four (recruit / relic, or auto-target)
+    void applyUpgradeTo(int idx, int ball, int slot);   // Choice: gear / infusion onto a chosen ball & slot
+    bool choiceNeedsTarget(int idx) const;
+    bool choiceFitsBall(int idx, int ball) const;
     void rerollChoice(int idx);   // Choice: swap card `idx` for another item (costs a Foresight charge)
     void repairCoreSkipItem();    // Choice: heal the core to full instead of taking an item
     void useReserve();            // Play: fire the "Stockpile" reserve power-up (key Q)
@@ -93,7 +96,12 @@ private:
     void openChoice();
     UpgradeCtx buildUpgradeCtx() const;   // shared by rollChoices / rerollChoice
     void rollChoices();
-    void applyUpgradeKind(UpgradeKind k);
+    void applyUpgradeKind(UpgradeKind k, int ball = -1, int slot = -1);
+    bool autoTarget(UpgradeKind k, int& ball, int& slot) const;   // first ball / free slot it fits
+    void finishChoice();                                          // after a pick: fx, close, next wave
+    BallSpec ballSpec(const BallLoadout& b) const;
+    std::vector<BallSpec> ballSpecs() const;
+    void syncWorldBalls();
     void bankRun(bool won);   // pay out cores/prisms/stats for the run; no navigation
     void finishToMenu();      // clear the run and go back to the game menu
 

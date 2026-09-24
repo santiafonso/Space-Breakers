@@ -1,69 +1,100 @@
 #pragma once
 
 #include <cstdint>
+#include <vector>
+
+#include "sim/Entities.hpp"
 
 namespace sb {
 
-// ---- between-wave items: pick 1 of 4 rolled from this pool ------------------
+// ---- between-wave picks: 1 of 4 rolled from this pool -----------------------
 //
-// A run shows four random, eligible items after every wave (or you can skip the
-// pick to repair the core to full instead).
-//
-// The elemental balls are just "add a ball of element X" items: they drop a new
-// ball of that element straight into the arena. An element item only shows once
-// its web node is unlocked; the unlock chain runs fire -> poison -> water ->
-// ice -> stone -> electric.
+// Every ball is a small "character": a role and two equipment slots (see
+// BallLoadout). A pick is one of four kinds:
+//  - Recruit: a new plain ball of a given role (up to cfg::ball::maxBalls).
+//  - Element: equipment that makes the ball fire / poison / ... while it's
+//             equipped. One element per ball; it costs a slot, so a ball is
+//             either elemental or carries two combat gears. Gated by that
+//             element's web node (fire -> poison -> water -> ice -> stone -> electric).
+//  - Gear:    combat equipment for one ball.
+//  - Relic:   a whole-run passive (the core, your throwing arm, elements).
+// Elements and gear ask which ball / slot they go to (a full slot is replaced).
 
 enum class UpgradeKind {
-    AddBall,           // +1 plain ball
-    AddFireBall,       // +1 fire ball     (needs the Ignition node)
-    AddPoisonBall,     // +1 poison ball   (needs the Venom node)
-    AddWaterBall,      // +1 water ball    (needs the Tide node)
-    AddIceBall,        // +1 ice ball      (needs the Frost node)
-    AddStoneBall,      // +1 stone ball    (needs the Quarry node)
-    AddElectricBall,   // +1 electric ball (needs the Arc node)
+    // recruits
+    RecruitStriker,
+    RecruitSupport,
+    RecruitGuardian,
+    // elements (order = element web-node slots 0..5)
+    ElemFire,
+    ElemPoison,
+    ElemWater,
+    ElemIce,
+    ElemStone,
+    ElemElectric,
+    // ball gear
+    HeavyImpact,       // +contact damage
+    BigBall,           // +radius
+    WallRush,          // speeds up on every wall bounce
+    Carom,             // speeds up when it clacks another ball
+    Ricochet,          // brief damage bonus right after a wall bounce
+    CeilingBreak,      // higher top speed
+    WarmUp,            // cruise speed climbs over the wave
+    HeavyKnock,        // shoves enemies much harder
+    FlingMomentum,     // "Reflexes": keeps a fling's speed longer
+    Cleave,            // punches through an enemy it kills
+    Crit,              // "Keen eye": chance of a double-damage hit
+    Bruiser,           // "Battering": damage scales with speed
+    Executioner,       // big bonus vs badly hurt enemies
+    Overkill,          // a kill's leftover damage splashes to a neighbour
+    Tempo,             // snaps back to cruise faster after a hit
+    Shatter,           // bonus damage vs frozen enemies   (needs the Frost node)
+    Conductor,         // its electric arc jumps to a 2nd enemy (electric ball only)
+    Bedrock,           // its stone rubble lasts far longer     (stone ball only)
+    // relics
     CoreSpring,        // balls ricochet off the core faster
     CoreSlowField,     // a zone around the core slows enemies inside it
-    FlingMomentum,     // a flung ball keeps its speed longer
-    WallRush,          // a ball speeds up on every wall bounce
-    Carom,             // a ball speeds up when it clacks another ball
-    StrongArm,         // you fling balls harder
-    Ricochet,          // brief damage bonus right after a wall bounce
-    CeilingBreak,      // raises the ball top-speed ceiling
-    WarmUp,            // cruise speed ramps up over the wave
-    HeavyKnock,        // more knockback to enemies
-    Conductor,         // electric arc jumps to a 2nd enemy   (needs the Arc node)
-    Shatter,           // bonus damage vs frozen enemies      (needs the Frost node)
-    Contagion,         // a poisoned enemy dying re-poisons nearby (needs the Venom node)
-    Bedrock,           // stone rubble lasts far longer        (needs the Quarry node)
-    Primed,            // +damage vs enemies already under an element effect (needs any element node)
-    Spearhead,         // the ball you flung most recently has a higher cruise speed
-    HeavyImpact,       // +contact damage, small, stacks to a cap
-    BigBall,           // +ball radius, small, stacks to a cap
-    // "Ball combat" items - synergise implicitly with the speed / damage picks.
-    Cleave,            // the ball punches through an enemy it kills
-    Crit,              // chance of a double-damage contact hit
-    Bruiser,           // contact damage scales with ball speed
-    Executioner,       // huge bonus damage to badly hurt enemies
-    Overkill,          // a kill's leftover damage splashes onto the nearest enemy
-    Tempo,             // the ball snaps back to cruise speed faster after a hit
+    StrongArm,         // you fling every ball harder
+    Contagion,         // a poisoned enemy dying poisons its neighbours (needs Venom)
+    Primed,            // +damage vs enemies under any element effect (needs any element node)
 };
-inline constexpr int kUpgradeKindCount = 31;
+inline constexpr int kUpgradeKindCount = 32;
 inline constexpr int kChoiceCount = 4;
-
-// "Add X ball" kinds map onto element web-node slots 0..5 (fire..electric);
-// everything else returns -1. Element enum is Plain,Fire,Poison,Water,Ice,Stone,
-// Electric, so the ball element is Element(elementItemSlot + 1).
+inline constexpr int kBallSlots = 2;
 inline constexpr int kElementItemCount = 6;
+
+enum class UpgradeCat { Recruit, Element, Gear, Relic };
+
+inline UpgradeCat upgradeCat(UpgradeKind k) {
+    const int i = static_cast<int>(k);
+    if (i <= static_cast<int>(UpgradeKind::RecruitGuardian)) return UpgradeCat::Recruit;
+    if (i <= static_cast<int>(UpgradeKind::ElemElectric)) return UpgradeCat::Element;
+    if (i <= static_cast<int>(UpgradeKind::Bedrock)) return UpgradeCat::Gear;
+    return UpgradeCat::Relic;
+}
+
+inline const char* upgradeCatName(UpgradeCat c) {
+    switch (c) {
+        case UpgradeCat::Recruit:  return "NEW BALL";
+        case UpgradeCat::Element:  return "ELEMENT";
+        case UpgradeCat::Gear:     return "BALL GEAR";
+        case UpgradeCat::Relic:    return "RELIC";
+    }
+    return "";
+}
+
+// Element items map onto element web-node slots 0..5 (fire..electric);
+// everything else returns -1. The ball element is Element(slot + 1).
 inline int elementItemSlot(UpgradeKind k) {
+    if (upgradeCat(k) != UpgradeCat::Element) return -1;
+    return static_cast<int>(k) - static_cast<int>(UpgradeKind::ElemFire);
+}
+
+inline BallRole recruitRole(UpgradeKind k) {
     switch (k) {
-        case UpgradeKind::AddFireBall:     return 0;
-        case UpgradeKind::AddPoisonBall:   return 1;
-        case UpgradeKind::AddWaterBall:    return 2;
-        case UpgradeKind::AddIceBall:      return 3;
-        case UpgradeKind::AddStoneBall:    return 4;
-        case UpgradeKind::AddElectricBall: return 5;
-        default:                           return -1;
+        case UpgradeKind::RecruitSupport:  return BallRole::Support;
+        case UpgradeKind::RecruitGuardian: return BallRole::Guardian;
+        default:                           return BallRole::Striker;
     }
 }
 
@@ -75,145 +106,171 @@ struct UpgradeInfo {
 // Machine-readable name, for the SB_UPGRADES dev override.
 inline const char* upgradeKindId(UpgradeKind k) {
     switch (k) {
-        case UpgradeKind::AddBall:          return "AddBall";
-        case UpgradeKind::AddFireBall:      return "AddFireBall";
-        case UpgradeKind::AddPoisonBall:    return "AddPoisonBall";
-        case UpgradeKind::AddWaterBall:     return "AddWaterBall";
-        case UpgradeKind::AddIceBall:       return "AddIceBall";
-        case UpgradeKind::AddStoneBall:     return "AddStoneBall";
-        case UpgradeKind::AddElectricBall:  return "AddElectricBall";
-        case UpgradeKind::CoreSpring:       return "CoreSpring";
-        case UpgradeKind::CoreSlowField:    return "CoreSlowField";
-        case UpgradeKind::FlingMomentum:    return "FlingMomentum";
-        case UpgradeKind::WallRush:         return "WallRush";
-        case UpgradeKind::Carom:            return "Carom";
-        case UpgradeKind::StrongArm:        return "StrongArm";
+        case UpgradeKind::RecruitStriker:  return "RecruitStriker";
+        case UpgradeKind::RecruitSupport:  return "RecruitSupport";
+        case UpgradeKind::RecruitGuardian: return "RecruitGuardian";
+        case UpgradeKind::ElemFire:      return "ElemFire";
+        case UpgradeKind::ElemPoison:    return "ElemPoison";
+        case UpgradeKind::ElemWater:     return "ElemWater";
+        case UpgradeKind::ElemIce:       return "ElemIce";
+        case UpgradeKind::ElemStone:     return "ElemStone";
+        case UpgradeKind::ElemElectric:  return "ElemElectric";
+        case UpgradeKind::HeavyImpact:     return "HeavyImpact";
+        case UpgradeKind::BigBall:         return "BigBall";
+        case UpgradeKind::WallRush:        return "WallRush";
+        case UpgradeKind::Carom:           return "Carom";
         case UpgradeKind::Ricochet:        return "Ricochet";
         case UpgradeKind::CeilingBreak:    return "CeilingBreak";
         case UpgradeKind::WarmUp:          return "WarmUp";
         case UpgradeKind::HeavyKnock:      return "HeavyKnock";
-        case UpgradeKind::Conductor:       return "Conductor";
+        case UpgradeKind::FlingMomentum:   return "FlingMomentum";
+        case UpgradeKind::Cleave:          return "Cleave";
+        case UpgradeKind::Crit:            return "Crit";
+        case UpgradeKind::Bruiser:         return "Bruiser";
+        case UpgradeKind::Executioner:     return "Executioner";
+        case UpgradeKind::Overkill:        return "Overkill";
+        case UpgradeKind::Tempo:           return "Tempo";
         case UpgradeKind::Shatter:         return "Shatter";
-        case UpgradeKind::Contagion:       return "Contagion";
+        case UpgradeKind::Conductor:       return "Conductor";
         case UpgradeKind::Bedrock:         return "Bedrock";
+        case UpgradeKind::CoreSpring:      return "CoreSpring";
+        case UpgradeKind::CoreSlowField:   return "CoreSlowField";
+        case UpgradeKind::StrongArm:       return "StrongArm";
+        case UpgradeKind::Contagion:       return "Contagion";
         case UpgradeKind::Primed:          return "Primed";
-        case UpgradeKind::Spearhead:      return "Spearhead";
-        case UpgradeKind::HeavyImpact:      return "HeavyImpact";
-        case UpgradeKind::BigBall:          return "BigBall";
-        case UpgradeKind::Cleave:           return "Cleave";
-        case UpgradeKind::Crit:             return "Crit";
-        case UpgradeKind::Bruiser:          return "Bruiser";
-        case UpgradeKind::Executioner:      return "Executioner";
-        case UpgradeKind::Overkill:         return "Overkill";
-        case UpgradeKind::Tempo:            return "Tempo";
     }
     return "";
 }
 
 inline UpgradeInfo upgradeInfo(UpgradeKind k) {
     switch (k) {
-        case UpgradeKind::AddBall:          return {"Extra ball", "one more ball in the arena"};
-        case UpgradeKind::AddFireBall:      return {"Fire ball", "+1 ball that hits harder on contact"};
-        case UpgradeKind::AddPoisonBall:    return {"Poison ball", "+1 ball; hits stack damage over time"};
-        case UpgradeKind::AddWaterBall:     return {"Water ball", "+1 ball trailing a damaging wake"};
-        case UpgradeKind::AddIceBall:       return {"Ice ball", "+1 ball that freezes enemies on hit"};
-        case UpgradeKind::AddStoneBall:     return {"Stone ball", "+1 ball that drops grinding rubble"};
-        case UpgradeKind::AddElectricBall:  return {"Electric ball", "+1 ball that zaps nearby enemies"};
-        case UpgradeKind::CoreSpring:       return {"Spring core", "your balls bounce off the core faster"};
-        case UpgradeKind::CoreSlowField:    return {"Slow field", "enemies near the core are slowed"};
-        case UpgradeKind::FlingMomentum:    return {"Reflexes", "a flung ball keeps its speed longer"};
-        case UpgradeKind::WallRush:         return {"Wall rush", "a ball speeds up every time it hits a wall"};
-        case UpgradeKind::Carom:            return {"Carom", "a ball speeds up when it clacks another ball"};
-        case UpgradeKind::StrongArm:        return {"Strong arm", "you fling balls noticeably harder"};
-        case UpgradeKind::Ricochet:        return {"Ricochet", "a ball hits harder for a moment after a wall bounce"};
-        case UpgradeKind::CeilingBreak:    return {"Ceiling break", "raises the ball's top-speed limit"};
-        case UpgradeKind::WarmUp:          return {"Warm-up", "ball cruise speed climbs as a wave goes on"};
-        case UpgradeKind::HeavyKnock:      return {"Heavy knock", "balls shove enemies back much harder"};
-        case UpgradeKind::Conductor:       return {"Conductor", "the electric arc jumps on to a second enemy"};
+        case UpgradeKind::RecruitStriker:  return {"Striker", "a new ball built to be flung: hits far harder above cruise speed"};
+        case UpgradeKind::RecruitSupport:  return {"Support", "a new ball that marks enemies (all balls hit them harder); stronger element"};
+        case UpgradeKind::RecruitGuardian: return {"Guardian", "a new big ball that shoves enemies back and staggers them"};
+        case UpgradeKind::ElemFire:      return {"Fire", "the ball turns fire: heavier contact hits"};
+        case UpgradeKind::ElemPoison:    return {"Poison", "the ball turns poison: hits stack damage over time"};
+        case UpgradeKind::ElemWater:     return {"Water", "the ball turns water: trails a damaging wake"};
+        case UpgradeKind::ElemIce:       return {"Ice", "the ball turns ice: hits freeze enemies in place"};
+        case UpgradeKind::ElemStone:     return {"Stone", "the ball turns stone: drops grinding rubble"};
+        case UpgradeKind::ElemElectric:  return {"Electric", "the ball turns electric: zaps nearby enemies"};
+        case UpgradeKind::HeavyImpact:     return {"Heavy impact", "+25% contact damage"};
+        case UpgradeKind::BigBall:         return {"Big ball", "+20% radius"};
+        case UpgradeKind::WallRush:        return {"Wall rush", "speeds up every time it hits a wall"};
+        case UpgradeKind::Carom:           return {"Carom", "speeds up when it clacks another ball"};
+        case UpgradeKind::Ricochet:        return {"Ricochet", "hits harder for a moment after a wall bounce"};
+        case UpgradeKind::CeilingBreak:    return {"Ceiling break", "raises its top-speed limit"};
+        case UpgradeKind::WarmUp:          return {"Warm-up", "its cruise speed climbs as a wave goes on"};
+        case UpgradeKind::HeavyKnock:      return {"Heavy knock", "shoves enemies back much harder"};
+        case UpgradeKind::FlingMomentum:   return {"Reflexes", "keeps a fling's speed longer"};
+        case UpgradeKind::Cleave:          return {"Cleave", "punches straight through an enemy it kills"};
+        case UpgradeKind::Crit:            return {"Keen eye", "one hit in seven deals double damage"};
+        case UpgradeKind::Bruiser:         return {"Battering", "the faster it moves, the harder it hits"};
+        case UpgradeKind::Executioner:     return {"Executioner", "big bonus damage to badly hurt enemies"};
+        case UpgradeKind::Overkill:        return {"Overkill", "leftover damage from a kill splashes onto the next enemy"};
+        case UpgradeKind::Tempo:           return {"Tempo", "snaps back to cruise speed faster after a hit"};
         case UpgradeKind::Shatter:         return {"Shatter", "hitting a frozen enemy deals bonus damage"};
+        case UpgradeKind::Conductor:       return {"Conductor", "its electric arc jumps on to a second enemy"};
+        case UpgradeKind::Bedrock:         return {"Bedrock", "its stone rubble lasts much longer"};
+        case UpgradeKind::CoreSpring:      return {"Spring core", "your balls bounce off the core faster"};
+        case UpgradeKind::CoreSlowField:   return {"Slow field", "enemies near the core are slowed"};
+        case UpgradeKind::StrongArm:       return {"Strong arm", "you fling every ball noticeably harder"};
         case UpgradeKind::Contagion:       return {"Contagion", "an enemy that dies poisoned poisons those near it"};
-        case UpgradeKind::Bedrock:         return {"Bedrock", "stone rubble lasts much longer"};
         case UpgradeKind::Primed:          return {"Primed", "+damage to enemies already burning, poisoned or frozen"};
-        case UpgradeKind::Spearhead:      return {"Spearhead", "the ball you flung most recently cruises faster"};
-        case UpgradeKind::HeavyImpact:      return {"Heavy impact", "+8% ball contact damage"};
-        case UpgradeKind::BigBall:          return {"Big ball", "+10% ball radius"};
-        case UpgradeKind::Cleave:           return {"Cleave", "the ball punches through an enemy it kills"};
-        case UpgradeKind::Crit:             return {"Keen eye", "one contact hit in seven deals double damage"};
-        case UpgradeKind::Bruiser:          return {"Battering", "the faster the ball moves, the harder it hits"};
-        case UpgradeKind::Executioner:      return {"Executioner", "big bonus damage to badly hurt enemies"};
-        case UpgradeKind::Overkill:         return {"Overkill", "leftover damage from a kill splashes onto the next enemy"};
-        case UpgradeKind::Tempo:            return {"Tempo", "the ball snaps back to cruise speed faster after a hit"};
     }
     return {"", ""};
 }
 
-// What the roll needs to know to drop picks that would do nothing.
-struct UpgradeCtx {
-    int ballCount = 1;
-    int maxBalls = 8;
-    bool elemUnlocked[kElementItemCount] = {};   // element web node has a level
-    int bigBallPicks = 0;
-    int heavyImpactPicks = 0;
-    bool spring = false;
-    bool slowField = false;
-    bool flingMomentum = false;
-    bool wallRush = false;
-    bool carom = false;
-    bool strongArm = false;
-    bool ricochet = false;
-    bool ceilingBreak = false;
-    bool warmUp = false;
-    bool heavyKnock = false;
-    bool conductor = false;
-    bool shatter = false;
-    bool contagion = false;
-    bool bedrock = false;
-    bool primed = false;
-    bool spearhead = false;
-    bool crit = false;
-    bool bruiser = false;
-    bool executioner = false;
-    bool overkill = false;
-    bool cleave = false;
-    bool tempo = false;
+// One ball of the run: its role and what sits in its two equipment slots.
+// Its element is whichever element item is equipped (Plain if none).
+struct BallLoadout {
+    BallRole role = BallRole::Striker;
+    int gear[kBallSlots] = {-1, -1};     // UpgradeKind, -1 = empty slot
+    int gearLvl[kBallSlots] = {0, 0};    // forge level, 1 once equipped
+
+    bool has(UpgradeKind k) const {
+        for (int g : gear)
+            if (g == static_cast<int>(k)) return true;
+        return false;
+    }
+    // Slot holding an element item, -1 if none.
+    int elementSlot() const {
+        for (int i = 0; i < kBallSlots; ++i)
+            if (gear[i] >= 0 && elementItemSlot(static_cast<UpgradeKind>(gear[i])) >= 0) return i;
+        return -1;
+    }
+    Element element() const {
+        const int s = elementSlot();
+        return s < 0 ? Element::Plain
+                     : static_cast<Element>(elementItemSlot(static_cast<UpgradeKind>(gear[s])) + 1);
+    }
 };
 
-// True if any elemental ball type is unlocked (for the "Primed" item).
+// Can equipment `k` go on this ball? No duplicates on one ball; Conductor /
+// Bedrock only on a ball that has their element equipped.
+inline bool upgradeFitsBall(UpgradeKind k, const BallLoadout& b) {
+    const UpgradeCat c = upgradeCat(k);
+    if (c != UpgradeCat::Gear && c != UpgradeCat::Element) return false;
+    if (b.has(k)) return false;
+    if (k == UpgradeKind::Conductor) return b.element() == Element::Electric;
+    if (k == UpgradeKind::Bedrock) return b.element() == Element::Stone;
+    return true;
+}
+
+// Where equipment `k` lands on this ball when no slot is picked: an element
+// always replaces the ball's current element (one per ball); otherwise the
+// first free slot, else slot 0.
+inline int defaultSlot(UpgradeKind k, const BallLoadout& b) {
+    if (elementItemSlot(k) >= 0 && b.elementSlot() >= 0) return b.elementSlot();
+    for (int i = 0; i < kBallSlots; ++i)
+        if (b.gear[i] < 0) return i;
+    return 0;
+}
+
+inline bool upgradeNeedsTarget(UpgradeKind k) {
+    const UpgradeCat c = upgradeCat(k);
+    return c == UpgradeCat::Gear || c == UpgradeCat::Element;
+}
+
+// What the roll needs to know to drop picks that would do nothing.
+struct UpgradeCtx {
+    const std::vector<BallLoadout>* balls = nullptr;
+    int maxBalls = 5;
+    bool elemUnlocked[kElementItemCount] = {};   // element web node has a level
+    bool spring = false;
+    bool slowField = false;
+    bool strongArm = false;
+    bool contagion = false;
+    bool primed = false;
+};
+
 inline bool anyElementUnlocked(const UpgradeCtx& c) {
-    for (int i = 0; i < kElementItemCount; ++i)
-        if (c.elemUnlocked[i]) return true;
+    for (bool u : c.elemUnlocked)
+        if (u) return true;
     return false;
 }
 
 inline bool upgradeEligible(UpgradeKind k, const UpgradeCtx& c) {
-    if (const int s = elementItemSlot(k); s >= 0)
-        return c.ballCount < c.maxBalls && c.elemUnlocked[s];
+    const int ballCount = c.balls ? static_cast<int>(c.balls->size()) : 0;
+    auto anyBallFits = [&] {
+        if (!c.balls) return false;
+        for (const BallLoadout& b : *c.balls)
+            if (upgradeFitsBall(k, b)) return true;
+        return false;
+    };
+    switch (upgradeCat(k)) {
+        case UpgradeCat::Recruit:  return ballCount < c.maxBalls;
+        case UpgradeCat::Element:  return c.elemUnlocked[elementItemSlot(k)] && anyBallFits();
+        case UpgradeCat::Gear:
+            if (k == UpgradeKind::Shatter && !c.elemUnlocked[3]) return false;   // ice
+            return anyBallFits();
+        case UpgradeCat::Relic: break;
+    }
     switch (k) {
-        case UpgradeKind::AddBall:       return c.ballCount < c.maxBalls;
-        case UpgradeKind::BigBall:       return c.bigBallPicks < 3;
-        case UpgradeKind::HeavyImpact:   return c.heavyImpactPicks < 3;
         case UpgradeKind::CoreSpring:    return !c.spring;
         case UpgradeKind::CoreSlowField: return !c.slowField;
-        case UpgradeKind::FlingMomentum: return !c.flingMomentum;
-        case UpgradeKind::WallRush:      return !c.wallRush;
-        case UpgradeKind::Carom:         return !c.carom;
         case UpgradeKind::StrongArm:     return !c.strongArm;
-        case UpgradeKind::Ricochet:      return !c.ricochet;
-        case UpgradeKind::CeilingBreak:  return !c.ceilingBreak;
-        case UpgradeKind::WarmUp:        return !c.warmUp;
-        case UpgradeKind::HeavyKnock:    return !c.heavyKnock;
-        case UpgradeKind::Conductor:     return !c.conductor && c.elemUnlocked[5];   // electric
-        case UpgradeKind::Shatter:       return !c.shatter   && c.elemUnlocked[3];   // ice
         case UpgradeKind::Contagion:     return !c.contagion && c.elemUnlocked[1];   // poison
-        case UpgradeKind::Bedrock:       return !c.bedrock   && c.elemUnlocked[4];   // stone
-        case UpgradeKind::Primed:        return !c.primed    && anyElementUnlocked(c);
-        case UpgradeKind::Spearhead:     return !c.spearhead;
-        case UpgradeKind::Cleave:        return !c.cleave;
-        case UpgradeKind::Crit:          return !c.crit;
-        case UpgradeKind::Bruiser:       return !c.bruiser;
-        case UpgradeKind::Executioner:   return !c.executioner;
-        case UpgradeKind::Overkill:      return !c.overkill;
-        case UpgradeKind::Tempo:         return !c.tempo;
+        case UpgradeKind::Primed:        return !c.primed && anyElementUnlocked(c);
         default:                         return false;
     }
 }
@@ -236,7 +293,7 @@ enum MetaUnlock {
     MetaStartBalls,   // Squad     - +1 starting ball                      (root)
     MetaCoreHp,       // Bulwark   - +core HP at the start
     MetaMend,         // Mend      - core heals more between waves
-    MetaFireItem,     // Ignition  - unlocks the fire ball item, +fire potency
+    MetaFireItem,     // Ignition  - unlocks the fire item, +fire potency
     MetaVenom,        // Venom     - unlocks the poison ball item, +poison potency
     MetaTide,         // Tide      - unlocks the water ball item, +water potency
     MetaFrost,        // Frost     - unlocks the ice ball item, +freeze time
@@ -285,7 +342,7 @@ struct MetaUnlockDef {
 
 inline const MetaUnlockDef& metaUnlockDef(int u) {
     static const MetaUnlockDef defs[MetaUnlockCount] = {
-        /* Squad     */ {"Squad",     "start each run with one more ball",
+        /* Squad     */ {"Squad",     "start each run with one more ball (a Guardian, then a Support)",
                          8u,  2, MetaBranch::Root,    MetaCurrency::Cores,  -1,  0.00f,  0.00f},
         /* Bulwark   */ {"Bulwark",   "start with +20 core health",
                          10u, 3, MetaBranch::Base,    MetaCurrency::Cores,   0, -1.00f,  0.00f},
@@ -293,25 +350,25 @@ inline const MetaUnlockDef& metaUnlockDef(int u) {
                          12u, 3, MetaBranch::Base,    MetaCurrency::Cores,   1, -2.00f,  0.00f},
         // Special-ball chain: it fans down-right. Each node's dominant axis is an
         // integer so it lands exactly on a background ring (ring = max(|gx|,|gy|)).
-        /* Ignition  */ {"Ignition",  "the fire ball item can appear; higher levels hit harder",
+        /* Ignition  */ {"Ignition",  "the fire item can appear; higher levels hit harder",
                          2u,  3, MetaBranch::Special, MetaCurrency::Prisms,  0,  1.00f,  0.00f},
-        /* Venom     */ {"Venom",     "the poison ball item can appear; higher levels stack faster",
+        /* Venom     */ {"Venom",     "the poison item can appear; higher levels stack faster",
                          2u,  3, MetaBranch::Special, MetaCurrency::Prisms,  3,  2.00f,  0.80f},
-        /* Tide      */ {"Tide",      "the water ball item can appear; higher levels leave a wider wake",
+        /* Tide      */ {"Tide",      "the water item can appear; higher levels leave a wider wake",
                          3u,  3, MetaBranch::Special, MetaCurrency::Prisms,  4,  3.00f,  1.70f},
-        /* Frost     */ {"Frost",     "the ice ball item can appear; higher levels freeze for longer",
+        /* Frost     */ {"Frost",     "the ice item can appear; higher levels freeze for longer",
                          3u,  3, MetaBranch::Special, MetaCurrency::Prisms,  5,  4.00f,  2.60f},
-        /* Quarry    */ {"Quarry",    "the stone ball item can appear; higher levels grind harder",
+        /* Quarry    */ {"Quarry",    "the stone item can appear; higher levels grind harder",
                          4u,  3, MetaBranch::Special, MetaCurrency::Prisms,  6,  4.00f,  4.00f},
-        /* Arc       */ {"Arc",       "the electric ball item can appear; higher levels zap harder",
+        /* Arc       */ {"Arc",       "the electric item can appear; higher levels zap harder",
                          4u,  3, MetaBranch::Special, MetaCurrency::Prisms,  7,  5.00f,  4.60f},
         /* Fortune   */ {"Fortune",   "earn cores for every enemy you kill",
                          6u,  3, MetaBranch::Eco,     MetaCurrency::Cores,   0,  0.00f, -1.00f},
         /* Windfall  */ {"Windfall",  "20% chance a cleared run pays a 2nd prism",
                          14u, 1, MetaBranch::Eco,     MetaCurrency::Cores,   9,  0.00f, -2.00f},
-        /* Heft      */ {"Heft",      "balls start with +8% contact damage",
+        /* Heft      */ {"Heft",      "every ball gets +8% contact damage",
                          10u, 2, MetaBranch::Combat,  MetaCurrency::Cores,   0,  0.00f,  1.00f},
-        /* Mass      */ {"Mass",      "balls start 10% larger",
+        /* Mass      */ {"Mass",      "every ball is 10% larger",
                          12u, 2, MetaBranch::Combat,  MetaCurrency::Cores,  11,  0.00f,  2.00f},
         /* Uplink    */ {"Uplink",    "power-ups appear more often",
                          8u,  3, MetaBranch::Pickups, MetaCurrency::Cores,   0,  1.00f, -1.00f},
