@@ -117,7 +117,7 @@ private:
     int hoverSlot_ = -1;
 };
 
-// The act's path map: rows of nodes left to right, the boss at the end. Click
+// The act's path map: rows of nodes top to bottom, the boss at the end. Click
 // a lit node (one linked from where you stand) to go there.
 class MapScreen : public Screen {
 public:

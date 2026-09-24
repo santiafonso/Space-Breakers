@@ -202,12 +202,13 @@ void EquipScreen::draw(App& app, sf::RenderWindow& w) {
 sf::Vector2f MapScreen::nodePos(App& app, int node) const {
     const sf::Vector2f s = app.size();
     const MapNode& n = app.data().run.map.nodes[static_cast<std::size_t>(node)];
-    const float left = 110.f, right = s.x - 110.f;
-    const float step = (right - left) / static_cast<float>(cfg::map::rows);   // rows 1..9 + boss
-    const float x = left + static_cast<float>(n.row - 1) * step;
-    const float top = s.y * 0.27f, laneGap = 118.f;
-    const float y = n.lane < 0 ? top + laneGap * 0.5f * static_cast<float>(cfg::map::lanes - 1)
-                               : top + laneGap * static_cast<float>(n.lane);
+    // Top to bottom: row 1 just under the title, the boss at the bottom.
+    const float top = 128.f, bottom = s.y - 62.f;
+    const float step = (bottom - top) / static_cast<float>(cfg::map::rows);   // rows 1..9 + boss
+    const float y = top + static_cast<float>(n.row - 1) * step;
+    const float laneGap = 150.f;
+    const float left = s.x * 0.5f - laneGap * 0.5f * static_cast<float>(cfg::map::lanes - 1);
+    const float x = n.lane < 0 ? s.x * 0.5f : left + laneGap * static_cast<float>(n.lane);
     return {x, y};
 }
 
@@ -222,7 +223,7 @@ void MapScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
     if (isKey(e, sf::Keyboard::Escape)) { app.openPause(); return; }
     if (e.type == sf::Event::KeyPressed && e.key.code >= sf::Keyboard::Num1 &&
         e.key.code <= sf::Keyboard::Num4) {
-        // 1-4: the open nodes, top to bottom
+        // 1-4: the open nodes, left to right
         std::vector<int> open;
         for (int i = 0; i < static_cast<int>(app.data().run.map.nodes.size()); ++i)
             if (app.mapNodeOpen(i)) open.push_back(i);
@@ -248,8 +249,8 @@ void MapScreen::draw(App& app, sf::RenderWindow& w) {
     const int count = static_cast<int>(nodes.size());
 
     drawCenteredPop(w, app.font(), "Act " + std::to_string(r.map.act) + "  -  choose your path",
-                    theme::fsTitle, {s.x * 0.5f, s.y * 0.09f}, theme::textHi, introPop(it, 0.f, 0.3f));
-    drawRunStatus(app, w, s.y * 0.09f + 40.f);
+                    theme::fsTitle, {s.x * 0.5f, 42.f}, theme::textHi, introPop(it, 0.f, 0.3f));
+    drawRunStatus(app, w, 82.f);
 
     // Links first. The path you walked is bright, the ways open to you are lit,
     // everything else stays faint.
@@ -293,28 +294,32 @@ void MapScreen::draw(App& app, sf::RenderWindow& w) {
         }
     }
 
-    // Hovered node's name + what it does; otherwise the legend.
-    const float by = s.y * 0.88f;
+    // Left column: the legend. Right column: the hovered node's name + what it does.
+    const MapNodeType legend[] = {MapNodeType::Combat, MapNodeType::Elite, MapNodeType::Shop,
+                                  MapNodeType::Forge,  MapNodeType::Rest,  MapNodeType::Upgrade};
+    float ly = s.y * 0.36f;
+    for (MapNodeType t : legend) {
+        drawNode(w, app.font(), {theme::margin + 24.f, ly}, t, 11.f, 0.9f, false);
+        sf::Text tx = makeText(app.font(), mapNodeName(t), theme::fsSmall, theme::textLo);
+        const sf::FloatRect b = tx.getLocalBounds();
+        tx.setOrigin(b.left, b.top + b.height * 0.5f);
+        tx.setPosition(theme::margin + 44.f, ly);
+        w.draw(tx);
+        ly += 34.f;
+    }
+    sf::Text keys = makeText(app.font(), "click a lit node (or 1-4)", theme::fsSmall, theme::textDim);
+    keys.setPosition(theme::margin + 12.f, ly + 10.f);
+    w.draw(keys);
+
     if (hover_ >= 0) {
         const MapNodeType t = nodes[static_cast<std::size_t>(hover_)].type;
-        drawCentered(w, app.font(), mapNodeName(t), theme::fsHeading, {s.x * 0.5f, by - 14.f}, nodeColor(t));
-        drawCentered(w, app.font(), mapNodeDesc(t), theme::fsSmall, {s.x * 0.5f, by + 14.f}, theme::textLo);
-    } else {
-        const MapNodeType legend[] = {MapNodeType::Combat, MapNodeType::Elite, MapNodeType::Shop,
-                                      MapNodeType::Forge,  MapNodeType::Rest,  MapNodeType::Upgrade};
-        const float gap = 150.f;
-        float x = s.x * 0.5f - gap * 2.5f;
-        for (MapNodeType t : legend) {
-            drawNode(w, app.font(), {x - 34.f, by}, t, 11.f, 0.9f, false);
-            sf::Text tx = makeText(app.font(), mapNodeName(t), theme::fsSmall, theme::textLo);
-            const sf::FloatRect b = tx.getLocalBounds();
-            tx.setOrigin(b.left, b.top + b.height * 0.5f);
-            tx.setPosition(x - 16.f, by);
-            w.draw(tx);
-            x += gap;
+        const float cx = s.x - 150.f;
+        drawCentered(w, app.font(), mapNodeName(t), theme::fsHeading, {cx, s.y * 0.42f}, nodeColor(t));
+        float dy = s.y * 0.42f + 30.f;
+        for (const std::string& l : wrapText(app.font(), mapNodeDesc(t), theme::fsSmall, 230.f)) {
+            drawCentered(w, app.font(), l, theme::fsSmall, {cx, dy}, theme::textLo);
+            dy += 18.f;
         }
-        drawCentered(w, app.font(), "click a lit node (or 1-4)   -   TAB in a fight shows your balls",
-                     theme::fsSmall, {s.x * 0.5f, by + 34.f}, theme::textDim);
     }
 }
 
