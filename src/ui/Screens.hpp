@@ -122,7 +122,7 @@ private:
     sf::Vector2f mouse_;
 };
 
-// The act's path map: rows of nodes from the bottom up, the boss at the top. Click
+// The act's path map: rows of nodes top to bottom, the boss at the end. Click
 // a lit node (one linked from where you stand) to go there.
 class MapScreen : public Screen {
 public:

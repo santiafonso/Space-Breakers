@@ -212,11 +212,10 @@ void EquipScreen::draw(App& app, sf::RenderWindow& w) {
 sf::Vector2f MapScreen::nodePos(App& app, int node) const {
     const sf::Vector2f s = app.size();
     const MapNode& n = app.data().run.map.nodes[static_cast<std::size_t>(node)];
-    // Bottom to top, like a tree: row 1 at the base, the boss at the crown
-    // just under the title.
-    const float top = 140.f, bottom = s.y - 50.f;
+    // Top to bottom: row 1 just under the title, the boss at the bottom.
+    const float top = 128.f, bottom = s.y - 62.f;
     const float step = (bottom - top) / static_cast<float>(cfg::map::rows);   // rows 1..9 + boss
-    const float y = bottom - static_cast<float>(n.row - 1) * step;
+    const float y = top + static_cast<float>(n.row - 1) * step;
     const float laneGap = 150.f;
     const float left = s.x * 0.5f - laneGap * 0.5f * static_cast<float>(cfg::map::lanes - 1);
     const float x = n.lane < 0 ? s.x * 0.5f : left + laneGap * static_cast<float>(n.lane);
