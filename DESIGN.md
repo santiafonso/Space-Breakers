@@ -623,7 +623,7 @@ Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
     `combatBase + perRow*fila`, élite x2, boss +`bossPay` al continuar.
   - Flujo: newRun → Play + **MapScreen** encima. Nodo → `App::travelTo`. Tras
     una pelea → mapa (o Choice si fue élite). Tras el miniboss "Continue" →
-    mapa del acto 2. Selector de pelota/slot sacado a **EquipScreen**
+    mapa del acto 2 (el mapa se dibuja de abajo hacia arriba: fila 1 en la base, boss arriba). Selector de pelota/slot sacado a **EquipScreen**
     (`EquipSource` Choice / Shop / Forge). Pantallas nuevas en `ui/RunScreens.cpp`;
     los paneles de loadout viven en `ui/Widgets`.
   - Falta: playtest (la UI no se pudo clickear acá), precios y pagos de oro,
