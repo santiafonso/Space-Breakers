@@ -17,8 +17,8 @@ namespace sb {
 // that row's fight. From the node you're on you may step to any node it links
 // to in the next row.
 
-enum class MapNodeType { Combat, Elite, Shop, Forge, Rest, Upgrade, Boss };
-inline constexpr int kMapNodeTypeCount = 7;
+enum class MapNodeType { Combat, Elite, Shop, Forge, Rest, Upgrade, Recruit, Boss };
+inline constexpr int kMapNodeTypeCount = 8;
 
 struct MapNode {
     MapNodeType type = MapNodeType::Combat;
@@ -42,6 +42,7 @@ inline const char* mapNodeName(MapNodeType t) {
         case MapNodeType::Forge:   return "Forge";
         case MapNodeType::Rest:    return "Rest";
         case MapNodeType::Upgrade: return "Upgrade";
+        case MapNodeType::Recruit: return "Recruit";
         case MapNodeType::Boss:    return "Boss";
     }
     return "";
@@ -55,6 +56,7 @@ inline const char* mapNodeDesc(MapNodeType t) {
         case MapNodeType::Forge:   return "level up one item a ball already carries";
         case MapNodeType::Rest:    return "no fight: the core is repaired to full";
         case MapNodeType::Upgrade: return "no fight: a free pick of 1 of 4";
+        case MapNodeType::Recruit: return "no fight: a new ball, or a role (Striker / Support / Guardian) for one you have";
         case MapNodeType::Boss:    return "the act's boss";
     }
     return "";
@@ -76,6 +78,7 @@ inline MapNodeType rollNodeType(Rng& rng, int row) {
         {MapNodeType::Forge,   row >= 4 ? cfg::map::wForge : 0},
         {MapNodeType::Rest,    row >= 4 ? cfg::map::wRest : 0},
         {MapNodeType::Upgrade, cfg::map::wUpgrade},
+        {MapNodeType::Recruit, row >= 2 ? cfg::map::wRecruit : 0},
     };
     int total = 0;
     for (const W& w : table) total += w.w;

@@ -56,6 +56,7 @@ sf::Color nodeColor(MapNodeType t) {
         case MapNodeType::Forge:   return theme::accent;
         case MapNodeType::Rest:    return theme::core;
         case MapNodeType::Upgrade: return theme::puSurge;
+        case MapNodeType::Recruit: return theme::ballMid;
         case MapNodeType::Boss:    return theme::coreLow;
     }
     return theme::textLo;
@@ -69,6 +70,7 @@ const char* nodeGlyph(MapNodeType t) {
         case MapNodeType::Forge:   return "^";
         case MapNodeType::Rest:    return "+";
         case MapNodeType::Upgrade: return "?";
+        case MapNodeType::Recruit: return "o";
         case MapNodeType::Boss:    return "B";
     }
     return "";
@@ -305,8 +307,9 @@ void MapScreen::draw(App& app, sf::RenderWindow& w) {
     }
 
     // Left column: the legend. Right column: the hovered node's name + what it does.
-    const MapNodeType legend[] = {MapNodeType::Combat, MapNodeType::Elite, MapNodeType::Shop,
-                                  MapNodeType::Forge,  MapNodeType::Rest,  MapNodeType::Upgrade};
+    const MapNodeType legend[] = {MapNodeType::Combat, MapNodeType::Elite,   MapNodeType::Shop,
+                                  MapNodeType::Forge,  MapNodeType::Rest,    MapNodeType::Upgrade,
+                                  MapNodeType::Recruit};
     float ly = s.y * 0.36f;
     int legendHover = -1;
     for (MapNodeType t : legend) {

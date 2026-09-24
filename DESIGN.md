@@ -659,6 +659,9 @@ Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
   - Dibujo: runner/shard más claros y chicos, tank oscuro con borde grueso,
     splitter con una grieta, shielded con un arco brillante hacia el núcleo.
     Tooltip al pasar el cursor por un enemigo (nombre + qué hacer).
+  - Nodo de mapa **Recluta** (`MapNodeType::Recruit`, pedido del usuario: roles
+    desde los caminos): elegir entre pelota nueva / Striker / Support / Guardian
+    (con 5 pelotas, la primera carta pasa a ser un modificador al azar).
 
 - **Fase 2 — Jefe tras la oleada 10.** Da upgrades de pelota (viento/agua/
   piedra). Extiende la run mas alla de 10 en "modo infinito" opcional.

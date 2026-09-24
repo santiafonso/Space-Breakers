@@ -121,6 +121,7 @@ private:
     void rollShop();
     UpgradeCtx buildUpgradeCtx() const;   // shared by rollChoices / rerollChoice
     void rollChoices();
+    void rollRecruitChoices();   // Recruit node: new ball + the three roles
     void applyUpgradeKind(UpgradeKind k, int ball = -1, int slot = -1);
     bool autoTarget(UpgradeKind k, int& ball, int& slot) const;   // first ball / free slot it fits
     void finishChoice();                                          // after a pick: fx, close, next wave

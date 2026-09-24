@@ -375,6 +375,18 @@ void App::rerollChoice(int idx) {
     effects_.flash(theme::accent, 0.25f);
 }
 
+// Recruit node: a new ball and the three roles. With the arena full, the ball
+// card becomes a random modifier instead.
+void App::rollRecruitChoices() {
+    const UpgradeCtx c = buildUpgradeCtx();
+    choices_[0] = upgradeEligible(UpgradeKind::AddBall, c)
+        ? UpgradeKind::AddBall
+        : static_cast<UpgradeKind>(static_cast<int>(UpgradeKind::HeavyImpact) + rng_.irange(0, kModifierCount - 1));
+    choices_[1] = UpgradeKind::RoleStriker;
+    choices_[2] = UpgradeKind::RoleSupport;
+    choices_[3] = UpgradeKind::RoleGuardian;
+}
+
 void App::openChoice() {
     rollChoices();
     push(ScreenId::Choice);
@@ -507,6 +519,11 @@ void App::travelTo(int node) {
         case MapNodeType::Upgrade:
             r.wave = wave;
             openChoice();
+            break;
+        case MapNodeType::Recruit:
+            r.wave = wave;
+            rollRecruitChoices();
+            push(ScreenId::Choice);
             break;
         case MapNodeType::Shop:
             r.wave = wave;

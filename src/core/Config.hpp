@@ -206,7 +206,8 @@ inline constexpr int wElite = 16;
 inline constexpr int wShop = 13;
 inline constexpr int wForge = 9;
 inline constexpr int wRest = 9;
-inline constexpr int wUpgrade = 9;
+inline constexpr int wUpgrade = 8;
+inline constexpr int wRecruit = 8;      // a new ball or a role
 // Elite waves: tougher and more of them.
 inline constexpr float eliteHpMul = 1.6f;
 inline constexpr float eliteCountMul = 1.3f;
