@@ -36,6 +36,8 @@ bool saveGame(const std::string& path, const GameData& d) {
         f << "meta.unlock " << i << ' ' << m.unlock[i] << '\n';
     f << "sound " << (m.soundOn ? 1 : 0) << '\n';
     f << "fullscreen " << (m.fullscreen ? 1 : 0) << '\n';
+    f << "aim.slingshot " << (m.slingshot ? 1 : 0) << '\n';
+    f << "aim.auto " << (m.autoFling ? 1 : 0) << '\n';
     f << "stat.enemiesKilled " << m.stats.enemiesKilled << '\n';
     f << "stat.coresEarned " << m.stats.coresEarned << '\n';
     f << "stat.bestWave " << m.stats.bestWave << '\n';
@@ -78,6 +80,8 @@ bool loadGame(const std::string& path, GameData& d) {
         else if (key == "meta.coreHp") ls >> m.unlock[MetaCoreHp];
         else if (key == "sound") { int v = 1; ls >> v; m.soundOn = v != 0; }
         else if (key == "fullscreen") { int v = 0; ls >> v; m.fullscreen = v != 0; }
+        else if (key == "aim.slingshot") { int v = 1; ls >> v; m.slingshot = v != 0; }
+        else if (key == "aim.auto") { int v = 0; ls >> v; m.autoFling = v != 0; }
         else if (key == "stat.enemiesKilled") ls >> m.stats.enemiesKilled;
         else if (key == "stat.coresEarned") ls >> m.stats.coresEarned;
         else if (key == "stat.bestWave") ls >> m.stats.bestWave;

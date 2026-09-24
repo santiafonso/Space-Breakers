@@ -45,6 +45,10 @@ public:
     Grabbed grabbedKind() const { return grabbed_; }
     void moveHeld(sf::Vector2f target, float dt);
     void releaseHeld(sf::Vector2f throwVel);
+    void cancelHeld();                 // let go without a throw: the ball resumes its old velocity
+    const Ball* heldBall() const {
+        return grabbed_ == Grabbed::Ball ? &balls_[static_cast<std::size_t>(heldIndex_)] : nullptr;
+    }
     void forceRelease();
 
     // ---- read-only views --------------------------------------------
@@ -99,6 +103,7 @@ private:
     sf::Vector2f wideArenaSize() const;      // the pulled-back arena used from the boss wave on
     void updateCoreSlide(float dt);          // ease the core left -> centre entering wave 11
     void advanceCombo(float dt);
+    void updateAutoFling(float dt, const WorldParams& p, FrameEvents& ev);
     void advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev);
     void emitElement(Ball& b, float dt, const WorldParams& p);
     void resolveBallPairs(FrameEvents& ev, const WorldParams& p);
@@ -134,6 +139,8 @@ private:
     Grabbed grabbed_ = Grabbed::None;
     int heldIndex_ = -1;
     sf::Vector2f heldGrabOffset_{0.f, 0.f};  // ball pos - cursor at grab, eased to zero
+    sf::Vector2f heldPrevVel_{0.f, 0.f};     // velocity before the grab (cancelHeld restores it)
+    float autoFlingTimer_ = cfg::combat::autoFlingInterval;
 
     int comboStreak_ = 0;
     int comboCapTier_ = cfg::combo::baseCapTier;

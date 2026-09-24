@@ -205,6 +205,7 @@ struct FrameEvents {
     PowerUp pickupKind = PowerUp::Points2x;
     bool coreHit = false;
     bool shieldBlock = false;             // a hit bounced off a Shielded enemy's shield
+    bool autoFlung = false;               // the auto-throw option launched a ball
     bool bossHit = false;                 // a ball landed on the miniboss this step
     bool waveCleared = false;
     bool runOver = false;
@@ -223,6 +224,7 @@ struct WorldParams {
     bool primed = false;          // Primed (relic): +damage vs enemies already under an element effect
     float elemMult[kElementCount] = {1.f, 1.f, 1.f, 1.f, 1.f, 1.f, 1.f};  // per-element potency (web levels)
     int  emberLevel = 0;          // Ember web node: fire hits apply a burn DoT
+    bool autoFling = false;       // option: the game throws a ball at the threat now and then
 
     // Meta web (Fase A).
     int  aegisHits = 0;           // Aegis: core ignores this many hits at the start of each wave

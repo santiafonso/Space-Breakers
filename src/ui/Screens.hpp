@@ -75,6 +75,8 @@ private:
     bool dragging_ = false;
     bool showPicks_ = false;   // Tab held: show the balls' loadouts + relics
     sf::Vector2f worldMouse_;  // pointer in arena units (enemy hover help)
+    sf::Vector2f anchor_;      // slingshot: where the held ball sits
+    void drawAim(App& app, sf::RenderWindow& w) const;
     float clock_ = 0.f;
     std::deque<std::pair<float, sf::Vector2f>> samples_;
 
@@ -164,6 +166,7 @@ private:
     void rebuild(App& app);
     Menu menu_;
     bool lastSound_ = true;
+    sf::Vector2f mouse_;
 };
 
 class StatsScreen : public Screen {

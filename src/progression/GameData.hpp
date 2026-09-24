@@ -30,6 +30,8 @@ struct MetaState {
     int unlock[MetaUnlockCount] = {};
     bool soundOn = true;
     bool fullscreen = false;
+    bool slingshot = true;    // aim: pull back and release (false = the old flick throw)
+    bool autoFling = false;   // auto-throw: the game flings a ball at the threat every so often
     Stats stats;
 };
 

@@ -444,6 +444,7 @@ bool World::grabAt(sf::Vector2f point, float catchRadius) {
     // Remember where the ball sat relative to the cursor so it doesn't snap to
     // the pointer on grab - moveHeld eases this offset out.
     heldGrabOffset_ = b.pos - point;
+    heldPrevVel_ = b.vel;
     b.held = true;
     b.vel = {0.f, 0.f};
     b.trail.clear();
@@ -474,6 +475,48 @@ void World::releaseHeld(sf::Vector2f throwVel) {
     else b.vel = throwVel;
     grabbed_ = Grabbed::None;
     heldIndex_ = -1;
+}
+
+void World::cancelHeld() {
+    if (grabbed_ != Grabbed::Ball) return;
+    Ball& b = balls_[heldIndex_];
+    b.held = false;
+    b.vel = heldPrevVel_;
+    heldGrabOffset_ = {0.f, 0.f};
+    grabbed_ = Grabbed::None;
+    heldIndex_ = -1;
+}
+
+// Auto-throw option: now and then, launch the ball that's closest to plain
+// cruising (the one doing least) at the enemy nearest the core.
+void World::updateAutoFling(float dt, const WorldParams& p, FrameEvents& ev) {
+    if (!p.autoFling || !waveRunning_) return;
+    autoFlingTimer_ -= dt;
+    if (autoFlingTimer_ > 0.f) return;
+    autoFlingTimer_ = cfg::combat::autoFlingInterval;
+
+    const Enemy* target = nullptr;
+    float best = 1e18f;
+    for (const Enemy& e : enemies_) {
+        if (e.hp <= 0.f || e.orbiter) continue;
+        const float d2 = dot(e.pos - core_.pos, e.pos - core_.pos);
+        if (d2 < best) { best = d2; target = &e; }
+    }
+    sf::Vector2f aim = target ? target->pos : (boss_.alive ? boss_.pos : sf::Vector2f{-1.f, -1.f});
+    if (aim.x < 0.f) return;
+
+    Ball* pick = nullptr;
+    float slowest = 1e18f;
+    for (std::size_t i = 0; i < balls_.size(); ++i) {
+        if (grabbed_ == Grabbed::Ball && static_cast<int>(i) == heldIndex_) continue;
+        Ball& b = balls_[i];
+        const float ratio = length(b.vel) / std::max(1.f, ballCruise(b, p));
+        if (ratio < slowest) { slowest = ratio; pick = &b; }
+    }
+    if (!pick || slowest > 1.3f) return;   // everyone is already flying hot
+    const sf::Vector2f d = normalized(aim - pick->pos, {1.f, 0.f});
+    pick->vel = d * std::min(ballCruise(*pick, p) * cfg::combat::autoFlingSpeedMul, ballMaxSpeed(*pick, p));
+    ev.autoFlung = true;
 }
 
 void World::forceRelease() {
@@ -1260,6 +1303,7 @@ FrameEvents World::step(float dt, const WorldParams& p) {
 
     advanceCombo(dt);
     updateCoreSlide(dt);
+    updateAutoFling(dt, p, ev);
     if (waveRunning_) waveClock_ += dt;   // "Warm-up" ramp
 
     for (std::size_t i = 0; i < balls_.size(); ++i) {

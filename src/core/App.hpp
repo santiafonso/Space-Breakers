@@ -104,6 +104,9 @@ public:
 
     void buyMetaUnlock(int unlock);
     void toggleSound();
+    void toggleSlingshot();
+    void toggleAutoFling();
+    void setAiming(bool on);   // slingshot aim in progress: time slows for a moment
     void toggleFullscreen();
     void save();
 
@@ -170,6 +173,8 @@ private:
     float autosaveTimer_ = 20.f;
     float hitstop_ = 0.f;     // >0 freezes the simulation for a beat after an impact
     float heat_ = 0.f;        // 0..1 backdrop warmth, follows the damage combo
+    bool aiming_ = false;
+    float aimT_ = 0.f;        // real seconds spent aiming (slow-mo runs out)
     int multiKillN_ = 0;      // kills in the current quick burst
     float multiKillT_ = 0.f;  // time left for the burst to keep chaining
     sf::Vector2f multiKillPos_{0.f, 0.f};   // UI position of the burst's last kill

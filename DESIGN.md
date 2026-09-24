@@ -663,6 +663,22 @@ Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
     desde los caminos): elegir entre pelota nueva / Striker / Support / Guardian
     (con 5 pelotas, la primera carta pasa a ser un modificador al azar).
 
+- **Fase G — tiro nuevo (gomera) + auto-tiro. [IMPLEMENTADO 2026-09-23]**
+  - Motivo: el tiro "flick" se sentía raro y había que tirar apurado.
+  - **Gomera** (default, `MetaState::slingshot`): click en una pelota → queda
+    quieta; tirás hacia atrás y se ve una banda + línea punteada hasta la
+    primera pared; al soltar sale en esa dirección con fuerza según el estirón
+    (`slingMinSpeed..slingMaxSpeed` en `slingMaxPull` px). Un estirón corto
+    (`slingDeadzone`) cancela y la pelota sigue como venía (`World::cancelHeld`).
+    **Cámara lenta al apuntar** (`aimTimeScale` 0.3, hasta `aimSlowMax` 2.5 s).
+  - El flick viejo queda como opción ("Aim: Flick" en pausa).
+  - **Auto-tiro** (opción en pausa, `MetaState::autoFling`,
+    `World::updateAutoFling`): cada `autoFlingInterval` lanza la pelota más
+    "quieta" hacia el enemigo más cercano al núcleo a `autoFlingSpeedMul` x
+    crucero. Sim sin input: 3 roles pasan de oleada ~3 a ~5; ayuda, no gana solo.
+  - Las dos opciones se guardan (`aim.slingshot`, `aim.auto`; sin bump de
+    versión) y tienen tooltip en la pausa.
+
 - **Fase 2 — Jefe tras la oleada 10.** Da upgrades de pelota (viento/agua/
   piedra). Extiende la run mas alla de 10 en "modo infinito" opcional.
 - **Fase 3 — Variedad.** Repulsor, bumper, rampa. Corredor, tanque, escindido.

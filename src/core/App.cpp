@@ -104,6 +104,7 @@ WorldParams App::params() const {
 
     // Meta web (Fase A).
     p.emberLevel = u[MetaEmber];
+    p.autoFling = data_.meta.autoFling;
     p.aegisHits = u[MetaAegis];
     p.coreRegenPerSec = cfg::core::regenPerLevel * static_cast<float>(u[MetaRegen]);
     p.stockpile = u[MetaStockpile] > 0;
@@ -828,6 +829,7 @@ void App::devCycleGrant() {
 
 void App::openPause() {
     world_.forceRelease();
+    setAiming(false);
     push(ScreenId::Pause);
 }
 void App::openStats() { push(ScreenId::Stats); }
@@ -860,6 +862,21 @@ void App::toggleSound() {
     data_.meta.soundOn = !data_.meta.soundOn;
     audio_.setEnabled(data_.meta.soundOn);
     save();
+}
+
+void App::toggleSlingshot() {
+    data_.meta.slingshot = !data_.meta.slingshot;
+    save();
+}
+
+void App::toggleAutoFling() {
+    data_.meta.autoFling = !data_.meta.autoFling;
+    save();
+}
+
+void App::setAiming(bool on) {
+    aiming_ = on;
+    aimT_ = 0.f;
 }
 
 void App::toggleFullscreen() {
@@ -958,6 +975,7 @@ void App::processEvents(const FrameEvents& ev) {
         if (!b.ballPair) effects_.edgeHit(b.normal);   // edge flash only for wall / core hits
         audio_.ballHit(clampf(b.speed / 900.f, 0.f, 1.f), harmony, b.ballPair);
     }
+    if (ev.autoFlung) audio_.thrown(0.35f);
     if (ev.comboTierUp) {
         hud_.pulseCombo();
         audio_.comboUp(ev.comboTier);
@@ -1051,6 +1069,10 @@ void App::update(float frameDt) {
             waveIntro_ = std::max(0.f, waveIntro_ - frameDt);
             const float t = 1.f - waveIntro_ / cfg::app::waveIntroTime;  // 0 -> 1
             simDt *= cfg::app::waveIntroSlow + (1.f - cfg::app::waveIntroSlow) * t;
+        }
+        if (aiming_ && aimT_ < cfg::app::aimSlowMax) {   // slingshot aim: bullet time, briefly
+            aimT_ += frameDt;
+            simDt *= cfg::app::aimTimeScale;
         }
         if (hitstop_ > 0.f) {  // an impact landed: hold the frame, no catch-up after
             hitstop_ = std::max(0.f, hitstop_ - frameDt);

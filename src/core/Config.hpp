@@ -97,7 +97,12 @@ inline constexpr float executeThreshold = 0.30f; // "Executioner": enemies below
 inline constexpr float executeMult = 2.6f;       // ...take x this contact damage
 inline constexpr float overkillFrac = 0.5f;      // "Overkill": this fraction of a kill's leftover damage...
 inline constexpr float overkillRange = 150.f;    // ...splashes onto the nearest enemy within this
-inline constexpr float tempoRecover = 0.4f;      // "Tempo": ball eases this far back toward cruise on an enemy hit
+inline constexpr float tempoRecover = 0.4f;
+// Auto-throw option: every autoFlingInterval the game flings one ball at the
+// enemy nearest the core, at autoFlingSpeedMul x its cruise - a helper, weaker
+// than a good hand throw.
+inline constexpr float autoFlingInterval = 1.4f;
+inline constexpr float autoFlingSpeedMul = 2.0f;      // "Tempo": ball eases this far back toward cruise on an enemy hit
 }  // namespace combat
 
 // Ball roles. Every ball is one of three; the role shapes how it wants to be
@@ -369,7 +374,15 @@ inline constexpr float autosaveInterval = 20.f;
 // this long, so the scene you ended on flows into the next one instead of snapping.
 inline constexpr float waveIntroTime = 0.85f;
 inline constexpr float waveIntroSlow = 0.35f;
-inline constexpr float throwVelScale = 1.15f;
+inline constexpr float throwVelScale = 1.15f;   // flick throw: pointer velocity -> ball velocity
+// Slingshot aim: grab a ball, pull back, release. The pull length sets the
+// power; time slows while you aim (for up to aimSlowMax real seconds).
+inline constexpr float slingMaxPull = 220.f;    // px of pull for full power
+inline constexpr float slingDeadzone = 14.f;    // a shorter pull cancels (the ball carries on)
+inline constexpr float slingMinSpeed = 330.f;
+inline constexpr float slingMaxSpeed = 1500.f;
+inline constexpr float aimTimeScale = 0.3f;
+inline constexpr float aimSlowMax = 2.5f;
 inline constexpr float pointerSampleWindow = 0.09f;
 inline constexpr float catchRadius = 130.f;   // grab a ball from near it, not only dead-on
 inline constexpr float grabSettle = 16.f;     // how fast the grab offset eases out (per s)

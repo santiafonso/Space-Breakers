@@ -504,13 +504,32 @@ void PlayScreen::grab(App& app, sf::Vector2f mouse) {
         dragging_ = true;
         samples_.clear();
         samples_.push_back({clock_, mouse});
+        if (app.data().meta.slingshot) {
+            if (const Ball* b = app.world().heldBall()) anchor_ = b->pos;
+            app.setAiming(true);
+        }
     }
 }
 
 void PlayScreen::release(App& app) {
     if (!dragging_) return;
     const float power = app.data().run.mods.strongArm ? cfg::combat::flingPowerBoost : 1.f;
-    const sf::Vector2f v = pointerVelocity() * cfg::app::throwVelScale * power;
+    sf::Vector2f v = pointerVelocity() * cfg::app::throwVelScale * power;
+    if (app.data().meta.slingshot) {
+        app.setAiming(false);
+        // Pull back, let go: the ball flies away from the pointer, harder the
+        // further you pulled. A tiny pull cancels and the ball carries on.
+        const sf::Vector2f pull = anchor_ - worldMouse_;
+        const float len = length(pull);
+        if (len < cfg::app::slingDeadzone) {
+            app.world().cancelHeld();
+            dragging_ = false;
+            samples_.clear();
+            return;
+        }
+        const float k = clampf(len / cfg::app::slingMaxPull, 0.f, 1.f);
+        v = pull / len * lerpf(cfg::app::slingMinSpeed, cfg::app::slingMaxSpeed, k) * power;
+    }
     app.world().releaseHeld(v);
     if (app.world().grabbedKind() == Grabbed::None) app.audio().thrown(clampf(length(v) / 900.f, 0.f, 1.f));
     dragging_ = false;
@@ -537,7 +556,16 @@ void PlayScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
             default: break;
         }
     }
-    if (e.type == sf::Event::LostFocus) { release(app); showPicks_ = false; return; }
+    if (e.type == sf::Event::LostFocus) {
+        if (dragging_ && app.data().meta.slingshot) {   // don't fire a throw on alt-tab
+            app.world().cancelHeld();
+            app.setAiming(false);
+            dragging_ = false;
+        }
+        release(app);
+        showPicks_ = false;
+        return;
+    }
     if (isLeftClick(e)) { grab(app, mouse); return; }
     if (e.type == sf::Event::MouseButtonReleased && e.mouseButton.button == sf::Mouse::Left)
         release(app);
@@ -558,14 +586,50 @@ void PlayScreen::update(App& app, float dt, sf::Vector2f mouse) {
         while (samples_.size() > 2 &&
                clock_ - samples_.front().first > cfg::app::pointerSampleWindow)
             samples_.pop_front();
-        app.world().moveHeld(mouse, dt);
+        if (!app.data().meta.slingshot) app.world().moveHeld(mouse, dt);   // flick: carry the ball
     }
+}
+
+// Slingshot aim: a band from the ball to the pointer and a dotted line along
+// the launch direction up to the first wall, brighter with more power.
+void PlayScreen::drawAim(App& app, sf::RenderWindow& w) const {
+    const Ball* b = app.world().heldBall();
+    if (!b) return;
+    const sf::Vector2f pull = anchor_ - worldMouse_;
+    const float len = length(pull);
+    const bool live = len >= cfg::app::slingDeadzone;
+    const float k = clampf(len / cfg::app::slingMaxPull, 0.f, 1.f);
+
+    auto seg = [&](sf::Vector2f a, sf::Vector2f c, float thick, sf::Color col) {
+        const sf::Vector2f d = c - a;
+        sf::RectangleShape r({length(d), thick});
+        r.setOrigin(0.f, thick * 0.5f);
+        r.setPosition(a);
+        r.setRotation(std::atan2(d.y, d.x) * 180.f / kPi);
+        r.setFillColor(col);
+        w.draw(r);
+    };
+    seg(b->pos, worldMouse_, 2.f, withAlpha(theme::textLo, live ? 0.5f : 0.25f));   // the band
+    if (!live) return;
+
+    const sf::Vector2f dir = pull / len;
+    const sf::Vector2f sz = app.world().size();
+    float t = 1e9f;   // distance to the first wall along dir
+    if (dir.x > 1e-4f) t = std::min(t, (sz.x - b->radius - b->pos.x) / dir.x);
+    if (dir.x < -1e-4f) t = std::min(t, (b->radius - b->pos.x) / dir.x);
+    if (dir.y > 1e-4f) t = std::min(t, (sz.y - b->radius - b->pos.y) / dir.y);
+    if (dir.y < -1e-4f) t = std::min(t, (b->radius - b->pos.y) / dir.y);
+    t = std::max(0.f, std::min(t, 2000.f));
+    const sf::Color col = withAlpha(lerpColor(theme::accent, theme::puGolden, k), 0.35f + 0.5f * k);
+    for (float s = b->radius + 6.f; s < t; s += 18.f)
+        seg(b->pos + dir * s, b->pos + dir * std::min(s + 9.f, t), 3.f, col);
 }
 
 void PlayScreen::draw(App& app, sf::RenderWindow& w) {
     app.useWorldView();
     renderer_.draw(w, app.world());
     app.effects().drawRings(w);
+    if (dragging_ && app.data().meta.slingshot) drawAim(app, w);
     app.useUiView();
 
     app.hud().draw(w);
@@ -869,10 +933,13 @@ void PauseScreen::rebuild(App& app) {
     const sf::Vector2f s = app.size();
     lastSound_ = app.data().meta.soundOn;
     menu_.init(app.font(), theme::fsItem, s.y * 0.062f);
+    const MetaState& m = app.data().meta;
     menu_.setItems({{"Resume", true},
                     {"Stats", true},
                     {"How to Play", true},
                     {lastSound_ ? "Sound: On" : "Sound: Off", true},
+                    {m.slingshot ? "Aim: Slingshot" : "Aim: Flick", true},
+                    {m.autoFling ? "Auto-throw: On" : "Auto-throw: Off", true},
                     {"Abandon run", true},
                     {"Quit", true}});
     menu_.layout({s.x * 0.5f, s.y * 0.34f});
@@ -888,13 +955,16 @@ void PauseScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) 
         case 1: app.openStats(); break;
         case 2: app.openHowTo(); break;
         case 3: app.toggleSound(); break;
-        case 4: app.abandonRun(); break;
-        case 5: app.quit(); break;
+        case 4: app.toggleSlingshot(); rebuild(app); break;
+        case 5: app.toggleAutoFling(); rebuild(app); break;
+        case 6: app.abandonRun(); break;
+        case 7: app.quit(); break;
         default: break;
     }
 }
 
 void PauseScreen::update(App& app, float dt, sf::Vector2f mouse) {
+    mouse_ = mouse;
     if (app.data().meta.soundOn != lastSound_) rebuild(app);
     menu_.update(dt, mouse);
 }
@@ -906,6 +976,20 @@ void PauseScreen::draw(App& app, sf::RenderWindow& w) {
     drawCenteredPop(w, app.font(), "Paused", theme::fsTitle, {s.x * 0.5f, s.y * 0.2f}, theme::textHi,
                     introPop(it, 0.03f, 0.28f));
     menu_.draw(w, it);
+
+    switch (menu_.clickIndex(mouse_)) {   // what the two aim options do
+        case 4:
+            drawTooltip(w, app.font(), mouse_, s, "Aim",
+                        "Slingshot: click a ball, pull back, release (time slows while you aim). "
+                        "Flick: grab it and throw it with a mouse swipe.");
+            break;
+        case 5:
+            drawTooltip(w, app.font(), mouse_, s, "Auto-throw",
+                        "every second or so the game flings a ball at the enemy closest to the core. "
+                        "Weaker than a good throw of your own.");
+            break;
+        default: break;
+    }
 }
 
 // ================================================================ Stats
@@ -936,7 +1020,7 @@ void HowToScreen::draw(App& app, sf::RenderWindow& w) {
 
     const std::array<const char*, 7> lines = {{
         "Enemies march on the core at the centre. Keep it alive.",
-        "Balls bounce in straight lines. Grab one and fling it into the enemies.",
+        "Click a ball, pull back and let go to fling it - time slows while you aim.",
         "Balls start Normal. A role makes one a Striker (fling it), a Support (marks",
         "enemies) or a Guardian (bounces at the closest threat and shoves it back).",
         "Between fights, pick your path on the map: fights pay gold, elites add a pick,",
