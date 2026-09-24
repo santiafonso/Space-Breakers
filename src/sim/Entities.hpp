@@ -17,6 +17,7 @@ enum class PowerUp { Points2x, SlowMo, Surge, Golden, Overdrive };
 inline constexpr int kPowerUpCount = 5;
 
 const char* powerUpName(PowerUp p);
+const char* powerUpDesc(PowerUp p);
 sf::Color powerUpColor(PowerUp p);
 float powerUpDuration(PowerUp p);
 
@@ -39,6 +40,7 @@ enum class BallRole { Normal, Striker, Support, Guardian };
 inline constexpr int kBallRoleCount = 4;
 
 const char* roleName(BallRole r);
+const char* roleDesc(BallRole r);
 
 // What a ball's equipped gear adds up to. Built by App from the run loadout and
 // pushed into the World (World::syncBalls) - the sim never sees gear kinds.

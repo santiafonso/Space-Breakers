@@ -592,7 +592,20 @@ void PlayScreen::draw(App& app, sf::RenderWindow& w) {
     drawCentered(w, app.font(), "hold TAB for your balls", theme::fsSmall,
                  {theme::margin + 60.f, s.y - theme::margin - 56.f}, theme::textDim);
 
-    if (showPicks_) drawPicks(app, w);
+    if (showPicks_) {
+        drawPicks(app, w);
+    } else if (!dragging_) {
+        // Hover help for the HUD and the ball tally (pointer in UI units).
+        const sf::Vector2f um = app.uiMouse();
+        std::string tt, td;
+        sf::Color tc = theme::textHi;
+        if (app.hud().tooltipAt(um, tt, td, tc)) {
+            drawTooltip(w, app.font(), um, s, tt, td, tc);
+        } else if (sf::FloatRect(theme::margin - 4.f, s.y - theme::margin - 64.f, 180.f, 64.f).contains(um)) {
+            drawTooltip(w, app.font(), um, s, "Your balls",
+                        "grab one and fling it into enemies. Hold TAB to see each ball's role, items and modifiers.");
+        }
+    }
 
     drawWaveBanner(app, w);
 
@@ -653,9 +666,29 @@ void PlayScreen::drawPicks(App& app, sf::RenderWindow& w) const {
         if (!relics.empty()) relics += "   -   ";
         relics += upgradeInfo(k).title;
     }
+    const float relicY = s.y * 0.48f + kPanelH * 0.5f + 30.f;
     drawCentered(w, app.font(), relics.empty() ? "no relics yet" : "Relics:  " + relics, theme::fsSmall,
-                 {s.x * 0.5f, s.y * 0.48f + kPanelH * 0.5f + 30.f},
-                 relics.empty() ? theme::textDim : theme::puGolden);
+                 {s.x * 0.5f, relicY}, relics.empty() ? theme::textDim : theme::puGolden);
+
+    // Hover help on the panels and the relic line.
+    const sf::Vector2f um = app.uiMouse();
+    for (int i = 0; i < n; ++i) {
+        const int part = panelPartAt(panelCenter(s, i, n, s.y * 0.48f), um);
+        std::string tt, td;
+        if (part >= 0 && loadoutTooltip(r.balls[static_cast<std::size_t>(i)], part, tt, td)) {
+            drawTooltip(w, app.font(), um, s, tt, td);
+            return;
+        }
+    }
+    if (!relics.empty() && std::fabs(um.y - relicY) < 12.f && std::fabs(um.x - s.x * 0.5f) < 300.f) {
+        std::string d;
+        for (const auto& [on, k] : list) {
+            if (!on) continue;
+            if (!d.empty()) d += ".  ";
+            d += std::string(upgradeInfo(k).title) + ": " + upgradeInfo(k).desc;
+        }
+        drawTooltip(w, app.font(), um, s, "Relics", d, theme::puGolden);
+    }
 }
 
 // ================================================================ Choice
@@ -709,6 +742,7 @@ void ChoiceScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse)
 }
 
 void ChoiceScreen::update(App& app, float dt, sf::Vector2f mouse) {
+    mouse_ = mouse;
     const float k = 1.f - std::exp(-16.f * dt);
     const int c = cardAt(app, mouse);
     const bool canReroll = app.rerollsLeft() > 0;
@@ -803,6 +837,23 @@ void ChoiceScreen::draw(App& app, sf::RenderWindow& w) {
     } else {
         drawCenteredPop(w, app.font(), hint, theme::fsSmall,
                         {s.x * 0.5f, s.y * 0.52f + kCardH * 0.5f + 40.f}, theme::textDim, hintPop);
+    }
+
+    // Hover help: what the card's kind means, the reroll strip, the repair skip.
+    if (app.rerollsLeft() > 0)
+        for (int i = 0; i < kChoiceCount; ++i)
+            if (rerollRect(s, i).contains(mouse_)) {
+                drawTooltip(w, app.font(), mouse_, s, "Reroll",
+                            "swap this card for a different pick (" + std::to_string(app.rerollsLeft()) +
+                                " left this run)");
+                return;
+            }
+    if (const int c = cardAt(app, mouse_); c >= 0) {
+        const UpgradeCat cat = upgradeCat(app.choices()[c]);
+        drawTooltip(w, app.font(), mouse_, s, upgradeCatName(cat), upgradeCatDesc(cat), catColor(cat));
+    } else if (coreHurt(app) && healRect(s).contains(mouse_)) {
+        drawTooltip(w, app.font(), mouse_, s, "Skip the pick", "repair the core to full instead of taking a card",
+                    theme::core);
     }
 }
 

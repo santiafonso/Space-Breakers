@@ -94,6 +94,18 @@ inline const char* upgradeCatName(UpgradeCat c) {
     return "";
 }
 
+inline const char* upgradeCatDesc(UpgradeCat c) {
+    switch (c) {
+        case UpgradeCat::NewBall:  return "adds one more Normal ball to the arena";
+        case UpgradeCat::Role:     return "changes what one of your balls is good at";
+        case UpgradeCat::Element:  return "an item: one element per ball, takes one of its 4 slots";
+        case UpgradeCat::Item:     return "a unique effect for one ball; takes one of its 4 slots";
+        case UpgradeCat::Modifier: return "a stat bump for one ball; no slot, stacks without limit";
+        case UpgradeCat::Relic:    return "a passive for the whole run";
+    }
+    return "";
+}
+
 // Element items map onto element web-node slots 0..5 (fire..electric);
 // everything else returns -1. The ball element is Element(slot + 1).
 inline int elementItemSlot(UpgradeKind k) {

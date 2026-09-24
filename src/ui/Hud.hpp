@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <string>
 
 #include "core/Math.hpp"
 #include "sim/Entities.hpp"
@@ -18,6 +19,8 @@ public:
                 bool bossWave, bool hasReserve, PowerUp reservePu);
     void pulseCombo();
     void draw(sf::RenderWindow& window) const;
+    // Hover text for the HUD element under `mouse` (UI units). False if none.
+    bool tooltipAt(sf::Vector2f mouse, std::string& title, std::string& desc, sf::Color& color) const;
 
 private:
     const sf::Font* font_ = nullptr;

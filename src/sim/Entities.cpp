@@ -13,6 +13,17 @@ const char* powerUpName(PowerUp p) {
     return "";
 }
 
+const char* powerUpDesc(PowerUp p) {
+    switch (p) {
+        case PowerUp::Points2x:  return "kills score double";
+        case PowerUp::SlowMo:    return "enemies move slower";
+        case PowerUp::Surge:     return "your balls cruise much faster";
+        case PowerUp::Golden:    return "the damage combo climbs faster";
+        case PowerUp::Overdrive: return "your balls hit twice as hard";
+    }
+    return "";
+}
+
 sf::Color powerUpColor(PowerUp p) {
     switch (p) {
         case PowerUp::Points2x:  return theme::puPoints;
@@ -69,6 +80,16 @@ const char* roleName(BallRole r) {
         case BallRole::Guardian: return "Guardian";
     }
     return "Normal";
+}
+
+const char* roleDesc(BallRole r) {
+    switch (r) {
+        case BallRole::Normal:   return "no role yet - a ROLE pick gives it one";
+        case BallRole::Striker:  return "hits far harder when flung fast - the one to throw";
+        case BallRole::Support:  return "weak hits, but marks enemies so every ball hits them harder";
+        case BallRole::Guardian: return "big; bounces toward the closest threat, shoves and staggers it";
+    }
+    return "";
 }
 
 }  // namespace sb

@@ -1,5 +1,6 @@
 #include "ui/Widgets.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdio>
@@ -233,6 +234,86 @@ void drawLoadoutPanel(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f c,
     const std::string ml = modifierLine(L);
     drawCentered(w, font, ml.empty() ? "no modifiers" : ml, theme::fsSmall,
                  {c.x, c.y + kPanelH * 0.5f - 18.f}, withAlpha(ml.empty() ? theme::textDim : theme::ballMid, a));
+}
+
+int panelPartAt(sf::Vector2f c, sf::Vector2f mouse) {
+    if (std::fabs(mouse.x - c.x) > kPanelW * 0.5f || std::fabs(mouse.y - c.y) > kPanelH * 0.5f) return -1;
+    for (int i = 0; i < kBallSlots; ++i)
+        if (slotRect(c, i).contains(mouse)) return i;
+    const float top = c.y - kPanelH * 0.5f;
+    if (mouse.y < top + 76.f) return kPanelPartBall;
+    if (mouse.y > c.y + kPanelH * 0.5f - 32.f) return kPanelPartMods;
+    return -1;
+}
+
+bool loadoutTooltip(const BallLoadout& L, int part, std::string& title, std::string& desc) {
+    if (part >= 0 && part < kBallSlots) {
+        if (L.gear[part] < 0) {
+            title = "Empty slot";
+            desc = "items and elements go here (4 per ball)";
+            return true;
+        }
+        const UpgradeInfo info = upgradeInfo(static_cast<UpgradeKind>(L.gear[part]));
+        title = info.title;
+        if (L.gearLvl[part] > 1) title += "  (level " + std::to_string(L.gearLvl[part]) + ")";
+        desc = info.desc;
+        return true;
+    }
+    if (part == kPanelPartBall) {
+        title = roleName(L.role);
+        desc = roleDesc(L.role);
+        const Element e = L.element();
+        if (e != Element::Plain) {
+            title = std::string(elementName(e)) + " " + title;
+            desc += std::string(".  ") +
+                    upgradeInfo(static_cast<UpgradeKind>(static_cast<int>(UpgradeKind::ElemFire) +
+                                                         static_cast<int>(e) - 1)).desc;
+        }
+        return true;
+    }
+    if (part == kPanelPartMods) {
+        title = "Modifiers";
+        desc.clear();
+        for (int i = 0; i < kModifierCount; ++i) {
+            if (L.mods[i] <= 0) continue;
+            if (!desc.empty()) desc += ",  ";
+            desc += std::string(upgradeInfo(static_cast<UpgradeKind>(static_cast<int>(UpgradeKind::HeavyImpact) + i)).title) +
+                    " x" + std::to_string(L.mods[i]);
+        }
+        if (desc.empty()) desc = "stat bumps that stack on this ball - none yet";
+        return true;
+    }
+    return false;
+}
+
+void drawTooltip(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f mouse, sf::Vector2f screen,
+                 const std::string& title, const std::string& desc, sf::Color titleColor) {
+    const float wd = 270.f, pad = 10.f, lineH = 17.f;
+    const std::vector<std::string> lines = wrapText(font, desc, theme::fsSmall, wd - 2.f * pad);
+    const float ht = pad * 2.f + 20.f + lineH * static_cast<float>(lines.size());
+    float x = mouse.x + 16.f, y = mouse.y + 18.f;
+    if (x + wd > screen.x - 4.f) x = mouse.x - wd - 12.f;
+    if (y + ht > screen.y - 4.f) y = mouse.y - ht - 10.f;
+    x = std::max(4.f, x);
+    y = std::max(4.f, y);
+
+    sf::RectangleShape box({wd, ht});
+    box.setPosition(x, y);
+    box.setFillColor(sf::Color(12, 12, 18, 235));
+    box.setOutlineThickness(1.f);
+    box.setOutlineColor(withAlpha(theme::accent, 0.45f));
+    w.draw(box);
+
+    sf::Text t = makeText(font, title, theme::fsBody, titleColor);
+    t.setPosition(std::round(x + pad), std::round(y + pad - 2.f));
+    w.draw(t);
+    float ly = y + pad + 22.f;
+    for (const std::string& l : lines) {
+        sf::Text d = makeText(font, l, theme::fsSmall, theme::textLo);
+        d.setPosition(std::round(x + pad), std::round(ly));
+        w.draw(d);
+        ly += lineH;
+    }
 }
 
 }  // namespace sb

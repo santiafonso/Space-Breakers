@@ -36,6 +36,47 @@ void Hud::update(float dt, int wave, int finalWave, int enemiesLeft, float coreF
     effectAlpha_ = lerpf(effectAlpha_, target, 1.f - std::exp(-10.f * dt));
 }
 
+bool Hud::tooltipAt(sf::Vector2f m, std::string& title, std::string& desc, sf::Color& color) const {
+    const float mg = theme::margin;
+    color = theme::textHi;
+    if (comboMul_ > 1.001f && sf::FloatRect(mg - 4.f, mg - 6.f, 130.f, 30.f).contains(m)) {
+        title = "Damage combo";
+        desc = "chain hits without a pause and every ball hits harder; it fades if you stop hitting";
+        color = theme::accent;
+        return true;
+    }
+    if (sf::FloatRect(size_.x - mg - 170.f, mg - 6.f, 176.f, 24.f).contains(m)) {
+        title = "Score";
+        desc = "points for kills this run; your best is kept on the Stats screen";
+        return true;
+    }
+    if (sf::FloatRect(size_.x - mg - 120.f, mg + 18.f, 126.f, 20.f).contains(m)) {
+        title = "Gold";
+        desc = "earned from fights; spend it in shops on the map";
+        color = theme::puGolden;
+        return true;
+    }
+    if (hasReserve_ && sf::FloatRect(size_.x - mg - 170.f, mg + 36.f, 176.f, 20.f).contains(m)) {
+        title = std::string("Reserve: ") + powerUpName(reservePu_);
+        desc = std::string(powerUpDesc(reservePu_)) + " - press Q to use it";
+        color = powerUpColor(reservePu_);
+        return true;
+    }
+    if (effectAlpha_ > 0.5f && effect_ &&
+        sf::FloatRect(size_.x * 0.5f - 100.f, mg + 50.f, 200.f, 30.f).contains(m)) {
+        title = powerUpName(effect_->kind);
+        desc = powerUpDesc(effect_->kind);
+        color = powerUpColor(effect_->kind);
+        return true;
+    }
+    if (sf::FloatRect(size_.x * 0.5f - 160.f, mg - 8.f, 320.f, 60.f).contains(m)) {
+        title = bossWave_ ? "Boss wave" : "Wave";
+        desc = "the bar is the core's health - if it empties the run is over. Below: enemies left.";
+        return true;
+    }
+    return false;
+}
+
 void Hud::draw(sf::RenderWindow& window) const {
     if (!font_) return;
 

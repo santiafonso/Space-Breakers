@@ -100,6 +100,7 @@ private:
     float hover_[4] = {};
     float rerollHover_[4] = {};
     float healHover_ = 0.f;
+    sf::Vector2f mouse_;
 };
 
 // Pick which ball (and which of its 4 slots) a role / element / item /
@@ -115,6 +116,7 @@ private:
     void targetAt(App& app, sf::Vector2f mouse, int& ball, int& slot) const;
     int hoverBall_ = -1;
     int hoverSlot_ = -1;
+    sf::Vector2f mouse_;
 };
 
 // The act's path map: rows of nodes top to bottom, the boss at the end. Click
@@ -127,9 +129,11 @@ public:
 
 private:
     sf::Vector2f nodePos(App& app, int node) const;
-    int nodeAt(App& app, sf::Vector2f mouse) const;
-    int hover_ = -1;
+    int nodeAt(App& app, sf::Vector2f mouse, bool openOnly = true) const;
+    int hover_ = -1;          // open node under the pointer
+    int info_ = -1;           // any node under the pointer (for the tooltip)
     float clock_ = 0.f;
+    sf::Vector2f mouse_;
 };
 
 // A Shop node: spend gold on a few rolled picks or on core repairs.
@@ -144,6 +148,7 @@ private:
     sf::FloatRect repairRect(App& app) const;
     sf::FloatRect leaveRect(App& app) const;
     int hover_ = -1;          // offer index, 100 = repair, 101 = leave
+    sf::Vector2f mouse_;
 };
 
 class PauseScreen : public Screen {

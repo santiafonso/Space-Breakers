@@ -42,6 +42,7 @@ public:
     sf::Vector2f size() const { return window_.logicalSize(); }
     void useWorldView() { window_.useWorldView(); }
     void useUiView() { window_.useUiView(); }
+    sf::Vector2f uiMouse() const { return window_.uiMousePosition(); }   // pointer in UI units, any screen
     WorldParams params() const;
 
     int runBallCount() const { return static_cast<int>(data_.run.balls.size()); }

@@ -50,6 +50,20 @@ sf::Vector2f panelCenter(sf::Vector2f size, int i, int n, float cy);   // i of n
 sf::FloatRect slotRect(sf::Vector2f panelCentre, int slot);
 std::string modifierLine(const BallLoadout& L);
 sf::Color catColor(UpgradeCat c);
+
+// What part of a loadout panel centred at `c` the pointer is on: 0..3 = item
+// slot, kPanelPartBall = the ball / role name, kPanelPartMods = the modifier
+// line, -1 = nothing.
+inline constexpr int kPanelPartBall = 10;
+inline constexpr int kPanelPartMods = 11;
+int panelPartAt(sf::Vector2f c, sf::Vector2f mouse);
+// Hover text for that part. False when there's nothing to say.
+bool loadoutTooltip(const BallLoadout& L, int part, std::string& title, std::string& desc);
+
+// A small hover box by the pointer: a title and a short wrapped description,
+// kept on screen.
+void drawTooltip(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f mouse, sf::Vector2f screen,
+                 const std::string& title, const std::string& desc, sf::Color titleColor = theme::textHi);
 void drawLoadoutPanel(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f c,
                       const BallLoadout& L, float alpha, float hover, int hoverSlot, bool dim);
 

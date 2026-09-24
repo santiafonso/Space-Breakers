@@ -149,6 +149,7 @@ void EquipScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) 
 }
 
 void EquipScreen::update(App& app, float, sf::Vector2f mouse) {
+    mouse_ = mouse;
     targetAt(app, mouse, hoverBall_, hoverSlot_);
 }
 
@@ -195,6 +196,13 @@ void EquipScreen::draw(App& app, sf::RenderWindow& w) {
     }
     drawCentered(w, app.font(), hint, theme::fsSmall, {s.x * 0.5f, s.y * 0.52f + kPanelH * 0.5f + 44.f},
                  theme::textDim);
+
+    for (int i = 0; i < n; ++i) {   // what's in the slot / on the ball under the pointer
+        const int part = panelPartAt(panelCenter(s, i, n, s.y * 0.52f), mouse_);
+        std::string tt, td;
+        if (part >= 0 && loadoutTooltip(balls[static_cast<std::size_t>(i)], part, tt, td))
+            drawTooltip(w, app.font(), mouse_, s, tt, td);
+    }
 }
 
 // ================================================================ Map
@@ -212,10 +220,10 @@ sf::Vector2f MapScreen::nodePos(App& app, int node) const {
     return {x, y};
 }
 
-int MapScreen::nodeAt(App& app, sf::Vector2f mouse) const {
+int MapScreen::nodeAt(App& app, sf::Vector2f mouse, bool openOnly) const {
     const int count = static_cast<int>(app.data().run.map.nodes.size());
     for (int i = 0; i < count; ++i)
-        if (length(nodePos(app, i) - mouse) < 30.f && app.mapNodeOpen(i)) return i;
+        if (length(nodePos(app, i) - mouse) < 30.f && (!openOnly || app.mapNodeOpen(i))) return i;
     return -1;
 }
 
@@ -238,7 +246,9 @@ void MapScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
 
 void MapScreen::update(App& app, float dt, sf::Vector2f mouse) {
     clock_ += dt;
+    mouse_ = mouse;
     hover_ = nodeAt(app, mouse);
+    info_ = nodeAt(app, mouse, false);
 }
 
 void MapScreen::draw(App& app, sf::RenderWindow& w) {
@@ -298,7 +308,10 @@ void MapScreen::draw(App& app, sf::RenderWindow& w) {
     const MapNodeType legend[] = {MapNodeType::Combat, MapNodeType::Elite, MapNodeType::Shop,
                                   MapNodeType::Forge,  MapNodeType::Rest,  MapNodeType::Upgrade};
     float ly = s.y * 0.36f;
+    int legendHover = -1;
     for (MapNodeType t : legend) {
+        if (sf::FloatRect(theme::margin + 8.f, ly - 15.f, 150.f, 30.f).contains(mouse_))
+            legendHover = static_cast<int>(t);
         drawNode(w, app.font(), {theme::margin + 24.f, ly}, t, 11.f, 0.9f, false);
         sf::Text tx = makeText(app.font(), mapNodeName(t), theme::fsSmall, theme::textLo);
         const sf::FloatRect b = tx.getLocalBounds();
@@ -311,15 +324,18 @@ void MapScreen::draw(App& app, sf::RenderWindow& w) {
     keys.setPosition(theme::margin + 12.f, ly + 10.f);
     w.draw(keys);
 
-    if (hover_ >= 0) {
-        const MapNodeType t = nodes[static_cast<std::size_t>(hover_)].type;
-        const float cx = s.x - 150.f;
-        drawCentered(w, app.font(), mapNodeName(t), theme::fsHeading, {cx, s.y * 0.42f}, nodeColor(t));
-        float dy = s.y * 0.42f + 30.f;
-        for (const std::string& l : wrapText(app.font(), mapNodeDesc(t), theme::fsSmall, 230.f)) {
-            drawCentered(w, app.font(), l, theme::fsSmall, {cx, dy}, theme::textLo);
-            dy += 18.f;
-        }
+    if (info_ >= 0) {
+        const MapNode& n = nodes[static_cast<std::size_t>(info_)];
+        std::string d = mapNodeDesc(n.type);
+        if (!app.mapNodeOpen(info_) && info_ != r.mapNode)
+            d += n.row <= r.mapRow ? "  (behind you)" : "  (not reachable from here yet)";
+        drawTooltip(w, app.font(), mouse_, s, mapNodeName(n.type), d, nodeColor(n.type));
+    } else if (legendHover >= 0) {
+        const auto t = static_cast<MapNodeType>(legendHover);
+        drawTooltip(w, app.font(), mouse_, s, mapNodeName(t), mapNodeDesc(t), nodeColor(t));
+    } else if (std::fabs(mouse_.y - 82.f) < 12.f && std::fabs(mouse_.x - s.x * 0.5f) < 170.f) {
+        drawTooltip(w, app.font(), mouse_, s, "Gold and core",
+                    "gold buys things in shops; the core must survive - rests and shops repair it");
     }
 }
 
@@ -360,6 +376,7 @@ void ShopScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
 }
 
 void ShopScreen::update(App& app, float, sf::Vector2f mouse) {
+    mouse_ = mouse;
     hover_ = -1;
     const int n = static_cast<int>(app.data().run.shopOffers.size());
     for (int i = 0; i < n; ++i)
@@ -421,6 +438,16 @@ void ShopScreen::draw(App& app, sf::RenderWindow& w) {
                    std::to_string(cfg::gold::priceRepair) + " gold",
                theme::core, hover_ == 100 ? 1.f : 0.f, hurt && app.gold() >= cfg::gold::priceRepair);
     drawButton(w, app.font(), leaveRect(app), "Leave (Esc)", theme::accent, hover_ == 101 ? 1.f : 0.f, true);
+
+    if (hover_ >= 0 && hover_ < n) {
+        const auto k = static_cast<UpgradeKind>(r.shopOffers[static_cast<std::size_t>(hover_)]);
+        const UpgradeCat cat = upgradeCat(k);
+        drawTooltip(w, app.font(), mouse_, s, upgradeCatName(cat), upgradeCatDesc(cat), catColor(cat));
+    } else if (hover_ == 100) {
+        drawTooltip(w, app.font(), mouse_, s, "Repair",
+                    "restores " + std::to_string(app.repairAmount()) +
+                        " core HP. The core also heals a little before every fight.", theme::core);
+    }
 }
 
 }  // namespace sb
