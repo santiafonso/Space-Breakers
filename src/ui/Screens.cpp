@@ -486,7 +486,7 @@ void PlayScreen::onEnter(App&) {
     clock_ = 0.f;
     samples_.clear();
     sceneIn_ = 0.f;        // run just started: fade the arena up from black
-    bannerWave_ = 0;       // let the first update fire the "Wave 1" banner
+    bannerWave_ = 0;       // let the first update fire the "Stage 1" banner
     bannerT_ = 999.f;
 }
 
@@ -519,16 +519,18 @@ void PlayScreen::release(App& app) {
         app.setAiming(false);
         // Pull back, let go: the ball flies away from the pointer, harder the
         // further you pulled. A tiny pull cancels and the ball carries on.
+        // Pull and speed are in arena units, so they scale with the wide arena.
+        const float k = app.world().arenaScale();
         const sf::Vector2f pull = anchor_ - worldMouse_;
         const float len = length(pull);
-        if (len < cfg::app::slingDeadzone) {
+        if (len < cfg::app::slingDeadzone * k) {
             app.world().cancelHeld();
             dragging_ = false;
             samples_.clear();
             return;
         }
-        const float k = clampf(len / cfg::app::slingMaxPull, 0.f, 1.f);
-        v = pull / len * lerpf(cfg::app::slingMinSpeed, cfg::app::slingMaxSpeed, k) * power;
+        const float pw = clampf(len / (cfg::app::slingMaxPull * k), 0.f, 1.f);
+        v = pull / len * lerpf(cfg::app::slingMinSpeed, cfg::app::slingMaxSpeed, pw) * k * power;
     }
     app.world().releaseHeld(v);
     if (app.world().grabbedKind() == Grabbed::None) app.audio().thrown(clampf(length(v) / 900.f, 0.f, 1.f));
@@ -576,8 +578,11 @@ void PlayScreen::update(App& app, float dt, sf::Vector2f mouse) {
     worldMouse_ = mouse;
     sceneIn_ += dt;
     bannerT_ += dt;
-    if (const int wv = app.data().run.wave; wv > 0 && wv != bannerWave_) {
-        bannerWave_ = wv;   // a new wave began (run start, or back from the upgrade cards)
+    // A new stage's fight began: key it on act + map row (several rows can
+    // share a difficulty wave).
+    if (const int key = app.data().run.map.act * 100 + app.data().run.mapRow;
+        app.data().run.mapRow > 0 && key != bannerWave_) {
+        bannerWave_ = key;
         bannerT_ = 0.f;
     }
     if (dragging_ && !sf::Mouse::isButtonPressed(sf::Mouse::Left)) release(app);
@@ -597,8 +602,9 @@ void PlayScreen::drawAim(App& app, sf::RenderWindow& w) const {
     if (!b) return;
     const sf::Vector2f pull = anchor_ - worldMouse_;
     const float len = length(pull);
-    const bool live = len >= cfg::app::slingDeadzone;
-    const float k = clampf(len / cfg::app::slingMaxPull, 0.f, 1.f);
+    const float as = app.world().arenaScale();
+    const bool live = len >= cfg::app::slingDeadzone * as;
+    const float k = clampf(len / (cfg::app::slingMaxPull * as), 0.f, 1.f);
 
     auto seg = [&](sf::Vector2f a, sf::Vector2f c, float thick, sf::Color col) {
         const sf::Vector2f d = c - a;
@@ -609,7 +615,7 @@ void PlayScreen::drawAim(App& app, sf::RenderWindow& w) const {
         r.setFillColor(col);
         w.draw(r);
     };
-    seg(b->pos, worldMouse_, 2.f, withAlpha(theme::textLo, live ? 0.5f : 0.25f));   // the band
+    seg(b->pos, worldMouse_, 2.f * as, withAlpha(theme::textLo, live ? 0.5f : 0.25f));   // the band
     if (!live) return;
 
     const sf::Vector2f dir = pull / len;
@@ -621,8 +627,8 @@ void PlayScreen::drawAim(App& app, sf::RenderWindow& w) const {
     if (dir.y < -1e-4f) t = std::min(t, (b->radius - b->pos.y) / dir.y);
     t = std::max(0.f, std::min(t, 2000.f));
     const sf::Color col = withAlpha(lerpColor(theme::accent, theme::puGolden, k), 0.35f + 0.5f * k);
-    for (float s = b->radius + 6.f; s < t; s += 18.f)
-        seg(b->pos + dir * s, b->pos + dir * std::min(s + 9.f, t), 3.f, col);
+    for (float s = b->radius + 6.f * as; s < t; s += 18.f * as)
+        seg(b->pos + dir * s, b->pos + dir * std::min(s + 9.f * as, t), 3.f * as, col);
 }
 
 void PlayScreen::draw(App& app, sf::RenderWindow& w) {
@@ -694,9 +700,9 @@ void PlayScreen::drawWaveBanner(App& app, sf::RenderWindow& w) const {
     const float a = clampf(in, 0.f, 1.f) * out;
     if (a <= 0.01f) return;
 
-    std::string label = "Wave " + std::to_string(bannerWave_);
-    if (bannerWave_ == cfg::run::bossWave) label = "Miniboss";
-    else if (bannerWave_ == cfg::run::finalWave) label = "Final boss";
+    const int act = bannerWave_ / 100, row = bannerWave_ % 100;
+    std::string label = "Stage " + std::to_string(row);
+    if (row > cfg::map::rows) label = act == 1 ? "Miniboss" : "Final boss";
 
     const sf::Vector2f c{s.x * 0.5f, s.y * 0.40f - (1.f - out) * 16.f};
 

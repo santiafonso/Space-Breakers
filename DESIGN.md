@@ -679,6 +679,21 @@ Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
   - Las dos opciones se guardan (`aim.slingshot`, `aim.auto`; sin bump de
     versión) y tienen tooltip en la pausa.
 
+- **Fase H — arena ancha a la misma velocidad + mapas más largos. [IMPLEMENTADO 2026-09-24]**
+  - Problema (usuario): con la cámara alejada (oleada 10 en adelante) las
+    pelotas se veían lentas y casi no cambiaban de dirección.
+    `World::arenaScale()` (1 en la arena normal, ~1.95 en la ancha) multiplica
+    el crucero, el techo y los tiros (gomera incluida); el radio crece
+    `ballRadiusArenaFrac` de eso. El daño, el sonido, el rastro y la stat de
+    velocidad leen la velocidad **en pantalla** (dividida por la escala), así
+    no pega más solo por ir más rápido en unidades del mundo. Sim: 300 px/s en
+    pantalla en las dos arenas.
+  - Mapas de **14 filas** por acto (`cfg::map::rows`) + boss. `mapRowWave`
+    reparte las 9 oleadas del acto entre las filas (1 2 2 3 4 4 5 6 6 7 8 8 9 9,
+    boss = 10 / 20): la curva y los bosses no se mueven, hay más paradas para
+    armar la composición (~40 nodos por acto). HUD y cartel muestran
+    "Act N - Stage R / 15". Nodos un poco más chicos; el click toma el más cercano.
+
 - **Pendiente (idea del usuario, 2026-09-24):** como las mejoras ya no llegan
   en cada oleada, cada una tiene que **sentirse mucho** al conseguirla: repasar
   items / modificadores / reliquias para que sean más fuertes y más visibles

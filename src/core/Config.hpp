@@ -202,7 +202,7 @@ inline constexpr int rerollsPerLevel = 2;     // "Foresight" web node: reroll ch
 
 // The path map between waves (one per act) and the run's gold.
 namespace map {
-inline constexpr int rows = 9;          // choosable rows per act; the boss is row 10
+inline constexpr int rows = 14;         // choosable rows per act; the boss is row rows+1
 inline constexpr int lanes = 4;         // max nodes per row
 inline constexpr int minPerRow = 2;
 // Node weights for rows 2..8 (row 1 is always a fight; row 9 is rest/shop/forge).
@@ -251,6 +251,10 @@ namespace boss {
 inline constexpr float arenaScaleX = 1.95f;   // boss arena vs the normal one (camera pulls way back)
 inline constexpr float arenaScaleY = 1.45f;
 inline constexpr float coreMarginX = 110.f;   // core sits this far from the left wall
+// The wide arena (boss wave on) is framed by a pulled-back camera. Ball speeds
+// scale with it so they look and bounce the same on screen; radius grows by
+// this fraction of the extra scale.
+inline constexpr float ballRadiusArenaFrac = 0.5f;
 inline constexpr float hp = 40.f;             // small bar - a handful of clean hits
 inline constexpr float radius = 58.f;         // fat target - you are meant to fling at it
 inline constexpr float speed = 54.f;          // px/s, dead straight at the core, no steering

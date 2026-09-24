@@ -81,7 +81,7 @@ private:
     std::deque<std::pair<float, sf::Vector2f>> samples_;
 
     float sceneIn_ = 999.f;    // counts up from 0 on run start - fade the scene up from black
-    int bannerWave_ = 0;       // wave the "Wave N" banner is showing
+    int bannerWave_ = 0;       // act * 100 + map row the "Stage N" banner is showing
     float bannerT_ = 999.f;    // time since the banner started (large = inactive)
 };
 

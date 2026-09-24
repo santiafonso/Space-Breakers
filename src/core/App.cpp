@@ -295,7 +295,8 @@ void App::newRun() {
     const int act = (startWave - 1) / cfg::run::bossWave + 1;
     r.map = generateMap(rng_, act);
     r.mapNode = -1;
-    r.mapRow = (startWave - 1) % cfg::run::bossWave;
+    r.mapRow = 0;   // stand just before the first row that plays as startWave
+    while (r.mapRow <= cfg::map::rows && mapRowWave(act, r.mapRow + 1) < startWave) ++r.mapRow;
     r.wave = startWave - 1;
     replaceStack(ScreenId::Play);
     push(ScreenId::Map);
@@ -500,7 +501,7 @@ void App::travelTo(int node) {
     n.visited = true;
     r.mapNode = node;
     r.mapRow = n.row;
-    const int wave = (r.map.act - 1) * cfg::run::bossWave + n.row;
+    const int wave = mapRowWave(r.map.act, n.row);
     back();   // close the map: the Play screen is underneath
     const sf::Vector2f mid{size().x * 0.5f, size().y * 0.4f};
     switch (n.type) {
@@ -1151,8 +1152,7 @@ void App::update(float frameDt) {
     if (const int n = effects_.takeArrivedCoins(); n > 0) hud_.pulseGold();
 
     const Core& c = world_.core();
-    const int finalWave = continueUnlocked_ ? cfg::run::finalWave : cfg::run::bossWave;
-    hud_.update(frameDt, world_.wave(), finalWave, world_.enemiesLeft(),
+    hud_.update(frameDt, data_.run.map.act, data_.run.mapRow, cfg::map::rows + 1, world_.enemiesLeft(),
                 c.maxHp > 0.f ? c.hp / c.maxHp : 0.f, world_.comboMultiplier(),
                 data_.run.score, data_.run.gold, world_.effect(), world_.bossWave(),
                 world_.hasReserve(), world_.reservePu());

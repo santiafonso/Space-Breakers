@@ -14,7 +14,9 @@ namespace sb {
 class Hud {
 public:
     void init(const sf::Font& font, sf::Vector2f size);
-    void update(float dt, int wave, int finalWave, int enemiesLeft, float coreFrac,
+    // act / stage: where you are on the path map (stage = map row, stages
+    // counts the boss row).
+    void update(float dt, int act, int stage, int stages, int enemiesLeft, float coreFrac,
                 float comboMultiplier, int score, int gold, const std::optional<ActiveEffect>& effect,
                 bool bossWave, bool hasReserve, PowerUp reservePu);
     void pulseCombo();
@@ -26,8 +28,9 @@ public:
 private:
     const sf::Font* font_ = nullptr;
     sf::Vector2f size_;
-    int wave_ = 0;
-    int finalWave_ = 0;
+    int act_ = 1;
+    int stage_ = 0;
+    int stages_ = 0;
     int enemiesLeft_ = 0;
     int score_ = 0;
     int gold_ = 0;

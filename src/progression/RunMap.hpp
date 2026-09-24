@@ -11,11 +11,11 @@ namespace sb {
 
 // ---- the path map: one per act ---------------------------------------------
 //
-// An act is cfg::map::rows rows of branching nodes followed by the boss. Row r
-// (1-based) is wave  (act-1)*bossWave + r  whatever the node is, so enemy
-// scaling and the boss waves (10 / 20) don't move; a non-combat node just skips
-// that row's fight. From the node you're on you may step to any node it links
-// to in the next row.
+// An act is cfg::map::rows rows of branching nodes followed by the boss. Each
+// row plays as a "difficulty wave" (mapRowWave): the act's 9 normal waves are
+// spread over its rows, so enemy scaling and the boss waves (10 / 20) don't
+// move however long the map is; a non-combat node just skips that row's fight.
+// From the node you're on you may step to any node it links to in the next row.
 
 enum class MapNodeType { Combat, Elite, Shop, Forge, Rest, Upgrade, Recruit, Boss };
 inline constexpr int kMapNodeTypeCount = 8;
@@ -60,6 +60,15 @@ inline const char* mapNodeDesc(MapNodeType t) {
         case MapNodeType::Boss:    return "the act's boss";
     }
     return "";
+}
+
+// The difficulty wave map row `row` of act `act` plays as: rows 1..rows spread
+// over waves 1..9 of the act, the boss row is wave 10 (20 in act 2).
+inline int mapRowWave(int act, int row) {
+    const int base = (act - 1) * cfg::run::bossWave;
+    if (row > cfg::map::rows) return base + cfg::run::bossWave;
+    const int span = cfg::run::bossWave - 1;
+    return base + std::clamp((row * span + cfg::map::rows - 1) / cfg::map::rows, 1, span);
 }
 
 namespace detail {

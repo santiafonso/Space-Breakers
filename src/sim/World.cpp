@@ -29,7 +29,7 @@ World::World(sf::Vector2f size) : baseSize_(size), size_(size) { core_.pos = siz
 // ---------------------------------------------------------------- speeds
 
 float World::cruiseBase(const WorldParams& p) const {
-    return cfg::ball::baseCruise * p.cruiseMult;
+    return cfg::ball::baseCruise * p.cruiseMult * arenaScale();
 }
 
 float World::cruiseSpeed(const WorldParams& p) const {
@@ -56,11 +56,12 @@ float World::ballCruise(const Ball& b, const WorldParams& p) const {
 
 float World::ballMaxSpeed(const Ball& b, const WorldParams& p) const {
     return std::min(cruiseBase(p) * cfg::ball::maxSpeedCruiseMul * b.mods.maxSpeedMult,
-                    cfg::ball::hardSpeedCap);
+                    cfg::ball::hardSpeedCap * arenaScale());
 }
 
 float World::ballRadius(const Ball& b, const WorldParams& p) const {
     return cfg::ball::radius * p.ballRadiusMult * b.mods.radiusMult *
+           (1.f + (arenaScale() - 1.f) * cfg::boss::ballRadiusArenaFrac) *
            (b.role == BallRole::Guardian ? cfg::role::guardianRadiusMul : 1.f);
 }
 
@@ -78,7 +79,7 @@ void World::boostSpeed(Ball& b, float mult, const WorldParams& p) {
 float World::fastestBall() const {
     float m = 0.f;
     for (const Ball& b : balls_) m = std::max(m, length(b.vel));
-    return m;
+    return m / arenaScale();   // on-screen speed, comparable across arenas
 }
 
 // ---------------------------------------------------------------- lifecycle
@@ -471,7 +472,8 @@ void World::releaseHeld(sf::Vector2f throwVel) {
     if (b.role == BallRole::Striker) throwVel *= cfg::role::strikerFlingMult;   // built to be flung
     const float s = length(throwVel);
     if (s < cfg::ball::minThrowSpeed) b.vel = rng_.direction() * cfg::ball::nudgeSpeed;
-    else if (s > cfg::ball::hardSpeedCap) b.vel = throwVel * (cfg::ball::hardSpeedCap / s);
+    else if (s > cfg::ball::hardSpeedCap * arenaScale())
+        b.vel = throwVel * (cfg::ball::hardSpeedCap * arenaScale() / s);
     else b.vel = throwVel;
     grabbed_ = Grabbed::None;
     heldIndex_ = -1;
@@ -588,7 +590,7 @@ void World::aimBounce(Ball& b, sf::Vector2f normal, const Enemy* skip) {
 
 float World::ballDamage(const Ball& b, const WorldParams& p) const {
     const float speed = length(b.vel);
-    const float ratio = speed / cfg::ball::baseCruise;
+    const float ratio = speed / (cfg::ball::baseCruise * arenaScale());   // on-screen speed, not world
     float dmg = (cfg::combat::contactDamageBase + cfg::combat::contactDamagePerCruise * ratio) *
                 comboMultiplier() * p.damageMult * b.mods.damageMult;
     switch (b.role) {
@@ -706,7 +708,7 @@ void World::regulateSpeed(Ball& b, float dt, const WorldParams& p) {
 void World::updateTrail(Ball& b) {
     b.trail.push_back(b.pos);
     const std::size_t cap =
-        static_cast<std::size_t>(clampf(4.f + length(b.vel) / 90.f, 4.f, 16.f));
+        static_cast<std::size_t>(clampf(4.f + length(b.vel) / (90.f * arenaScale()), 4.f, 16.f));
     while (b.trail.size() > cap) b.trail.pop_front();
 }
 
@@ -724,7 +726,7 @@ void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
         fx.normal = c.normal;
         fx.pos = c.point;
         fx.color = b.color;
-        fx.speed = length(b.vel);
+        fx.speed = length(b.vel) / arenaScale();   // sound / ring size read on-screen speed
         ev.bounces.push_back(fx);
     };
 
@@ -868,7 +870,7 @@ void World::resolveBallPairs(FrameEvents& ev, const WorldParams& p) {
             fx.pos = (a.pos + b.pos) * 0.5f;
             fx.normal = n;
             fx.color = lerpColor(a.color, b.color, 0.5f);
-            fx.speed = std::max(length(a.vel), length(b.vel));
+            fx.speed = std::max(length(a.vel), length(b.vel)) / arenaScale();
             fx.ballPair = true;
             ev.bounces.push_back(fx);
         }

@@ -18,11 +18,12 @@ void Hud::init(const sf::Font& font, sf::Vector2f size) {
 void Hud::pulseCombo() { comboPop_ = 1.f; }
 void Hud::pulseGold() { goldPop_ = std::min(1.f, goldPop_ + 0.5f); }
 
-void Hud::update(float dt, int wave, int finalWave, int enemiesLeft, float coreFrac,
+void Hud::update(float dt, int act, int stage, int stages, int enemiesLeft, float coreFrac,
                  float comboMultiplier, int score, int gold, const std::optional<ActiveEffect>& effect,
                  bool bossWave, bool hasReserve, PowerUp reservePu) {
-    wave_ = wave;
-    finalWave_ = finalWave;
+    act_ = act;
+    stage_ = stage;
+    stages_ = stages;
     bossWave_ = bossWave;
     enemiesLeft_ = enemiesLeft;
     score_ = score;
@@ -73,7 +74,7 @@ bool Hud::tooltipAt(sf::Vector2f m, std::string& title, std::string& desc, sf::C
         return true;
     }
     if (sf::FloatRect(size_.x * 0.5f - 160.f, mg - 8.f, 320.f, 60.f).contains(m)) {
-        title = bossWave_ ? "Boss wave" : "Wave";
+        title = bossWave_ ? "Boss" : "Stage";
         desc = "the bar is the core's health - if it empties the run is over. Below: enemies left.";
         return true;
     }
@@ -130,9 +131,9 @@ void Hud::draw(sf::RenderWindow& window) const {
     // Wave / core-health banner, top centre.
     char banner[48];
     if (bossWave_)
-        std::snprintf(banner, sizeof(banner), "Wave %d / %d  -  MINIBOSS", wave_, finalWave_);
+        std::snprintf(banner, sizeof(banner), "Act %d  -  %s", act_, act_ == 1 ? "MINIBOSS" : "FINAL BOSS");
     else
-        std::snprintf(banner, sizeof(banner), "Wave %d / %d", wave_, finalWave_);
+        std::snprintf(banner, sizeof(banner), "Act %d  -  Stage %d / %d", act_, stage_, stages_);
     drawCentered(window, *font_, banner, theme::fsHeading, {size_.x * 0.5f, theme::margin + 6.f},
                  bossWave_ ? theme::coreLow : theme::textHi);
 

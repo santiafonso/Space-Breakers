@@ -67,6 +67,9 @@ public:
 
     // Area the camera should frame (grows for the boss wave).
     sf::Vector2f viewSize() const { return size_; }
+    // How much bigger the current arena is than the normal one (1 on waves
+    // 1-9). Ball speeds scale by it so they look the same on screen.
+    float arenaScale() const { return size_.x / baseSize_.x; }
     sf::Vector2f viewCenter() const { return size_ * 0.5f; }
 
     bool waveRunning() const { return waveRunning_; }

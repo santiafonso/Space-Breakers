@@ -224,10 +224,15 @@ sf::Vector2f MapScreen::nodePos(App& app, int node) const {
 }
 
 int MapScreen::nodeAt(App& app, sf::Vector2f mouse, bool openOnly) const {
+    // Nearest node within reach (rows sit close together on a long map).
     const int count = static_cast<int>(app.data().run.map.nodes.size());
-    for (int i = 0; i < count; ++i)
-        if (length(nodePos(app, i) - mouse) < 30.f && (!openOnly || app.mapNodeOpen(i))) return i;
-    return -1;
+    int best = -1;
+    float bestD = 22.f;
+    for (int i = 0; i < count; ++i) {
+        const float d = length(nodePos(app, i) - mouse);
+        if (d < bestD && (!openOnly || app.mapNodeOpen(i))) { bestD = d; best = i; }
+    }
+    return best;
 }
 
 void MapScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
@@ -292,7 +297,7 @@ void MapScreen::draw(App& app, sf::RenderWindow& w) {
         const bool open = app.mapNodeOpen(i);
         const bool here = i == r.mapNode;
         const bool past = n.row <= r.mapRow && !here;
-        float rad = n.type == MapNodeType::Boss ? 30.f : 19.f;
+        float rad = n.type == MapNodeType::Boss ? 25.f : 15.f;
         if (open) rad *= 1.f + 0.08f * std::sin(clock_ * 5.f) + (hover_ == i ? 0.18f : 0.f);
         const float a = cp * (open || here ? 1.f : (past ? (n.visited ? 0.7f : 0.2f) : 0.45f));
         drawNode(w, app.font(), nodePos(app, i), n.type, rad, a, n.visited || hover_ == i);
