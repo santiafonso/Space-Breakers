@@ -679,6 +679,11 @@ Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
   - Las dos opciones se guardan (`aim.slingshot`, `aim.auto`; sin bump de
     versión) y tienen tooltip en la pausa.
 
+- **Pendiente (idea del usuario, 2026-09-24):** como las mejoras ya no llegan
+  en cada oleada, cada una tiene que **sentirse mucho** al conseguirla: repasar
+  items / modificadores / reliquias para que sean más fuertes y más visibles
+  en juego. Se ve más adelante.
+
 - **Fase 2 — Jefe tras la oleada 10.** Da upgrades de pelota (viento/agua/
   piedra). Extiende la run mas alla de 10 en "modo infinito" opcional.
 - **Fase 3 — Variedad.** Repulsor, bumper, rampa. Corredor, tanque, escindido.
