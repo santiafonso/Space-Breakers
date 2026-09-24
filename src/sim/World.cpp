@@ -191,7 +191,7 @@ void World::carryBalls(const WorldParams& p) {
     coreHitThisWave_ = false;          // "Interest": track a damage-free wave
 }
 
-void World::startWave(int wave, const WorldParams& p) {
+void World::startWave(int wave, const WorldParams& p, bool elite) {
     bossWave_ = false;
     boss_ = Boss{};
     coreSlideT_ = 0.f;
@@ -200,6 +200,8 @@ void World::startWave(int wave, const WorldParams& p) {
 
     wave_ = wave;
     toSpawn_ = waveEnemyCount(wave);
+    if (elite) toSpawn_ = static_cast<int>(std::lround(static_cast<float>(toSpawn_) * cfg::map::eliteCountMul));
+    waveHpMul_ = elite ? cfg::map::eliteHpMul : 1.f;
     spawnTimer_ = cfg::wave::introDelay;
     waveRunning_ = true;
     bolts_.clear();
@@ -219,7 +221,7 @@ sf::Vector2f World::wideArenaSize() const {
 
 // Waves 11..20: same wide arena and pulled-back camera as the boss, but a normal
 // (hard) wave. The core eases from the boss's far-left spot back to the centre.
-void World::startPostBossWave(int wave, const WorldParams& p) {
+void World::startPostBossWave(int wave, const WorldParams& p, bool elite) {
     bossWave_ = false;
     boss_ = Boss{};
     size_ = wideArenaSize();
@@ -230,6 +232,8 @@ void World::startPostBossWave(int wave, const WorldParams& p) {
 
     wave_ = wave;
     toSpawn_ = waveEnemyCount(wave);
+    if (elite) toSpawn_ = static_cast<int>(std::lround(static_cast<float>(toSpawn_) * cfg::map::eliteCountMul));
+    waveHpMul_ = elite ? cfg::map::eliteHpMul : 1.f;
     spawnTimer_ = cfg::wave::introDelay;
     waveRunning_ = true;
     bolts_.clear();
@@ -247,6 +251,7 @@ void World::updateCoreSlide(float dt) {
 
 void World::startBossWave(const WorldParams& p) {
     bossWave_ = true;
+    waveHpMul_ = 1.f;
     wave_ = cfg::run::bossWave;
     waveRunning_ = true;
     toSpawn_ = 0;
@@ -274,6 +279,7 @@ void World::startBossWave(const WorldParams& p) {
 // of shield enemies spins around it and is topped up while it lives.
 void World::startFinalBossWave(const WorldParams& p) {
     bossWave_ = true;
+    waveHpMul_ = 1.f;
     wave_ = cfg::run::finalWave;
     waveRunning_ = true;
     toSpawn_ = 0;
@@ -352,7 +358,7 @@ void World::spawnEnemy() {
         e.maxHp = e.hp = cfg::finalBoss::addHp;
         e.speed = cfg::finalBoss::addSpeed;
     } else {
-        e.maxHp = e.hp = waveEnemyHp(wave_);
+        e.maxHp = e.hp = waveEnemyHp(wave_) * waveHpMul_;
         e.speed = waveEnemySpeed(wave_);
     }
     e.vel = normalized(core_.pos - pos) * e.speed;

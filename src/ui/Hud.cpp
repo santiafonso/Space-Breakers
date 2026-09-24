@@ -17,13 +17,14 @@ void Hud::init(const sf::Font& font, sf::Vector2f size) {
 void Hud::pulseCombo() { comboPop_ = 1.f; }
 
 void Hud::update(float dt, int wave, int finalWave, int enemiesLeft, float coreFrac,
-                 float comboMultiplier, int score, const std::optional<ActiveEffect>& effect,
+                 float comboMultiplier, int score, int gold, const std::optional<ActiveEffect>& effect,
                  bool bossWave, bool hasReserve, PowerUp reservePu) {
     wave_ = wave;
     finalWave_ = finalWave;
     bossWave_ = bossWave;
     enemiesLeft_ = enemiesLeft;
     score_ = score;
+    gold_ = gold;
     coreFrac_ = clampf(coreFrac, 0.f, 1.f);
     comboMul_ = comboMultiplier;
     effect_ = effect;
@@ -60,14 +61,23 @@ void Hud::draw(sf::RenderWindow& window) const {
         window.draw(sc);
     }
 
-    // "Stockpile" reserve power-up, just under the score.
+    // Run gold, under the score.
+    {
+        sf::Text gd = makeText(*font_, "GOLD  " + std::to_string(gold_), theme::fsSmall, theme::puGolden);
+        const sf::FloatRect gb = gd.getLocalBounds();
+        gd.setOrigin(gb.left + gb.width, gb.top);
+        gd.setPosition(size_.x - theme::margin, theme::margin + 22.f);
+        window.draw(gd);
+    }
+
+    // "Stockpile" reserve power-up, under the gold.
     if (hasReserve_) {
         const sf::Color col = powerUpColor(reservePu_);
         sf::Text rs = makeText(*font_, std::string("[Q] ") + powerUpName(reservePu_),
                                theme::fsSmall, col);
         const sf::FloatRect rb = rs.getLocalBounds();
         rs.setOrigin(rb.left + rb.width, rb.top);
-        rs.setPosition(size_.x - theme::margin, theme::margin + 22.f);
+        rs.setPosition(size_.x - theme::margin, theme::margin + 40.f);
         window.draw(rs);
     }
 

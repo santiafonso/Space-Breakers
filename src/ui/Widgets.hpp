@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 #include "core/Math.hpp"
 #include "core/Theme.hpp"
@@ -33,5 +34,23 @@ void drawDim(sf::RenderWindow& window, sf::Vector2f size, float alpha);
 // rows popping in; pass a large value for no animation.
 void drawStatsPanel(sf::RenderWindow& window, const sf::Font& font, sf::Vector2f size,
                     const Stats& stats, float intro = 1e6f);
+
+// Greedy word-wrap: break `str` into lines no wider than `maxW` at `size`.
+std::vector<std::string> wrapText(const sf::Font& font, const std::string& str, unsigned size,
+                                  float maxW);
+
+// ---- ball loadout panels: one ball's look, role, 4 item slots, modifiers ----
+inline constexpr float kPanelW = 190.f;
+inline constexpr float kPanelH = 250.f;
+inline constexpr float kPanelGap = 16.f;
+inline constexpr float kSlotH = 24.f;
+inline constexpr float kSlotStep = 29.f;
+
+sf::Vector2f panelCenter(sf::Vector2f size, int i, int n, float cy);   // i of n, in a row
+sf::FloatRect slotRect(sf::Vector2f panelCentre, int slot);
+std::string modifierLine(const BallLoadout& L);
+sf::Color catColor(UpgradeCat c);
+void drawLoadoutPanel(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f c,
+                      const BallLoadout& L, float alpha, float hover, int hoverSlot, bool dim);
 
 }  // namespace sb

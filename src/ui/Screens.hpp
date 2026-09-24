@@ -82,8 +82,8 @@ private:
     float bannerT_ = 999.f;    // time since the banner started (large = inactive)
 };
 
-// Overlay after a wave: pick 1 of 4 rolled items (or skip to repair the core).
-// Gear and infusions then ask which ball (and, for gear, which slot) they go on.
+// Overlay after an Elite fight or on an Upgrade node: pick 1 of 4 (or skip to
+// repair the core). Picks that go on a ball open the Equip picker.
 class ChoiceScreen : public Screen {
 public:
     void handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) override;
@@ -96,18 +96,54 @@ private:
     sf::FloatRect healRect(sf::Vector2f size) const;  // "repair core" button, when the core isn't full
     sf::FloatRect rerollRect(sf::Vector2f size, int i) const;  // "reroll" strip under card i
     bool coreHurt(App& app) const;
-    void pickCard(App& app, int idx);                 // recruit / relic apply now; others enter target mode
-    // Target mode: which ball panel / slot the pointer is on (-1 none).
-    void targetAt(App& app, sf::Vector2f mouse, int& ball, int& slot) const;
-    void drawTargets(App& app, sf::RenderWindow& w);
 
     float hover_[4] = {};
     float rerollHover_[4] = {};
     float healHover_ = 0.f;
-    int target_ = -1;          // card being placed on a ball, -1 = picking a card
-    float targetT_ = 0.f;      // time since target mode opened (intro)
+};
+
+// Pick which ball (and which of its 4 slots) a role / element / item /
+// modifier goes on - from a Choice card or a shop buy. At a Forge node it
+// picks the item to level up instead.
+class EquipScreen : public Screen {
+public:
+    void handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) override;
+    void update(App& app, float dt, sf::Vector2f mouse) override;
+    void draw(App& app, sf::RenderWindow& w) override;
+
+private:
+    void targetAt(App& app, sf::Vector2f mouse, int& ball, int& slot) const;
     int hoverBall_ = -1;
     int hoverSlot_ = -1;
+};
+
+// The act's path map: rows of nodes left to right, the boss at the end. Click
+// a lit node (one linked from where you stand) to go there.
+class MapScreen : public Screen {
+public:
+    void handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) override;
+    void update(App& app, float dt, sf::Vector2f mouse) override;
+    void draw(App& app, sf::RenderWindow& w) override;
+
+private:
+    sf::Vector2f nodePos(App& app, int node) const;
+    int nodeAt(App& app, sf::Vector2f mouse) const;
+    int hover_ = -1;
+    float clock_ = 0.f;
+};
+
+// A Shop node: spend gold on a few rolled picks or on core repairs.
+class ShopScreen : public Screen {
+public:
+    void handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) override;
+    void update(App& app, float dt, sf::Vector2f mouse) override;
+    void draw(App& app, sf::RenderWindow& w) override;
+
+private:
+    sf::FloatRect offerRect(App& app, int i) const;
+    sf::FloatRect repairRect(App& app) const;
+    sf::FloatRect leaveRect(App& app) const;
+    int hover_ = -1;          // offer index, 100 = repair, 101 = leave
 };
 
 class PauseScreen : public Screen {

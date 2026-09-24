@@ -28,28 +28,6 @@ bool isDismiss(const sf::Event& e) {
            isKey(e, sf::Keyboard::Space);
 }
 
-// Greedy word-wrap: break `str` into lines no wider than `maxW` at `size`.
-std::vector<std::string> wrapText(const sf::Font& font, const std::string& str, unsigned size,
-                                  float maxW) {
-    std::vector<std::string> lines;
-    std::string line;
-    std::size_t i = 0;
-    while (i < str.size()) {
-        std::size_t sp = str.find(' ', i);
-        const std::string word = str.substr(i, sp == std::string::npos ? std::string::npos : sp - i);
-        const std::string trial = line.empty() ? word : line + " " + word;
-        if (!line.empty() && makeText(font, trial, size, theme::textLo).getLocalBounds().width > maxW) {
-            lines.push_back(line);
-            line = word;
-        } else {
-            line = trial;
-        }
-        if (sp == std::string::npos) break;
-        i = sp + 1;
-    }
-    if (!line.empty()) lines.push_back(line);
-    return lines;
-}
 
 constexpr float kCardW = 252.f;
 constexpr float kCardH = 176.f;
@@ -130,116 +108,6 @@ void drawDot(sf::RenderWindow& w, sf::Vector2f p, float r, sf::Color c) {
     d.setPosition(p);
     d.setFillColor(c);
     w.draw(d);
-}
-
-// ---- ball loadout panels (Choice target mode + the Tab overlay) -----------
-constexpr float kPanelW = 190.f;
-constexpr float kPanelH = 250.f;
-constexpr float kPanelGap = 16.f;
-constexpr float kSlotH = 24.f;
-constexpr float kSlotStep = 29.f;
-
-sf::Vector2f panelCenter(sf::Vector2f size, int i, int n, float cy) {
-    const float total = static_cast<float>(n) * kPanelW + static_cast<float>(n - 1) * kPanelGap;
-    const float x0 = size.x * 0.5f - total * 0.5f + kPanelW * 0.5f;
-    return {x0 + static_cast<float>(i) * (kPanelW + kPanelGap), cy};
-}
-
-sf::FloatRect slotRect(sf::Vector2f c, int slot) {
-    const float wd = kPanelW - 24.f;
-    const float cy = c.y - kPanelH * 0.5f + 100.f + static_cast<float>(slot) * kSlotStep;
-    return {c.x - wd * 0.5f, cy - kSlotH * 0.5f, wd, kSlotH};
-}
-
-// "DMG 2  SPD 1" - a ball's stacked modifiers, compact.
-std::string modifierLine(const BallLoadout& L) {
-    static const char* kShort[kModifierCount] = {"DMG", "SIZE", "SPD", "TOP", "KNOCK", "FLING"};
-    std::string out;
-    for (int i = 0; i < kModifierCount; ++i) {
-        if (L.mods[i] <= 0) continue;
-        if (!out.empty()) out += "  ";
-        out += std::string(kShort[i]) + " " + std::to_string(L.mods[i]);
-    }
-    return out;
-}
-
-sf::Color catColor(UpgradeCat c) {
-    switch (c) {
-        case UpgradeCat::NewBall:  return theme::core;
-        case UpgradeCat::Role:     return theme::puOverdrive;
-        case UpgradeCat::Element:  return theme::elemFire;
-        case UpgradeCat::Item:     return theme::accent;
-        case UpgradeCat::Modifier: return theme::ballMid;
-        case UpgradeCat::Relic:    return theme::puGolden;
-    }
-    return theme::accent;
-}
-
-// One ball of the loadout: its look (element colour + role mark, same as in the
-// arena), role / element name, its item slots and its stacked modifiers.
-void drawLoadoutPanel(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f c,
-                      const BallLoadout& L, float alpha, float hover, int hoverSlot, bool dim) {
-    const float a = alpha * (dim ? 0.35f : 1.f);
-    sf::RectangleShape box({kPanelW, kPanelH});
-    box.setOrigin(kPanelW * 0.5f, kPanelH * 0.5f);
-    box.setPosition(c);
-    box.setFillColor(withAlpha(theme::accent, (0.06f + 0.14f * hover) * a));
-    box.setOutlineThickness(1.5f);
-    box.setOutlineColor(withAlpha(theme::accent, (0.30f + 0.5f * hover) * a));
-    w.draw(box);
-
-    const Element el = L.element();
-    const sf::Color ec = el == Element::Plain ? theme::textLo : elementColor(el);
-    const float r = L.role == BallRole::Guardian ? 17.f : 13.f;
-    const sf::Vector2f bp{c.x, c.y - kPanelH * 0.5f + 30.f};
-    sf::CircleShape ball(r, 32);
-    ball.setOrigin(r, r);
-    ball.setPosition(bp);
-    ball.setFillColor(withAlpha(ec, a));
-    ball.setOutlineThickness(L.role == BallRole::Guardian ? 3.5f : 1.5f);
-    ball.setOutlineColor(withAlpha(sf::Color::White, (L.role == BallRole::Guardian ? 0.55f : 0.2f) * a));
-    w.draw(ball);
-    if (L.role == BallRole::Support) {
-        sf::CircleShape ring(r * 0.5f, 24);
-        ring.setOrigin(r * 0.5f, r * 0.5f);
-        ring.setPosition(bp);
-        ring.setFillColor(sf::Color::Transparent);
-        ring.setOutlineThickness(2.f);
-        ring.setOutlineColor(withAlpha(sf::Color::White, 0.7f * a));
-        w.draw(ring);
-    } else if (L.role == BallRole::Striker) {
-        sf::CircleShape dot(r * 0.28f, 16);
-        dot.setOrigin(r * 0.28f, r * 0.28f);
-        dot.setPosition(bp);
-        dot.setFillColor(withAlpha(sf::Color::White, 0.8f * a));
-        w.draw(dot);
-    }
-
-    std::string name = roleName(L.role);
-    if (el != Element::Plain) name = std::string(elementName(el)) + " " + name;
-    drawCentered(w, font, name, theme::fsBody, {c.x, c.y - kPanelH * 0.5f + 64.f}, withAlpha(theme::textHi, a));
-
-    for (int i = 0; i < kBallSlots; ++i) {
-        const sf::FloatRect sr = slotRect(c, i);
-        const bool hot = hoverSlot == i;
-        sf::RectangleShape sb({sr.width, sr.height});
-        sb.setPosition(sr.left, sr.top);
-        sb.setFillColor(withAlpha(theme::textLo, (hot ? 0.22f : 0.06f) * a));
-        sb.setOutlineThickness(1.f);
-        sb.setOutlineColor(withAlpha(theme::accent, (hot ? 0.8f : 0.2f) * a));
-        w.draw(sb);
-        std::string t = "empty slot";
-        sf::Color tc = theme::textDim;
-        if (L.gear[i] >= 0) {
-            t = upgradeInfo(static_cast<UpgradeKind>(L.gear[i])).title;
-            if (L.gearLvl[i] > 1) t += "  Lv" + std::to_string(L.gearLvl[i]);
-            tc = theme::textLo;
-        }
-        drawCentered(w, font, t, theme::fsSmall, {c.x, sr.top + sr.height * 0.5f - 1.f}, withAlpha(tc, a));
-    }
-    const std::string ml = modifierLine(L);
-    drawCentered(w, font, ml.empty() ? "no modifiers" : ml, theme::fsSmall,
-                 {c.x, c.y + kPanelH * 0.5f - 18.f}, withAlpha(ml.empty() ? theme::textDim : theme::ballMid, a));
 }
 
 }  // namespace
@@ -821,60 +689,10 @@ bool ChoiceScreen::coreHurt(App& app) const {
     return c.hp < c.maxHp - 0.5f;
 }
 
-void ChoiceScreen::pickCard(App& app, int idx) {
-    if (!app.choiceNeedsTarget(idx)) {
-        app.applyUpgrade(idx);
-        return;
-    }
-    target_ = idx;
-    targetT_ = 0.f;
-    hoverBall_ = hoverSlot_ = -1;
-}
-
-void ChoiceScreen::targetAt(App& app, sf::Vector2f mouse, int& ball, int& slot) const {
-    ball = slot = -1;
-    const sf::Vector2f s = app.size();
-    const int n = app.runBallCount();
-    for (int i = 0; i < n; ++i) {
-        const sf::Vector2f c = panelCenter(s, i, n, s.y * 0.52f);
-        if (std::fabs(mouse.x - c.x) > kPanelW * 0.5f || std::fabs(mouse.y - c.y) > kPanelH * 0.5f) continue;
-        if (!app.choiceFitsBall(target_, i)) return;
-        ball = i;
-        // Items land in the slot under the pointer, else their default slot. An
-        // element always takes over the ball's current element slot. Roles and
-        // modifiers just pick the ball.
-        const UpgradeKind k = app.choices()[target_];
-        if (!upgradeTakesSlot(k)) return;
-        const BallLoadout& L = app.data().run.balls[i];
-        slot = defaultSlot(k, L);
-        if (elementItemSlot(k) < 0 || L.elementSlot() < 0)
-            for (int sl = 0; sl < kBallSlots; ++sl)
-                if (slotRect(c, sl).contains(mouse)) slot = sl;
-        return;
-    }
-}
-
 void ChoiceScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
-    if (target_ >= 0) {
-        const bool rightClick = e.type == sf::Event::MouseButtonPressed &&
-                                e.mouseButton.button == sf::Mouse::Right;
-        if (isKey(e, sf::Keyboard::Escape) || rightClick) { target_ = -1; return; }
-        if (e.type == sf::Event::KeyPressed && e.key.code >= sf::Keyboard::Num1 &&
-            e.key.code < sf::Keyboard::Num1 + app.runBallCount()) {
-            const int b = e.key.code - sf::Keyboard::Num1;
-            if (!app.choiceFitsBall(target_, b)) return;
-            app.applyUpgradeTo(target_, b, -1);   // -1: default slot
-            return;
-        }
-        if (!isLeftClick(e)) return;
-        int b, sl;
-        targetAt(app, mouse, b, sl);
-        if (b >= 0) app.applyUpgradeTo(target_, b, sl);
-        return;
-    }
     if (e.type == sf::Event::KeyPressed && e.key.code >= sf::Keyboard::Num1 &&
         e.key.code < sf::Keyboard::Num1 + kChoiceCount) {
-        pickCard(app, e.key.code - sf::Keyboard::Num1);
+        app.applyUpgrade(e.key.code - sf::Keyboard::Num1);
         return;
     }
     if (!isLeftClick(e)) return;
@@ -887,16 +705,11 @@ void ChoiceScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse)
         return;
     }
     const int c = cardAt(app, mouse);
-    if (c >= 0) pickCard(app, c);
+    if (c >= 0) app.applyUpgrade(c);
 }
 
 void ChoiceScreen::update(App& app, float dt, sf::Vector2f mouse) {
     const float k = 1.f - std::exp(-16.f * dt);
-    if (target_ >= 0) {
-        targetT_ += dt;
-        targetAt(app, mouse, hoverBall_, hoverSlot_);
-        return;
-    }
     const int c = cardAt(app, mouse);
     const bool canReroll = app.rerollsLeft() > 0;
     for (int i = 0; i < kChoiceCount; ++i) {
@@ -908,51 +721,12 @@ void ChoiceScreen::update(App& app, float dt, sf::Vector2f mouse) {
     healHover_ = lerpf(healHover_, onHeal ? 1.f : 0.f, k);
 }
 
-void ChoiceScreen::drawTargets(App& app, sf::RenderWindow& w) {
-    const sf::Vector2f s = app.size();
-    const UpgradeKind k = app.choices()[target_];
-    const UpgradeInfo info = upgradeInfo(k);
-
-    drawDim(w, s, 0.82f);
-    const UpgradeCat cat = upgradeCat(k);
-    std::string title;
-    switch (cat) {
-        case UpgradeCat::Role:     title = std::string("Make a ball a ") + info.title; break;
-        case UpgradeCat::Modifier: title = std::string(info.title) + " - pick a ball"; break;
-        default:                   title = std::string("Equip ") + info.title + " - pick a ball and slot"; break;
-    }
-    drawCenteredPop(w, app.font(), title, theme::fsHeading, {s.x * 0.5f, s.y * 0.24f}, theme::textHi,
-                    introPop(targetT_, 0.f, 0.25f));
-    drawCentered(w, app.font(), info.desc, theme::fsSmall, {s.x * 0.5f, s.y * 0.24f + 30.f}, theme::textLo);
-
-    const auto& balls = app.data().run.balls;
-    const int n = static_cast<int>(balls.size());
-    for (int i = 0; i < n; ++i) {
-        const float cp = clampf(introPop(targetT_, 0.04f * static_cast<float>(i), 0.3f), 0.f, 1.f);
-        const sf::Vector2f c = panelCenter(s, i, n, s.y * 0.52f) + sf::Vector2f(0.f, (1.f - cp) * 30.f);
-        const bool fits = app.choiceFitsBall(target_, i);
-        const bool hot = hoverBall_ == i;
-        drawLoadoutPanel(w, app.font(), c, balls[i], cp, hot ? 1.f : 0.f, hot ? hoverSlot_ : -1, !fits);
-        drawCentered(w, app.font(), std::to_string(i + 1), theme::fsSmall,
-                     {c.x, c.y + kPanelH * 0.5f + 14.f}, withAlpha(theme::textDim, cp));
-    }
-    drawCentered(w, app.font(),
-                 elementItemSlot(k) >= 0 ? "click a ball (one element per ball: it replaces the current one)   -   Esc: back"
-                 : upgradeTakesSlot(k)   ? "click a slot (a full one gets replaced)   -   Esc / right-click: back"
-                                         : "click a ball   -   Esc / right-click: back",
-                 theme::fsSmall, {s.x * 0.5f, s.y * 0.52f + kPanelH * 0.5f + 46.f}, theme::textDim);
-}
-
 void ChoiceScreen::draw(App& app, sf::RenderWindow& w) {
     const sf::Vector2f s = app.size();
     const float it = intro();
-    if (target_ >= 0) {
-        drawTargets(app, w);
-        return;
-    }
 
     drawDim(w, s, 0.82f * clampf(introPop(it, 0.f, 0.2f), 0.f, 1.f));
-    drawCenteredPop(w, app.font(), "Wave cleared - choose one", theme::fsTitle,
+    drawCenteredPop(w, app.font(), "Choose one", theme::fsTitle,
                     {s.x * 0.5f, s.y * 0.26f}, theme::textHi, introPop(it, 0.04f, 0.3f));
 
     for (int i = 0; i < kChoiceCount; ++i) {
@@ -1108,8 +882,8 @@ void HowToScreen::draw(App& app, sf::RenderWindow& w) {
         "Balls bounce in straight lines. Grab one and fling it into the enemies.",
         "Balls start Normal. A role makes one a Striker (fling it), a Support (marks",
         "enemies) or a Guardian (bounces at the closest threat and shoves it back).",
-        "After each wave pick 1 of 4: a ball, a role, an item (4 slots per ball),",
-        "a modifier (stacks freely) or a relic - or skip it to repair the core.",
+        "Between fights, pick your path on the map: fights pay gold, elites add a pick,",
+        "shops / forges / rests / upgrades build your balls (4 item slots each).",
         "Beat the miniboss at wave 10, clear wave 20 to finish the run.",
     }};
     const float y0 = s.y * 0.32f;

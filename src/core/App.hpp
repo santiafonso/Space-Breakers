@@ -17,11 +17,15 @@
 
 namespace sb {
 
-enum class ScreenId { Menu, Loadout, Play, Choice, Pause, Stats, HowTo, BossWin };
+enum class ScreenId { Menu, Loadout, Play, Choice, Pause, Stats, HowTo, BossWin, Map, Shop, Equip };
+
+// Who opened the ball / slot picker, and so what confirming it does.
+enum class EquipSource { Choice, Shop, Forge };
 
 // Top-level application: owns the window, subsystems and the screen stack, runs
 // the loop (fixed-step simulation, per-frame render) and wires the flow:
-// Menu -> Loadout (spend cores) -> Play (10 waves, Choice between each) -> Loadout.
+// Menu -> Loadout (spend cores) -> Play + Map (pick a node; fights run on the
+// Play screen, shops / forges / rests / picks open over it) -> ... -> Loadout.
 class App {
 public:
     App();
@@ -50,10 +54,29 @@ public:
 
     void openLoadout();     // Menu -> the game menu
     void newRun();          // Loadout "Start" -> a fresh run
-    void applyUpgrade(int idx);   // Choice: pick one of the four (recruit / relic, or auto-target)
-    void applyUpgradeTo(int idx, int ball, int slot);   // Choice: gear / infusion onto a chosen ball & slot
-    bool choiceNeedsTarget(int idx) const;
-    bool choiceFitsBall(int idx, int ball) const;
+    void applyUpgrade(int idx);   // Choice: take card idx (asks for a ball first when it needs one)
+
+    // ---- path map ----
+    void openMap();
+    bool mapNodeOpen(int node) const;   // can you step onto this node now?
+    void travelTo(int node);            // step onto it: fight, shop, forge, rest or a pick
+    int gold() const { return data_.run.gold; }
+
+    // ---- ball / slot picker (Equip screen) ----
+    void beginEquip(EquipSource src, UpgradeKind k, int ref);
+    EquipSource equipSource() const { return equipSrc_; }
+    UpgradeKind equipKind() const { return equipKind_; }
+    bool equipFitsBall(int ball) const;
+    bool equipFitsSlot(int ball, int slot) const;
+    void confirmEquip(int ball, int slot);   // slot -1 = default slot
+    void cancelEquip();
+
+    // ---- shop ----
+    int shopPrice(UpgradeKind k) const;
+    void buyShopOffer(int i);
+    void buyRepair();
+    int repairAmount() const;           // HP a shop repair restores
+    void leaveShop();
     void rerollChoice(int idx);   // Choice: swap card `idx` for another item (costs a Foresight charge)
     void repairCoreSkipItem();    // Choice: heal the core to full instead of taking an item
     void useReserve();            // Play: fire the "Stockpile" reserve power-up (key Q)
@@ -92,8 +115,9 @@ private:
     int startBallCount() const;
     float startCoreHp() const;
     unsigned powerUpMask() const;
-    void startNextWave();
+    void startWaveAt(int wave, bool elite);   // fight wave N (boss waves are picked by N)
     void openChoice();
+    void rollShop();
     UpgradeCtx buildUpgradeCtx() const;   // shared by rollChoices / rerollChoice
     void rollChoices();
     void applyUpgradeKind(UpgradeKind k, int ball = -1, int slot = -1);
@@ -131,6 +155,9 @@ private:
     bool continueUnlocked_ = false;  // snapshot at newRun: has a run ever been won before?
     bool runBanked_ = false;         // this run's cores/prisms have been paid out
     int devGrantNext_ = 0;
+    EquipSource equipSrc_ = EquipSource::Choice;
+    UpgradeKind equipKind_ = UpgradeKind::AddBall;
+    int equipRef_ = -1;       // Choice card / shop offer being placed
 
     float fade_ = 0.f;
     float waveIntro_ = 0.f;   // >0 while a new wave eases in (sim runs slow -> full)

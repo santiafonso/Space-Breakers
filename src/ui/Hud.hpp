@@ -14,7 +14,7 @@ class Hud {
 public:
     void init(const sf::Font& font, sf::Vector2f size);
     void update(float dt, int wave, int finalWave, int enemiesLeft, float coreFrac,
-                float comboMultiplier, int score, const std::optional<ActiveEffect>& effect,
+                float comboMultiplier, int score, int gold, const std::optional<ActiveEffect>& effect,
                 bool bossWave, bool hasReserve, PowerUp reservePu);
     void pulseCombo();
     void draw(sf::RenderWindow& window) const;
@@ -26,6 +26,7 @@ private:
     int finalWave_ = 0;
     int enemiesLeft_ = 0;
     int score_ = 0;
+    int gold_ = 0;
     bool bossWave_ = false;
     float coreFrac_ = 1.f;
     float comboMul_ = 1.f;

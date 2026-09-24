@@ -595,6 +595,40 @@ Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
     el fling + opción de **auto-fling** para quien no quiera tirar tanto.
     Fase B (Appraiser, sub-nodos de elementos) queda en pausa.
 
+- **Fase C2 — pelotas normales, roles como picks, 4 slots + modificadores. [IMPLEMENTADO 2026-09-23]**
+  - Pedido del usuario: arrancás con pelotas **Normales** (`BallRole::Normal`); el
+    rol se consigue después (carta ROLE, más adelante nodos del mapa). **4 slots
+    de items** por pelota (`kBallSlots`); los **modificadores** (Heavy impact,
+    Big ball, Swift nuevo, Ceiling break, Heavy knock, Reflexes) no ocupan slot
+    y se apilan sin límite (`BallLoadout::mods`, `cfg::combat::*PerStack`; Big
+    ball topeado en `bigBallMaxMult`). Categorías: NEW BALL · ROLE · ELEMENT ·
+    ITEM · MODIFIER · RELIC (34 picks).
+
+- **Fase D — mapa de caminos + oro. [IMPLEMENTADO 2026-09-23]**
+  - `progression/RunMap.hpp`: por acto, 9 filas de 2-4 nodos en 4 carriles +
+    boss (fila 10). Enlaces a carriles vecinos; todo nodo tiene entrada y
+    salida (probado con 2000 mapas). Fila 1 = pelea; fila 9 = descanso/tienda/
+    forja. Pesos en `cfg::map`. Mezcla medida: ~51% pelea, 11% élite, 12%
+    tienda, 7% forja, 11% descanso, 8% mejora.
+  - La **fila = número de oleada** (acto 2 = +10), pelees o no: la curva de
+    dificultad y los bosses (10 / 20) no se mueven; un nodo sin pelea se saltea
+    esa oleada.
+  - Nodos: **Pelea** (paga oro) · **Élite** (`eliteHpMul`/`eliteCountMul`, paga
+    el doble + elegir 1 de 4) · **Tienda** (`cfg::gold::shopOffers` picks con
+    precio + reparar `repairFrac` del núcleo) · **Forja** (sube 1 item de nivel,
+    tope `maxItemLevel`, cada nivel +50% del bono) · **Descanso** (núcleo a full)
+    · **Mejora** (elegir 1 de 4 gratis) · **Boss**.
+  - Las mejoras ya **no** salen en cada oleada: solo élite / mejora / tienda.
+  - Oro de partida (`RunState::gold`, HUD arriba a la derecha): pelea
+    `combatBase + perRow*fila`, élite x2, boss +`bossPay` al continuar.
+  - Flujo: newRun → Play + **MapScreen** encima. Nodo → `App::travelTo`. Tras
+    una pelea → mapa (o Choice si fue élite). Tras el miniboss "Continue" →
+    mapa del acto 2. Selector de pelota/slot sacado a **EquipScreen**
+    (`EquipSource` Choice / Shop / Forge). Pantallas nuevas en `ui/RunScreens.cpp`;
+    los paneles de loadout viven en `ui/Widgets`.
+  - Falta: playtest (la UI no se pudo clickear acá), precios y pagos de oro,
+    nodos de mapa que den roles (pedido del usuario), eventos.
+
 - **Fase 2 — Jefe tras la oleada 10.** Da upgrades de pelota (viento/agua/
   piedra). Extiende la run mas alla de 10 en "modo infinito" opcional.
 - **Fase 3 — Variedad.** Repulsor, bumper, rampa. Corredor, tanque, escindido.

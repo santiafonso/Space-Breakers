@@ -20,9 +20,10 @@ public:
     // ---- run / wave lifecycle -----------------------------------------
     void startRun(const WorldParams& p, const std::vector<BallSpec>& balls,
                   float coreHp, float coreMaxHp);
-    void startWave(int wave, const WorldParams& p);
+    // elite: an Elite map node - tougher and more enemies (cfg::map).
+    void startWave(int wave, const WorldParams& p, bool elite = false);
     void startBossWave(const WorldParams& p);   // the wave-10 miniboss duel (Charger)
-    void startPostBossWave(int wave, const WorldParams& p);  // waves 11..19: wide arena, core slides to centre
+    void startPostBossWave(int wave, const WorldParams& p, bool elite = false);  // waves 11..19: wide arena, core slides to centre
     void startFinalBossWave(const WorldParams& p);           // wave 20: the Orbital boss + shield ring
     // Match the balls to the run loadout: refresh role / element / gear of the
     // existing ones in place (they keep flying) and spawn any new ones.
@@ -146,6 +147,7 @@ private:
     int toSpawn_ = 0;
     float spawnTimer_ = 0.f;
     float waveClock_ = 0.f;   // seconds into the current wave (drives "Warm-up")
+    float waveHpMul_ = 1.f;   // Elite wave: enemy HP multiplier
 
     float pickupTimer_ = cfg::pickup::spawnMin;
     bool invuln_ = false;  // dev: core takes no damage

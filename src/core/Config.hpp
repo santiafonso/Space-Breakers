@@ -195,6 +195,41 @@ inline constexpr float coreSlideTime = 1.4f;  // core eases left -> arena centre
 inline constexpr int rerollsPerLevel = 2;     // "Foresight" web node: reroll charges per run, per level
 }  // namespace run
 
+// The path map between waves (one per act) and the run's gold.
+namespace map {
+inline constexpr int rows = 9;          // choosable rows per act; the boss is row 10
+inline constexpr int lanes = 4;         // max nodes per row
+inline constexpr int minPerRow = 2;
+// Node weights for rows 2..8 (row 1 is always a fight; row 9 is rest/shop/forge).
+inline constexpr int wCombat = 44;
+inline constexpr int wElite = 16;
+inline constexpr int wShop = 13;
+inline constexpr int wForge = 9;
+inline constexpr int wRest = 9;
+inline constexpr int wUpgrade = 9;
+// Elite waves: tougher and more of them.
+inline constexpr float eliteHpMul = 1.6f;
+inline constexpr float eliteCountMul = 1.3f;
+}  // namespace map
+
+namespace gold {
+inline constexpr int combatBase = 12;     // a cleared fight pays this + perRow * row
+inline constexpr int elitePerRowMul = 2;  // an elite pays 2x a fight (and a pick)
+inline constexpr int perRow = 2;
+inline constexpr int bossPay = 40;
+// Shop prices.
+inline constexpr int priceNewBall = 60;
+inline constexpr int priceRole = 35;
+inline constexpr int priceElement = 40;
+inline constexpr int priceItem = 45;
+inline constexpr int priceModifier = 22;
+inline constexpr int priceRelic = 70;
+inline constexpr int priceRepair = 20;     // repairs repairFrac of the core's max HP
+inline constexpr float repairFrac = 0.30f;
+inline constexpr int shopOffers = 5;
+inline constexpr int maxItemLevel = 3;     // forge cap
+}  // namespace gold
+
 // Wave 10 is a miniboss duel in a wider arena.
 namespace boss {
 inline constexpr float arenaScaleX = 1.95f;   // boss arena vs the normal one (camera pulls way back)

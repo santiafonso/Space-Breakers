@@ -208,6 +208,9 @@ std::unique_ptr<Screen> App::makeScreen(ScreenId id) {
         case ScreenId::Stats:   return std::make_unique<StatsScreen>();
         case ScreenId::HowTo:   return std::make_unique<HowToScreen>();
         case ScreenId::BossWin: return std::make_unique<BossWinScreen>();
+        case ScreenId::Map:     return std::make_unique<MapScreen>();
+        case ScreenId::Shop:    return std::make_unique<ShopScreen>();
+        case ScreenId::Equip:   return std::make_unique<EquipScreen>();
     }
     return std::make_unique<MenuScreen>();
 }
@@ -287,14 +290,20 @@ void App::newRun() {
         }
     }
 
+    // The act's path map. A dev SB_WAVE start drops you at the row before it.
+    const int act = (startWave - 1) / cfg::run::bossWave + 1;
+    r.map = generateMap(rng_, act);
+    r.mapNode = -1;
+    r.mapRow = (startWave - 1) % cfg::run::bossWave;
     r.wave = startWave - 1;
-    startNextWave();
     replaceStack(ScreenId::Play);
+    push(ScreenId::Map);
     save();
 }
 
-void App::startNextWave() {
-    data_.run.wave += 1;
+void App::startWaveAt(int wave, bool elite) {
+    data_.run.wave = wave;
+    data_.run.eliteWave = elite;
     waveIntro_ = cfg::app::waveIntroTime;   // ease the sim in instead of snapping
     world_.repairCore(cfg::core::waveHeal +
                       cfg::core::mendPerLevel * static_cast<float>(data_.meta.unlock[MetaMend]));
@@ -306,9 +315,9 @@ void App::startNextWave() {
     else if (w == cfg::run::finalWave)
         world_.startFinalBossWave(params());         // wave 20: Orbital boss + shield ring
     else if (w > cfg::run::bossWave)
-        world_.startPostBossWave(w, params());       // waves 11..19: wide arena, core slides to centre
+        world_.startPostBossWave(w, params(), elite);   // waves 11..19: wide arena, core slides to centre
     else
-        world_.startWave(w, params());
+        world_.startWave(w, params(), elite);
     data_.meta.stats.bestWave =
         std::max(data_.meta.stats.bestWave, static_cast<std::uint32_t>(data_.run.wave));
 }
@@ -431,7 +440,7 @@ void App::repairCoreSkipItem() {
     audio_.purchase();
     effects_.flash(theme::core, 0.4f);
     back();
-    startNextWave();
+    openMap();
 }
 
 // "Stockpile" web node: fire the reserved power-up (Q during play).
@@ -445,30 +454,212 @@ void App::useReserve() {
 void App::finishChoice() {
     audio_.purchase();
     effects_.flash(theme::accent, 0.4f);
-    back();
-    startNextWave();
+    back();      // close the Choice
+    openMap();
 }
 
 void App::applyUpgrade(int idx) {
     if (idx < 0 || idx >= kChoiceCount) return;
+    if (upgradeNeedsTarget(choices_[idx])) {
+        beginEquip(EquipSource::Choice, choices_[idx], idx);
+        return;
+    }
     applyUpgradeKind(choices_[idx]);
     finishChoice();
 }
 
-void App::applyUpgradeTo(int idx, int ball, int slot) {
-    if (idx < 0 || idx >= kChoiceCount || !choiceFitsBall(idx, ball)) return;
-    applyUpgradeKind(choices_[idx], ball, slot);
-    finishChoice();
+// ---------------------------------------------------------------- path map
+
+void App::openMap() { push(ScreenId::Map); }
+
+bool App::mapNodeOpen(int node) const {
+    const RunState& r = data_.run;
+    if (node < 0 || node >= static_cast<int>(r.map.nodes.size())) return false;
+    if (r.mapNode < 0) return r.map.nodes[static_cast<std::size_t>(node)].row == r.mapRow + 1;
+    const auto& nx = r.map.nodes[static_cast<std::size_t>(r.mapNode)].next;
+    return std::find(nx.begin(), nx.end(), node) != nx.end();
 }
 
-bool App::choiceNeedsTarget(int idx) const {
-    return idx >= 0 && idx < kChoiceCount && upgradeNeedsTarget(choices_[idx]);
+void App::travelTo(int node) {
+    if (!mapNodeOpen(node)) return;
+    RunState& r = data_.run;
+    MapNode& n = r.map.nodes[static_cast<std::size_t>(node)];
+    n.visited = true;
+    r.mapNode = node;
+    r.mapRow = n.row;
+    const int wave = (r.map.act - 1) * cfg::run::bossWave + n.row;
+    back();   // close the map: the Play screen is underneath
+    const sf::Vector2f mid{size().x * 0.5f, size().y * 0.4f};
+    switch (n.type) {
+        case MapNodeType::Combat:
+        case MapNodeType::Elite:
+        case MapNodeType::Boss:
+            startWaveAt(wave, n.type == MapNodeType::Elite);
+            break;
+        case MapNodeType::Rest:
+            r.wave = wave;
+            world_.repairCore(1e9f);
+            audio_.purchase();
+            effects_.flash(theme::core, 0.5f);
+            effects_.addLabel("Core repaired", mid, theme::core, 26, 1.2f);
+            openMap();
+            break;
+        case MapNodeType::Upgrade:
+            r.wave = wave;
+            openChoice();
+            break;
+        case MapNodeType::Shop:
+            r.wave = wave;
+            rollShop();
+            push(ScreenId::Shop);
+            break;
+        case MapNodeType::Forge: {
+            r.wave = wave;
+            bool any = false;
+            for (int b = 0; b < runBallCount() && !any; ++b)
+                for (int sl = 0; sl < kBallSlots; ++sl)
+                    if (r.balls[static_cast<std::size_t>(b)].gear[sl] >= 0 &&
+                        r.balls[static_cast<std::size_t>(b)].gearLvl[sl] < cfg::gold::maxItemLevel) any = true;
+            if (any) {
+                equipSrc_ = EquipSource::Forge;
+                equipRef_ = -1;
+                push(ScreenId::Equip);
+            } else {
+                effects_.addLabel("nothing to forge yet", mid, theme::textLo, 22, 1.2f);
+                openMap();
+            }
+            break;
+        }
+    }
+    save();
 }
 
-bool App::choiceFitsBall(int idx, int ball) const {
-    return idx >= 0 && idx < kChoiceCount && ball >= 0 &&
-           ball < static_cast<int>(data_.run.balls.size()) &&
-           upgradeFitsBall(choices_[idx], data_.run.balls[ball]);
+// ---------------------------------------------------------------- equip picker
+
+void App::beginEquip(EquipSource src, UpgradeKind k, int ref) {
+    equipSrc_ = src;
+    equipKind_ = k;
+    equipRef_ = ref;
+    push(ScreenId::Equip);
+}
+
+bool App::equipFitsSlot(int ball, int slot) const {
+    if (ball < 0 || ball >= runBallCount()) return false;
+    const BallLoadout& b = data_.run.balls[static_cast<std::size_t>(ball)];
+    if (equipSrc_ == EquipSource::Forge)
+        return slot >= 0 && slot < kBallSlots && b.gear[slot] >= 0 &&
+               b.gearLvl[slot] < cfg::gold::maxItemLevel;
+    return upgradeFitsBall(equipKind_, b);
+}
+
+bool App::equipFitsBall(int ball) const {
+    if (equipSrc_ == EquipSource::Forge) {
+        for (int sl = 0; sl < kBallSlots; ++sl)
+            if (equipFitsSlot(ball, sl)) return true;
+        return false;
+    }
+    return equipFitsSlot(ball, 0);
+}
+
+void App::confirmEquip(int ball, int slot) {
+    if (!equipFitsBall(ball)) return;
+    RunState& r = data_.run;
+    switch (equipSrc_) {
+        case EquipSource::Choice:
+            back();   // close the picker, back on the Choice
+            applyUpgradeKind(equipKind_, ball, slot);
+            finishChoice();
+            break;
+        case EquipSource::Shop: {
+            const int price = shopPrice(equipKind_);
+            if (r.gold < price || equipRef_ < 0 || equipRef_ >= static_cast<int>(r.shopSold.size())) return;
+            r.gold -= price;
+            r.shopSold[static_cast<std::size_t>(equipRef_)] = true;
+            applyUpgradeKind(equipKind_, ball, slot);
+            audio_.purchase();
+            effects_.flash(theme::puGolden, 0.35f);
+            back();   // back to the shop
+            break;
+        }
+        case EquipSource::Forge: {
+            if (!equipFitsSlot(ball, slot))
+                for (slot = 0; slot < kBallSlots && !equipFitsSlot(ball, slot); ++slot) {}
+            if (!equipFitsSlot(ball, slot)) return;
+            ++r.balls[static_cast<std::size_t>(ball)].gearLvl[slot];
+            syncWorldBalls();
+            audio_.purchase();
+            effects_.flash(theme::accent, 0.4f);
+            back();
+            openMap();
+            break;
+        }
+    }
+}
+
+void App::cancelEquip() {
+    back();
+    if (equipSrc_ == EquipSource::Forge) openMap();   // walking away from the forge
+}
+
+// ---------------------------------------------------------------- shop
+
+int App::shopPrice(UpgradeKind k) const {
+    switch (upgradeCat(k)) {
+        case UpgradeCat::NewBall:  return cfg::gold::priceNewBall;
+        case UpgradeCat::Role:     return cfg::gold::priceRole;
+        case UpgradeCat::Element:  return cfg::gold::priceElement;
+        case UpgradeCat::Item:     return cfg::gold::priceItem;
+        case UpgradeCat::Modifier: return cfg::gold::priceModifier;
+        case UpgradeCat::Relic:    return cfg::gold::priceRelic;
+    }
+    return 0;
+}
+
+void App::rollShop() {
+    RunState& r = data_.run;
+    const UpgradeCtx c = buildUpgradeCtx();
+    std::vector<int> pool;
+    for (int i = 0; i < kUpgradeKindCount; ++i)
+        if (upgradeEligible(static_cast<UpgradeKind>(i), c)) pool.push_back(i);
+    for (std::size_t i = pool.size(); i > 1; --i)
+        std::swap(pool[i - 1], pool[static_cast<std::size_t>(rng_.irange(0, static_cast<int>(i) - 1))]);
+    if (static_cast<int>(pool.size()) > cfg::gold::shopOffers) pool.resize(cfg::gold::shopOffers);
+    r.shopOffers = pool;
+    r.shopSold.assign(pool.size(), false);
+}
+
+void App::buyShopOffer(int i) {
+    RunState& r = data_.run;
+    if (i < 0 || i >= static_cast<int>(r.shopOffers.size()) || r.shopSold[static_cast<std::size_t>(i)]) return;
+    const auto k = static_cast<UpgradeKind>(r.shopOffers[static_cast<std::size_t>(i)]);
+    if (r.gold < shopPrice(k) || !upgradeEligible(k, buildUpgradeCtx())) return;
+    if (upgradeNeedsTarget(k)) {
+        beginEquip(EquipSource::Shop, k, i);
+        return;
+    }
+    r.gold -= shopPrice(k);
+    r.shopSold[static_cast<std::size_t>(i)] = true;
+    applyUpgradeKind(k);
+    audio_.purchase();
+    effects_.flash(theme::puGolden, 0.35f);
+}
+
+int App::repairAmount() const {
+    return static_cast<int>(std::lround(world_.core().maxHp * cfg::gold::repairFrac));
+}
+
+void App::buyRepair() {
+    const Core& c = world_.core();
+    if (data_.run.gold < cfg::gold::priceRepair || c.hp >= c.maxHp - 0.5f) return;
+    data_.run.gold -= cfg::gold::priceRepair;
+    world_.repairCore(static_cast<float>(repairAmount()));
+    audio_.purchase();
+    effects_.flash(theme::core, 0.35f);
+}
+
+void App::leaveShop() {
+    back();
+    openMap();
 }
 
 // Pay out the run: cores, prisms and lifetime stats. No navigation - the caller
@@ -518,11 +709,16 @@ bool App::bossWinCanContinue() const {
            data_.run.wave == cfg::run::bossWave;
 }
 
-// "Continue" on the BossWin card: resume the run at wave 11. Nothing is banked -
-// the run is still live and pays out when it truly ends (wave 20 or the core).
+// "Continue" on the BossWin card: on to act 2 (a fresh map, waves 11-20).
+// Nothing is banked - the run is still live and pays out when it truly ends.
 void App::continuePastBoss() {
     back();   // drop the BossWin card, back to the PlayScreen underneath
-    startNextWave();
+    RunState& r = data_.run;
+    r.gold += cfg::gold::bossPay;
+    r.map = generateMap(rng_, 2);
+    r.mapNode = -1;
+    r.mapRow = 0;
+    openMap();
 }
 
 // "Back to menu" on the BossWin card. If the run wasn't banked yet (miniboss just
@@ -753,8 +949,17 @@ void App::processEvents(const FrameEvents& ev) {
             push(ScreenId::BossWin);
             return;
         }
+        // A cleared fight pays gold; an Elite pays double plus a pick.
+        RunState& r = data_.run;
+        const int row = w - (r.map.act - 1) * cfg::run::bossWave;
+        int pay = cfg::gold::combatBase + cfg::gold::perRow * row;
+        if (r.eliteWave) pay *= cfg::gold::elitePerRowMul;
+        r.gold += pay;
+        effects_.addLabel("+" + std::to_string(pay) + " gold", {size().x * 0.5f, size().y * 0.4f},
+                          theme::puGolden, 26, 1.2f);
         audio_.purchase();
-        openChoice();
+        if (r.eliteWave) openChoice();
+        else openMap();
     }
 }
 
@@ -849,7 +1054,7 @@ void App::update(float frameDt) {
     const int finalWave = continueUnlocked_ ? cfg::run::finalWave : cfg::run::bossWave;
     hud_.update(frameDt, world_.wave(), finalWave, world_.enemiesLeft(),
                 c.maxHp > 0.f ? c.hp / c.maxHp : 0.f, world_.comboMultiplier(),
-                data_.run.score, world_.effect(), world_.bossWave(),
+                data_.run.score, data_.run.gold, world_.effect(), world_.bossWave(),
                 world_.hasReserve(), world_.reservePu());
 }
 

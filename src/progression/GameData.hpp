@@ -5,6 +5,7 @@
 
 #include "core/Config.hpp"
 #include "progression/Offers.hpp"
+#include "progression/RunMap.hpp"
 
 namespace sb {
 
@@ -54,6 +55,18 @@ struct RunState {
     float bountyCores = 0.f;   // cores accrued from the "Fortune" node this run
     std::vector<BallLoadout> balls;   // one per ball in play, same order as World::balls()
     RunMods mods;
+
+    // Path map. mapNode = node you're standing on (-1 = start of the act: any
+    // row-1 node is open). mapRow = row of that node (0 at the act start).
+    int gold = 0;
+    RunMap map;
+    int mapNode = -1;
+    int mapRow = 0;
+    bool eliteWave = false;           // the wave in progress came from an Elite node
+
+    // Shop stock at the current Shop node.
+    std::vector<int> shopOffers;      // UpgradeKind
+    std::vector<bool> shopSold;
 };
 
 struct GameData {
