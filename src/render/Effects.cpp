@@ -1,6 +1,7 @@
 #include "render/Effects.hpp"
 
 #include <algorithm>
+#include <cmath>
 
 namespace sb {
 
@@ -15,6 +16,7 @@ void Effects::init(const sf::Font& font, sf::Vector2f size) {
 
 void Effects::clear() {
     rings_.clear();
+    coins_.clear();
     labels_.clear();
     for (float& e : edge_) e = 0.f;
     flash_ = 0.f;
@@ -58,6 +60,24 @@ void Effects::addLabel(const std::string& text, sf::Vector2f pos, sf::Color colo
     labels_.push_back(l);
 }
 
+void Effects::addCoin(sf::Vector2f pos, sf::Vector2f target, float radius) {
+    if (coins_.size() >= 60) return;
+    Coin c;
+    c.pos = pos;
+    c.target = target;
+    c.radius = radius;
+    // Pop up and a little sideways before being pulled to the counter.
+    const float a = -kPi * 0.5f + (static_cast<float>(coins_.size() % 7) - 3.f) * 0.22f;
+    c.vel = sf::Vector2f{std::cos(a), std::sin(a)} * 260.f;
+    coins_.push_back(c);
+}
+
+int Effects::takeArrivedCoins() {
+    const int n = arrived_;
+    arrived_ = 0;
+    return n;
+}
+
 void Effects::flash(sf::Color color, float strength) {
     flashColor_ = color;
     flash_ = std::max(flash_, clampf(strength, 0.f, 1.f));
@@ -74,6 +94,26 @@ void Effects::update(float dt) {
         it->text.move(it->vel * dt);
         if (it->age >= it->life) it = labels_.erase(it);
         else ++it;
+    }
+    for (auto it = coins_.begin(); it != coins_.end();) {
+        Coin& c = *it;
+        c.age += dt;
+        if (c.age < 0.22f) {
+            c.vel *= std::exp(-6.f * dt);   // the pop, easing off
+        } else {
+            // Then home in on the gold counter, faster and faster.
+            const sf::Vector2f d = c.target - c.pos;
+            const float pull = 900.f + 2600.f * (c.age - 0.22f);
+            c.vel += normalized(d, {1.f, 0.f}) * pull * dt;
+            c.vel *= std::exp(-2.5f * dt);
+        }
+        c.pos += c.vel * dt;
+        if ((c.age > 0.22f && length(c.target - c.pos) < 14.f) || c.age > 2.5f) {
+            ++arrived_;
+            it = coins_.erase(it);
+        } else {
+            ++it;
+        }
     }
     for (float& e : edge_) e *= std::exp(-6.f * dt);
     flash_ *= std::exp(-6.f * dt);
@@ -116,6 +156,15 @@ void Effects::drawOverlay(sf::RenderWindow& window) const {
         sf::RectangleShape r(size_);
         r.setFillColor(withAlpha(flashColor_, flash_ * 0.16f));
         window.draw(r);
+    }
+    for (const Coin& c : coins_) {
+        sf::CircleShape coin(c.radius, 18);
+        coin.setOrigin(c.radius, c.radius);
+        coin.setPosition(c.pos);
+        coin.setFillColor(theme::puGolden);
+        coin.setOutlineThickness(1.5f);
+        coin.setOutlineColor(withAlpha(theme::elemFire, 0.8f));
+        window.draw(coin);
     }
     for (const Label& l : labels_) {
         const float t = l.age / l.life;

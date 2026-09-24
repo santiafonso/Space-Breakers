@@ -213,10 +213,20 @@ inline constexpr float eliteCountMul = 1.3f;
 }  // namespace map
 
 namespace gold {
-inline constexpr int combatBase = 12;     // a cleared fight pays this + perRow * row
+inline constexpr int combatBase = 8;      // a cleared fight pays this + perRow * row
 inline constexpr int elitePerRowMul = 2;  // an elite pays 2x a fight (and a pick)
 inline constexpr int perRow = 2;
 inline constexpr int bossPay = 40;
+// Playing well pays: every kill drops gold that grows with the damage combo,
+// kills in a quick burst pay a multi-kill bonus, a wave with no core damage
+// pays a clean bonus.
+inline constexpr float perKill = 0.5f;
+inline constexpr float comboBonusPerTier = 0.25f;  // per-kill gold x (1 + this * combo tier)
+inline constexpr float multiKillWindow = 0.35f;    // kills this close together chain into one burst
+inline constexpr int multiKillMin = 3;
+inline constexpr int multiKillGoldPer = 1;         // bonus gold per enemy in a multi-kill
+inline constexpr int cleanBase = 4;                // clean wave: this + cleanPerRow * row
+inline constexpr int cleanPerRow = 1;
 // Shop prices.
 inline constexpr int priceNewBall = 60;
 inline constexpr int priceRole = 35;
@@ -348,6 +358,11 @@ inline constexpr float hitstopBossHit = 0.055f;  // a ball lands on the miniboss
 inline constexpr float camKickCoreHit = 9.f;     // camera-shake amplitude (px at normal zoom)
 inline constexpr float camKickBossHit = 5.f;
 inline constexpr float camKickDecay   = 13.f;    // shake falloff per second
+
+// The backdrop "heat" follows the damage combo: rises fast, cools slowly.
+inline constexpr float heatRise = 3.0f;
+inline constexpr float heatFall = 0.8f;
+inline constexpr float heatAlpha = 0.85f;        // strength of the warm tint at a full combo
 }  // namespace app
 
 }  // namespace sb::cfg

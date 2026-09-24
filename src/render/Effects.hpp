@@ -20,6 +20,10 @@ public:
     void addLabel(const std::string& text, sf::Vector2f pos, sf::Color color,
                   unsigned size, float life);
     void flash(sf::Color color, float strength);
+    // A gold coin that pops out at `pos` (UI units) and flies to `target`.
+    // Bigger coins for a bigger combo.
+    void addCoin(sf::Vector2f pos, sf::Vector2f target, float radius);
+    int takeArrivedCoins();   // coins that reached their target since the last call
     void clear();
 
     void update(float dt);
@@ -43,6 +47,16 @@ private:
         sf::Vector2f vel;
     };
 
+    struct Coin {
+        sf::Vector2f pos;
+        sf::Vector2f vel;
+        sf::Vector2f target;
+        float age = 0.f;
+        float radius = 4.f;
+    };
+
+    std::vector<Coin> coins_;
+    int arrived_ = 0;
     const sf::Font* font_ = nullptr;
     sf::Vector2f size_;
     std::vector<Ring> rings_;

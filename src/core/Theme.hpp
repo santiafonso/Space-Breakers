@@ -8,6 +8,7 @@ namespace sb::theme {
 
 // Backdrop / surfaces
 inline const sf::Color bg{13, 13, 19};
+inline const sf::Color bgHot{58, 22, 38};   // the backdrop warms toward this as the combo climbs
 inline const sf::Color panel{0, 0, 0};  // paired with alpha
 inline const sf::Color arenaEdge{54, 58, 78};
 

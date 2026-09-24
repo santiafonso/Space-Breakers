@@ -1,5 +1,6 @@
 #include "ui/Hud.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <string>
@@ -15,6 +16,7 @@ void Hud::init(const sf::Font& font, sf::Vector2f size) {
 }
 
 void Hud::pulseCombo() { comboPop_ = 1.f; }
+void Hud::pulseGold() { goldPop_ = std::min(1.f, goldPop_ + 0.5f); }
 
 void Hud::update(float dt, int wave, int finalWave, int enemiesLeft, float coreFrac,
                  float comboMultiplier, int score, int gold, const std::optional<ActiveEffect>& effect,
@@ -32,6 +34,7 @@ void Hud::update(float dt, int wave, int finalWave, int enemiesLeft, float coreF
     reservePu_ = reservePu;
 
     comboPop_ *= std::exp(-7.f * dt);
+    goldPop_ *= std::exp(-9.f * dt);
     const float target = effect ? 1.f : 0.f;
     effectAlpha_ = lerpf(effectAlpha_, target, 1.f - std::exp(-10.f * dt));
 }
@@ -107,6 +110,8 @@ void Hud::draw(sf::RenderWindow& window) const {
         sf::Text gd = makeText(*font_, "GOLD  " + std::to_string(gold_), theme::fsSmall, theme::puGolden);
         const sf::FloatRect gb = gd.getLocalBounds();
         gd.setOrigin(gb.left + gb.width, gb.top);
+        const float gs = 1.f + 0.3f * goldPop_;   // bumps as coins land
+        gd.setScale(gs, gs);
         gd.setPosition(size_.x - theme::margin, theme::margin + 22.f);
         window.draw(gd);
     }

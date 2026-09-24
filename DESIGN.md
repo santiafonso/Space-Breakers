@@ -629,6 +629,23 @@ Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
   - Falta: playtest (la UI no se pudo clickear acá), precios y pagos de oro,
     nodos de mapa que den roles (pedido del usuario), eventos.
 
+- **Fase E — tooltips + feedback y recompensa por jugar bien. [IMPLEMENTADO 2026-09-23]**
+  - Tooltips (`drawTooltip` en `ui/Widgets`) en casi todo: nodos del mapa y su
+    leyenda, cartas de la Choice (qué es cada categoría) y reroll, ofertas y
+    reparación de la tienda, slots / rol / modificadores de cada pelota (Equip y
+    TAB), reliquias, HUD (combo, score, oro, reserva, power-up, núcleo) y el
+    contador de pelotas. Textos cortos: `roleDesc`, `powerUpDesc`,
+    `upgradeCatDesc`.
+  - **Fondo que se calienta** con el combo (`App::heat_` → `theme::bgHot`, sube
+    rápido y se enfría lento, `cfg::app::heat*`).
+  - **Monedas**: cada kill suelta una moneda (`Effects::addCoin`) que vuela al
+    contador de oro; más grande cuanto más alto el combo; el contador late al
+    llegar (`Hud::pulseGold`).
+  - **Oro por kill** × (1 + `comboBonusPerTier` × tier del combo) → jugar bien
+    paga más. `combatBase` 12 → 8 para compensar.
+  - **Multi-kill**: ≥3 kills dentro de `multiKillWindow` → cartel "xN MULTI-KILL"
+    + oro extra + monedas. **Oleada limpia** (sin daño al núcleo) → bonus de oro.
+
 - **Fase 2 — Jefe tras la oleada 10.** Da upgrades de pelota (viento/agua/
   piedra). Extiende la run mas alla de 10 en "modo infinito" opcional.
 - **Fase 3 — Variedad.** Repulsor, bumper, rampa. Corredor, tanque, escindido.

@@ -18,6 +18,7 @@ public:
                 float comboMultiplier, int score, int gold, const std::optional<ActiveEffect>& effect,
                 bool bossWave, bool hasReserve, PowerUp reservePu);
     void pulseCombo();
+    void pulseGold();
     void draw(sf::RenderWindow& window) const;
     // Hover text for the HUD element under `mouse` (UI units). False if none.
     bool tooltipAt(sf::Vector2f mouse, std::string& title, std::string& desc, sf::Color& color) const;
@@ -30,6 +31,7 @@ private:
     int enemiesLeft_ = 0;
     int score_ = 0;
     int gold_ = 0;
+    float goldPop_ = 0.f;
     bool bossWave_ = false;
     float coreFrac_ = 1.f;
     float comboMul_ = 1.f;

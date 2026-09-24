@@ -135,6 +135,9 @@ private:
     void render();
     void drawDevOverlay(sf::RenderWindow& w) const;   // dev key cheat-sheet, always top-right in SB_DEV
     void processEvents(const FrameEvents& ev);
+    sf::Vector2f worldToUi(sf::Vector2f p) const;   // arena point -> UI units (for coins / labels)
+    sf::Vector2f goldCounterPos() const;            // where kill coins fly to (HUD gold)
+    void flushMultiKill();                          // pay out a finished kill burst
 
     Window window_;
     sf::Font font_;
@@ -165,6 +168,10 @@ private:
     float worldAccum_ = 0.f;
     float autosaveTimer_ = 20.f;
     float hitstop_ = 0.f;     // >0 freezes the simulation for a beat after an impact
+    float heat_ = 0.f;        // 0..1 backdrop warmth, follows the damage combo
+    int multiKillN_ = 0;      // kills in the current quick burst
+    float multiKillT_ = 0.f;  // time left for the burst to keep chaining
+    sf::Vector2f multiKillPos_{0.f, 0.f};   // UI position of the burst's last kill
 
     sf::Vector2f camSize_{1280.f, 800.f};
     sf::Vector2f camCenter_{640.f, 400.f};

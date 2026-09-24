@@ -879,10 +879,48 @@ void App::handleEvent(const sf::Event& e) {
     }
 }
 
+sf::Vector2f App::worldToUi(sf::Vector2f p) const {
+    const sf::Vector2f tl = camCenter_ + camShake_ - camSize_ * 0.5f;
+    return {(p.x - tl.x) * kLogical().x / camSize_.x, (p.y - tl.y) * kLogical().y / camSize_.y};
+}
+
+sf::Vector2f App::goldCounterPos() const {
+    return {size().x - theme::margin - 30.f, theme::margin + 30.f};
+}
+
+void App::flushMultiKill() {
+    if (multiKillN_ >= cfg::gold::multiKillMin) {
+        const int bonus = multiKillN_ * cfg::gold::multiKillGoldPer;
+        data_.run.gold += bonus;
+        effects_.addLabel("x" + std::to_string(multiKillN_) + " MULTI-KILL  +" + std::to_string(bonus),
+                          multiKillPos_ + sf::Vector2f{0.f, -24.f}, theme::puGolden,
+                          static_cast<unsigned>(std::min(34, 18 + 2 * multiKillN_)), 1.0f);
+        audio_.comboUp(std::min(multiKillN_, cfg::combo::baseCapTier));
+        for (int i = 0; i < std::min(multiKillN_, 6); ++i)
+            effects_.addCoin(multiKillPos_, goldCounterPos(), 7.f);
+    }
+    multiKillN_ = 0;
+    multiKillT_ = 0.f;
+}
+
 void App::processEvents(const FrameEvents& ev) {
+    // Every kill drops gold that grows with the combo; the coin grows with it.
+    const float comboGold = 1.f + cfg::gold::comboBonusPerTier * static_cast<float>(ev.comboTier);
     for (const sf::Vector2f& k : ev.kills) {
         ++data_.meta.stats.enemiesKilled;
         effects_.addRing(k, 520.f, theme::enemy);
+        if (!data_.run.active) continue;
+        data_.run.goldFrac += cfg::gold::perKill * comboGold;
+        const sf::Vector2f ui = worldToUi(k);
+        effects_.addCoin(ui, goldCounterPos(), 3.5f + 1.2f * static_cast<float>(ev.comboTier));
+        multiKillPos_ = ui;
+        ++multiKillN_;
+        multiKillT_ = cfg::gold::multiKillWindow;
+    }
+    if (data_.run.goldFrac >= 1.f) {
+        const int whole = static_cast<int>(data_.run.goldFrac);
+        data_.run.gold += whole;
+        data_.run.goldFrac -= static_cast<float>(whole);
     }
     if (!ev.kills.empty()) {
         hitstop_ = std::max(hitstop_, cfg::app::hitstopKill);
@@ -933,6 +971,7 @@ void App::processEvents(const FrameEvents& ev) {
         return;
     }
     if (ev.waveCleared) {
+        flushMultiKill();   // the last burst of the wave still counts
         if (const int interest = data_.meta.unlock[MetaInterest];   // "Interest": reward a clean wave
             interest > 0 && world_.coreCleanWave())
             data_.run.bountyCores += cfg::meta::interestPerLevel * static_cast<float>(interest);
@@ -949,7 +988,8 @@ void App::processEvents(const FrameEvents& ev) {
             push(ScreenId::BossWin);
             return;
         }
-        // A cleared fight pays gold; an Elite pays double plus a pick.
+        // A cleared fight pays gold (an Elite double, plus a pick), and a
+        // clean one - nothing reached the core - pays a bonus on top.
         RunState& r = data_.run;
         const int row = w - (r.map.act - 1) * cfg::run::bossWave;
         int pay = cfg::gold::combatBase + cfg::gold::perRow * row;
@@ -957,6 +997,12 @@ void App::processEvents(const FrameEvents& ev) {
         r.gold += pay;
         effects_.addLabel("+" + std::to_string(pay) + " gold", {size().x * 0.5f, size().y * 0.4f},
                           theme::puGolden, 26, 1.2f);
+        if (world_.coreCleanWave()) {
+            const int clean = cfg::gold::cleanBase + cfg::gold::cleanPerRow * row;
+            r.gold += clean;
+            effects_.addLabel("clean wave  +" + std::to_string(clean), {size().x * 0.5f, size().y * 0.4f + 34.f},
+                              theme::core, 20, 1.3f);
+        }
         audio_.purchase();
         if (r.eliteWave) openChoice();
         else openMap();
@@ -1004,6 +1050,10 @@ void App::update(float frameDt) {
         }
         if (steps == cfg::loop::maxSteps) worldAccum_ = 0.f;
 
+        if (multiKillT_ > 0.f) {   // a kill burst ends once kills stop chaining
+            multiKillT_ -= frameDt;
+            if (multiKillT_ <= 0.f) flushMultiKill();
+        }
         data_.meta.stats.timePlayed += frameDt;
         autosaveTimer_ -= frameDt;
         if (autosaveTimer_ <= 0.f) {
@@ -1050,6 +1100,17 @@ void App::update(float frameDt) {
     }
     window_.setWorldView(camSize_, camCenter_ + camShake_);
 
+    // Backdrop heat follows the damage combo while you fight; it cools off
+    // slowly when the combo drops or the fight ends.
+    {
+        const float target = simulating() && cfg::combo::baseCapTier > 0
+            ? static_cast<float>(world_.comboTier()) / static_cast<float>(cfg::combo::baseCapTier)
+            : 0.f;
+        const float rate = target > heat_ ? cfg::app::heatRise : cfg::app::heatFall;
+        heat_ += (target - heat_) * (1.f - std::exp(-rate * frameDt));
+    }
+    if (const int n = effects_.takeArrivedCoins(); n > 0) hud_.pulseGold();
+
     const Core& c = world_.core();
     const int finalWave = continueUnlocked_ ? cfg::run::finalWave : cfg::run::bossWave;
     hud_.update(frameDt, world_.wave(), finalWave, world_.enemiesLeft(),
@@ -1062,6 +1123,11 @@ void App::render() {
     sf::RenderWindow& w = window_.handle();
     window_.useUiView();
     w.clear(theme::bg);
+    if (heat_ > 0.01f) {   // warm tint over the arena (not the letterbox bars)
+        sf::RectangleShape hot(size());
+        hot.setFillColor(withAlpha(theme::bgHot, heat_ * cfg::app::heatAlpha));
+        w.draw(hot);
+    }
     effects_.drawBorder(w);
 
     std::size_t start = 0;

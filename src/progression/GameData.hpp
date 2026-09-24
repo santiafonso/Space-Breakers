@@ -59,6 +59,7 @@ struct RunState {
     // Path map. mapNode = node you're standing on (-1 = start of the act: any
     // row-1 node is open). mapRow = row of that node (0 at the act start).
     int gold = 0;
+    float goldFrac = 0.f;             // fractional per-kill gold not paid out yet
     RunMap map;
     int mapNode = -1;
     int mapRow = 0;
