@@ -134,9 +134,10 @@ void drawDot(sf::RenderWindow& w, sf::Vector2f p, float r, sf::Color c) {
 
 // ---- ball loadout panels (Choice target mode + the Tab overlay) -----------
 constexpr float kPanelW = 190.f;
-constexpr float kPanelH = 176.f;
+constexpr float kPanelH = 250.f;
 constexpr float kPanelGap = 16.f;
-constexpr float kSlotH = 28.f;
+constexpr float kSlotH = 24.f;
+constexpr float kSlotStep = 29.f;
 
 sf::Vector2f panelCenter(sf::Vector2f size, int i, int n, float cy) {
     const float total = static_cast<float>(n) * kPanelW + static_cast<float>(n - 1) * kPanelGap;
@@ -146,22 +147,36 @@ sf::Vector2f panelCenter(sf::Vector2f size, int i, int n, float cy) {
 
 sf::FloatRect slotRect(sf::Vector2f c, int slot) {
     const float wd = kPanelW - 24.f;
-    const float cy = c.y + 30.f + static_cast<float>(slot) * (kSlotH + 8.f);
+    const float cy = c.y - kPanelH * 0.5f + 100.f + static_cast<float>(slot) * kSlotStep;
     return {c.x - wd * 0.5f, cy - kSlotH * 0.5f, wd, kSlotH};
+}
+
+// "DMG 2  SPD 1" - a ball's stacked modifiers, compact.
+std::string modifierLine(const BallLoadout& L) {
+    static const char* kShort[kModifierCount] = {"DMG", "SIZE", "SPD", "TOP", "KNOCK", "FLING"};
+    std::string out;
+    for (int i = 0; i < kModifierCount; ++i) {
+        if (L.mods[i] <= 0) continue;
+        if (!out.empty()) out += "  ";
+        out += std::string(kShort[i]) + " " + std::to_string(L.mods[i]);
+    }
+    return out;
 }
 
 sf::Color catColor(UpgradeCat c) {
     switch (c) {
-        case UpgradeCat::Recruit:  return theme::core;
+        case UpgradeCat::NewBall:  return theme::core;
+        case UpgradeCat::Role:     return theme::puOverdrive;
         case UpgradeCat::Element:  return theme::elemFire;
-        case UpgradeCat::Gear:     return theme::accent;
+        case UpgradeCat::Item:     return theme::accent;
+        case UpgradeCat::Modifier: return theme::ballMid;
         case UpgradeCat::Relic:    return theme::puGolden;
     }
     return theme::accent;
 }
 
 // One ball of the loadout: its look (element colour + role mark, same as in the
-// arena), role / element name and its two gear slots.
+// arena), role / element name, its item slots and its stacked modifiers.
 void drawLoadoutPanel(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f c,
                       const BallLoadout& L, float alpha, float hover, int hoverSlot, bool dim) {
     const float a = alpha * (dim ? 0.35f : 1.f);
@@ -176,7 +191,7 @@ void drawLoadoutPanel(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f c,
     const Element el = L.element();
     const sf::Color ec = el == Element::Plain ? theme::textLo : elementColor(el);
     const float r = L.role == BallRole::Guardian ? 17.f : 13.f;
-    const sf::Vector2f bp{c.x, c.y - kPanelH * 0.5f + 32.f};
+    const sf::Vector2f bp{c.x, c.y - kPanelH * 0.5f + 30.f};
     sf::CircleShape ball(r, 32);
     ball.setOrigin(r, r);
     ball.setPosition(bp);
@@ -192,11 +207,17 @@ void drawLoadoutPanel(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f c,
         ring.setOutlineThickness(2.f);
         ring.setOutlineColor(withAlpha(sf::Color::White, 0.7f * a));
         w.draw(ring);
+    } else if (L.role == BallRole::Striker) {
+        sf::CircleShape dot(r * 0.28f, 16);
+        dot.setOrigin(r * 0.28f, r * 0.28f);
+        dot.setPosition(bp);
+        dot.setFillColor(withAlpha(sf::Color::White, 0.8f * a));
+        w.draw(dot);
     }
 
     std::string name = roleName(L.role);
     if (el != Element::Plain) name = std::string(elementName(el)) + " " + name;
-    drawCentered(w, font, name, theme::fsBody, {c.x, c.y - 12.f}, withAlpha(theme::textHi, a));
+    drawCentered(w, font, name, theme::fsBody, {c.x, c.y - kPanelH * 0.5f + 64.f}, withAlpha(theme::textHi, a));
 
     for (int i = 0; i < kBallSlots; ++i) {
         const sf::FloatRect sr = slotRect(c, i);
@@ -216,6 +237,9 @@ void drawLoadoutPanel(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f c,
         }
         drawCentered(w, font, t, theme::fsSmall, {c.x, sr.top + sr.height * 0.5f - 1.f}, withAlpha(tc, a));
     }
+    const std::string ml = modifierLine(L);
+    drawCentered(w, font, ml.empty() ? "no modifiers" : ml, theme::fsSmall,
+                 {c.x, c.y + kPanelH * 0.5f - 18.f}, withAlpha(ml.empty() ? theme::textDim : theme::ballMid, a));
 }
 
 }  // namespace
@@ -816,9 +840,11 @@ void ChoiceScreen::targetAt(App& app, sf::Vector2f mouse, int& ball, int& slot) 
         if (std::fabs(mouse.x - c.x) > kPanelW * 0.5f || std::fabs(mouse.y - c.y) > kPanelH * 0.5f) continue;
         if (!app.choiceFitsBall(target_, i)) return;
         ball = i;
-        // Equipment lands in the slot under the pointer, else its default slot.
-        // An element always takes over the ball's current element slot.
+        // Items land in the slot under the pointer, else their default slot. An
+        // element always takes over the ball's current element slot. Roles and
+        // modifiers just pick the ball.
         const UpgradeKind k = app.choices()[target_];
+        if (!upgradeTakesSlot(k)) return;
         const BallLoadout& L = app.data().run.balls[i];
         slot = defaultSlot(k, L);
         if (elementItemSlot(k) < 0 || L.elementSlot() < 0)
@@ -837,13 +863,13 @@ void ChoiceScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse)
             e.key.code < sf::Keyboard::Num1 + app.runBallCount()) {
             const int b = e.key.code - sf::Keyboard::Num1;
             if (!app.choiceFitsBall(target_, b)) return;
-            app.applyUpgradeTo(target_, b, defaultSlot(app.choices()[target_], app.data().run.balls[b]));
+            app.applyUpgradeTo(target_, b, -1);   // -1: default slot
             return;
         }
         if (!isLeftClick(e)) return;
         int b, sl;
         targetAt(app, mouse, b, sl);
-        if (b >= 0) app.applyUpgradeTo(target_, b, std::max(0, sl));
+        if (b >= 0) app.applyUpgradeTo(target_, b, sl);
         return;
     }
     if (e.type == sf::Event::KeyPressed && e.key.code >= sf::Keyboard::Num1 &&
@@ -888,7 +914,13 @@ void ChoiceScreen::drawTargets(App& app, sf::RenderWindow& w) {
     const UpgradeInfo info = upgradeInfo(k);
 
     drawDim(w, s, 0.82f);
-    const std::string title = std::string("Equip ") + info.title + " - pick a ball and slot";
+    const UpgradeCat cat = upgradeCat(k);
+    std::string title;
+    switch (cat) {
+        case UpgradeCat::Role:     title = std::string("Make a ball a ") + info.title; break;
+        case UpgradeCat::Modifier: title = std::string(info.title) + " - pick a ball"; break;
+        default:                   title = std::string("Equip ") + info.title + " - pick a ball and slot"; break;
+    }
     drawCenteredPop(w, app.font(), title, theme::fsHeading, {s.x * 0.5f, s.y * 0.24f}, theme::textHi,
                     introPop(targetT_, 0.f, 0.25f));
     drawCentered(w, app.font(), info.desc, theme::fsSmall, {s.x * 0.5f, s.y * 0.24f + 30.f}, theme::textLo);
@@ -905,9 +937,9 @@ void ChoiceScreen::drawTargets(App& app, sf::RenderWindow& w) {
                      {c.x, c.y + kPanelH * 0.5f + 14.f}, withAlpha(theme::textDim, cp));
     }
     drawCentered(w, app.font(),
-                 elementItemSlot(k) >= 0
-                     ? "click a ball (one element per ball: it replaces the current one)   -   Esc: back"
-                     : "click a slot (a full one gets replaced)   -   Esc / right-click: back",
+                 elementItemSlot(k) >= 0 ? "click a ball (one element per ball: it replaces the current one)   -   Esc: back"
+                 : upgradeTakesSlot(k)   ? "click a slot (a full one gets replaced)   -   Esc / right-click: back"
+                                         : "click a ball   -   Esc / right-click: back",
                  theme::fsSmall, {s.x * 0.5f, s.y * 0.52f + kPanelH * 0.5f + 46.f}, theme::textDim);
 }
 
@@ -1074,10 +1106,10 @@ void HowToScreen::draw(App& app, sf::RenderWindow& w) {
     const std::array<const char*, 7> lines = {{
         "Enemies march on the core at the centre. Keep it alive.",
         "Balls bounce in straight lines. Grab one and fling it into the enemies.",
-        "Striker: fling it, hits hard when fast. Guardian: aims its bounces at the",
-        "closest threat and shoves it back. Support: marks enemies for the others.",
-        "After each wave pick 1 of 4: a new ball, gear or an element for one ball's",
-        "2 slots, or a relic - or skip it to repair the core.",
+        "Balls start Normal. A role makes one a Striker (fling it), a Support (marks",
+        "enemies) or a Guardian (bounces at the closest threat and shoves it back).",
+        "After each wave pick 1 of 4: a ball, a role, an item (4 slots per ball),",
+        "a modifier (stacks freely) or a relic - or skip it to repair the core.",
         "Beat the miniboss at wave 10, clear wave 20 to finish the run.",
     }};
     const float y0 = s.y * 0.32f;

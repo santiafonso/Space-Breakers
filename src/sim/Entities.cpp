@@ -63,11 +63,12 @@ sf::Color elementColor(Element e) {
 
 const char* roleName(BallRole r) {
     switch (r) {
+        case BallRole::Normal:   return "Normal";
         case BallRole::Striker:  return "Striker";
         case BallRole::Support:  return "Support";
         case BallRole::Guardian: return "Guardian";
     }
-    return "Striker";
+    return "Normal";
 }
 
 }  // namespace sb

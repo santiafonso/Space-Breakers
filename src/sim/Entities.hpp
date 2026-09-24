@@ -32,10 +32,11 @@ sf::Color elementColor(Element e);
 
 // ---------------------------------------------------------------- ball roles
 
-// Striker = worth flinging, Support = marks enemies + stronger element,
-// Guardian = big, shoves and staggers (see cfg::role).
-enum class BallRole { Striker, Support, Guardian };
-inline constexpr int kBallRoleCount = 3;
+// Every ball starts Normal; a ROLE pick turns it into Striker (worth
+// flinging), Support (marks enemies + stronger element) or Guardian (big,
+// shoves, staggers, aims its bounces) - see cfg::role.
+enum class BallRole { Normal, Striker, Support, Guardian };
+inline constexpr int kBallRoleCount = 4;
 
 const char* roleName(BallRole r);
 
@@ -44,6 +45,7 @@ const char* roleName(BallRole r);
 struct BallMods {
     float damageMult = 1.f;    // Heavy impact
     float radiusMult = 1.f;    // Big ball
+    float cruiseMult = 1.f;    // Swift
     float wallBoost = 1.f;     // Wall rush: speed x this per wall bounce
     float pairBoost = 1.f;     // Carom: speed x this per ball-vs-ball clack
     float flingDecay = 1.f;    // Reflexes (< 1 keeps a fling's speed longer)
@@ -64,7 +66,7 @@ struct BallMods {
 
 // Everything the World needs to build / refresh one ball.
 struct BallSpec {
-    BallRole role = BallRole::Striker;
+    BallRole role = BallRole::Normal;
     Element element = Element::Plain;
     BallMods mods;
 };
@@ -76,9 +78,9 @@ struct Ball {
     sf::Vector2f vel;
     float radius = cfg::ball::radius;
     bool held = false;
-    BallRole role = BallRole::Striker;
+    BallRole role = BallRole::Normal;
     Element element = Element::Plain;
-    BallMods mods;          // this ball's gear
+    BallMods mods;          // this ball's items + modifiers
     float cooldown = 0.f;   // water drip / stone drop / electric zap timer
     float squash = 0.f;
     sf::Vector2f squashAxis{1.f, 0.f};

@@ -126,8 +126,8 @@ WorldParams App::params() const {
     return p;
 }
 
-// Fold one ball's gear into the numbers the sim uses. A forge level past the
-// first scales the gear's bonus by cfg::combat::gearLevelBonus per level.
+// Fold one ball's items + modifiers into the numbers the sim uses. An item's
+// forge level past the first scales its bonus by cfg::combat::gearLevelBonus.
 BallSpec App::ballSpec(const BallLoadout& L) const {
     BallSpec s;
     s.role = L.role;
@@ -138,27 +138,30 @@ BallSpec App::ballSpec(const BallLoadout& L) const {
         const float lv = 1.f + cfg::combat::gearLevelBonus * static_cast<float>(std::max(0, L.gearLvl[i] - 1));
         auto boost = [lv](float mult) { return 1.f + (mult - 1.f) * lv; };
         switch (static_cast<UpgradeKind>(L.gear[i])) {
-            case UpgradeKind::HeavyImpact:   m.damageMult *= 1.f + cfg::combat::heavyImpactGear * lv; break;
-            case UpgradeKind::BigBall:       m.radiusMult *= 1.f + cfg::combat::bigBallGear * lv; break;
-            case UpgradeKind::WallRush:      m.wallBoost = boost(cfg::combat::wallBounceBoost); break;
-            case UpgradeKind::Carom:         m.pairBoost = boost(cfg::combat::pairBounceBoost); break;
-            case UpgradeKind::Ricochet:      m.ricochet = true; break;
-            case UpgradeKind::CeilingBreak:  m.maxSpeedMult = boost(cfg::combat::ceilingBreakMult); break;
-            case UpgradeKind::WarmUp:        m.warmUp = true; break;
-            case UpgradeKind::HeavyKnock:    m.knockMult = boost(cfg::combat::heavyKnockMult); break;
-            case UpgradeKind::FlingMomentum: m.flingDecay = cfg::combat::flingDecayMult / lv; break;
-            case UpgradeKind::Cleave:        m.cleave = true; break;
-            case UpgradeKind::Crit:          m.critChance = cfg::combat::critChance * lv; break;
-            case UpgradeKind::Bruiser:       m.bruiser = true; break;
-            case UpgradeKind::Executioner:   m.executioner = true; break;
-            case UpgradeKind::Overkill:      m.overkill = true; break;
-            case UpgradeKind::Tempo:         m.tempo = true; break;
-            case UpgradeKind::Shatter:       m.shatter = true; break;
-            case UpgradeKind::Conductor:     m.conductor = true; break;
-            case UpgradeKind::Bedrock:       m.bedrock = true; break;
-            default: break;
+            case UpgradeKind::WallRush:    m.wallBoost = boost(cfg::combat::wallBounceBoost); break;
+            case UpgradeKind::Carom:       m.pairBoost = boost(cfg::combat::pairBounceBoost); break;
+            case UpgradeKind::Ricochet:    m.ricochet = true; break;
+            case UpgradeKind::WarmUp:      m.warmUp = true; break;
+            case UpgradeKind::Cleave:      m.cleave = true; break;
+            case UpgradeKind::Crit:        m.critChance = cfg::combat::critChance * lv; break;
+            case UpgradeKind::Bruiser:     m.bruiser = true; break;
+            case UpgradeKind::Executioner: m.executioner = true; break;
+            case UpgradeKind::Overkill:    m.overkill = true; break;
+            case UpgradeKind::Tempo:       m.tempo = true; break;
+            case UpgradeKind::Shatter:     m.shatter = true; break;
+            case UpgradeKind::Conductor:   m.conductor = true; break;
+            case UpgradeKind::Bedrock:     m.bedrock = true; break;
+            default: break;   // elements are read via L.element()
         }
     }
+    auto stacks = [&L](UpgradeKind k) { return static_cast<float>(L.mods[modifierIndex(k)]); };
+    m.damageMult = 1.f + cfg::combat::heavyImpactPerStack * stacks(UpgradeKind::HeavyImpact);
+    m.radiusMult = std::min(1.f + cfg::combat::bigBallPerStack * stacks(UpgradeKind::BigBall),
+                            cfg::combat::bigBallMaxMult);
+    m.cruiseMult = 1.f + cfg::combat::swiftPerStack * stacks(UpgradeKind::Swift);
+    m.maxSpeedMult = 1.f + cfg::combat::ceilingPerStack * stacks(UpgradeKind::CeilingBreak);
+    m.knockMult = 1.f + cfg::combat::knockPerStack * stacks(UpgradeKind::HeavyKnock);
+    m.flingDecay = std::pow(cfg::combat::reflexesPerStack, stacks(UpgradeKind::FlingMomentum));
     return s;
 }
 
@@ -245,17 +248,8 @@ void App::newRun() {
     r.wave = 0;
     r.coreMaxHp = startCoreHp();
     r.coreHp = r.coreMaxHp;
-    // Start with a Striker; "Squad" adds a Guardian, then a Support.
-    static const BallRole kStartRoles[] = {BallRole::Striker, BallRole::Guardian, BallRole::Support};
-    auto startLoadout = [](int n) {
-        std::vector<BallLoadout> v;
-        for (int i = 0; i < n; ++i) {
-            BallLoadout b;
-            b.role = kStartRoles[i % kBallRoleCount];
-            v.push_back(b);
-        }
-        return v;
-    };
+    // Every ball starts Normal; roles come from ROLE picks.
+    auto startLoadout = [](int n) { return std::vector<BallLoadout>(static_cast<std::size_t>(n)); };
     r.balls = startLoadout(startBallCount());
     ++data_.meta.stats.runs;
 
@@ -399,20 +393,25 @@ void App::applyUpgradeKind(UpgradeKind k, int ball, int slot) {
         if (ball < 0 && !autoTarget(k, ball, slot)) return;
         if (ball >= static_cast<int>(r.balls.size()) || !upgradeFitsBall(k, r.balls[ball])) return;
         BallLoadout& b = r.balls[ball];
-        // One element per ball: a new element always replaces the current one.
-        if (elementItemSlot(k) >= 0 && b.elementSlot() >= 0) slot = b.elementSlot();
-        slot = std::clamp(slot, 0, kBallSlots - 1);
-        b.gear[slot] = static_cast<int>(k);
-        b.gearLvl[slot] = 1;
+        if (upgradeCat(k) == UpgradeCat::Role) {
+            b.role = roleOf(k);
+        } else if (const int mi = modifierIndex(k); mi >= 0) {
+            ++b.mods[mi];
+        } else {
+            // One element per ball: a new element always replaces the current one.
+            if (elementItemSlot(k) >= 0 && b.elementSlot() >= 0) slot = b.elementSlot();
+            if (slot < 0) slot = defaultSlot(k, b);
+            slot = std::clamp(slot, 0, kBallSlots - 1);
+            b.gear[slot] = static_cast<int>(k);
+            b.gearLvl[slot] = 1;
+        }
         syncWorldBalls();
         return;
     }
     switch (k) {
-        case UpgradeKind::RecruitStriker:
-        case UpgradeKind::RecruitSupport:
-        case UpgradeKind::RecruitGuardian:
+        case UpgradeKind::AddBall:
             if (static_cast<int>(r.balls.size()) >= cfg::ball::maxBalls) return;
-            r.balls.push_back(BallLoadout{recruitRole(k)});
+            r.balls.push_back(BallLoadout{});
             syncWorldBalls();
             break;
         case UpgradeKind::CoreSpring:    m.spring = true; break;
@@ -601,7 +600,7 @@ void App::devToggleInvuln() {
 void App::devAddBall() {
     if (!devMode() || !data_.run.active) return;
     if (runBallCount() >= cfg::ball::maxBalls) return;
-    data_.run.balls.push_back(BallLoadout{static_cast<BallRole>(runBallCount() % kBallRoleCount)});
+    data_.run.balls.push_back(BallLoadout{});
     syncWorldBalls();
 }
 

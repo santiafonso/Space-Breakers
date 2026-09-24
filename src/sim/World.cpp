@@ -40,11 +40,13 @@ float World::cruiseSpeed(const WorldParams& p) const {
 }
 
 float World::ballBaseCruise(const Ball& b, const WorldParams& p) const {
-    return cruiseBase(p) * (b.role == BallRole::Guardian ? cfg::role::guardianCruiseMul : 1.f);
+    return cruiseBase(p) * b.mods.cruiseMult *
+           (b.role == BallRole::Guardian ? cfg::role::guardianCruiseMul : 1.f);
 }
 
 float World::ballCruise(const Ball& b, const WorldParams& p) const {
-    float c = cruiseSpeed(p) * (b.role == BallRole::Guardian ? cfg::role::guardianCruiseMul : 1.f);
+    float c = cruiseSpeed(p) * b.mods.cruiseMult *
+              (b.role == BallRole::Guardian ? cfg::role::guardianCruiseMul : 1.f);
     if (b.mods.warmUp) {   // "Warm-up": cruise climbs over the course of a wave
         const float t = clampf(waveClock_ / cfg::combat::warmUpTime, 0.f, 1.f);
         c *= 1.f + t * cfg::combat::warmUpBonus;
@@ -488,6 +490,7 @@ float World::ballDamage(const Ball& b, const WorldParams& p) const {
         }
         case BallRole::Support:  dmg *= cfg::role::supportDamageMul; break;
         case BallRole::Guardian: dmg *= cfg::role::guardianDamageMul; break;
+        case BallRole::Normal:   break;
     }
     if (effect_ && effect_->kind == PowerUp::Overdrive)
         dmg *= 1.f + (cfg::powerup::overdriveDamageMul - 1.f) * effStrength(p);   // fades under "Afterglow"

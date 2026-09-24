@@ -223,7 +223,7 @@ void WorldRenderer::drawBall(sf::RenderWindow& window, const Ball& b,
     c.setScale(lerpf(perpS, along, ax), lerpf(perpS, along, ay));
     c.setFillColor(withAlpha(col, alpha));
     // Role marks, kept minimal: a Guardian has a heavy rim, a Support a small
-    // inner ring, a Striker is the plain ball.
+    // inner ring, a Striker a small centre dot; a Normal ball is plain.
     const bool guardian = b.role == BallRole::Guardian;
     c.setOutlineThickness(guardian ? 4.f : 2.f);
     c.setOutlineColor(withAlpha(sf::Color::White,
@@ -238,6 +238,13 @@ void WorldRenderer::drawBall(sf::RenderWindow& window, const Ball& b,
         inner.setOutlineThickness(2.f);
         inner.setOutlineColor(withAlpha(sf::Color::White, 0.65f * alpha));
         window.draw(inner);
+    } else if (b.role == BallRole::Striker) {
+        const float dr = b.radius * 0.26f;
+        sf::CircleShape dot(dr, 16);
+        dot.setOrigin(dr, dr);
+        dot.setPosition(b.pos);
+        dot.setFillColor(withAlpha(sf::Color::White, 0.75f * alpha));
+        window.draw(dot);
     }
 
     if (b.held) {

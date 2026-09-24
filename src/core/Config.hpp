@@ -54,17 +54,22 @@ inline constexpr float contactDamagePerCruise = 1.7f;   // + this * (speed / bas
 inline constexpr float knockback = 190.f;
 inline constexpr float hitRebound = 0.9f;               // the ball bounces off an enemy like a wall
 
-// Between-wave items. Most are ball GEAR now: equipped into one of a ball's
-// two slots, so they only affect that ball. A gear's forge level scales its
-// bonus by gearLevelBonus per level past the first.
+// Between-wave picks. ITEMS sit in one of a ball's 4 slots and only affect
+// that ball; an item's forge level scales its bonus by gearLevelBonus per level
+// past the first. MODIFIERS are per-ball stat bumps with no slot - they stack
+// without limit (the per-stack values below; radius has a physical cap).
 inline constexpr float gearLevelBonus = 0.5f;
 inline constexpr float springBoost = 1.6f;        // "Spring": ball speed x this on a core bounce
 inline constexpr float wallBounceBoost = 1.12f;   // "Wall rush": ball speed x this on a wall bounce
 inline constexpr float pairBounceBoost = 1.16f;   // "Carom": ball speed x this when it clacks another ball
 inline constexpr float flingPowerBoost = 1.4f;    // "Strong arm": a flung ball leaves your hand x this faster
-inline constexpr float flingDecayMult = 0.45f;    // "Reflexes": fling speed decays this much slower
-inline constexpr float heavyImpactGear = 0.25f;   // "Heavy impact" gear: + this contact damage on that ball
-inline constexpr float bigBallGear = 0.20f;       // "Big ball" gear: + this radius on that ball
+inline constexpr float heavyImpactPerStack = 0.15f;  // "Heavy impact": + this contact damage
+inline constexpr float bigBallPerStack = 0.10f;      // "Big ball": + this radius...
+inline constexpr float bigBallMaxMult = 2.0f;        // ...up to x this (so a ball can't fill the arena)
+inline constexpr float swiftPerStack = 0.08f;        // "Swift": + this cruise speed
+inline constexpr float ceilingPerStack = 0.20f;      // "Ceiling break": + this top speed
+inline constexpr float knockPerStack = 0.5f;         // "Heavy knock": + this knockback
+inline constexpr float reflexesPerStack = 0.75f;     // "Reflexes": fling decay x this per stack
 inline constexpr float heftPerLevel = 0.08f;      // "Heft" web node: + this contact damage, every ball
 inline constexpr float massPerLevel = 0.10f;      // "Mass" web node: + this radius, every ball
 inline constexpr float slowFieldRadius = 210.f;   // "Slow field": zone around the core...
@@ -73,10 +78,8 @@ inline constexpr float slowFieldMul = 0.55f;      // ...enemies inside move at t
 // More between-wave items (all booleans, one pick each).
 inline constexpr float ricochetWindow = 0.6f;    // "Ricochet": a wall bounce arms a damage bonus for this long
 inline constexpr float ricochetMult = 1.6f;      // ...contact damage x this while it's armed
-inline constexpr float ceilingBreakMult = 1.5f;  // "Ceiling break": raises the ball's top-speed ceiling
 inline constexpr float warmUpTime = 22.f;        // "Warm-up": cruise speed ramps up over this many seconds of a wave
 inline constexpr float warmUpBonus = 0.6f;       // ...up to + this fraction of cruise by the end
-inline constexpr float heavyKnockMult = 2.2f;    // "Heavy knock": enemy knockback x this
 inline constexpr float conductorRange = 240.f;   // "Conductor": the electric arc jumps to a 2nd enemy within this
 inline constexpr float conductorFalloff = 0.6f;  // ...for this fraction of the bolt's damage
 inline constexpr float shatterBonus = 1.8f;      // "Shatter": hitting a frozen enemy does x this damage
