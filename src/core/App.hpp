@@ -175,6 +175,7 @@ private:
     float heat_ = 0.f;        // 0..1 backdrop warmth, follows the damage combo
     bool aiming_ = false;
     float aimT_ = 0.f;        // real seconds spent aiming (slow-mo runs out)
+    float reactLabelCd_ = 0.f;   // spacing between reaction name labels
     int multiKillN_ = 0;      // kills in the current quick burst
     float multiKillT_ = 0.f;  // time left for the burst to keep chaining
     sf::Vector2f multiKillPos_{0.f, 0.f};   // UI position of the burst's last kill

@@ -7,27 +7,24 @@
 
 namespace sb {
 
-// ---- between-wave picks: 1 of 4 rolled from this pool -----------------------
+// ---- between-wave picks ------------------------------------------------------
 //
-// Every ball is a small "character": a role, up to four items, and any number
-// of stacked modifiers (see BallLoadout). A pick is one of six kinds:
-//  - New ball: one more Normal ball (up to cfg::ball::maxBalls).
-//  - Role:     turn one ball into a Striker / Support / Guardian.
+// Every ball is a small "character": up to four items, any number of stacked
+// modifiers, and a role that EMERGES from its items. Every item carries a tag
+// (Striker / Guardian / Support): 2 items of one tag give the ball that role,
+// 4 give its mastery. A pick is one of five kinds:
+//  - New ball: one more ball (up to cfg::ball::maxBalls).
 //  - Element:  an item that makes the ball fire / poison / ... while equipped.
-//              One element per ball. Gated by that element's web node
-//              (fire -> poison -> water -> ice -> stone -> electric).
-//  - Item:     a unique effect for one ball; takes one of its 4 item slots.
+//              One element per ball. Gated by that element's web node. Two
+//              DIFFERENT balls landing different elements on one enemy set off
+//              a reaction (see World).
+//  - Item:     a unique effect for one ball; takes one of its 4 slots.
 //  - Modifier: a stat bump for one ball; no slot, stacks without limit.
-//  - Relic:    a whole-run passive (the core, your throwing arm, elements).
-// Everything but new balls and relics asks which ball it goes to.
+//  - Relic:    a whole-run passive.
 
 enum class UpgradeKind {
     // new ball
     AddBall,
-    // roles
-    RoleStriker,
-    RoleSupport,
-    RoleGuardian,
     // elements (order = element web-node slots 0..5)
     ElemFire,
     ElemPoison,
@@ -36,19 +33,25 @@ enum class UpgradeKind {
     ElemStone,
     ElemElectric,
     // items (take a slot)
-    WallRush,          // speeds up on every wall bounce
-    Carom,             // speeds up when it clacks another ball
-    Ricochet,          // brief damage bonus right after a wall bounce
-    WarmUp,            // cruise speed climbs over the wave
-    Cleave,            // punches through an enemy it kills
-    Crit,              // "Keen eye": chance of a double-damage hit
-    Bruiser,           // "Battering": damage scales with speed
-    Executioner,       // big bonus vs badly hurt enemies
-    Overkill,          // a kill's leftover damage splashes to a neighbour
-    Tempo,             // snaps back to cruise faster after a hit
-    Shatter,           // bonus damage vs frozen enemies   (needs the Frost node)
-    Conductor,         // its electric arc jumps to a 2nd enemy (electric ball only)
-    Bedrock,           // its stone rubble lasts far longer     (stone ball only)
+    WallRush,          // speeds up on every wall bounce                 [Striker]
+    Carom,             // speeds up when it clacks another ball          [Guardian]
+    Ricochet,          // brief damage bonus right after a wall bounce   [Striker]
+    WarmUp,            // cruise speed climbs over the wave              [Guardian]
+    Cleave,            // punches through an enemy it kills              [Striker]
+    Crit,              // "Keen eye": chance of a double-damage hit      [Striker]
+    Bruiser,           // "Battering": damage scales with speed          [Striker]
+    Executioner,       // big bonus vs badly hurt enemies                [Striker]
+    Overkill,          // a kill's leftover damage splashes              [Support]
+    Tempo,             // snaps back to cruise faster after a hit        [Guardian]
+    Shatter,           // bonus damage vs frozen enemies (needs Frost)   [Support]
+    Conductor,         // its electric arc jumps to a 2nd enemy          [Striker]
+    Bedrock,           // its stone rubble lasts far longer              [Guardian]
+    Echo,              // chance a hit strikes twice                     [Striker]
+    Tesla,             // chance a hit zaps 3 nearby enemies             [Support]
+    Bomber,            // chance a kill explodes                         [Support]
+    SplitShot,         // chance a wall bounce spawns a ghost copy       [Support]
+    Rampart,           // hits shove much further and stagger longer     [Guardian]
+    Mender,            // each core bounce repairs the core a little     [Guardian]
     // modifiers (no slot, stack)
     HeavyImpact,       // +contact damage
     BigBall,           // +radius
@@ -62,22 +65,26 @@ enum class UpgradeKind {
     StrongArm,         // you fling every ball harder
     Contagion,         // a poisoned enemy dying poisons its neighbours (needs Venom)
     Primed,            // +damage vs enemies under any element effect (needs any element node)
+    Catalyst,          // reactions hit twice as hard and wider (needs 2 element nodes)
+    ChainReaction,     // a reaction may echo onto another afflicted enemy (needs 2 element nodes)
+    LuckyClover,       // every chance x1.6
+    GlassCannon,       // all damage x1.6, core max HP -30%
+    MagneticCore,      // balls leave the core aimed at the nearest enemy
 };
-inline constexpr int kUpgradeKindCount = 34;
-static_assert(static_cast<int>(UpgradeKind::Primed) + 1 == kUpgradeKindCount, "update kUpgradeKindCount");
+inline constexpr int kUpgradeKindCount = 42;
+static_assert(static_cast<int>(UpgradeKind::MagneticCore) + 1 == kUpgradeKindCount, "update kUpgradeKindCount");
 inline constexpr int kChoiceCount = 4;
 inline constexpr int kBallSlots = 4;          // item slots per ball
 inline constexpr int kElementItemCount = 6;
 inline constexpr int kModifierCount = 6;      // HeavyImpact..FlingMomentum
 
-enum class UpgradeCat { NewBall, Role, Element, Item, Modifier, Relic };
+enum class UpgradeCat { NewBall, Element, Item, Modifier, Relic };
 
 inline UpgradeCat upgradeCat(UpgradeKind k) {
     const int i = static_cast<int>(k);
     if (i <= static_cast<int>(UpgradeKind::AddBall)) return UpgradeCat::NewBall;
-    if (i <= static_cast<int>(UpgradeKind::RoleGuardian)) return UpgradeCat::Role;
     if (i <= static_cast<int>(UpgradeKind::ElemElectric)) return UpgradeCat::Element;
-    if (i <= static_cast<int>(UpgradeKind::Bedrock)) return UpgradeCat::Item;
+    if (i <= static_cast<int>(UpgradeKind::Mender)) return UpgradeCat::Item;
     if (i <= static_cast<int>(UpgradeKind::FlingMomentum)) return UpgradeCat::Modifier;
     return UpgradeCat::Relic;
 }
@@ -85,7 +92,6 @@ inline UpgradeCat upgradeCat(UpgradeKind k) {
 inline const char* upgradeCatName(UpgradeCat c) {
     switch (c) {
         case UpgradeCat::NewBall:  return "NEW BALL";
-        case UpgradeCat::Role:     return "ROLE";
         case UpgradeCat::Element:  return "ELEMENT";
         case UpgradeCat::Item:     return "ITEM";
         case UpgradeCat::Modifier: return "MODIFIER";
@@ -96,14 +102,56 @@ inline const char* upgradeCatName(UpgradeCat c) {
 
 inline const char* upgradeCatDesc(UpgradeCat c) {
     switch (c) {
-        case UpgradeCat::NewBall:  return "adds one more Normal ball to the arena";
-        case UpgradeCat::Role:     return "changes what one of your balls is good at";
-        case UpgradeCat::Element:  return "an item: one element per ball, takes one of its 4 slots";
-        case UpgradeCat::Item:     return "a unique effect for one ball; takes one of its 4 slots";
+        case UpgradeCat::NewBall:  return "adds one more ball to the arena";
+        case UpgradeCat::Element:  return "an item: one element per ball, takes one of its 4 slots. Two balls with different elements hitting the same enemy set off a reaction.";
+        case UpgradeCat::Item:     return "a unique effect for one ball; takes one of its 4 slots. Its tag counts toward the ball's role.";
         case UpgradeCat::Modifier: return "a stat bump for one ball; no slot, stacks without limit";
         case UpgradeCat::Relic:    return "a passive for the whole run";
     }
     return "";
+}
+
+// ---- item tags: a ball's role comes from them ------------------------------
+enum class ItemTag { None, Striker, Guardian, Support };
+
+inline ItemTag itemTag(UpgradeKind k) {
+    switch (k) {
+        case UpgradeKind::ElemFire: case UpgradeKind::ElemElectric:
+        case UpgradeKind::WallRush: case UpgradeKind::Ricochet: case UpgradeKind::Cleave:
+        case UpgradeKind::Crit: case UpgradeKind::Bruiser: case UpgradeKind::Executioner:
+        case UpgradeKind::Conductor: case UpgradeKind::Echo:
+            return ItemTag::Striker;
+        case UpgradeKind::ElemIce: case UpgradeKind::ElemStone:
+        case UpgradeKind::Carom: case UpgradeKind::WarmUp: case UpgradeKind::Tempo:
+        case UpgradeKind::Bedrock: case UpgradeKind::Rampart: case UpgradeKind::Mender:
+            return ItemTag::Guardian;
+        case UpgradeKind::ElemPoison: case UpgradeKind::ElemWater:
+        case UpgradeKind::Overkill: case UpgradeKind::Shatter: case UpgradeKind::Tesla:
+        case UpgradeKind::Bomber: case UpgradeKind::SplitShot:
+            return ItemTag::Support;
+        default:
+            return ItemTag::None;
+    }
+}
+
+inline const char* itemTagName(ItemTag t) {
+    switch (t) {
+        case ItemTag::Striker:  return "Striker";
+        case ItemTag::Guardian: return "Guardian";
+        case ItemTag::Support:  return "Support";
+        case ItemTag::None:     return "";
+    }
+    return "";
+}
+
+inline BallRole tagRole(ItemTag t) {
+    switch (t) {
+        case ItemTag::Striker:  return BallRole::Striker;
+        case ItemTag::Guardian: return BallRole::Guardian;
+        case ItemTag::Support:  return BallRole::Support;
+        case ItemTag::None:     return BallRole::Normal;
+    }
+    return BallRole::Normal;
 }
 
 // Element items map onto element web-node slots 0..5 (fire..electric);
@@ -119,15 +167,6 @@ inline int modifierIndex(UpgradeKind k) {
     return static_cast<int>(k) - static_cast<int>(UpgradeKind::HeavyImpact);
 }
 
-inline BallRole roleOf(UpgradeKind k) {
-    switch (k) {
-        case UpgradeKind::RoleStriker:  return BallRole::Striker;
-        case UpgradeKind::RoleSupport:  return BallRole::Support;
-        case UpgradeKind::RoleGuardian: return BallRole::Guardian;
-        default:                        return BallRole::Normal;
-    }
-}
-
 struct UpgradeInfo {
     const char* title;
     const char* desc;
@@ -137,9 +176,6 @@ struct UpgradeInfo {
 inline const char* upgradeKindId(UpgradeKind k) {
     switch (k) {
         case UpgradeKind::AddBall:        return "AddBall";
-        case UpgradeKind::RoleStriker:    return "RoleStriker";
-        case UpgradeKind::RoleSupport:    return "RoleSupport";
-        case UpgradeKind::RoleGuardian:   return "RoleGuardian";
         case UpgradeKind::ElemFire:       return "ElemFire";
         case UpgradeKind::ElemPoison:     return "ElemPoison";
         case UpgradeKind::ElemWater:      return "ElemWater";
@@ -159,6 +195,12 @@ inline const char* upgradeKindId(UpgradeKind k) {
         case UpgradeKind::Shatter:        return "Shatter";
         case UpgradeKind::Conductor:      return "Conductor";
         case UpgradeKind::Bedrock:        return "Bedrock";
+        case UpgradeKind::Echo:           return "Echo";
+        case UpgradeKind::Tesla:          return "Tesla";
+        case UpgradeKind::Bomber:         return "Bomber";
+        case UpgradeKind::SplitShot:      return "SplitShot";
+        case UpgradeKind::Rampart:        return "Rampart";
+        case UpgradeKind::Mender:         return "Mender";
         case UpgradeKind::HeavyImpact:    return "HeavyImpact";
         case UpgradeKind::BigBall:        return "BigBall";
         case UpgradeKind::Swift:          return "Swift";
@@ -170,16 +212,18 @@ inline const char* upgradeKindId(UpgradeKind k) {
         case UpgradeKind::StrongArm:      return "StrongArm";
         case UpgradeKind::Contagion:      return "Contagion";
         case UpgradeKind::Primed:         return "Primed";
+        case UpgradeKind::Catalyst:       return "Catalyst";
+        case UpgradeKind::ChainReaction:  return "ChainReaction";
+        case UpgradeKind::LuckyClover:    return "LuckyClover";
+        case UpgradeKind::GlassCannon:    return "GlassCannon";
+        case UpgradeKind::MagneticCore:   return "MagneticCore";
     }
     return "";
 }
 
 inline UpgradeInfo upgradeInfo(UpgradeKind k) {
     switch (k) {
-        case UpgradeKind::AddBall:       return {"Extra ball", "one more Normal ball in the arena"};
-        case UpgradeKind::RoleStriker:   return {"Striker", "a ball becomes a Striker: hits far harder when flung fast"};
-        case UpgradeKind::RoleSupport:   return {"Support", "a ball becomes a Support: marks enemies so every ball hits them harder"};
-        case UpgradeKind::RoleGuardian:  return {"Guardian", "a ball becomes a big Guardian: bounces at the closest threat and shoves it back"};
+        case UpgradeKind::AddBall:       return {"Extra ball", "one more ball in the arena"};
         case UpgradeKind::ElemFire:      return {"Fire", "the ball turns fire: heavier contact hits"};
         case UpgradeKind::ElemPoison:    return {"Poison", "the ball turns poison: hits stack damage over time"};
         case UpgradeKind::ElemWater:     return {"Water", "the ball turns water: trails a damaging wake"};
@@ -191,7 +235,7 @@ inline UpgradeInfo upgradeInfo(UpgradeKind k) {
         case UpgradeKind::Ricochet:      return {"Ricochet", "hits harder for a moment after a wall bounce"};
         case UpgradeKind::WarmUp:        return {"Warm-up", "its cruise speed climbs as a wave goes on"};
         case UpgradeKind::Cleave:        return {"Cleave", "punches straight through an enemy it kills"};
-        case UpgradeKind::Crit:          return {"Keen eye", "one hit in seven deals double damage"};
+        case UpgradeKind::Crit:          return {"Keen eye", "15% chance a hit deals double damage"};
         case UpgradeKind::Bruiser:       return {"Battering", "the faster it moves, the harder it hits"};
         case UpgradeKind::Executioner:   return {"Executioner", "big bonus damage to badly hurt enemies"};
         case UpgradeKind::Overkill:      return {"Overkill", "leftover damage from a kill splashes onto the next enemy"};
@@ -199,6 +243,12 @@ inline UpgradeInfo upgradeInfo(UpgradeKind k) {
         case UpgradeKind::Shatter:       return {"Shatter", "hitting a frozen enemy deals bonus damage"};
         case UpgradeKind::Conductor:     return {"Conductor", "its electric arc jumps on to a second enemy"};
         case UpgradeKind::Bedrock:       return {"Bedrock", "its stone rubble lasts much longer"};
+        case UpgradeKind::Echo:          return {"Echo", "25% chance a hit strikes twice (effects and all)"};
+        case UpgradeKind::Tesla:         return {"Tesla", "20% chance a hit zaps up to 3 enemies nearby"};
+        case UpgradeKind::Bomber:        return {"Bomber", "30% chance an enemy it kills explodes"};
+        case UpgradeKind::SplitShot:     return {"Split shot", "15% chance a wall bounce spawns a ghost copy with the same items (lasts a few seconds)"};
+        case UpgradeKind::Rampart:       return {"Rampart", "its hits shove enemies much further and stagger them longer"};
+        case UpgradeKind::Mender:        return {"Mender", "every time it bounces off the core, the core repairs a little"};
         case UpgradeKind::HeavyImpact:   return {"Heavy impact", "+15% contact damage (stacks)"};
         case UpgradeKind::BigBall:       return {"Big ball", "+10% radius (stacks)"};
         case UpgradeKind::Swift:         return {"Swift", "+8% cruise speed (stacks)"};
@@ -210,14 +260,19 @@ inline UpgradeInfo upgradeInfo(UpgradeKind k) {
         case UpgradeKind::StrongArm:     return {"Strong arm", "you fling every ball noticeably harder"};
         case UpgradeKind::Contagion:     return {"Contagion", "an enemy that dies poisoned poisons those near it"};
         case UpgradeKind::Primed:        return {"Primed", "+damage to enemies already burning, poisoned or frozen"};
+        case UpgradeKind::Catalyst:      return {"Catalyst", "element reactions hit twice as hard and reach further"};
+        case UpgradeKind::ChainReaction: return {"Chain reaction", "35% chance a reaction sets off again on another afflicted enemy - it can cascade"};
+        case UpgradeKind::LuckyClover:   return {"Lucky clover", "every chance (crits, echoes, zaps, bombs, ghosts...) x1.6"};
+        case UpgradeKind::GlassCannon:   return {"Glass cannon", "all damage x1.6, but the core loses 30% of its max health"};
+        case UpgradeKind::MagneticCore:  return {"Magnetic core", "every ball bouncing off the core flies at the nearest enemy"};
     }
     return {"", ""};
 }
 
-// One ball of the run: its role, its item slots and its stacked modifiers.
-// Its element is whichever element item is equipped (Plain if none).
+// One ball of the run: its item slots and its stacked modifiers. Its element
+// is whichever element item is equipped (Plain if none); its role is the tag
+// with 2+ items (4 = mastery).
 struct BallLoadout {
-    BallRole role = BallRole::Normal;
     int gear[kBallSlots] = {-1, -1, -1, -1};   // UpgradeKind per item slot, -1 = empty
     int gearLvl[kBallSlots] = {0, 0, 0, 0};    // forge level, 1 once equipped
     int mods[kModifierCount] = {};             // stacks per modifier (modifierIndex)
@@ -238,6 +293,27 @@ struct BallLoadout {
         return s < 0 ? Element::Plain
                      : static_cast<Element>(elementItemSlot(static_cast<UpgradeKind>(gear[s])) + 1);
     }
+    int tagCount(ItemTag t) const {
+        int n = 0;
+        for (int g : gear)
+            if (g >= 0 && itemTag(static_cast<UpgradeKind>(g)) == t) ++n;
+        return n;
+    }
+    // The tag with the most items, if it has 2+. Ties go to the tag of the
+    // earliest slot.
+    ItemTag leadTag() const {
+        ItemTag best = ItemTag::None;
+        int bestN = 1;
+        for (int g : gear) {
+            if (g < 0) continue;
+            const ItemTag t = itemTag(static_cast<UpgradeKind>(g));
+            const int n = tagCount(t);
+            if (t != ItemTag::None && n > bestN) { best = t; bestN = n; }
+        }
+        return best;
+    }
+    BallRole role() const { return tagRole(leadTag()); }
+    bool mastery() const { return leadTag() != ItemTag::None && tagCount(leadTag()) >= 4; }
 };
 
 inline bool upgradeTakesSlot(UpgradeKind k) {
@@ -246,16 +322,13 @@ inline bool upgradeTakesSlot(UpgradeKind k) {
 }
 
 inline bool upgradeNeedsTarget(UpgradeKind k) {
-    const UpgradeCat c = upgradeCat(k);
-    return c == UpgradeCat::Role || c == UpgradeCat::Modifier || upgradeTakesSlot(k);
+    return upgradeCat(k) == UpgradeCat::Modifier || upgradeTakesSlot(k);
 }
 
-// Can pick `k` go on this ball? Roles: not the one it already has. Items: no
-// duplicates on one ball; Conductor / Bedrock only with their element equipped.
-// Modifiers: always.
+// Can pick `k` go on this ball? Items: no duplicates on one ball; Conductor /
+// Bedrock only with their element equipped. Modifiers: always.
 inline bool upgradeFitsBall(UpgradeKind k, const BallLoadout& b) {
     switch (upgradeCat(k)) {
-        case UpgradeCat::Role:     return b.role != roleOf(k);
         case UpgradeCat::Modifier: return true;
         case UpgradeCat::Element:
         case UpgradeCat::Item:
@@ -287,12 +360,18 @@ struct UpgradeCtx {
     bool strongArm = false;
     bool contagion = false;
     bool primed = false;
+    bool catalyst = false;
+    bool chainReaction = false;
+    bool luckyClover = false;
+    bool glassCannon = false;
+    bool magneticCore = false;
 };
 
-inline bool anyElementUnlocked(const UpgradeCtx& c) {
+inline int elementsUnlocked(const UpgradeCtx& c) {
+    int n = 0;
     for (bool u : c.elemUnlocked)
-        if (u) return true;
-    return false;
+        if (u) ++n;
+    return n;
 }
 
 inline bool upgradeEligible(UpgradeKind k, const UpgradeCtx& c) {
@@ -305,7 +384,6 @@ inline bool upgradeEligible(UpgradeKind k, const UpgradeCtx& c) {
     };
     switch (upgradeCat(k)) {
         case UpgradeCat::NewBall:  return ballCount < c.maxBalls;
-        case UpgradeCat::Role:
         case UpgradeCat::Modifier: return anyBallFits();
         case UpgradeCat::Element:  return c.elemUnlocked[elementItemSlot(k)] && anyBallFits();
         case UpgradeCat::Item:
@@ -318,7 +396,12 @@ inline bool upgradeEligible(UpgradeKind k, const UpgradeCtx& c) {
         case UpgradeKind::CoreSlowField: return !c.slowField;
         case UpgradeKind::StrongArm:     return !c.strongArm;
         case UpgradeKind::Contagion:     return !c.contagion && c.elemUnlocked[1];   // poison
-        case UpgradeKind::Primed:        return !c.primed && anyElementUnlocked(c);
+        case UpgradeKind::Primed:        return !c.primed && elementsUnlocked(c) > 0;
+        case UpgradeKind::Catalyst:      return !c.catalyst && elementsUnlocked(c) >= 2;
+        case UpgradeKind::ChainReaction: return !c.chainReaction && elementsUnlocked(c) >= 2;
+        case UpgradeKind::LuckyClover:   return !c.luckyClover;
+        case UpgradeKind::GlassCannon:   return !c.glassCannon;
+        case UpgradeKind::MagneticCore:  return !c.magneticCore;
         default:                         return false;
     }
 }

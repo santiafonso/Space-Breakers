@@ -6,7 +6,7 @@
 namespace sb {
 
 namespace {
-constexpr std::size_t kMaxRings = 18;
+constexpr std::size_t kMaxRings = 28;
 }
 
 void Effects::init(const sf::Font& font, sf::Vector2f size) {
@@ -34,6 +34,18 @@ void Effects::addRing(sf::Vector2f pos, float speed, sf::Color color) {
     r.r0 = 10.f;
     r.r1 = 30.f + speed * 0.03f;
     r.color = color;
+    rings_.push_back(r);
+}
+
+void Effects::addBurst(sf::Vector2f pos, float radius, sf::Color color) {
+    if (rings_.size() >= kMaxRings) rings_.erase(rings_.begin());
+    Ring r;
+    r.pos = pos;
+    r.life = 0.45f;
+    r.r0 = radius * 0.3f;
+    r.r1 = radius;
+    r.color = color;
+    r.burst = true;
     rings_.push_back(r);
 }
 
@@ -145,8 +157,9 @@ void Effects::drawRings(sf::RenderWindow& window) const {
         c.setOrigin(c.getRadius(), c.getRadius());
         c.setPosition(r.pos);
         c.setFillColor(sf::Color::Transparent);
-        c.setOutlineThickness(2.f);
-        c.setOutlineColor(withAlpha(r.color, (1.f - t) * 0.5f));
+        c.setOutlineThickness(r.burst ? 4.f : 2.f);
+        c.setOutlineColor(withAlpha(r.color, (1.f - t) * (r.burst ? 0.8f : 0.5f)));
+        if (r.burst) c.setFillColor(withAlpha(r.color, (1.f - t) * 0.12f));   // a faint fill for area hits
         window.draw(c);
     }
 }

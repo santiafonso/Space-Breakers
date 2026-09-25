@@ -50,6 +50,7 @@ sf::Vector2f panelCenter(sf::Vector2f size, int i, int n, float cy);   // i of n
 sf::FloatRect slotRect(sf::Vector2f panelCentre, int slot);
 std::string modifierLine(const BallLoadout& L);
 sf::Color catColor(UpgradeCat c);
+sf::Color tagColor(ItemTag t);   // Striker / Guardian / Support item colour
 
 // What part of a loadout panel centred at `c` the pointer is on: 0..3 = item
 // slot, kPanelPartBall = the ball / role name, kPanelPartMods = the modifier

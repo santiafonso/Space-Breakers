@@ -860,8 +860,10 @@ void ChoiceScreen::draw(App& app, sf::RenderWindow& w) {
 
         const UpgradeKind kind = app.choices()[i];
         const UpgradeCat cat = upgradeCat(kind);
-        drawCenteredPop(w, app.font(), std::to_string(i + 1) + "   " + upgradeCatName(cat), theme::fsSmall,
-                        {c.x, c.y - kCardH * 0.5f + 16.f}, catColor(cat), cp);
+        std::string head = std::to_string(i + 1) + "   " + upgradeCatName(cat);
+        if (itemTag(kind) != ItemTag::None) head += std::string("  -  ") + itemTagName(itemTag(kind));
+        drawCenteredPop(w, app.font(), head, theme::fsSmall, {c.x, c.y - kCardH * 0.5f + 16.f},
+                        itemTag(kind) != ItemTag::None ? tagColor(itemTag(kind)) : catColor(cat), cp);
         const int es = elementItemSlot(kind);
         drawCenteredPop(w, app.font(), info.title, theme::fsItem,
                         {c.x, c.y - kCardH * 0.5f + 52.f},
@@ -1027,8 +1029,8 @@ void HowToScreen::draw(App& app, sf::RenderWindow& w) {
     const std::array<const char*, 7> lines = {{
         "Enemies march on the core at the centre. Keep it alive.",
         "Click a ball, pull back and let go to fling it - time slows while you aim.",
-        "Balls start Normal. A role makes one a Striker (fling it), a Support (marks",
-        "enemies) or a Guardian (bounces at the closest threat and shoves it back).",
+        "Items carry a tag: 2 of one tag give a ball that role (Striker / Guardian /",
+        "Support), 4 its mastery. Two balls' elements on one enemy set off a reaction.",
         "Between fights, pick your path on the map: fights pay gold, elites add a pick,",
         "shops / forges / rests / upgrades build your balls (4 item slots each).",
         "Beat the miniboss at wave 10, clear wave 20 to finish the run.",

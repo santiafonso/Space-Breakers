@@ -694,6 +694,56 @@ Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
     armar la composición (~40 nodos por acto). HUD y cartel muestran
     "Act N - Stage R / 15". Nodos un poco más chicos; el click toma el más cercano.
 
+- **Fase I — sinergias: roles por items, reacciones, procs y reliquias fuertes. [IMPLEMENTADO 2026-09-25]**
+  Norte (usuario): priorizar diversión; inspiración Isaac / Slay the Spire —
+  combinaciones que, bien ordenadas, se vuelven **rotas y catastróficas**, con
+  probabilidades en el medio.
+  - **Roles por items.** Cada item tiene una etiqueta (STRIKER / GUARDIAN /
+    SUPPORT). Una pelota toma el rol de la etiqueta con **2+ items**; con **4**
+    llega a la **maestría** (efecto nuevo). Las cartas ROLE desaparecen; el
+    nodo Recluta ofrece pelota nueva + un item de cada etiqueta.
+    - Maestría Striker: los golpes por encima del crucero sueltan una onda
+      expansiva. Guardian: al rebotar en el núcleo suelta un pulso que empuja
+      y aturde. Support: la marca se contagia a los enemigos cercanos.
+  - **Reacciones entre pelotas.** Un enemigo guarda el último elemento que le
+    aplicó una pelota. Si **otra** pelota con **otro** elemento lo golpea, se
+    dispara una reacción (y consume el estado):
+    fuego+hielo **Estallido** (explosión, x2 a congelados) · fuego+veneno
+    **Combustión** (el veneno restante explota en área) · veneno+eléctrico
+    **Plaga** (arco que salta a 4 y los envenena) · agua+eléctrico
+    **Electrocución** (todos los que tocan alguna estela reciben descarga) ·
+    agua+fuego **Vapor** (nube: aturde y daña en área) · hielo+eléctrico
+    **Superconductor** (quebradizos: +daño recibido) · cualquier otro par
+    **Choque** (pequeña explosión).
+  - **Procs (probabilidades):** Keen eye (crítico), **Echo** (el golpe se
+    repite), **Tesla** (descarga a 3), **Bomber** (al matar, explota),
+    **Split shot** (al rebotar en pared crea una pelota fantasma temporal que
+    copia los items). Todos pasan por la **suerte** global.
+  - **Reliquias nuevas, fuertes:** **Catalyst** (reacciones x2 y más grandes) ·
+    **Chain Reaction** (una reacción puede repetirse en otro enemigo afectado →
+    cascadas) · **Lucky Clover** (todas las probabilidades x1.6) · **Glass
+    Cannon** (todo el daño x1.6, núcleo -30% vida máx.) · **Magnetic Core**
+    (todas las pelotas salen del núcleo apuntando al enemigo más cercano).
+  - Combos pensados para romperse: Split shot + Cleave + Bomber (fantasmas que
+    atraviesan y explotan) · Chain Reaction + Catalyst + 3 elementos distintos ·
+    Echo + Executioner + Keen eye · Support maestro + Superconductor.
+  - Implementación: `ItemTag` / `itemTag()` en `Offers.hpp`; `BallLoadout::role()`
+    y `mastery()` salen de los tags (desempate: el tag del slot más temprano).
+    `World::strike` concentra un golpe (daño, estados, procs, reacción);
+    `applyElement` / `triggerReaction` (el elemento también **salpica** a los
+    enemigos "limpios" a `elemSplash`, y las descargas eléctricas y la estela de
+    agua también aplican su elemento); `damageEnemy` aplica "quebradizo";
+    fantasmas en `World::ghosts()` (no se sincronizan con el loadout, mueren al
+    cambiar de oleada). Todo el tuning en `cfg::synergy`. Los items en las
+    cartas muestran su tag con color; el panel de cada pelota muestra el rol
+    (+ = maestría) y el tooltip cuenta los tags.
+  - Medido sin jugador (12 corridas, 4 pelotas de fuego/veneno/agua/eléctrico,
+    oleadas 5-9): ~10 reacciones/min, ~0.6 por kill. Performance: 1-2 µs por
+    paso incluso con cascadas. `supportDamageMul` 0.6 → 0.8 (sus items de
+    Bomber/Tesla/Split shot necesitan matar).
+  - Falta playtest: frecuencia de reacciones con el jugador tirando, números de
+    procs, precio de las reliquias nuevas.
+
 - **Pendiente (idea del usuario, 2026-09-24):** como las mejoras ya no llegan
   en cada oleada, cada una tiene que **sentirse mucho** al conseguirla: repasar
   items / modificadores / reliquias para que sean más fuertes y más visibles

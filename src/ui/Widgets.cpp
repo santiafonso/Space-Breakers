@@ -157,10 +157,19 @@ std::string modifierLine(const BallLoadout& L) {
     return out;
 }
 
+sf::Color tagColor(ItemTag t) {
+    switch (t) {
+        case ItemTag::Striker:  return theme::ballFast;
+        case ItemTag::Guardian: return theme::core;
+        case ItemTag::Support:  return theme::puSurge;
+        case ItemTag::None:     return theme::textLo;
+    }
+    return theme::textLo;
+}
+
 sf::Color catColor(UpgradeCat c) {
     switch (c) {
         case UpgradeCat::NewBall:  return theme::core;
-        case UpgradeCat::Role:     return theme::puOverdrive;
         case UpgradeCat::Element:  return theme::elemFire;
         case UpgradeCat::Item:     return theme::accent;
         case UpgradeCat::Modifier: return theme::ballMid;
@@ -184,16 +193,16 @@ void drawLoadoutPanel(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f c,
 
     const Element el = L.element();
     const sf::Color ec = el == Element::Plain ? theme::textLo : elementColor(el);
-    const float r = L.role == BallRole::Guardian ? 17.f : 13.f;
+    const float r = L.role() == BallRole::Guardian ? 17.f : 13.f;
     const sf::Vector2f bp{c.x, c.y - kPanelH * 0.5f + 30.f};
     sf::CircleShape ball(r, 32);
     ball.setOrigin(r, r);
     ball.setPosition(bp);
     ball.setFillColor(withAlpha(ec, a));
-    ball.setOutlineThickness(L.role == BallRole::Guardian ? 3.5f : 1.5f);
-    ball.setOutlineColor(withAlpha(sf::Color::White, (L.role == BallRole::Guardian ? 0.55f : 0.2f) * a));
+    ball.setOutlineThickness(L.role() == BallRole::Guardian ? 3.5f : 1.5f);
+    ball.setOutlineColor(withAlpha(sf::Color::White, (L.role() == BallRole::Guardian ? 0.55f : 0.2f) * a));
     w.draw(ball);
-    if (L.role == BallRole::Support) {
+    if (L.role() == BallRole::Support) {
         sf::CircleShape ring(r * 0.5f, 24);
         ring.setOrigin(r * 0.5f, r * 0.5f);
         ring.setPosition(bp);
@@ -201,7 +210,7 @@ void drawLoadoutPanel(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f c,
         ring.setOutlineThickness(2.f);
         ring.setOutlineColor(withAlpha(sf::Color::White, 0.7f * a));
         w.draw(ring);
-    } else if (L.role == BallRole::Striker) {
+    } else if (L.role() == BallRole::Striker) {
         sf::CircleShape dot(r * 0.28f, 16);
         dot.setOrigin(r * 0.28f, r * 0.28f);
         dot.setPosition(bp);
@@ -209,7 +218,8 @@ void drawLoadoutPanel(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f c,
         w.draw(dot);
     }
 
-    std::string name = roleName(L.role);
+    std::string name = roleName(L.role());
+    if (L.mastery()) name += "+";   // mastery: 4 items of its tag
     if (el != Element::Plain) name = std::string(elementName(el)) + " " + name;
     drawCentered(w, font, name, theme::fsBody, {c.x, c.y - kPanelH * 0.5f + 64.f}, withAlpha(theme::textHi, a));
 
@@ -225,9 +235,10 @@ void drawLoadoutPanel(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f c,
         std::string t = "empty slot";
         sf::Color tc = theme::textDim;
         if (L.gear[i] >= 0) {
-            t = upgradeInfo(static_cast<UpgradeKind>(L.gear[i])).title;
+            const auto k = static_cast<UpgradeKind>(L.gear[i]);
+            t = upgradeInfo(k).title;
             if (L.gearLvl[i] > 1) t += "  Lv" + std::to_string(L.gearLvl[i]);
-            tc = theme::textLo;
+            tc = tagColor(itemTag(k));   // the tag shows which role it pushes toward
         }
         drawCentered(w, font, t, theme::fsSmall, {c.x, sr.top + sr.height * 0.5f - 1.f}, withAlpha(tc, a));
     }
@@ -253,15 +264,22 @@ bool loadoutTooltip(const BallLoadout& L, int part, std::string& title, std::str
             desc = "items and elements go here (4 per ball)";
             return true;
         }
-        const UpgradeInfo info = upgradeInfo(static_cast<UpgradeKind>(L.gear[part]));
+        const auto k = static_cast<UpgradeKind>(L.gear[part]);
+        const UpgradeInfo info = upgradeInfo(k);
         title = info.title;
         if (L.gearLvl[part] > 1) title += "  (level " + std::to_string(L.gearLvl[part]) + ")";
         desc = info.desc;
+        if (itemTag(k) != ItemTag::None) desc += std::string("  [") + itemTagName(itemTag(k)) + "]";
         return true;
     }
     if (part == kPanelPartBall) {
-        title = roleName(L.role);
-        desc = roleDesc(L.role);
+        title = roleName(L.role());
+        if (L.mastery()) title += " (mastery)";
+        desc = roleDesc(L.role());
+        desc += std::string(".  Roles come from item tags: 2 of a tag = that role, 4 = mastery. Now: ") +
+                std::to_string(L.tagCount(ItemTag::Striker)) + " Striker, " +
+                std::to_string(L.tagCount(ItemTag::Guardian)) + " Guardian, " +
+                std::to_string(L.tagCount(ItemTag::Support)) + " Support";
         const Element e = L.element();
         if (e != Element::Plain) {
             title = std::string(elementName(e)) + " " + title;

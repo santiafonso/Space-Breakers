@@ -101,6 +101,11 @@ WorldParams App::params() const {
     p.slowField = m.slowField;
     p.contagion = m.contagion;
     p.primed = m.primed;
+    p.catalyst = m.catalyst;
+    p.chainReaction = m.chainReaction;
+    p.magneticCore = m.magneticCore;
+    p.luck = m.luckyClover ? cfg::synergy::luckyCloverMul : 1.f;
+    if (m.glassCannon) p.damageMult *= cfg::synergy::glassDamage;
 
     // Meta web (Fase A).
     p.emberLevel = u[MetaEmber];
@@ -131,7 +136,8 @@ WorldParams App::params() const {
 // forge level past the first scales its bonus by cfg::combat::gearLevelBonus.
 BallSpec App::ballSpec(const BallLoadout& L) const {
     BallSpec s;
-    s.role = L.role;
+    s.role = L.role();   // from its item tags (2 = role, 4 = mastery)
+    s.mods.mastery = L.mastery();
     s.element = L.element();
     BallMods& m = s.mods;
     for (int i = 0; i < kBallSlots; ++i) {
@@ -152,6 +158,12 @@ BallSpec App::ballSpec(const BallLoadout& L) const {
             case UpgradeKind::Shatter:     m.shatter = true; break;
             case UpgradeKind::Conductor:   m.conductor = true; break;
             case UpgradeKind::Bedrock:     m.bedrock = true; break;
+            case UpgradeKind::Echo:        m.echo = true; break;
+            case UpgradeKind::Tesla:       m.tesla = true; break;
+            case UpgradeKind::Bomber:      m.bomber = true; break;
+            case UpgradeKind::SplitShot:   m.splitShot = true; break;
+            case UpgradeKind::Rampart:     m.rampart = true; break;
+            case UpgradeKind::Mender:      m.mender = true; break;
             default: break;   // elements are read via L.element()
         }
     }
@@ -338,6 +350,11 @@ UpgradeCtx App::buildUpgradeCtx() const {
     c.strongArm = r.mods.strongArm;
     c.contagion = r.mods.contagion;
     c.primed = r.mods.primed;
+    c.catalyst = r.mods.catalyst;
+    c.chainReaction = r.mods.chainReaction;
+    c.luckyClover = r.mods.luckyClover;
+    c.glassCannon = r.mods.glassCannon;
+    c.magneticCore = r.mods.magneticCore;
     return c;
 }
 
@@ -377,16 +394,24 @@ void App::rerollChoice(int idx) {
     effects_.flash(theme::accent, 0.25f);
 }
 
-// Recruit node: a new ball and the three roles. With the arena full, the ball
-// card becomes a random modifier instead.
+// Recruit node: a new ball plus one item of each tag, so you can push a ball
+// toward the role you want. With the arena full the ball card becomes a random
+// modifier instead.
 void App::rollRecruitChoices() {
     const UpgradeCtx c = buildUpgradeCtx();
     choices_[0] = upgradeEligible(UpgradeKind::AddBall, c)
         ? UpgradeKind::AddBall
         : static_cast<UpgradeKind>(static_cast<int>(UpgradeKind::HeavyImpact) + rng_.irange(0, kModifierCount - 1));
-    choices_[1] = UpgradeKind::RoleStriker;
-    choices_[2] = UpgradeKind::RoleSupport;
-    choices_[3] = UpgradeKind::RoleGuardian;
+    const ItemTag tags[3] = {ItemTag::Striker, ItemTag::Guardian, ItemTag::Support};
+    for (int t = 0; t < 3; ++t) {
+        std::vector<UpgradeKind> pool;
+        for (int i = 0; i < kUpgradeKindCount; ++i) {
+            const auto k = static_cast<UpgradeKind>(i);
+            if (itemTag(k) == tags[t] && upgradeEligible(k, c)) pool.push_back(k);
+        }
+        choices_[t + 1] = pool.empty() ? UpgradeKind::HeavyImpact
+                                       : pool[static_cast<std::size_t>(rng_.irange(0, static_cast<int>(pool.size()) - 1))];
+    }
 }
 
 void App::openChoice() {
@@ -416,9 +441,7 @@ void App::applyUpgradeKind(UpgradeKind k, int ball, int slot) {
         if (ball < 0 && !autoTarget(k, ball, slot)) return;
         if (ball >= static_cast<int>(r.balls.size()) || !upgradeFitsBall(k, r.balls[ball])) return;
         BallLoadout& b = r.balls[ball];
-        if (upgradeCat(k) == UpgradeCat::Role) {
-            b.role = roleOf(k);
-        } else if (const int mi = modifierIndex(k); mi >= 0) {
+        if (const int mi = modifierIndex(k); mi >= 0) {
             ++b.mods[mi];
         } else {
             // One element per ball: a new element always replaces the current one.
@@ -442,6 +465,14 @@ void App::applyUpgradeKind(UpgradeKind k, int ball, int slot) {
         case UpgradeKind::StrongArm:     m.strongArm = true; break;
         case UpgradeKind::Contagion:     m.contagion = true; break;
         case UpgradeKind::Primed:        m.primed = true; break;
+        case UpgradeKind::Catalyst:      m.catalyst = true; break;
+        case UpgradeKind::ChainReaction: m.chainReaction = true; break;
+        case UpgradeKind::LuckyClover:   m.luckyClover = true; break;
+        case UpgradeKind::MagneticCore:  m.magneticCore = true; break;
+        case UpgradeKind::GlassCannon:   // big damage, a smaller core
+            m.glassCannon = true;
+            world_.addCoreMaxHp(-world_.core().maxHp * (1.f - cfg::synergy::glassCoreHp));
+            break;
         default: break;
     }
 }
@@ -625,7 +656,6 @@ void App::cancelEquip() {
 int App::shopPrice(UpgradeKind k) const {
     switch (upgradeCat(k)) {
         case UpgradeCat::NewBall:  return cfg::gold::priceNewBall;
-        case UpgradeCat::Role:     return cfg::gold::priceRole;
         case UpgradeCat::Element:  return cfg::gold::priceElement;
         case UpgradeCat::Item:     return cfg::gold::priceItem;
         case UpgradeCat::Modifier: return cfg::gold::priceModifier;
@@ -971,6 +1001,16 @@ void App::processEvents(const FrameEvents& ev) {
     const float harmony = cfg::combo::baseCapTier > 0
         ? static_cast<float>(ev.comboTier) / static_cast<float>(cfg::combo::baseCapTier)
         : 0.f;
+    // Reactions, explosions, mastery pulses: a big ring, and the reaction's
+    // name (rate-limited so a cascade reads as a burst, not a wall of text).
+    for (const BurstFx& b : ev.bursts) {
+        effects_.addBurst(b.pos, b.radius, b.color);
+        if (b.label && reactLabelCd_ <= 0.f) {
+            effects_.addLabel(b.label, worldToUi(b.pos) + sf::Vector2f{0.f, -18.f}, b.color, 18, 0.8f);
+            audio_.comboUp(4);
+            reactLabelCd_ = 0.25f;
+        }
+    }
     for (const BounceFx& b : ev.bounces) {
         effects_.addRing(b.pos, b.speed, b.color);
         if (!b.ballPair) effects_.edgeHit(b.normal);   // edge flash only for wall / core hits
@@ -1090,6 +1130,7 @@ void App::update(float frameDt) {
         }
         if (steps == cfg::loop::maxSteps) worldAccum_ = 0.f;
 
+        reactLabelCd_ = std::max(0.f, reactLabelCd_ - frameDt);
         if (multiKillT_ > 0.f) {   // a kill burst ends once kills stop chaining
             multiKillT_ -= frameDt;
             if (multiKillT_ <= 0.f) flushMultiKill();

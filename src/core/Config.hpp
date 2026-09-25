@@ -115,7 +115,7 @@ inline constexpr float strikerFlingMult = 1.25f;   // throw velocity x this
 inline constexpr float strikerFlingDecay = 0.6f;   // fling speed decays at this fraction of the normal rate
 // Support: weak hits, but marks what it touches - every ball hits a marked
 // enemy harder - and its element is stronger.
-inline constexpr float supportDamageMul = 0.6f;
+inline constexpr float supportDamageMul = 0.8f;   // not too low: its Bomber / Tesla / Split shot items need kills
 inline constexpr float supportElemMul = 1.4f;      // poison / freeze / wake / zap potency on a support ball
 inline constexpr float markDuration = 3.0f;
 inline constexpr float markDamageMul = 1.35f;      // any ball (and zaps) vs a marked enemy
@@ -133,6 +133,57 @@ inline constexpr float staggerDrag = 3.5f;         // knockback bleed-off per se
 inline constexpr bool  guardianAimsBounces = true;
 inline constexpr float guardianAimJitter = 0.06f;  // rad of wobble so it isn't robotic
 }  // namespace role
+
+// Synergies (Fase I): procs, element reactions, role masteries and the big
+// relics. Every chance goes through the run's luck (Lucky clover).
+namespace synergy {
+inline constexpr float luckyCloverMul = 1.6f;
+inline constexpr float chanceCap = 0.9f;
+// procs
+inline constexpr float echoChance = 0.25f;       // "Echo": the hit strikes again
+inline constexpr float teslaChance = 0.20f;      // "Tesla": zap nearby enemies...
+inline constexpr int   teslaTargets = 3;
+inline constexpr float teslaRange = 170.f;
+inline constexpr float teslaFrac = 0.6f;         // ...for this fraction of the hit
+inline constexpr float bomberChance = 0.30f;     // "Bomber": a kill explodes...
+inline constexpr float bombRadius = 95.f;
+inline constexpr float bombFrac = 1.2f;          // ...for this x the killing hit
+inline constexpr float splitChance = 0.15f;      // "Split shot": a wall bounce spawns a ghost
+inline constexpr float ghostLife = 4.0f;
+inline constexpr int   maxGhosts = 8;
+inline constexpr float ghostSpread = 0.45f;      // rad the ghost veers off the parent's heading
+inline constexpr float rampartKnock = 2.0f;      // "Rampart": knockback x this...
+inline constexpr float rampartStagger = 1.5f;    // ...and staggers for staggerDuration x this
+inline constexpr float menderHeal = 0.6f;        // "Mender": core hp per core bounce
+// relics
+inline constexpr float glassDamage = 1.6f;       // "Glass cannon"
+inline constexpr float glassCoreHp = 0.7f;
+inline constexpr float catalystDamage = 2.0f;    // "Catalyst": reactions x this...
+inline constexpr float catalystRadius = 1.5f;    // ...and wider
+inline constexpr float chainChance = 0.35f;      // "Chain reaction": a reaction repeats on another afflicted enemy
+inline constexpr float chainRange = 260.f;
+inline constexpr int   chainMaxDepth = 6;
+// element reactions: two DIFFERENT balls, two different elements, one enemy
+inline constexpr float reactWindow = 4.0f;       // how long an applied element waits for a partner
+inline constexpr float elemSplash = 70.f;        // a hit also leaves its element on bare enemies this close
+inline constexpr float burstRadius = 110.f, burstFrac = 2.0f;         // fire + ice (x2 more vs frozen)
+inline constexpr float combustRadius = 100.f, combustPoison = 2.0f;   // fire + poison: the poison left, x this
+inline constexpr float plagueRange = 180.f, plagueFrac = 0.8f;        // poison + electric
+inline constexpr int   plagueTargets = 4;
+inline constexpr float electrocuteFrac = 1.5f, electrocuteRadius = 120.f;   // water + electric
+inline constexpr float steamRadius = 120.f, steamFrac = 0.8f, steamStagger = 1.2f;   // water + fire
+inline constexpr float superRadius = 120.f, superFrac = 0.5f, brittleTime = 5.f;     // ice + electric
+inline constexpr float brittleMul = 1.5f;                             // brittle enemies take x this
+inline constexpr float clashRadius = 80.f, clashFrac = 1.0f;          // any other pair
+// role masteries (4 items of one tag)
+inline constexpr float strikerShockSpeed = 1.2f;   // above this x cruise, hits shockwave...
+inline constexpr float strikerShockRadius = 90.f;
+inline constexpr float strikerShockFrac = 0.5f;
+inline constexpr float guardianPulseRadius = 170.f;   // core bounce pulse
+inline constexpr float guardianPulseKnock = 380.f;
+inline constexpr float guardianPulseStagger = 0.8f;
+inline constexpr float supportSpread = 100.f;      // marks spread this far
+}  // namespace synergy
 
 // Run score: arcade points, shown in the HUD and kept as a lifetime best.
 namespace score {
@@ -235,7 +286,6 @@ inline constexpr int cleanBase = 4;                // clean wave: this + cleanPe
 inline constexpr int cleanPerRow = 1;
 // Shop prices.
 inline constexpr int priceNewBall = 60;
-inline constexpr int priceRole = 35;
 inline constexpr int priceElement = 40;
 inline constexpr int priceItem = 45;
 inline constexpr int priceModifier = 22;

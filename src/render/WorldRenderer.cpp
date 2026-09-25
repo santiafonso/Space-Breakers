@@ -231,7 +231,8 @@ void WorldRenderer::drawPickup(sf::RenderWindow& window, const Pickup& pu) const
 void WorldRenderer::drawBall(sf::RenderWindow& window, const Ball& b,
                              const std::optional<ActiveEffect>& effect) const {
     sf::Color col = b.color;   // World bakes the element hue into b.color (see elementSpeedColor)
-    float alpha = 1.f;
+    // A "Split shot" ghost is see-through and fades out over its last second.
+    const float alpha = b.ghost ? 0.45f * clampf(b.ghostLife, 0.f, 1.f) : 1.f;
     if (effect && effect->kind == PowerUp::Golden) col = lerpColor(col, theme::puGolden, 0.85f);
 
     if (!b.held && !b.trail.empty()) {
@@ -301,6 +302,7 @@ void WorldRenderer::draw(sf::RenderWindow& window, const World& world) const {
     for (const Enemy& e : world.enemies()) drawEnemy(window, e, world.core().pos);
     for (const Bolt& bo : world.bolts()) drawBolt(window, bo);
     for (const Pickup& pu : world.pickups()) drawPickup(window, pu);
+    for (const Ball& g : world.ghosts()) drawBall(window, g, world.effect());
     for (const Ball& b : world.balls()) drawBall(window, b, world.effect());
 }
 

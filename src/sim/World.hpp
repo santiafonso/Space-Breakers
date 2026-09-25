@@ -53,6 +53,7 @@ public:
 
     // ---- read-only views --------------------------------------------
     const std::vector<Ball>& balls() const { return balls_; }
+    const std::vector<Ball>& ghosts() const { return ghosts_; }   // "Split shot" copies
     const std::vector<Enemy>& enemies() const { return enemies_; }
     const std::vector<Bolt>& bolts() const { return bolts_; }
     const std::vector<Obstacle>& obstacles() const { return obstacles_; }
@@ -108,10 +109,10 @@ private:
     void advanceCombo(float dt);
     void updateAutoFling(float dt, const WorldParams& p, FrameEvents& ev);
     void advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev);
-    void emitElement(Ball& b, float dt, const WorldParams& p);
+    void emitElement(Ball& b, float dt, const WorldParams& p, FrameEvents& ev);
     void resolveBallPairs(FrameEvents& ev, const WorldParams& p);
     void updateBolts(float dt);
-    void updateWaterTrails(float dt, const WorldParams& p);
+    void updateWaterTrails(float dt, const WorldParams& p, FrameEvents& ev);
     void updateObstacles(float dt);
     void updateEnemies(float dt, const WorldParams& p, FrameEvents& ev);
     void updateBoss(float dt, const WorldParams& p, FrameEvents& ev);
@@ -122,7 +123,22 @@ private:
     void activateEffect(PowerUp k, const WorldParams& p);   // start an effect (Charged applies here)
     float effStrength(const WorldParams& p) const;          // 1 while live, ramps to 0 over the Afterglow tail
     void afterBounce(Ball& b, sf::Vector2f normal, bool countHit);
-    void aimBounce(Ball& b, sf::Vector2f normal, const Enemy* skip);   // Guardian: bounce toward the threat
+    // Guardian (or any ball when `force`): bounce toward the threat.
+    void aimBounce(Ball& b, sf::Vector2f normal, const Enemy* skip, bool force = false);
+
+    // ---- hits, procs and reactions (Fase I) ----
+    // One ball landing on one enemy: damage, statuses, procs, reactions.
+    // Returns true if it killed it. No bounce - the caller handles that.
+    bool strike(Ball& b, Enemy& e, sf::Vector2f normal, const WorldParams& p, FrameEvents& ev,
+                bool allowEcho = true);
+    void damageEnemy(Enemy& e, float dmg);            // any damage source; applies "brittle"
+    void areaDamage(sf::Vector2f at, float radius, float dmg, const Enemy* skip);
+    void applyElement(Enemy& e, const Ball& b, float hitDmg, const WorldParams& p, FrameEvents& ev);
+    void triggerReaction(Element x, Element y, Enemy& e, float hitDmg, const WorldParams& p,
+                         FrameEvents& ev, int depth);
+    bool chance(float base, const WorldParams& p);    // roll a proc through the run's luck
+    void spawnGhost(const Ball& parent);
+    void guardianPulse(FrameEvents& ev);
     void regulateSpeed(Ball& b, float dt, const WorldParams& p);
     void updateTrail(Ball& b);
     float ballDamage(const Ball& b, const WorldParams& p) const;
@@ -130,6 +146,8 @@ private:
     sf::Vector2f baseSize_;   // the normal arena
     sf::Vector2f size_;       // current arena (== baseSize_ except on the boss wave)
     std::vector<Ball> balls_;
+    std::vector<Ball> ghosts_;          // "Split shot" copies (never synced to the loadout)
+    std::vector<Ball> pendingGhosts_;   // spawned mid-step, added after the ball loop
     std::vector<Enemy> enemies_;
     std::vector<Bolt> bolts_;
     std::vector<Obstacle> obstacles_;

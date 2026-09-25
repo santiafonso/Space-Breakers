@@ -170,7 +170,6 @@ void EquipScreen::draw(App& app, sf::RenderWindow& w) {
         hint = "click an item   -   Esc: leave the forge";
     } else {
         switch (upgradeCat(k)) {
-            case UpgradeCat::Role:     title = std::string("Make a ball a ") + info.title; break;
             case UpgradeCat::Modifier: title = std::string(info.title) + " - pick a ball"; break;
             default:                   title = std::string("Equip ") + info.title + " - pick a ball and slot"; break;
         }
@@ -424,8 +423,10 @@ void ShopScreen::draw(App& app, sf::RenderWindow& w) {
         card.setOutlineColor(withAlpha(theme::accent, (0.35f + 0.5f * h) * a));
         w.draw(card);
 
-        drawCentered(w, app.font(), upgradeCatName(cat), theme::fsSmall, {cx, rc.top + 16.f},
-                     withAlpha(catColor(cat), a));
+        std::string head = upgradeCatName(cat);
+        if (itemTag(k) != ItemTag::None) head += std::string("  -  ") + itemTagName(itemTag(k));
+        drawCentered(w, app.font(), head, theme::fsSmall, {cx, rc.top + 16.f},
+                     withAlpha(itemTag(k) != ItemTag::None ? tagColor(itemTag(k)) : catColor(cat), a));
         const int es = elementItemSlot(k);
         drawCentered(w, app.font(), info.title, theme::fsHeading, {cx, rc.top + 46.f},
                      withAlpha(es >= 0 ? elementColor(static_cast<Element>(es + 1)) : theme::textHi, a));

@@ -64,6 +64,13 @@ struct BallMods {
     bool shatter = false;
     bool conductor = false;    // only acts on an electric ball
     bool bedrock = false;      // only acts on a stone ball
+    bool echo = false;         // chance a hit strikes twice
+    bool tesla = false;        // chance a hit zaps nearby enemies
+    bool bomber = false;       // chance a kill explodes
+    bool splitShot = false;    // chance a wall bounce spawns a ghost copy
+    bool rampart = false;      // hits shove further, stagger longer
+    bool mender = false;       // core bounces repair the core
+    bool mastery = false;      // 4 items of its role's tag
 };
 
 // Everything the World needs to build / refresh one ball.
@@ -90,6 +97,9 @@ struct Ball {
     float ricochetT = 0.f;   // "Ricochet": seconds of post-wall-bounce damage bonus left
     std::deque<sf::Vector2f> trail;
     std::deque<sf::Vector2f> waterTrail;   // water ball only: the damaging "worm" wake
+    int owner = -1;          // index of the (real) ball this is / was copied from - reactions need two owners
+    bool ghost = false;      // "Split shot" copy: temporary, fades out
+    float ghostLife = 0.f;
 };
 
 // Grunt = the plain walker. The rest each want a different answer (cfg::enemy).
@@ -116,6 +126,10 @@ struct Enemy {
     float burn = 0.f;       // seconds of burn remaining ("Ember": fire ball DoT)
     float burnDps = 0.f;    // current burn damage/s while it lasts
     float mark = 0.f;       // seconds left marked by a Support ball (takes more damage)
+    float brittle = 0.f;    // seconds left brittle (Superconductor reaction): takes more damage
+    Element elem = Element::Plain;   // last element a ball left on it, waiting for a reaction
+    int elemOwner = -1;              // which ball left it
+    float elemT = 0.f;               // how long it keeps waiting
     float stagger = 0.f;    // seconds left staggered by a Guardian (drifts, doesn't advance)
     bool orbiter = false;   // wave-20 shield: orbits the boss instead of seeking the core
     float orbitPhase = 0.f; // its slot angle on the ring
@@ -196,7 +210,17 @@ struct BounceFx {
     bool ballPair = false;   // ball-vs-ball clack (vs a wall / core / enemy impact)
 };
 
+// A burst on the field: a reaction, an explosion, a mastery pulse. `label` is
+// set for element reactions (shown as a small floating word).
+struct BurstFx {
+    sf::Vector2f pos;
+    float radius = 80.f;
+    sf::Color color;
+    const char* label = nullptr;
+};
+
 struct FrameEvents {
+    std::vector<BurstFx> bursts;
     std::vector<BounceFx> bounces;
     std::vector<sf::Vector2f> kills;
     int comboTier = 0;
@@ -222,6 +246,10 @@ struct WorldParams {
     bool slowField = false;       // Slow field (relic): a zone around the core slows enemies
     bool contagion = false;       // Contagion (relic): a poisoned enemy dying re-poisons nearby
     bool primed = false;          // Primed (relic): +damage vs enemies already under an element effect
+    bool catalyst = false;        // Catalyst (relic): reactions harder + wider
+    bool chainReaction = false;   // Chain reaction (relic): reactions can cascade
+    bool magneticCore = false;    // Magnetic core (relic): core bounces aim at the nearest enemy
+    float luck = 1.f;             // Lucky clover (relic): every chance x this
     float elemMult[kElementCount] = {1.f, 1.f, 1.f, 1.f, 1.f, 1.f, 1.f};  // per-element potency (web levels)
     int  emberLevel = 0;          // Ember web node: fire hits apply a burn DoT
     bool autoFling = false;       // option: the game throws a ball at the threat now and then
