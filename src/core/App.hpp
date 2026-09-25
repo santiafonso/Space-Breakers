@@ -120,10 +120,17 @@ private:
     float startCoreHp() const;
     unsigned powerUpMask() const;
     void startWaveAt(int wave, bool elite);   // fight wave N (boss waves are picked by N)
-    void openChoice();
+    // Where a set of cards comes from - it sets the tier odds.
+    enum class RollSource { Normal, Elite, Boss };
+    void openChoice(RollSource src = RollSource::Normal);
+    // One random eligible pick: rolls a tier by the source's odds (Lucky clover
+    // shifts them up), then a pick of that tier not in `exclude`. `filter`
+    // narrows the pool (e.g. one item tag).
+    UpgradeKind rollPick(RollSource src, const std::vector<UpgradeKind>& exclude,
+                         bool (*filter)(UpgradeKind) = nullptr);
     void rollShop();
     UpgradeCtx buildUpgradeCtx() const;   // shared by rollChoices / rerollChoice
-    void rollChoices();
+    void rollChoices(RollSource src);
     void rollRecruitChoices();   // Recruit node: new ball + the three roles
     void applyUpgradeKind(UpgradeKind k, int ball = -1, int slot = -1);
     bool autoTarget(UpgradeKind k, int& ball, int& slot) const;   // first ball / free slot it fits
@@ -166,6 +173,10 @@ private:
     EquipSource equipSrc_ = EquipSource::Choice;
     UpgradeKind equipKind_ = UpgradeKind::AddBall;
     int equipRef_ = -1;       // Choice card / shop offer being placed
+    RollSource rollSource_ = RollSource::Normal;   // what the current Choice was rolled from (rerolls keep it)
+public:
+    bool choiceIsBossTreasure() const { return rollSource_ == RollSource::Boss; }
+private:
 
     float fade_ = 0.f;
     float waveIntro_ = 0.f;   // >0 while a new wave eases in (sim runs slow -> full)

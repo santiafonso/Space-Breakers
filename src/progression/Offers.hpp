@@ -52,6 +52,17 @@ enum class UpgradeKind {
     SplitShot,         // chance a wall bounce spawns a ghost copy       [Support]
     Rampart,           // hits shove much further and stagger longer     [Guardian]
     Mender,            // each core bounce repairs the core a little     [Guardian]
+    // game-changers: they change how the ball itself behaves
+    Seeker,            // curves toward the nearest enemy                [Striker]
+    Piercing,          // passes through enemies instead of bouncing     [Striker]
+    Railgun,           // every wall bounce fires a beam along its path  [Striker]
+    Berserk,           // each hit without touching a wall hits harder   [Striker]
+    Giant,             // huge, slower, heavier                          [Guardian]
+    Satellite,         // orbits the core instead of bouncing around     [Guardian]
+    GravityWell,       // drags nearby enemies toward itself             [Support]
+    Storm,             // zaps everything around it, all the time        [Support]
+    Gemini,            // a permanent ghost twin with the same items     [Support]
+    Midas,             // its kills pay extra gold                       [Support]
     // modifiers (no slot, stack)
     HeavyImpact,       // +contact damage
     BigBall,           // +radius
@@ -70,9 +81,13 @@ enum class UpgradeKind {
     LuckyClover,       // every chance x1.6
     GlassCannon,       // all damage x1.6, core max HP -30%
     MagneticCore,      // balls leave the core aimed at the nearest enemy
+    PrismCore,         // balls with no element leave a random one on every hit (reactions everywhere)
+    Phoenix,           // once per act the core comes back from 0 at half health
+    TimeDilation,      // enemies move 25% slower, always
+    Overcharge,        // the damage combo can climb twice as high
 };
-inline constexpr int kUpgradeKindCount = 42;
-static_assert(static_cast<int>(UpgradeKind::MagneticCore) + 1 == kUpgradeKindCount, "update kUpgradeKindCount");
+inline constexpr int kUpgradeKindCount = 56;
+static_assert(static_cast<int>(UpgradeKind::Overcharge) + 1 == kUpgradeKindCount, "update kUpgradeKindCount");
 inline constexpr int kChoiceCount = 4;
 inline constexpr int kBallSlots = 4;          // item slots per ball
 inline constexpr int kElementItemCount = 6;
@@ -84,7 +99,7 @@ inline UpgradeCat upgradeCat(UpgradeKind k) {
     const int i = static_cast<int>(k);
     if (i <= static_cast<int>(UpgradeKind::AddBall)) return UpgradeCat::NewBall;
     if (i <= static_cast<int>(UpgradeKind::ElemElectric)) return UpgradeCat::Element;
-    if (i <= static_cast<int>(UpgradeKind::Mender)) return UpgradeCat::Item;
+    if (i <= static_cast<int>(UpgradeKind::Midas)) return UpgradeCat::Item;
     if (i <= static_cast<int>(UpgradeKind::FlingMomentum)) return UpgradeCat::Modifier;
     return UpgradeCat::Relic;
 }
@@ -111,6 +126,54 @@ inline const char* upgradeCatDesc(UpgradeCat c) {
     return "";
 }
 
+// ---- tiers: how rare (and how strong) a pick is -----------------------------
+// Commons are small, steady bumps; legendaries change how the run plays.
+enum class Tier { Common, Uncommon, Rare, Epic, Legendary };
+inline constexpr int kTierCount = 5;
+
+inline Tier upgradeTier(UpgradeKind k) {
+    switch (k) {
+        case UpgradeKind::WallRush: case UpgradeKind::Carom: case UpgradeKind::WarmUp:
+        case UpgradeKind::Tempo: case UpgradeKind::Ricochet:
+        case UpgradeKind::HeavyImpact: case UpgradeKind::BigBall: case UpgradeKind::Swift:
+        case UpgradeKind::CeilingBreak: case UpgradeKind::HeavyKnock: case UpgradeKind::FlingMomentum:
+        case UpgradeKind::CoreSpring: case UpgradeKind::StrongArm:
+            return Tier::Common;
+        case UpgradeKind::AddBall:
+        case UpgradeKind::ElemFire: case UpgradeKind::ElemPoison: case UpgradeKind::ElemWater:
+        case UpgradeKind::ElemIce: case UpgradeKind::ElemStone: case UpgradeKind::ElemElectric:
+        case UpgradeKind::Crit: case UpgradeKind::Bruiser: case UpgradeKind::Rampart:
+        case UpgradeKind::Mender: case UpgradeKind::Bedrock: case UpgradeKind::Conductor:
+        case UpgradeKind::Shatter: case UpgradeKind::CoreSlowField: case UpgradeKind::Contagion:
+        case UpgradeKind::Primed:
+            return Tier::Uncommon;
+        case UpgradeKind::Cleave: case UpgradeKind::Executioner: case UpgradeKind::Overkill:
+        case UpgradeKind::Tesla: case UpgradeKind::Bomber: case UpgradeKind::Echo:
+        case UpgradeKind::Berserk: case UpgradeKind::Giant: case UpgradeKind::Midas:
+        case UpgradeKind::LuckyClover: case UpgradeKind::MagneticCore: case UpgradeKind::Overcharge:
+            return Tier::Rare;
+        case UpgradeKind::SplitShot: case UpgradeKind::Piercing:
+        case UpgradeKind::Storm: case UpgradeKind::Catalyst: case UpgradeKind::ChainReaction:
+        case UpgradeKind::GlassCannon: case UpgradeKind::Phoenix: case UpgradeKind::TimeDilation:
+            return Tier::Epic;
+        case UpgradeKind::Railgun: case UpgradeKind::Satellite: case UpgradeKind::GravityWell:
+        case UpgradeKind::Gemini: case UpgradeKind::PrismCore: case UpgradeKind::Seeker:
+            return Tier::Legendary;
+    }
+    return Tier::Common;
+}
+
+inline const char* tierName(Tier t) {
+    switch (t) {
+        case Tier::Common:    return "Common";
+        case Tier::Uncommon:  return "Uncommon";
+        case Tier::Rare:      return "Rare";
+        case Tier::Epic:      return "Epic";
+        case Tier::Legendary: return "Legendary";
+    }
+    return "";
+}
+
 // ---- item tags: a ball's role comes from them ------------------------------
 enum class ItemTag { None, Striker, Guardian, Support };
 
@@ -120,14 +183,19 @@ inline ItemTag itemTag(UpgradeKind k) {
         case UpgradeKind::WallRush: case UpgradeKind::Ricochet: case UpgradeKind::Cleave:
         case UpgradeKind::Crit: case UpgradeKind::Bruiser: case UpgradeKind::Executioner:
         case UpgradeKind::Conductor: case UpgradeKind::Echo:
+        case UpgradeKind::Seeker: case UpgradeKind::Piercing: case UpgradeKind::Railgun:
+        case UpgradeKind::Berserk:
             return ItemTag::Striker;
         case UpgradeKind::ElemIce: case UpgradeKind::ElemStone:
         case UpgradeKind::Carom: case UpgradeKind::WarmUp: case UpgradeKind::Tempo:
         case UpgradeKind::Bedrock: case UpgradeKind::Rampart: case UpgradeKind::Mender:
+        case UpgradeKind::Giant: case UpgradeKind::Satellite:
             return ItemTag::Guardian;
         case UpgradeKind::ElemPoison: case UpgradeKind::ElemWater:
         case UpgradeKind::Overkill: case UpgradeKind::Shatter: case UpgradeKind::Tesla:
         case UpgradeKind::Bomber: case UpgradeKind::SplitShot:
+        case UpgradeKind::GravityWell: case UpgradeKind::Storm: case UpgradeKind::Gemini:
+        case UpgradeKind::Midas:
             return ItemTag::Support;
         default:
             return ItemTag::None;
@@ -201,6 +269,16 @@ inline const char* upgradeKindId(UpgradeKind k) {
         case UpgradeKind::SplitShot:      return "SplitShot";
         case UpgradeKind::Rampart:        return "Rampart";
         case UpgradeKind::Mender:         return "Mender";
+        case UpgradeKind::Seeker:         return "Seeker";
+        case UpgradeKind::Piercing:       return "Piercing";
+        case UpgradeKind::Railgun:        return "Railgun";
+        case UpgradeKind::Berserk:        return "Berserk";
+        case UpgradeKind::Giant:          return "Giant";
+        case UpgradeKind::Satellite:      return "Satellite";
+        case UpgradeKind::GravityWell:    return "GravityWell";
+        case UpgradeKind::Storm:          return "Storm";
+        case UpgradeKind::Gemini:         return "Gemini";
+        case UpgradeKind::Midas:          return "Midas";
         case UpgradeKind::HeavyImpact:    return "HeavyImpact";
         case UpgradeKind::BigBall:        return "BigBall";
         case UpgradeKind::Swift:          return "Swift";
@@ -217,6 +295,10 @@ inline const char* upgradeKindId(UpgradeKind k) {
         case UpgradeKind::LuckyClover:    return "LuckyClover";
         case UpgradeKind::GlassCannon:    return "GlassCannon";
         case UpgradeKind::MagneticCore:   return "MagneticCore";
+        case UpgradeKind::PrismCore:      return "PrismCore";
+        case UpgradeKind::Phoenix:        return "Phoenix";
+        case UpgradeKind::TimeDilation:   return "TimeDilation";
+        case UpgradeKind::Overcharge:     return "Overcharge";
     }
     return "";
 }
@@ -249,6 +331,16 @@ inline UpgradeInfo upgradeInfo(UpgradeKind k) {
         case UpgradeKind::SplitShot:     return {"Split shot", "15% chance a wall bounce spawns a ghost copy with the same items (lasts a few seconds)"};
         case UpgradeKind::Rampart:       return {"Rampart", "its hits shove enemies much further and stagger them longer"};
         case UpgradeKind::Mender:        return {"Mender", "every time it bounces off the core, the core repairs a little"};
+        case UpgradeKind::Seeker:        return {"Seeker", "the ball curves in flight toward the nearest enemy"};
+        case UpgradeKind::Piercing:      return {"Piercing", "the ball passes straight through enemies, hitting every one on its path"};
+        case UpgradeKind::Railgun:       return {"Railgun", "every wall bounce fires a beam along its new path, hitting all in line"};
+        case UpgradeKind::Berserk:       return {"Berserk", "each enemy hit in a row adds +15% damage; touching a wall resets it"};
+        case UpgradeKind::Giant:         return {"Giant", "the ball becomes huge and heavy: x1.8 size, x1.3 damage, a bit slower"};
+        case UpgradeKind::Satellite:     return {"Satellite", "the ball stops bouncing and orbits the core, grinding whatever comes close"};
+        case UpgradeKind::GravityWell:   return {"Gravity well", "drags every enemy near it toward itself - packs them up for reactions"};
+        case UpgradeKind::Storm:         return {"Storm", "a constant storm around the ball zaps every enemy near it"};
+        case UpgradeKind::Gemini:        return {"Gemini", "a permanent ghost twin flies with it, copying all its items"};
+        case UpgradeKind::Midas:         return {"Midas", "enemies it kills pay 3 extra gold"};
         case UpgradeKind::HeavyImpact:   return {"Heavy impact", "+15% contact damage (stacks)"};
         case UpgradeKind::BigBall:       return {"Big ball", "+10% radius (stacks)"};
         case UpgradeKind::Swift:         return {"Swift", "+8% cruise speed (stacks)"};
@@ -265,6 +357,10 @@ inline UpgradeInfo upgradeInfo(UpgradeKind k) {
         case UpgradeKind::LuckyClover:   return {"Lucky clover", "every chance (crits, echoes, zaps, bombs, ghosts...) x1.6"};
         case UpgradeKind::GlassCannon:   return {"Glass cannon", "all damage x1.6, but the core loses 30% of its max health"};
         case UpgradeKind::MagneticCore:  return {"Magnetic core", "every ball bouncing off the core flies at the nearest enemy"};
+        case UpgradeKind::PrismCore:     return {"Prism core", "balls with no element leave a random element on every hit - reactions everywhere"};
+        case UpgradeKind::Phoenix:       return {"Phoenix", "once per act, when the core breaks it comes back at half health"};
+        case UpgradeKind::TimeDilation:  return {"Time dilation", "all enemies move 25% slower, all the time"};
+        case UpgradeKind::Overcharge:    return {"Overcharge", "the damage combo can climb twice as high"};
     }
     return {"", ""};
 }
@@ -365,6 +461,10 @@ struct UpgradeCtx {
     bool luckyClover = false;
     bool glassCannon = false;
     bool magneticCore = false;
+    bool prismCore = false;
+    bool phoenix = false;
+    bool timeDilation = false;
+    bool overcharge = false;
 };
 
 inline int elementsUnlocked(const UpgradeCtx& c) {
@@ -402,6 +502,10 @@ inline bool upgradeEligible(UpgradeKind k, const UpgradeCtx& c) {
         case UpgradeKind::LuckyClover:   return !c.luckyClover;
         case UpgradeKind::GlassCannon:   return !c.glassCannon;
         case UpgradeKind::MagneticCore:  return !c.magneticCore;
+        case UpgradeKind::PrismCore:     return !c.prismCore;
+        case UpgradeKind::Phoenix:       return !c.phoenix;
+        case UpgradeKind::TimeDilation:  return !c.timeDilation;
+        case UpgradeKind::Overcharge:    return !c.overcharge;
         default:                         return false;
     }
 }

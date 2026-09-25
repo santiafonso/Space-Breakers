@@ -35,6 +35,7 @@ public:
     // ---- dev tools (no-ops unless the caller is in dev mode) ---------
     void devWinWave();                    // clear the current wave now
     void devSetInvuln(bool on) { invuln_ = on; }
+    void setPhoenix(int charges) { phoenixLeft_ = charges; }   // "Phoenix" relic: saves left this act
     bool devInvuln() const { return invuln_; }
 
     FrameEvents step(float dt, const WorldParams& p);
@@ -106,7 +107,11 @@ private:
     void carryBalls(const WorldParams& p);   // keep balls in place across a wave change
     sf::Vector2f wideArenaSize() const;      // the pulled-back arena used from the boss wave on
     void updateCoreSlide(float dt);          // ease the core left -> centre entering wave 11
-    void advanceCombo(float dt);
+    void advanceCombo(float dt, const WorldParams& p);
+    void advanceSatellite(Ball& b, float dt, const WorldParams& p, FrameEvents& ev);   // "Satellite": orbit the core
+    void fireRail(Ball& b, const WorldParams& p, FrameEvents& ev);                    // "Railgun" beam
+    void updateStorm(Ball& b, float dt, const WorldParams& p, FrameEvents& ev);       // "Storm" zaps
+    void updateTwins(const WorldParams& p);                                            // "Gemini" twins
     void updateAutoFling(float dt, const WorldParams& p, FrameEvents& ev);
     void advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev);
     void emitElement(Ball& b, float dt, const WorldParams& p, FrameEvents& ev);
@@ -133,7 +138,8 @@ private:
                 bool allowEcho = true);
     void damageEnemy(Enemy& e, float dmg);            // any damage source; applies "brittle"
     void areaDamage(sf::Vector2f at, float radius, float dmg, const Enemy* skip);
-    void applyElement(Enemy& e, const Ball& b, float hitDmg, const WorldParams& p, FrameEvents& ev);
+    void applyElement(Enemy& e, Element el, int owner, float hitDmg, const WorldParams& p, FrameEvents& ev);
+    Element hitElement(const Ball& b, const WorldParams& p);   // its element, or a random one under "Prism core"
     void triggerReaction(Element x, Element y, Enemy& e, float hitDmg, const WorldParams& p,
                          FrameEvents& ev, int depth);
     bool chance(float base, const WorldParams& p);    // roll a proc through the run's luck
@@ -183,6 +189,7 @@ private:
 
     float pickupTimer_ = cfg::pickup::spawnMin;
     bool invuln_ = false;  // dev: core takes no damage
+    int phoenixLeft_ = 0;  // "Phoenix": times the core can still come back this act
 
     int aegisChargesLeft_ = 0;      // "Aegis": hits the core still soaks this wave
     bool coreHitThisWave_ = false;  // "Interest": did anything reach the core this wave

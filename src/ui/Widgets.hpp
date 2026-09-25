@@ -51,6 +51,10 @@ sf::FloatRect slotRect(sf::Vector2f panelCentre, int slot);
 std::string modifierLine(const BallLoadout& L);
 sf::Color catColor(UpgradeCat c);
 sf::Color tagColor(ItemTag t);   // Striker / Guardian / Support item colour
+sf::Color tierColor(Tier t);     // Common grey .. Legendary gold
+// A pick's card frame: tier-coloured fill + outline; Epic / Legendary get a
+// pulsing halo so the rare ones jump out. `time` drives the pulse.
+void drawTierFrame(sf::RenderWindow& w, sf::FloatRect r, Tier t, float hover, float alpha, float time);
 
 // What part of a loadout panel centred at `c` the pointer is on: 0..3 = item
 // slot, kPanelPartBall = the ball / role name, kPanelPartMods = the modifier

@@ -747,6 +747,35 @@ Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
   - Falta playtest: frecuencia de reacciones con el jugador tirando, números de
     procs, precio de las reliquias nuevas.
 
+- **Fase J — tiers + items que cambian la pelota + reliquias legendarias. [IMPLEMENTADO 2026-09-25]**
+  Pedido (usuario): "no me es muy diferente si me sale cualquiera" → pocos items
+  que cambien drásticamente la partida y muchos chicos que aporten.
+  - **Tiers** (`Tier`, `upgradeTier`): Common (gris) · Uncommon (verde) · Rare
+    (azul) · Epic (violeta) · Legendary (dorado). Cada carta tira primero un tier
+    (`cfg::tier::weightsNormal` 45/30/16/7/2, `weightsElite` 18/32/28/15/7,
+    `weightsBoss` solo Epic/Legendary) y después un pick de ese tier
+    (`App::rollPick`, con fallback al tier vecino). Lucky clover corre las
+    probabilidades un tier para arriba. Precios de tienda por tier
+    (`priceByTier` 30/45/65/95/150). Cartas con marco del color del tier; Epic
+    y Legendary con un halo que late.
+  - **Tesoro de boss**: al "Continue" después del miniboss, una elección de
+    1 de 4 **solo Epic/Legendary**.
+  - **Items que cambian la pelota** (`cfg::changer`): **Seeker** (L, curva hacia
+    el enemigo más cercano) · **Railgun** (L, cada rebote en pared dispara un haz
+    que pega a todo en línea, x2) · **Satellite** (L, deja de rebotar y orbita el
+    núcleo moliendo lo que se acerca, x1.8; no se agarra) · **Gravity well** (L,
+    arrastra enemigos hacia la pelota: arma racimos para reacciones) · **Gemini**
+    (L, gemelo fantasma permanente con los mismos items) · **Piercing** (E,
+    atraviesa enemigos) · **Storm** (E, descargas constantes alrededor) ·
+    **Berserk** (R, +15% por golpe seguido, se resetea en pared) · **Giant** (R,
+    x1.8 tamaño, x1.3 daño, más lenta) · **Midas** (R, +3 oro por kill).
+  - **Reliquias**: **Prism core** (L, las pelotas sin elemento dejan uno al
+    azar en cada golpe → reacciones por todos lados) · **Phoenix** (E, una vez
+    por acto el núcleo vuelve con 50%) · **Time dilation** (E, enemigos -25%
+    velocidad) · **Overcharge** (R, el combo sube al doble).
+  - Sim sin jugador (2 pelotas, 8 corridas): Seeker 2 → 22 kills, Gemini+
+    Satellite ~20, Satellite 13, Storm 9; ningún NaN, <1.5 µs por paso.
+
 - **Pendiente (idea del usuario, 2026-09-24):** como las mejoras ya no llegan
   en cada oleada, cada una tiene que **sentirse mucho** al conseguirla: repasar
   items / modificadores / reliquias para que sean más fuertes y más visibles

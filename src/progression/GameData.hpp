@@ -49,6 +49,10 @@ struct RunMods {
     bool luckyClover = false;    // every chance x1.6
     bool glassCannon = false;    // all damage x1.6, core -30% max HP
     bool magneticCore = false;   // core bounces aim at the nearest enemy
+    bool prismCore = false;      // elementless balls leave a random element
+    bool phoenix = false;        // the core comes back once per act
+    bool timeDilation = false;   // enemies slower
+    bool overcharge = false;     // higher combo cap
 };
 
 // The current run, in memory only.

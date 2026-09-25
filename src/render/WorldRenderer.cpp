@@ -66,6 +66,17 @@ void WorldRenderer::drawObstacle(sf::RenderWindow& window, const Obstacle& o) co
 
 void WorldRenderer::drawBolt(sf::RenderWindow& window, const Bolt& bo) const {
     const float f = bo.maxLife > 0.f ? clampf(bo.life / bo.maxLife, 0.f, 1.f) : 0.f;
+    if (bo.beam) {   // Railgun: a straight bright beam that thins out as it fades
+        const sf::Vector2f d = bo.b - bo.a;
+        const float thick = 3.f + 9.f * f;
+        sf::RectangleShape beam({length(d), thick});
+        beam.setOrigin(0.f, thick * 0.5f);
+        beam.setPosition(bo.a);
+        beam.setRotation(std::atan2(d.y, d.x) * 180.f / kPi);
+        beam.setFillColor(withAlpha(theme::puGolden, 0.25f + 0.65f * f));
+        window.draw(beam);
+        return;
+    }
     const sf::Color col = withAlpha(theme::elemElectric, 0.35f + 0.55f * f);
 
     // A jagged 3-segment arc between the two endpoints.

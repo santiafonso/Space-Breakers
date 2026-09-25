@@ -167,6 +167,38 @@ sf::Color tagColor(ItemTag t) {
     return theme::textLo;
 }
 
+sf::Color tierColor(Tier t) {
+    switch (t) {
+        case Tier::Common:    return theme::textLo;
+        case Tier::Uncommon:  return theme::ballMid;
+        case Tier::Rare:      return theme::accent;
+        case Tier::Epic:      return theme::puSurge;
+        case Tier::Legendary: return theme::puGolden;
+    }
+    return theme::textLo;
+}
+
+void drawTierFrame(sf::RenderWindow& w, sf::FloatRect r, Tier t, float hover, float alpha, float time) {
+    const sf::Color col = tierColor(t);
+    const int rank = static_cast<int>(t);
+    if (rank >= static_cast<int>(Tier::Epic)) {   // a slow breathing halo behind the rare ones
+        const float pulse = 0.5f + 0.5f * std::sin(time * (rank == 4 ? 4.f : 2.6f));
+        const float grow = 4.f + 6.f * pulse;
+        sf::RectangleShape halo({r.width + 2.f * grow, r.height + 2.f * grow});
+        halo.setPosition(r.left - grow, r.top - grow);
+        halo.setFillColor(sf::Color::Transparent);
+        halo.setOutlineThickness(rank == 4 ? 3.f : 2.f);
+        halo.setOutlineColor(withAlpha(col, (0.18f + 0.3f * pulse) * alpha));
+        w.draw(halo);
+    }
+    sf::RectangleShape card({r.width, r.height});
+    card.setPosition(r.left, r.top);
+    card.setFillColor(withAlpha(col, (0.07f + 0.03f * static_cast<float>(rank) + 0.14f * hover) * alpha));
+    card.setOutlineThickness(rank >= 3 ? 3.f : 2.f);
+    card.setOutlineColor(withAlpha(col, (0.45f + 0.45f * hover) * alpha));
+    w.draw(card);
+}
+
 sf::Color catColor(UpgradeCat c) {
     switch (c) {
         case UpgradeCat::NewBall:  return theme::core;
@@ -269,7 +301,9 @@ bool loadoutTooltip(const BallLoadout& L, int part, std::string& title, std::str
         title = info.title;
         if (L.gearLvl[part] > 1) title += "  (level " + std::to_string(L.gearLvl[part]) + ")";
         desc = info.desc;
-        if (itemTag(k) != ItemTag::None) desc += std::string("  [") + itemTagName(itemTag(k)) + "]";
+        desc += std::string("  [") + tierName(upgradeTier(k));
+        if (itemTag(k) != ItemTag::None) desc += std::string(", ") + itemTagName(itemTag(k));
+        desc += "]";
         return true;
     }
     if (part == kPanelPartBall) {

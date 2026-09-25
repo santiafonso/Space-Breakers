@@ -416,12 +416,10 @@ void ShopScreen::draw(App& app, sf::RenderWindow& w) {
         const sf::FloatRect rc = offerRect(app, i);
         const float cx = rc.left + rc.width * 0.5f;
 
-        sf::RectangleShape card({rc.width, rc.height});
-        card.setPosition(rc.left, rc.top);
-        card.setFillColor(withAlpha(theme::accent, (0.08f + 0.14f * h) * a));
-        card.setOutlineThickness(1.5f);
-        card.setOutlineColor(withAlpha(theme::accent, (0.35f + 0.5f * h) * a));
-        w.draw(card);
+        const Tier tier = upgradeTier(k);
+        drawTierFrame(w, rc, tier, h, a, it);
+        drawCentered(w, app.font(), tierName(tier), theme::fsSmall, {cx, rc.top + 64.f},
+                     withAlpha(tierColor(tier), a));
 
         std::string head = upgradeCatName(cat);
         if (itemTag(k) != ItemTag::None) head += std::string("  -  ") + itemTagName(itemTag(k));
@@ -431,7 +429,7 @@ void ShopScreen::draw(App& app, sf::RenderWindow& w) {
         drawCentered(w, app.font(), info.title, theme::fsHeading, {cx, rc.top + 46.f},
                      withAlpha(es >= 0 ? elementColor(static_cast<Element>(es + 1)) : theme::textHi, a));
         const auto lines = wrapText(app.font(), info.desc, theme::fsSmall, rc.width - 22.f);
-        float y = rc.top + 78.f;
+        float y = rc.top + 86.f;
         for (const std::string& l : lines) {
             drawCentered(w, app.font(), l, theme::fsSmall, {cx, y}, withAlpha(theme::textLo, a));
             y += 17.f;

@@ -105,6 +105,9 @@ WorldParams App::params() const {
     p.chainReaction = m.chainReaction;
     p.magneticCore = m.magneticCore;
     p.luck = m.luckyClover ? cfg::synergy::luckyCloverMul : 1.f;
+    p.prismCore = m.prismCore;
+    p.timeDilation = m.timeDilation;
+    p.overcharge = m.overcharge;
     if (m.glassCannon) p.damageMult *= cfg::synergy::glassDamage;
 
     // Meta web (Fase A).
@@ -164,6 +167,16 @@ BallSpec App::ballSpec(const BallLoadout& L) const {
             case UpgradeKind::SplitShot:   m.splitChance = cfg::synergy::splitChance * lv; break;
             case UpgradeKind::Rampart:     m.rampart = true; break;
             case UpgradeKind::Mender:      m.menderHeal = cfg::synergy::menderHeal * lv; break;
+            case UpgradeKind::Seeker:      m.seeker = true; break;
+            case UpgradeKind::Piercing:    m.piercing = true; break;
+            case UpgradeKind::Railgun:     m.railgun = true; break;
+            case UpgradeKind::Berserk:     m.berserk = true; break;
+            case UpgradeKind::Satellite:   m.satellite = true; break;
+            case UpgradeKind::GravityWell: m.gravityWell = true; break;
+            case UpgradeKind::Storm:       m.storm = true; break;
+            case UpgradeKind::Gemini:      m.gemini = true; break;
+            case UpgradeKind::Midas:       m.midas = true; break;
+            case UpgradeKind::Giant:       break;   // folded in after the modifiers below
             default: break;   // elements are read via L.element()
         }
     }
@@ -180,6 +193,11 @@ BallSpec App::ballSpec(const BallLoadout& L) const {
     m.maxSpeedMult = 1.f + cfg::combat::ceilingPerStack * stacks(UpgradeKind::CeilingBreak);
     m.knockMult = 1.f + cfg::combat::knockPerStack * stacks(UpgradeKind::HeavyKnock);
     m.flingDecay = std::pow(cfg::combat::reflexesPerStack, stacks(UpgradeKind::FlingMomentum));
+    if (L.has(UpgradeKind::Giant)) {   // "Giant": huge, heavy, a touch slower
+        m.radiusMult *= cfg::changer::giantRadius;
+        m.damageMult *= cfg::changer::giantDamage;
+        m.cruiseMult *= cfg::changer::giantCruise;
+    }
     return s;
 }
 
@@ -291,6 +309,7 @@ void App::newRun() {
     continueUnlocked_ = data_.meta.stats.wins > 0 || startWave > cfg::run::bossWave;
 
     world_.startRun(params(), ballSpecs(), r.coreHp, r.coreMaxHp);
+    world_.setPhoenix(0);   // no Phoenix until it's picked
     effects_.clear();
     hitstop_ = 0.f;
     camKick_ = 0.f;
@@ -360,40 +379,73 @@ UpgradeCtx App::buildUpgradeCtx() const {
     c.luckyClover = r.mods.luckyClover;
     c.glassCannon = r.mods.glassCannon;
     c.magneticCore = r.mods.magneticCore;
+    c.prismCore = r.mods.prismCore;
+    c.phoenix = r.mods.phoenix;
+    c.timeDilation = r.mods.timeDilation;
+    c.overcharge = r.mods.overcharge;
     return c;
 }
 
-void App::rollChoices() {
+UpgradeKind App::rollPick(RollSource src, const std::vector<UpgradeKind>& exclude,
+                          bool (*filter)(UpgradeKind)) {
     const UpgradeCtx c = buildUpgradeCtx();
-    std::vector<UpgradeKind> pool;
+    const int* base = src == RollSource::Elite ? cfg::tier::weightsElite
+                    : src == RollSource::Boss  ? cfg::tier::weightsBoss
+                                               : cfg::tier::weightsNormal;
+    float w[kTierCount];
+    for (int t = 0; t < kTierCount; ++t) w[t] = static_cast<float>(base[t]);
+    if (data_.run.mods.luckyClover)   // luck nudges every tier's odds one step up
+        for (int t = kTierCount - 2; t >= 0; --t) {
+            const float moved = w[t] * cfg::tier::luckShift;
+            w[t] -= moved;
+            w[t + 1] += moved;
+        }
+
+    // Eligible picks by tier.
+    std::vector<UpgradeKind> byTier[kTierCount];
     for (int i = 0; i < kUpgradeKindCount; ++i) {
         const auto k = static_cast<UpgradeKind>(i);
-        if (upgradeEligible(k, c)) pool.push_back(k);
+        if (!upgradeEligible(k, c) || (filter && !filter(k))) continue;
+        if (std::find(exclude.begin(), exclude.end(), k) != exclude.end()) continue;
+        byTier[static_cast<int>(upgradeTier(k))].push_back(k);
     }
-    for (std::size_t i = pool.size(); i > 1; --i)
-        std::swap(pool[i - 1], pool[static_cast<std::size_t>(rng_.irange(0, static_cast<int>(i) - 1))]);
+    float total = 0.f;
+    for (int t = 0; t < kTierCount; ++t) total += w[t];
+    float roll = rng_.range(0.f, std::max(total, 1e-3f));
+    int tier = 0;
+    for (; tier < kTierCount - 1; ++tier) {
+        if (roll < w[tier]) break;
+        roll -= w[tier];
+    }
+    // That tier empty? Step down, then up, to the nearest tier that has something.
+    for (int d = 0; d < kTierCount; ++d) {
+        for (int t : {tier - d, tier + d}) {
+            if (t < 0 || t >= kTierCount || byTier[t].empty()) continue;
+            if (src == RollSource::Boss && t < static_cast<int>(Tier::Rare) && d < kTierCount - 1) continue;
+            const auto& v = byTier[t];
+            return v[static_cast<std::size_t>(rng_.irange(0, static_cast<int>(v.size()) - 1))];
+        }
+    }
+    return UpgradeKind::HeavyImpact;   // always eligible: a modifier fits any ball
+}
 
-    for (int i = 0; i < kChoiceCount; ++i)
-        choices_[i] = pool.empty() ? UpgradeKind::CoreSpring   // inert fallback (idempotent relic)
-                                   : pool[static_cast<std::size_t>(i) % pool.size()];
+void App::rollChoices(RollSource src) {
+    rollSource_ = src;
+    std::vector<UpgradeKind> taken;
+    for (int i = 0; i < kChoiceCount; ++i) {
+        choices_[i] = rollPick(src, taken);
+        taken.push_back(choices_[i]);
+    }
 }
 
 // "reroll" button under a Choice card: swap that one card for a different
 // eligible item that isn't already on the table. Costs one Foresight charge.
 void App::rerollChoice(int idx) {
     if (idx < 0 || idx >= kChoiceCount || data_.run.rerollsLeft <= 0) return;
-    const UpgradeCtx c = buildUpgradeCtx();
-    std::vector<UpgradeKind> pool;
-    for (int i = 0; i < kUpgradeKindCount; ++i) {
-        const auto k = static_cast<UpgradeKind>(i);
-        if (!upgradeEligible(k, c)) continue;
-        bool shown = false;
-        for (int j = 0; j < kChoiceCount; ++j)
-            if (choices_[j] == k) shown = true;
-        if (!shown) pool.push_back(k);
-    }
-    if (pool.empty()) return;   // nothing new to offer - keep the charge
-    choices_[idx] = pool[static_cast<std::size_t>(rng_.irange(0, static_cast<int>(pool.size()) - 1))];
+    const std::vector<UpgradeKind> shown(choices_.begin(), choices_.end());
+    const UpgradeKind k = rollPick(rollSource_, shown);   // same odds as the card it replaces
+    if (std::find(shown.begin(), shown.end(), k) != shown.end()) return;   // nothing new - keep the charge
+    choices_[idx] = k;
     --data_.run.rerollsLeft;
     audio_.purchase();
     effects_.flash(theme::accent, 0.25f);
@@ -407,20 +459,21 @@ void App::rollRecruitChoices() {
     choices_[0] = upgradeEligible(UpgradeKind::AddBall, c)
         ? UpgradeKind::AddBall
         : static_cast<UpgradeKind>(static_cast<int>(UpgradeKind::HeavyImpact) + rng_.irange(0, kModifierCount - 1));
-    const ItemTag tags[3] = {ItemTag::Striker, ItemTag::Guardian, ItemTag::Support};
+    rollSource_ = RollSource::Normal;
+    static bool (*const tagFilters[3])(UpgradeKind) = {
+        [](UpgradeKind k) { return itemTag(k) == ItemTag::Striker; },
+        [](UpgradeKind k) { return itemTag(k) == ItemTag::Guardian; },
+        [](UpgradeKind k) { return itemTag(k) == ItemTag::Support; },
+    };
+    std::vector<UpgradeKind> taken{choices_[0]};
     for (int t = 0; t < 3; ++t) {
-        std::vector<UpgradeKind> pool;
-        for (int i = 0; i < kUpgradeKindCount; ++i) {
-            const auto k = static_cast<UpgradeKind>(i);
-            if (itemTag(k) == tags[t] && upgradeEligible(k, c)) pool.push_back(k);
-        }
-        choices_[t + 1] = pool.empty() ? UpgradeKind::HeavyImpact
-                                       : pool[static_cast<std::size_t>(rng_.irange(0, static_cast<int>(pool.size()) - 1))];
+        choices_[t + 1] = rollPick(RollSource::Normal, taken, tagFilters[t]);
+        taken.push_back(choices_[t + 1]);
     }
 }
 
-void App::openChoice() {
-    rollChoices();
+void App::openChoice(RollSource src) {
+    rollChoices(src);
     push(ScreenId::Choice);
 }
 
@@ -474,6 +527,10 @@ void App::applyUpgradeKind(UpgradeKind k, int ball, int slot) {
         case UpgradeKind::ChainReaction: m.chainReaction = true; break;
         case UpgradeKind::LuckyClover:   m.luckyClover = true; break;
         case UpgradeKind::MagneticCore:  m.magneticCore = true; break;
+        case UpgradeKind::PrismCore:     m.prismCore = true; break;
+        case UpgradeKind::TimeDilation:  m.timeDilation = true; break;
+        case UpgradeKind::Overcharge:    m.overcharge = true; break;
+        case UpgradeKind::Phoenix:       m.phoenix = true; world_.setPhoenix(1); break;
         case UpgradeKind::GlassCannon:   // big damage, a smaller core
             m.glassCannon = true;
             world_.addCoreMaxHp(-world_.core().maxHp * (1.f - cfg::synergy::glassCoreHp));
@@ -661,25 +718,22 @@ void App::cancelEquip() {
 int App::shopPrice(UpgradeKind k) const {
     switch (upgradeCat(k)) {
         case UpgradeCat::NewBall:  return cfg::gold::priceNewBall;
-        case UpgradeCat::Element:  return cfg::gold::priceElement;
-        case UpgradeCat::Item:     return cfg::gold::priceItem;
         case UpgradeCat::Modifier: return cfg::gold::priceModifier;
-        case UpgradeCat::Relic:    return cfg::gold::priceRelic;
+        default:                   return cfg::gold::priceByTier[static_cast<int>(upgradeTier(k))];
     }
-    return 0;
 }
 
 void App::rollShop() {
     RunState& r = data_.run;
-    const UpgradeCtx c = buildUpgradeCtx();
-    std::vector<int> pool;
-    for (int i = 0; i < kUpgradeKindCount; ++i)
-        if (upgradeEligible(static_cast<UpgradeKind>(i), c)) pool.push_back(i);
-    for (std::size_t i = pool.size(); i > 1; --i)
-        std::swap(pool[i - 1], pool[static_cast<std::size_t>(rng_.irange(0, static_cast<int>(i) - 1))]);
-    if (static_cast<int>(pool.size()) > cfg::gold::shopOffers) pool.resize(cfg::gold::shopOffers);
-    r.shopOffers = pool;
-    r.shopSold.assign(pool.size(), false);
+    std::vector<UpgradeKind> taken;
+    for (int i = 0; i < cfg::gold::shopOffers; ++i) {
+        const UpgradeKind k = rollPick(RollSource::Normal, taken);
+        if (std::find(taken.begin(), taken.end(), k) != taken.end()) break;   // pool ran dry
+        taken.push_back(k);
+    }
+    r.shopOffers.clear();
+    for (UpgradeKind k : taken) r.shopOffers.push_back(static_cast<int>(k));
+    r.shopSold.assign(r.shopOffers.size(), false);
 }
 
 void App::buyShopOffer(int i) {
@@ -772,7 +826,8 @@ void App::continuePastBoss() {
     r.map = generateMap(rng_, 2);
     r.mapNode = -1;
     r.mapRow = 0;
-    openMap();
+    world_.setPhoenix(r.mods.phoenix ? 1 : 0);   // "Phoenix" recharges for the new act
+    openChoice(RollSource::Boss);                // boss treasure: an Epic / Legendary pick, then the map
 }
 
 // "Back to menu" on the BossWin card. If the run wasn't banked yet (miniboss just
@@ -1022,6 +1077,13 @@ void App::processEvents(const FrameEvents& ev) {
         audio_.ballHit(clampf(b.speed / 900.f, 0.f, 1.f), harmony, b.ballPair);
     }
     if (ev.autoFlung) audio_.thrown(0.35f);
+    if (ev.midasKills > 0 && data_.run.active)   // "Midas": extra gold per kill
+        data_.run.gold += ev.midasKills * cfg::changer::midasGold;
+    if (ev.phoenix) {
+        effects_.flash(theme::puGolden, 1.f);
+        effects_.addLabel("PHOENIX", {size().x * 0.5f, size().y * 0.4f}, theme::puGolden, 40, 1.6f);
+        audio_.comboUp(cfg::combo::baseCapTier);
+    }
     if (ev.comboTierUp) {
         hud_.pulseCombo();
         audio_.comboUp(ev.comboTier);
@@ -1085,7 +1147,7 @@ void App::processEvents(const FrameEvents& ev) {
                               theme::core, 20, 1.3f);
         }
         audio_.purchase();
-        if (r.eliteWave) openChoice();
+        if (r.eliteWave) openChoice(RollSource::Elite);
         else openMap();
     }
 }

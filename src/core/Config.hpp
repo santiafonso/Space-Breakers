@@ -186,6 +186,40 @@ inline constexpr float guardianPulseStagger = 0.8f;
 inline constexpr float supportSpread = 100.f;      // marks spread this far
 }  // namespace synergy
 
+// Tiers: how rare a pick is. Each card rolls a tier first (by these weights),
+// then an eligible pick of that tier (falling back to lower tiers if none).
+namespace tier {
+inline constexpr int weightsNormal[5] = {45, 30, 16, 7, 2};   // upgrade nodes, shops
+inline constexpr int weightsElite[5]  = {18, 32, 28, 15, 7};  // elite fights
+inline constexpr int weightsBoss[5]   = {0, 0, 0, 65, 35};    // the treasure after a boss
+inline constexpr float luckShift = 0.5f;   // Lucky clover moves this share of each tier's weight up one tier
+}  // namespace tier
+
+// Game-changing items (Fase J).
+namespace changer {
+inline constexpr float seekerTurn = 2.6f;          // Seeker: rad/s it can curve toward its target
+inline constexpr float seekerRange = 520.f;
+inline constexpr float pierceCooldown = 0.25f;     // Piercing / Satellite: time before the same enemy can be hit again
+inline constexpr float railWidth = 22.f;           // Railgun: beam half-width...
+inline constexpr float railFrac = 2.0f;            // ...damage x the ball's hit
+inline constexpr float berserkPerHit = 0.15f;      // Berserk: + this damage per hit in a row...
+inline constexpr int   berserkMax = 12;            // ...up to this many
+inline constexpr float giantRadius = 1.8f, giantDamage = 1.3f, giantCruise = 0.8f;
+inline constexpr float satelliteRadius = 150.f;    // Satellite: orbit radius around the core
+inline constexpr float satelliteSpeed = 1.1f;      // ...orbit speed x its cruise
+inline constexpr float satelliteDamage = 1.8f;     // ...its hits x this (it grinds whatever comes close)
+inline constexpr float gravityRadius = 230.f;      // Gravity well: pull radius...
+inline constexpr float gravityPull = 210.f;        // ...px/s drag toward the ball at its centre (fades to 0 at the edge)
+inline constexpr float stormRadius = 150.f;        // Storm: zap radius...
+inline constexpr float stormInterval = 0.55f;      // ...every this many seconds...
+inline constexpr float stormFrac = 0.35f;          // ...for this x the ball's hit
+inline constexpr int   midasGold = 3;
+// relics
+inline constexpr float timeDilation = 0.75f;       // enemies' time scale
+inline constexpr int   overchargeMul = 2;          // combo cap x this
+inline constexpr float phoenixHeal = 0.5f;         // core comes back at this fraction of max
+}  // namespace changer
+
 // Run score: arcade points, shown in the HUD and kept as a lifetime best.
 namespace score {
 inline constexpr int perKill = 100;   // per enemy killed; x2 while DOUBLE POINTS is up; boss gives 0
@@ -287,10 +321,9 @@ inline constexpr int cleanBase = 4;                // clean wave: this + cleanPe
 inline constexpr int cleanPerRow = 1;
 // Shop prices.
 inline constexpr int priceNewBall = 60;
-inline constexpr int priceElement = 40;
-inline constexpr int priceItem = 45;
 inline constexpr int priceModifier = 22;
-inline constexpr int priceRelic = 70;
+// Items, elements and relics are priced by tier (Common .. Legendary).
+inline constexpr int priceByTier[5] = {30, 45, 65, 95, 150};
 inline constexpr int priceRepair = 20;     // repairs repairFrac of the core's max HP
 inline constexpr float repairFrac = 0.30f;
 inline constexpr int shopOffers = 5;

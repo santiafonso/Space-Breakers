@@ -71,6 +71,16 @@ struct BallMods {
     bool rampart = false;      // hits shove further, stagger longer
     float menderHeal = 0.f;    // Mender: core hp per core bounce
     bool mastery = false;      // 4 items of its role's tag
+    // game-changers (Fase J)
+    bool seeker = false;
+    bool piercing = false;
+    bool railgun = false;
+    bool berserk = false;
+    bool satellite = false;
+    bool gravityWell = false;
+    bool storm = false;
+    bool gemini = false;
+    bool midas = false;
 };
 
 // Everything the World needs to build / refresh one ball.
@@ -100,6 +110,10 @@ struct Ball {
     int owner = -1;          // index of the (real) ball this is / was copied from - reactions need two owners
     bool ghost = false;      // "Split shot" copy: temporary, fades out
     float ghostLife = 0.f;
+    bool twin = false;       // "Gemini": a permanent ghost that follows its parent's items
+    int berserkStacks = 0;   // "Berserk": hits in a row since the last wall
+    float stormT = 0.f;      // "Storm": time to the next zap
+    float orbitAng = 0.f;    // "Satellite": angle around the core
 };
 
 // Grunt = the plain walker. The rest each want a different answer (cfg::enemy).
@@ -130,6 +144,7 @@ struct Enemy {
     Element elem = Element::Plain;   // last element a ball left on it, waiting for a reaction
     int elemOwner = -1;              // which ball left it
     float elemT = 0.f;               // how long it keeps waiting
+    float pierceCd = 0.f;            // Piercing / Satellite balls can't re-hit it until this runs out
     float stagger = 0.f;    // seconds left staggered by a Guardian (drifts, doesn't advance)
     bool orbiter = false;   // wave-20 shield: orbits the boss instead of seeking the core
     float orbitPhase = 0.f; // its slot angle on the ring
@@ -142,6 +157,7 @@ struct Bolt {
     sf::Vector2f b;
     float life = cfg::element::boltLife;
     float maxLife = cfg::element::boltLife;
+    bool beam = false;   // a Railgun beam: straight and thick instead of a jagged arc
 };
 
 // A stone ball's rubble: enemies are pushed out of it and take chip damage.
@@ -230,6 +246,8 @@ struct FrameEvents {
     bool coreHit = false;
     bool shieldBlock = false;             // a hit bounced off a Shielded enemy's shield
     bool autoFlung = false;               // the auto-throw option launched a ball
+    int midasKills = 0;                   // kills by a Midas ball (extra gold)
+    bool phoenix = false;                 // the Phoenix relic just saved the core
     bool bossHit = false;                 // a ball landed on the miniboss this step
     bool waveCleared = false;
     bool runOver = false;
@@ -250,6 +268,9 @@ struct WorldParams {
     bool chainReaction = false;   // Chain reaction (relic): reactions can cascade
     bool magneticCore = false;    // Magnetic core (relic): core bounces aim at the nearest enemy
     float luck = 1.f;             // Lucky clover (relic): every chance x this
+    bool prismCore = false;       // Prism core (relic): elementless balls leave a random element
+    bool timeDilation = false;    // Time dilation (relic): enemies move slower
+    bool overcharge = false;      // Overcharge (relic): higher combo cap
     float elemMult[kElementCount] = {1.f, 1.f, 1.f, 1.f, 1.f, 1.f, 1.f};  // per-element potency (web levels)
     int  emberLevel = 0;          // Ember web node: fire hits apply a burn DoT
     bool autoFling = false;       // option: the game throws a ball at the threat now and then

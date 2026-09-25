@@ -836,7 +836,8 @@ void ChoiceScreen::draw(App& app, sf::RenderWindow& w) {
     const float it = intro();
 
     drawDim(w, s, 0.82f * clampf(introPop(it, 0.f, 0.2f), 0.f, 1.f));
-    drawCenteredPop(w, app.font(), "Choose one", theme::fsTitle,
+    drawCenteredPop(w, app.font(), app.choiceIsBossTreasure() ? "Boss treasure - choose one" : "Choose one",
+                    theme::fsTitle,
                     {s.x * 0.5f, s.y * 0.26f}, theme::textHi, introPop(it, 0.04f, 0.3f));
 
     for (int i = 0; i < kChoiceCount; ++i) {
@@ -848,17 +849,13 @@ void ChoiceScreen::draw(App& app, sf::RenderWindow& w) {
         const float ca = clampf(cp, 0.f, 1.f);
         const sf::Vector2f c = c0 + sf::Vector2f(0.f, (1.f - ca) * 46.f);   // rises up into place
 
-        sf::RectangleShape card({kCardW, kCardH});
-        card.setOrigin(kCardW * 0.5f, kCardH * 0.5f);
-        card.setPosition(c);
-        const float sc = 0.55f + 0.45f * cp;                                // springs open
-        card.setScale(sc, sc);
-        card.setFillColor(withAlpha(theme::accent, (0.10f + 0.16f * h) * ca));
-        card.setOutlineThickness(2.f);
-        card.setOutlineColor(withAlpha(theme::accent, (0.4f + 0.5f * h) * ca));
-        w.draw(card);
-
         const UpgradeKind kind = app.choices()[i];
+        const Tier tier = upgradeTier(kind);
+        const float sc = 0.55f + 0.45f * clampf(cp, 0.f, 1.05f);            // springs open
+        drawTierFrame(w, {c.x - kCardW * 0.5f * sc, c.y - kCardH * 0.5f * sc, kCardW * sc, kCardH * sc},
+                      tier, h, ca, it);
+        drawCenteredPop(w, app.font(), tierName(tier), theme::fsSmall, {c.x, c.y - kCardH * 0.5f + 80.f},
+                        tierColor(tier), cp);
         const UpgradeCat cat = upgradeCat(kind);
         std::string head = std::to_string(i + 1) + "   " + upgradeCatName(cat);
         if (itemTag(kind) != ItemTag::None) head += std::string("  -  ") + itemTagName(itemTag(kind));
@@ -872,7 +869,7 @@ void ChoiceScreen::draw(App& app, sf::RenderWindow& w) {
         const std::vector<std::string> desc =
             wrapText(app.font(), info.desc, theme::fsSmall, kCardW - 28.f);
         const float lineH = 18.f;
-        float dy = c.y + 22.f - lineH * 0.5f * static_cast<float>(desc.size() - 1);
+        float dy = c.y + 32.f - lineH * 0.5f * static_cast<float>(desc.size() - 1);   // under the tier line
         for (const std::string& dl : desc) {
             drawCenteredPop(w, app.font(), dl, theme::fsSmall, {c.x, dy}, theme::textLo, cp);
             dy += lineH;
