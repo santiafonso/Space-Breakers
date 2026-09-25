@@ -1,6 +1,8 @@
 #include "render/Effects.hpp"
 
 #include <algorithm>
+
+#include "render/Draw.hpp"
 #include <cmath>
 
 namespace sb {
@@ -46,6 +48,18 @@ void Effects::addBurst(sf::Vector2f pos, float radius, sf::Color color) {
     r.r1 = radius;
     r.color = color;
     r.burst = true;
+    rings_.push_back(r);
+}
+
+void Effects::addPop(sf::Vector2f pos, float radius, sf::Color color) {
+    if (rings_.size() >= kMaxRings) rings_.erase(rings_.begin());
+    Ring r;
+    r.pos = pos;
+    r.life = 0.24f;
+    r.r0 = radius * 0.6f;
+    r.r1 = radius * 1.8f;
+    r.color = color;
+    r.pop = true;
     rings_.push_back(r);
 }
 
@@ -153,6 +167,12 @@ void Effects::drawBorder(sf::RenderWindow& window) const {
 void Effects::drawRings(sf::RenderWindow& window) const {
     for (const Ring& r : rings_) {
         const float t = r.age / r.life;
+        if (r.pop) {   // a bright disc that swells and fades - the enemy bursting
+            const float rad = lerpf(r.r0, r.r1, 1.f - (1.f - t) * (1.f - t));
+            draw::disc(window, r.pos, rad, withAlpha(lerpColor(r.color, sf::Color::White, 0.5f), (1.f - t) * 0.7f),
+                       withAlpha(r.color, 0.f), {1.f, 1.f}, 28);
+            continue;
+        }
         sf::CircleShape c(lerpf(r.r0, r.r1, t), 32);
         c.setOrigin(c.getRadius(), c.getRadius());
         c.setPosition(r.pos);

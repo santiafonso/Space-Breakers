@@ -11,6 +11,7 @@
 #include "core/App.hpp"
 #include "core/Config.hpp"
 #include "core/Theme.hpp"
+#include "render/Draw.hpp"
 #include "ui/Widgets.hpp"
 
 namespace sb {
@@ -283,17 +284,9 @@ void LoadoutScreen::drawInfoCard(App& app, sf::RenderWindow& w, int node) const 
     const float cw = 300.f, ch = 116.f;
     const sf::Vector2f o(theme::margin, s.y * 0.15f);
 
-    sf::RectangleShape card({cw, ch});
-    card.setPosition(o);
-    card.setFillColor(withAlpha(theme::panel, 0.85f));
-    card.setOutlineThickness(1.f);
-    card.setOutlineColor(withAlpha(col, 0.5f));
-    w.draw(card);
-
-    sf::RectangleShape stripe({3.f, ch});
-    stripe.setPosition(o);
-    stripe.setFillColor(col);
-    w.draw(stripe);
+    draw::box(w, {o.x, o.y, cw, ch}, 10.f, withAlpha(lerpColor(theme::bg, col, 0.16f), 0.95f),
+              withAlpha(theme::bg, 0.95f), withAlpha(col, 0.55f), 1.5f);
+    draw::box(w, {o.x, o.y + 10.f, 4.f, ch - 20.f}, 2.f, col, col);   // branch colour tab
 
     sf::Text name = makeText(app.font(), d.name, theme::fsItem, theme::textHi);
     name.setPosition(o.x + 14.f, o.y + 8.f);
@@ -919,13 +912,9 @@ void ChoiceScreen::draw(App& app, sf::RenderWindow& w) {
             const float wd = kCardW - 28.f, ht = 22.f;
             const float rh = rerollHover_[i];
             const float ry = c.y + kCardH * 0.5f - 15.f;
-            sf::RectangleShape rb({wd, ht});
-            rb.setOrigin(wd * 0.5f, ht * 0.5f);
-            rb.setPosition(c.x, ry);
-            rb.setFillColor(withAlpha(theme::textLo, (0.06f + 0.12f * rh) * ca));
-            rb.setOutlineThickness(1.f);
-            rb.setOutlineColor(withAlpha(theme::accent, (0.22f + 0.4f * rh) * ca));
-            w.draw(rb);
+            draw::box(w, {c.x - wd * 0.5f, ry - ht * 0.5f, wd, ht}, 6.f,
+                      withAlpha(theme::textLo, (0.10f + 0.14f * rh) * ca), withAlpha(theme::textLo, (0.04f + 0.08f * rh) * ca),
+                      withAlpha(theme::accent, (0.22f + 0.4f * rh) * ca), 1.f);
             drawCenteredPop(w, app.font(), "reroll", theme::fsSmall, {c.x, ry - 1.f},
                             theme::textLo, cp);
         }
@@ -939,12 +928,9 @@ void ChoiceScreen::draw(App& app, sf::RenderWindow& w) {
     if (coreHurt(app)) {
         const sf::FloatRect r = healRect(s);
         const float a = clampf(hintPop, 0.f, 1.f);
-        sf::RectangleShape btn({r.width, r.height});
-        btn.setPosition(r.left, r.top);
-        btn.setFillColor(withAlpha(theme::core, (0.10f + 0.16f * healHover_) * a));
-        btn.setOutlineThickness(1.5f);
-        btn.setOutlineColor(withAlpha(theme::core, (0.4f + 0.45f * healHover_) * a));
-        w.draw(btn);
+        draw::box(w, r, 9.f, withAlpha(lerpColor(theme::bg, theme::core, 0.2f + 0.18f * healHover_), a),
+                  withAlpha(lerpColor(theme::bg, theme::core, 0.05f), a),
+                  withAlpha(theme::core, (0.4f + 0.45f * healHover_) * a), 1.5f);
         drawCenteredPop(w, app.font(), "Repair the core instead  -  skip this item", theme::fsSmall,
                         {s.x * 0.5f, r.top + r.height * 0.5f - 1.f}, theme::textHi, hintPop);
         drawCenteredPop(w, app.font(), hint, theme::fsSmall,

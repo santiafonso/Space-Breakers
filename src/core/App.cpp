@@ -1065,7 +1065,7 @@ void App::processEvents(const FrameEvents& ev) {
     const float comboGold = 1.f + cfg::gold::comboBonusPerTier * static_cast<float>(ev.comboTier);
     for (const sf::Vector2f& k : ev.kills) {
         ++data_.meta.stats.enemiesKilled;
-        effects_.addRing(k, 520.f, theme::enemy);
+        effects_.addPop(k, cfg::wave::enemyRadius, theme::enemy);
         if (!data_.run.active) continue;
         data_.run.goldFrac += cfg::gold::perKill * comboGold;
         const sf::Vector2f ui = worldToUi(k);

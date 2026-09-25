@@ -17,6 +17,7 @@ public:
 
     void addRing(sf::Vector2f pos, float speed, sf::Color color);
     void addBurst(sf::Vector2f pos, float radius, sf::Color color);   // reaction / explosion (arena units)
+    void addPop(sf::Vector2f pos, float radius, sf::Color color);     // something dies: a quick bright flash
     void edgeHit(sf::Vector2f normal);
     void addLabel(const std::string& text, sf::Vector2f pos, sf::Color color,
                   unsigned size, float life);
@@ -41,6 +42,7 @@ private:
         float r1 = 0.f;
         sf::Color color;
         bool burst = false;
+        bool pop = false;
     };
     struct Label {
         sf::Text text;

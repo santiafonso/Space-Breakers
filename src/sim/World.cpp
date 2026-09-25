@@ -1111,6 +1111,7 @@ void World::updateTrail(Ball& b) {
 }
 
 void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev) {
+    b.age += dt;
     b.radius = ballRadius(b, p);   // role, "Big ball" gear, "Mass" web
     if (b.mods.storm) updateStorm(b, dt, p, ev);
     if (b.mods.satellite) {
@@ -1339,6 +1340,7 @@ void World::updateEnemies(float dt, const WorldParams& p, FrameEvents& ev) {
             e.hp -= e.burnDps * dt;
             if (e.burn <= 0.f) e.burnDps = 0.f;
         }
+        e.age += dt;
         e.mark = std::max(0.f, e.mark - dt);
         e.brittle = std::max(0.f, e.brittle - dt);
         e.pierceCd = std::max(0.f, e.pierceCd - dt);

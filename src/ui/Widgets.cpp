@@ -1,5 +1,7 @@
 #include "ui/Widgets.hpp"
 
+#include "render/Draw.hpp"
+
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -190,19 +192,15 @@ void drawTierFrame(sf::RenderWindow& w, sf::FloatRect r, Tier t, float hover, fl
     if (rank >= static_cast<int>(Tier::Epic)) {   // a slow breathing halo behind the rare ones
         const float pulse = 0.5f + 0.5f * std::sin(time * (rank == 4 ? 4.f : 2.6f));
         const float grow = 4.f + 6.f * pulse;
-        sf::RectangleShape halo({r.width + 2.f * grow, r.height + 2.f * grow});
-        halo.setPosition(r.left - grow, r.top - grow);
-        halo.setFillColor(sf::Color::Transparent);
-        halo.setOutlineThickness(rank == 4 ? 3.f : 2.f);
-        halo.setOutlineColor(withAlpha(col, (0.18f + 0.3f * pulse) * alpha));
-        w.draw(halo);
+        draw::box(w, {r.left - grow, r.top - grow, r.width + 2.f * grow, r.height + 2.f * grow}, 14.f + grow,
+                  withAlpha(col, 0.05f * pulse * alpha), withAlpha(col, 0.f),
+                  withAlpha(col, (0.18f + 0.3f * pulse) * alpha), rank == 4 ? 3.f : 2.f);
     }
-    sf::RectangleShape card({r.width, r.height});
-    card.setPosition(r.left, r.top);
-    card.setFillColor(withAlpha(col, (0.07f + 0.03f * static_cast<float>(rank) + 0.14f * hover) * alpha));
-    card.setOutlineThickness(rank >= 3 ? 3.f : 2.f);
-    card.setOutlineColor(withAlpha(col, (0.45f + 0.45f * hover) * alpha));
-    w.draw(card);
+    // A dark card lit from the top by its tier colour; brighter under the pointer.
+    const float lit = 0.14f + 0.04f * static_cast<float>(rank) + 0.14f * hover;
+    draw::box(w, r, 12.f, withAlpha(lerpColor(theme::bg, col, lit), 0.97f * alpha),
+              withAlpha(lerpColor(theme::bg, col, lit * 0.3f), 0.97f * alpha),
+              withAlpha(col, (0.45f + 0.45f * hover) * alpha), rank >= 3 ? 2.5f : 1.5f);
 }
 
 sf::Color catColor(UpgradeCat c) {
@@ -221,45 +219,29 @@ sf::Color catColor(UpgradeCat c) {
 void drawLoadoutPanel(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f c,
                       const BallLoadout& L, float alpha, float hover, int hoverSlot, bool dim) {
     const float a = alpha * (dim ? 0.35f : 1.f);
-    sf::RectangleShape back({kPanelW, kPanelH});   // solid backing: the arena must not show through
-    back.setOrigin(kPanelW * 0.5f, kPanelH * 0.5f);
-    back.setPosition(c);
-    back.setFillColor(withAlpha(theme::bg, 0.94f * alpha));
-    w.draw(back);
-    sf::RectangleShape box({kPanelW, kPanelH});
-    box.setOrigin(kPanelW * 0.5f, kPanelH * 0.5f);
-    box.setPosition(c);
-    box.setFillColor(withAlpha(theme::accent, (0.06f + 0.14f * hover) * a));
-    box.setOutlineThickness(1.5f);
-    box.setOutlineColor(withAlpha(theme::accent, (0.30f + 0.5f * hover) * a));
-    w.draw(box);
+    // Solid, so the arena never shows through; lit a touch from the top.
+    const sf::FloatRect pr{c.x - kPanelW * 0.5f, c.y - kPanelH * 0.5f, kPanelW, kPanelH};
+    draw::box(w, pr, 12.f, withAlpha(lerpColor(theme::bg, theme::accent, 0.10f + 0.12f * hover), 0.96f * alpha),
+              withAlpha(lerpColor(theme::bg, theme::accent, 0.02f), 0.96f * alpha),
+              withAlpha(theme::accent, (0.30f + 0.5f * hover) * a), 1.5f);
 
     const Element el = L.element();
     const sf::Color ec = el == Element::Plain ? theme::textLo : elementColor(el);
     const float r = L.role() == BallRole::Guardian ? 17.f : 13.f;
     const sf::Vector2f bp{c.x, c.y - kPanelH * 0.5f + 30.f};
-    sf::CircleShape ball(r, 32);
-    ball.setOrigin(r, r);
-    ball.setPosition(bp);
-    ball.setFillColor(withAlpha(ec, a));
-    ball.setOutlineThickness(L.role() == BallRole::Guardian ? 3.5f : 1.5f);
-    ball.setOutlineColor(withAlpha(sf::Color::White, (L.role() == BallRole::Guardian ? 0.55f : 0.2f) * a));
-    w.draw(ball);
-    if (L.role() == BallRole::Support) {
-        sf::CircleShape ring(r * 0.5f, 24);
-        ring.setOrigin(r * 0.5f, r * 0.5f);
-        ring.setPosition(bp);
-        ring.setFillColor(sf::Color::Transparent);
-        ring.setOutlineThickness(2.f);
-        ring.setOutlineColor(withAlpha(sf::Color::White, 0.7f * a));
-        w.draw(ring);
-    } else if (L.role() == BallRole::Striker) {
-        sf::CircleShape dot(r * 0.28f, 16);
-        dot.setOrigin(r * 0.28f, r * 0.28f);
-        dot.setPosition(bp);
-        dot.setFillColor(withAlpha(sf::Color::White, 0.8f * a));
-        w.draw(dot);
-    }
+    // The same look as in the arena: glow, shaded body, role mark, highlight.
+    const bool guardian = L.role() == BallRole::Guardian;
+    draw::glow(w, bp, r * 2.2f, ec, 0.22f * a);
+    draw::disc(w, bp, r, withAlpha(lerpColor(ec, sf::Color::White, 0.4f), a),
+               withAlpha(lerpColor(ec, theme::bg, 0.2f), a));
+    draw::ring(w, bp, r, guardian ? 3.5f : 1.5f, withAlpha(sf::Color::White, (guardian ? 0.55f : 0.22f) * a));
+    if (L.role() == BallRole::Support)
+        draw::ring(w, bp, r * 0.45f, 2.f, withAlpha(sf::Color::White, 0.7f * a));
+    else if (L.role() == BallRole::Striker)
+        draw::disc(w, bp, r * 0.26f, withAlpha(sf::Color::White, 0.85f * a), withAlpha(sf::Color::White, 0.6f * a));
+    if (L.mastery()) draw::ring(w, bp, r + 5.f, 1.5f, withAlpha(lerpColor(ec, sf::Color::White, 0.5f), 0.7f * a));
+    draw::disc(w, bp + sf::Vector2f{-0.34f, -0.38f} * r, r * 0.3f, withAlpha(sf::Color::White, 0.5f * a),
+               withAlpha(sf::Color::White, 0.f), {1.f, 0.8f}, 16);
 
     std::string name = roleName(L.role());
     if (L.mastery()) name += "+";   // mastery: 4 items of its tag
@@ -269,12 +251,9 @@ void drawLoadoutPanel(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f c,
     for (int i = 0; i < kBallSlots; ++i) {
         const sf::FloatRect sr = slotRect(c, i);
         const bool hot = hoverSlot == i;
-        sf::RectangleShape sb({sr.width, sr.height});
-        sb.setPosition(sr.left, sr.top);
-        sb.setFillColor(withAlpha(theme::textLo, (hot ? 0.22f : 0.06f) * a));
-        sb.setOutlineThickness(1.f);
-        sb.setOutlineColor(withAlpha(theme::accent, (hot ? 0.8f : 0.2f) * a));
-        w.draw(sb);
+        draw::box(w, sr, 6.f, withAlpha(theme::textLo, (hot ? 0.24f : 0.09f) * a),
+                  withAlpha(theme::textLo, (hot ? 0.14f : 0.03f) * a),
+                  withAlpha(theme::accent, (hot ? 0.8f : 0.18f) * a), 1.f);
         std::string t = "empty slot";
         sf::Color tc = theme::textDim;
         if (L.gear[i] >= 0) {
@@ -360,12 +339,8 @@ void drawTooltip(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f mouse, 
     x = std::max(4.f, x);
     y = std::max(4.f, y);
 
-    sf::RectangleShape box({wd, ht});
-    box.setPosition(x, y);
-    box.setFillColor(sf::Color(12, 12, 18, 235));
-    box.setOutlineThickness(1.f);
-    box.setOutlineColor(withAlpha(theme::accent, 0.45f));
-    w.draw(box);
+    draw::box(w, {x, y, wd, ht}, 8.f, sf::Color(24, 26, 36, 242), sf::Color(12, 12, 18, 242),
+              withAlpha(titleColor, 0.5f), 1.f);
 
     sf::Text t = makeText(font, title, theme::fsBody, titleColor);
     t.setPosition(std::round(x + pad), std::round(y + pad - 2.f));

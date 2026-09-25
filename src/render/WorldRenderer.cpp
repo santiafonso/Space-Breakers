@@ -2,26 +2,48 @@
 
 #include <cmath>
 
+#include "render/Draw.hpp"
+
 namespace sb {
+
+namespace {
+
+sf::Color lighten(sf::Color c, float k) { return lerpColor(c, sf::Color::White, k); }
+sf::Color darken(sf::Color c, float k) { return lerpColor(c, theme::bg, k); }
+
+// 0 -> 1 with a small overshoot: things pop into existence instead of fading.
+float popIn(float age, float dur) {
+    const float t = clampf(age / dur, 0.f, 1.f);
+    const float c1 = 1.70158f, c3 = c1 + 1.f;
+    return 1.f + c3 * std::pow(t - 1.f, 3.f) + c1 * std::pow(t - 1.f, 2.f);
+}
+
+float clockSeconds() {   // a shared visual clock for idle motion (spins, pulses)
+    static sf::Clock clock;
+    return clock.getElapsedTime().asSeconds();
+}
+
+}  // namespace
 
 void WorldRenderer::drawCore(sf::RenderWindow& window, const Core& c) const {
     const float frac = c.maxHp > 0.f ? clampf(c.hp / c.maxHp, 0.f, 1.f) : 0.f;
     const sf::Color tint = lerpColor(theme::coreLow, theme::core, frac);
+    const float t = clockSeconds();
+    const float breathe = 0.5f + 0.5f * std::sin(t * 2.f);
 
-    sf::CircleShape body(c.radius, 40);
-    body.setOrigin(c.radius, c.radius);
-    body.setPosition(c.pos);
-    body.setFillColor(withAlpha(tint, 0.18f + 0.3f * c.hitFlash));
-    body.setOutlineThickness(2.f);
-    body.setOutlineColor(withAlpha(tint, 0.85f));
-    window.draw(body);
-
-    sf::CircleShape hp(c.radius - 6.f, 40);
-    hp.setOrigin(hp.getRadius(), hp.getRadius());
-    hp.setPosition(c.pos);
-    hp.setScale(frac, frac);
-    hp.setFillColor(withAlpha(tint, 0.5f));
-    window.draw(hp);
+    draw::glow(window, c.pos, c.radius * 3.2f, tint, 0.16f + 0.05f * breathe + 0.4f * c.hitFlash);
+    draw::disc(window, c.pos, c.radius, withAlpha(lighten(tint, 0.15f), 0.55f + 0.3f * c.hitFlash),
+               withAlpha(darken(tint, 0.35f), 0.35f));
+    // Health as an arc around the core, over a faint full track.
+    draw::ring(window, c.pos, c.radius + 7.f, 4.f, withAlpha(theme::arenaEdge, 0.6f));
+    draw::ring(window, c.pos, c.radius + 7.f, 4.f, withAlpha(tint, 0.95f), -kPi * 0.5f,
+               -kPi * 0.5f + 2.f * kPi * frac);
+    // Three slow-turning segments inside: the core is alive.
+    for (int k = 0; k < 3; ++k) {
+        const float a = t * 0.8f + static_cast<float>(k) * 2.f * kPi / 3.f;
+        draw::ring(window, c.pos, c.radius * 0.62f, 2.5f, withAlpha(lighten(tint, 0.4f), 0.55f), a, a + 1.2f);
+    }
+    draw::disc(window, c.pos, c.radius * 0.28f, withAlpha(sf::Color::White, 0.8f), withAlpha(tint, 0.6f));
 }
 
 // The water ball's "worm" wake: a tapering ribbon along its recent path, widest
@@ -157,29 +179,46 @@ void WorldRenderer::drawBoss(sf::RenderWindow& window, const Boss& b, sf::Vector
 
 void WorldRenderer::drawEnemy(sf::RenderWindow& window, const Enemy& e, sf::Vector2f corePos) const {
     const float frac = e.maxHp > 0.f ? clampf(e.hp / e.maxHp, 0.f, 1.f) : 0.f;
-    // Each kind keeps the enemy red but reads differently: runners/shards
-    // lighter and smaller, tanks darker with a heavy rim, splitters cracked,
+    const float r = e.radius * popIn(e.age, 0.28f);   // spawns pop in
+    if (r <= 0.5f) return;
+    // Each kind keeps the enemy red but reads differently: runners / shards are
+    // lighter arrowheads, tanks darker turning hexagons, splitters cracked,
     // shielded ones carry a bright arc on the side facing the core.
     sf::Color base = theme::enemy;
     if (e.kind == EnemyKind::Runner || e.kind == EnemyKind::Shard) base = lerpColor(theme::enemy, theme::ballFast, 0.35f);
-    if (e.kind == EnemyKind::Tank) base = lerpColor(theme::enemy, theme::bg, 0.3f);
-    sf::Color fill = lerpColor(base, sf::Color::White, e.hitFlash);
+    if (e.kind == EnemyKind::Tank) base = lerpColor(theme::enemy, theme::bg, 0.25f);
+    sf::Color fill = base;
     if (e.poison > 0.f) fill = lerpColor(fill, theme::elemPoison, 0.5f);
     if (e.burn > 0.f)   fill = lerpColor(fill, theme::elemFire, 0.5f);
     if (e.frozen > 0.f) fill = lerpColor(fill, theme::elemIce, 0.65f);
+    fill = lerpColor(fill, sf::Color::White, e.hitFlash * 0.8f);
+    const sf::Color inner = lighten(fill, 0.25f), outer = darken(fill, 0.3f);
+    const sf::Color rim = withAlpha(e.mark > 0.f ? sf::Color::White : lighten(fill, 0.35f),
+                                    e.mark > 0.f ? 0.85f : 0.55f);
 
-    sf::CircleShape body(e.radius, 24);
-    body.setOrigin(e.radius, e.radius);
-    body.setPosition(e.pos);
-    body.setFillColor(withAlpha(fill, 0.9f));
-    body.setOutlineThickness(e.kind == EnemyKind::Tank ? 4.f : (e.mark > 0.f ? 3.f : 2.f));   // marked: brighter rim
-    body.setOutlineColor(withAlpha(sf::Color::White,
-                                   (e.mark > 0.f ? 0.7f : 0.15f) + 0.3f * e.hitFlash));
-    window.draw(body);
+    draw::glow(window, e.pos, r * 1.9f, fill, 0.10f + 0.25f * e.hitFlash);
+    const float heading = std::atan2(e.vel.y, e.vel.x);
+    switch (e.kind) {
+        case EnemyKind::Runner:
+        case EnemyKind::Shard:
+            draw::polygon(window, e.pos, r * 1.2f, 3, heading, inner, outer);
+            draw::polygonOutline(window, e.pos, r * 1.2f, 3, heading, 2.f, rim);
+            break;
+        case EnemyKind::Tank: {
+            const float spin = e.age * 0.4f;
+            draw::polygon(window, e.pos, r * 1.08f, 6, spin, inner, outer);
+            draw::polygonOutline(window, e.pos, r * 1.08f, 6, spin, 4.f, rim);
+            break;
+        }
+        default:
+            draw::disc(window, e.pos, r, inner, outer);
+            draw::ring(window, e.pos, r, e.mark > 0.f ? 3.f : 2.f, rim);
+            break;
+    }
 
     if (e.kind == EnemyKind::Splitter) {   // a crack across the middle
-        sf::RectangleShape crack({e.radius * 1.6f, 2.f});
-        crack.setOrigin(e.radius * 0.8f, 1.f);
+        sf::RectangleShape crack({r * 1.6f, 2.f});
+        crack.setOrigin(r * 0.8f, 1.f);
         crack.setPosition(e.pos);
         crack.setRotation(35.f);
         crack.setFillColor(withAlpha(theme::bg, 0.8f));
@@ -188,28 +227,13 @@ void WorldRenderer::drawEnemy(sf::RenderWindow& window, const Enemy& e, sf::Vect
     if (e.kind == EnemyKind::Shielded) {   // the shield arc, facing the core
         const float face = std::atan2(corePos.y - e.pos.y, corePos.x - e.pos.x);
         const float arc = cfg::enemy::shieldArc;
-        const int segs = 10;
-        const float rr = e.radius + 5.f;
-        for (int i = 0; i < segs; ++i) {
-            const float a0 = face - arc + 2.f * arc * static_cast<float>(i) / segs;
-            const float a1 = face - arc + 2.f * arc * static_cast<float>(i + 1) / segs;
-            const sf::Vector2f p0 = e.pos + sf::Vector2f{std::cos(a0), std::sin(a0)} * rr;
-            const sf::Vector2f p1 = e.pos + sf::Vector2f{std::cos(a1), std::sin(a1)} * rr;
-            const sf::Vector2f d = p1 - p0;
-            sf::RectangleShape seg({length(d) + 1.f, 3.5f});
-            seg.setOrigin(0.f, 1.75f);
-            seg.setPosition(p0);
-            seg.setRotation(std::atan2(d.y, d.x) * 180.f / kPi);
-            seg.setFillColor(withAlpha(e.frozen > 0.f ? theme::elemIce : theme::textHi, 0.85f));
-            window.draw(seg);
-        }
+        draw::ring(window, e.pos, r + 5.f, 4.f,
+                   withAlpha(e.frozen > 0.f ? theme::elemIce : theme::textHi, 0.9f), face - arc, face + arc);
     }
-
-    sf::CircleShape hpDot(e.radius * 0.5f * frac + 1.f, 16);
-    hpDot.setOrigin(hpDot.getRadius(), hpDot.getRadius());
-    hpDot.setPosition(e.pos);
-    hpDot.setFillColor(withAlpha(theme::bg, 0.55f));
-    window.draw(hpDot);
+    if (e.frozen > 0.f) draw::ring(window, e.pos, r + 2.f, 2.f, withAlpha(theme::elemIce, 0.7f));
+    if (frac < 0.999f)   // health left, as a thin arc - only once it's been hurt
+        draw::ring(window, e.pos, r + 9.f, 2.f, withAlpha(lighten(fill, 0.4f), 0.75f), -kPi * 0.5f,
+                   -kPi * 0.5f + 2.f * kPi * frac, 32);
 }
 
 void WorldRenderer::drawPickup(sf::RenderWindow& window, const Pickup& pu) const {
@@ -245,16 +269,15 @@ void WorldRenderer::drawBall(sf::RenderWindow& window, const Ball& b,
     // A "Split shot" ghost is see-through and fades out over its last second.
     const float alpha = b.ghost ? 0.45f * clampf(b.ghostLife, 0.f, 1.f) : 1.f;
     if (effect && effect->kind == PowerUp::Golden) col = lerpColor(col, theme::puGolden, 0.85f);
+    const float r = b.radius * popIn(b.age, 0.3f);
+    if (r <= 0.5f) return;
 
-    if (!b.held && !b.trail.empty()) {
+    if (!b.held && !b.trail.empty()) {   // a soft comet tail
         const int n = static_cast<int>(b.trail.size());
         for (int k = 0; k < n; ++k) {
             const float f = static_cast<float>(k + 1) / static_cast<float>(n + 1);
-            sf::CircleShape g(b.radius * (0.3f + 0.55f * f), 16);
-            g.setOrigin(g.getRadius(), g.getRadius());
-            g.setPosition(b.trail[k]);
-            g.setFillColor(withAlpha(col, (0.04f + 0.12f * f) * alpha));
-            window.draw(g);
+            draw::disc(window, b.trail[k], r * (0.25f + 0.6f * f), withAlpha(col, (0.05f + 0.16f * f) * alpha),
+                       withAlpha(col, 0.f), {1.f, 1.f}, 20);
         }
     }
 
@@ -262,46 +285,29 @@ void WorldRenderer::drawBall(sf::RenderWindow& window, const Ball& b,
     const float ay = std::fabs(b.squashAxis.y);
     const float along = 1.f - 0.32f * b.squash;
     const float perpS = 1.f + 0.22f * b.squash;
+    const sf::Vector2f sc{lerpf(perpS, along, ax), lerpf(perpS, along, ay)};
 
-    sf::CircleShape c(b.radius, 40);
-    c.setOrigin(b.radius, b.radius);
-    c.setPosition(b.pos);
-    c.setScale(lerpf(perpS, along, ax), lerpf(perpS, along, ay));
-    c.setFillColor(withAlpha(col, alpha));
+    draw::glow(window, b.pos, r * 2.4f, col, 0.22f * alpha);
+    draw::disc(window, b.pos, r, withAlpha(lighten(col, 0.4f), alpha), withAlpha(darken(col, 0.2f), alpha), sc);
+
     // Role marks, kept minimal: a Guardian has a heavy rim, a Support a small
     // inner ring, a Striker a small centre dot; a Normal ball is plain.
     const bool guardian = b.role == BallRole::Guardian;
-    c.setOutlineThickness(guardian ? 4.f : 2.f);
-    c.setOutlineColor(withAlpha(sf::Color::White,
-                                (b.held ? 0.85f : (guardian ? 0.5f : 0.16f)) * alpha));
-    window.draw(c);
-    if (b.role == BallRole::Support) {
-        const float ir = b.radius * 0.45f;
-        sf::CircleShape inner(ir, 24);
-        inner.setOrigin(ir, ir);
-        inner.setPosition(b.pos);
-        inner.setFillColor(sf::Color::Transparent);
-        inner.setOutlineThickness(2.f);
-        inner.setOutlineColor(withAlpha(sf::Color::White, 0.65f * alpha));
-        window.draw(inner);
-    } else if (b.role == BallRole::Striker) {
-        const float dr = b.radius * 0.26f;
-        sf::CircleShape dot(dr, 16);
-        dot.setOrigin(dr, dr);
-        dot.setPosition(b.pos);
-        dot.setFillColor(withAlpha(sf::Color::White, 0.75f * alpha));
-        window.draw(dot);
-    }
+    draw::ring(window, b.pos, r, guardian ? 4.f : 1.5f,
+               withAlpha(sf::Color::White, (b.held ? 0.85f : (guardian ? 0.5f : 0.22f)) * alpha));
+    if (b.role == BallRole::Support)
+        draw::ring(window, b.pos, r * 0.45f, 2.f, withAlpha(sf::Color::White, 0.65f * alpha));
+    else if (b.role == BallRole::Striker)
+        draw::disc(window, b.pos, r * 0.24f, withAlpha(sf::Color::White, 0.85f * alpha),
+                   withAlpha(sf::Color::White, 0.6f * alpha), {1.f, 1.f}, 16);
+    if (b.mods.mastery)   // mastered: a second, outer halo ring
+        draw::ring(window, b.pos, r + 5.f, 1.5f, withAlpha(lighten(col, 0.5f), 0.6f * alpha));
 
-    if (b.held) {
-        sf::CircleShape ring(b.radius + 7.f, 40);
-        ring.setOrigin(ring.getRadius(), ring.getRadius());
-        ring.setPosition(b.pos);
-        ring.setFillColor(sf::Color::Transparent);
-        ring.setOutlineThickness(2.f);
-        ring.setOutlineColor(withAlpha(theme::accent, 0.7f));
-        window.draw(ring);
-    }
+    // A specular highlight, top-left: reads as a solid, shiny ball.
+    draw::disc(window, b.pos + sf::Vector2f{-0.34f, -0.38f} * r, r * 0.3f,
+               withAlpha(sf::Color::White, 0.5f * alpha), withAlpha(sf::Color::White, 0.f), {1.f, 0.8f}, 16);
+
+    if (b.held) draw::ring(window, b.pos, r + 8.f, 2.f, withAlpha(theme::accent, 0.75f));
 }
 
 void WorldRenderer::draw(sf::RenderWindow& window, const World& world) const {

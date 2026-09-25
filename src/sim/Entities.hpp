@@ -114,6 +114,7 @@ struct Ball {
     int berserkStacks = 0;   // "Berserk": hits in a row since the last wall
     float stormT = 0.f;      // "Storm": time to the next zap
     float orbitAng = 0.f;    // "Satellite": angle around the core
+    float age = 0.f;         // seconds since it appeared (spawn pop-in)
 };
 
 // Grunt = the plain walker. The rest each want a different answer (cfg::enemy).
@@ -145,6 +146,7 @@ struct Enemy {
     int elemOwner = -1;              // which ball left it
     float elemT = 0.f;               // how long it keeps waiting
     float pierceCd = 0.f;            // Piercing / Satellite balls can't re-hit it until this runs out
+    float age = 0.f;                 // seconds alive (drives the spawn pop-in)
     float stagger = 0.f;    // seconds left staggered by a Guardian (drifts, doesn't advance)
     bool orbiter = false;   // wave-20 shield: orbits the boss instead of seeking the core
     float orbitPhase = 0.f; // its slot angle on the ring

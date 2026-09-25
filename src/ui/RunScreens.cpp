@@ -8,6 +8,7 @@
 #include "core/App.hpp"
 #include "core/Config.hpp"
 #include "core/Theme.hpp"
+#include "render/Draw.hpp"
 #include "ui/Screens.hpp"
 #include "ui/Widgets.hpp"
 
@@ -28,12 +29,9 @@ bool isRightClick(const sf::Event& e) {
 void drawButton(sf::RenderWindow& w, const sf::Font& font, sf::FloatRect r, const std::string& label,
                 sf::Color col, float hover, bool enabled) {
     const float a = enabled ? 1.f : 0.35f;
-    sf::RectangleShape b({r.width, r.height});
-    b.setPosition(r.left, r.top);
-    b.setFillColor(withAlpha(col, (0.10f + 0.16f * hover) * a));
-    b.setOutlineThickness(1.5f);
-    b.setOutlineColor(withAlpha(col, (0.4f + 0.45f * hover) * a));
-    w.draw(b);
+    draw::box(w, r, 9.f, withAlpha(lerpColor(theme::bg, col, 0.22f + 0.2f * hover), a),
+              withAlpha(lerpColor(theme::bg, col, 0.06f + 0.1f * hover), a),
+              withAlpha(col, (0.4f + 0.45f * hover) * a), 1.5f);
     drawCentered(w, font, label, theme::fsSmall, {r.left + r.width * 0.5f, r.top + r.height * 0.5f - 1.f},
                  withAlpha(theme::textHi, a));
 }
