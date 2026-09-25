@@ -34,6 +34,8 @@ public:
 
     // ---- dev tools (no-ops unless the caller is in dev mode) ---------
     void devWinWave();                    // clear the current wave now
+    void devSpawn(EnemyKind k, int n);    // drop n enemies of a kind in from the edges
+    void devKillAll();                    // everything on the field dies (counts as kills)
     void devSetInvuln(bool on) { invuln_ = on; }
     void setPhoenix(int charges) { phoenixLeft_ = charges; }   // "Phoenix" relic: saves left this act
     bool devInvuln() const { return invuln_; }

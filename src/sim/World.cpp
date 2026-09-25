@@ -130,6 +130,20 @@ void World::addCoreMaxHp(float delta) {
     core_.hp = std::min(core_.maxHp, core_.hp + delta);
 }
 
+void World::devSpawn(EnemyKind k, int n) {
+    for (int i = 0; i < n; ++i) {
+        spawnEnemy();
+        setEnemyKind(enemies_.back(), k, waveEnemyHp(std::max(1, wave_)) * waveHpMul_,
+                     waveEnemySpeed(std::max(1, wave_)));
+    }
+    waveRunning_ = true;
+}
+
+void World::devKillAll() {
+    for (Enemy& e : enemies_)
+        if (!e.orbiter) e.hp = 0.f;   // swept (as kills) on the next step
+}
+
 void World::devWinWave() {
     toSpawn_ = 0;
     enemies_.clear();

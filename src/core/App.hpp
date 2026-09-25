@@ -17,7 +17,7 @@
 
 namespace sb {
 
-enum class ScreenId { Menu, Loadout, Play, Choice, Pause, Stats, HowTo, BossWin, Map, Shop, Equip };
+enum class ScreenId { Menu, Loadout, Play, Choice, Pause, Stats, HowTo, BossWin, Map, Shop, Equip, Dev };
 
 // Who opened the ball / slot picker, and so what confirming it does.
 enum class EquipSource { Choice, Shop, Forge };
@@ -96,6 +96,19 @@ public:
     void devToggleInvuln();
     void devAddBall();
     void devCycleGrant();  // grant the "next" upgrade in the pool
+    // ---- the F1 dev panel (SB_DEV only) ----
+    void devOpenPanel();
+    void devGrant(UpgradeKind k);            // onto devBall()
+    void devClearBall();                     // strip devBall() back to a plain ball
+    void devSpawn(EnemyKind k, int n);
+    void devKillAll();
+    void devGold(int n);
+    void devSetTimeScale(float s) { devTimeScale_ = s; }
+    float devTimeScale() const { return devTimeScale_; }
+    int devBall() const { return std::min(devBall_, std::max(0, runBallCount() - 1)); }
+    void devSetBall(int b) { devBall_ = b; }
+    enum class DevOpen { Shop, Forge, Upgrade, Elite, BossTreasure, Recruit, JumpToBoss };
+    void devOpen(DevOpen what);
     void openPause();
     void openStats();
     void openHowTo();
@@ -176,6 +189,8 @@ private:
     bool continueUnlocked_ = false;  // snapshot at newRun: has a run ever been won before?
     bool runBanked_ = false;         // this run's cores/prisms have been paid out
     int devGrantNext_ = 0;
+    int devBall_ = 0;              // dev panel: which ball grants go to
+    float devTimeScale_ = 1.f;     // dev panel: simulation speed
     EquipSource equipSrc_ = EquipSource::Choice;
     UpgradeKind equipKind_ = UpgradeKind::AddBall;
     int equipRef_ = -1;       // Choice card / shop offer being placed

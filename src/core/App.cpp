@@ -244,6 +244,7 @@ std::unique_ptr<Screen> App::makeScreen(ScreenId id) {
         case ScreenId::Map:     return std::make_unique<MapScreen>();
         case ScreenId::Shop:    return std::make_unique<ShopScreen>();
         case ScreenId::Equip:   return std::make_unique<EquipScreen>();
+        case ScreenId::Dev:     return std::make_unique<DevScreen>();
     }
     return std::make_unique<MenuScreen>();
 }
@@ -941,6 +942,73 @@ void App::devAddBall() {
     syncWorldBalls();
 }
 
+void App::devOpenPanel() {
+    if (!devMode() || !data_.run.active) return;
+    world_.forceRelease();
+    setAiming(false);
+    push(ScreenId::Dev);
+}
+
+void App::devGrant(UpgradeKind k) {
+    if (!devMode() || !data_.run.active) return;
+    if (upgradeCat(k) == UpgradeCat::NewBall) {
+        devAddBall();
+        return;
+    }
+    const int b = devBall();
+    if (upgradeNeedsTarget(k)) {
+        if (b >= runBallCount() || !upgradeFitsBall(k, data_.run.balls[static_cast<std::size_t>(b)])) {
+            effects_.addLabel("doesn't fit that ball", {size().x * 0.5f, size().y * 0.9f}, theme::coreLow, 18, 0.9f);
+            return;
+        }
+        applyUpgradeKind(k, b, -1);
+    } else {
+        applyUpgradeKind(k);
+    }
+    effects_.addLabel(std::string("+ ") + upgradeInfo(k).title, {size().x * 0.5f, size().y * 0.9f},
+                      tierColor(upgradeTier(k)), 18, 0.9f);
+}
+
+void App::devClearBall() {
+    if (!devMode() || !data_.run.active || runBallCount() == 0) return;
+    data_.run.balls[static_cast<std::size_t>(devBall())] = BallLoadout{};
+    syncWorldBalls();
+}
+
+void App::devSpawn(EnemyKind k, int n) {
+    if (!devMode() || !data_.run.active) return;
+    world_.devSpawn(k, n);
+}
+
+void App::devKillAll() {
+    if (!devMode() || !data_.run.active) return;
+    world_.devKillAll();
+}
+
+void App::devGold(int n) {
+    if (!devMode() || !data_.run.active) return;
+    data_.run.gold += n;
+}
+
+void App::devOpen(DevOpen what) {
+    if (!devMode() || !data_.run.active) return;
+    back();   // close the dev panel, back on the fight
+    switch (what) {
+        case DevOpen::Shop:         rollShop(); push(ScreenId::Shop); break;
+        case DevOpen::Forge:        equipSrc_ = EquipSource::Forge; equipRef_ = -1; push(ScreenId::Equip); break;
+        case DevOpen::Upgrade:      openChoice(RollSource::Normal); break;
+        case DevOpen::Elite:        openChoice(RollSource::Elite); break;
+        case DevOpen::BossTreasure: openChoice(RollSource::Boss); break;
+        case DevOpen::Recruit:      rollRecruitChoices(); push(ScreenId::Choice); break;
+        case DevOpen::JumpToBoss:   // stand right before the boss row and open the map
+            data_.run.mapRow = cfg::map::rows;
+            data_.run.mapNode = -1;
+            world_.devWinWave();
+            openMap();
+            break;
+    }
+}
+
 void App::devCycleGrant() {
     if (!devMode() || !data_.run.active) return;
     const auto k = static_cast<UpgradeKind>(devGrantNext_ % kUpgradeKindCount);
@@ -1217,6 +1285,7 @@ void App::update(float frameDt) {
             aimT_ += frameDt;
             simDt *= cfg::app::aimTimeScale;
         }
+        simDt *= devTimeScale_;   // dev panel: slow motion / fast forward
         if (hitstop_ > 0.f) {  // an impact landed: hold the frame, no catch-up after
             hitstop_ = std::max(0.f, hitstop_ - frameDt);
             simDt = 0.f;
@@ -1402,6 +1471,11 @@ int App::runSnapshots(const std::string& dir) {
     tab.key.code = sf::Keyboard::Tab;
     stack_.back()->handleEvent(*this, tab, {0.f, 0.f});
     snapFrame(d + "08_tab.png");
+    tab.type = sf::Event::KeyReleased;
+    stack_.back()->handleEvent(*this, tab, {0.f, 0.f});
+
+    push(ScreenId::Dev);
+    snapFrame(d + "09_dev.png");
     return 0;
 }
 
@@ -1410,13 +1484,14 @@ int App::runSnapshots(const std::string& dir) {
 // only do anything on the Play screen, "menu" ones on the game menu.
 void App::drawDevOverlay(sf::RenderWindow& w) const {
     const bool invuln = world_.devInvuln();
-    const std::array<std::pair<const char*, bool>, 10> lines = {{
+    const std::array<std::pair<const char*, bool>, 11> lines = {{
         {"- DEV -", true},
         {"menu / web:", false},
         {"  C   +999999 cores & prisms", false},
         {"in a run:", false},
         {"  N win wave   H heal core", false},
         {invuln ? "  G invuln: ON   B add ball" : "  G invuln: off   B add ball", invuln},
+        {"  F1  DEV PANEL (items, spawns, speed)", true},
         {"  U grant next item   C +25 cores", false},
         {"  TAB   items taken", false},
         {"env (on Start):", false},

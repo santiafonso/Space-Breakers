@@ -586,6 +586,7 @@ void PlayScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
             case sf::Keyboard::G:        app.devToggleInvuln(); return;
             case sf::Keyboard::B:        app.devAddBall(); return;
             case sf::Keyboard::U:        app.devCycleGrant(); return;
+            case sf::Keyboard::F1:       app.devOpenPanel(); return;
             case sf::Keyboard::C:        app.devGrantCores(25); return;
             default: break;
         }

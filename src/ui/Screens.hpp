@@ -1,6 +1,8 @@
 #pragma once
 
 #include <deque>
+#include <string>
+#include <vector>
 #include <utility>
 
 #include "progression/Offers.hpp"
@@ -136,6 +138,32 @@ private:
     int hover_ = -1;          // open node under the pointer
     int info_ = -1;           // any node under the pointer (for the tooltip)
     float clock_ = 0.f;
+    sf::Vector2f mouse_;
+};
+
+// The F1 dev panel (SB_DEV): grant any pick to a chosen ball, spawn enemy
+// kinds, change the sim speed, open any between-wave screen. The fight is
+// paused underneath while it's open.
+class DevScreen : public Screen {
+public:
+    void handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) override;
+    void update(App& app, float dt, sf::Vector2f mouse) override;
+    void draw(App& app, sf::RenderWindow& w) override;
+    bool opaque() const override { return false; }
+
+private:
+    struct Button {
+        sf::FloatRect rect;
+        std::string label;
+        sf::Color color;
+        int action = 0;            // index into the actions table (see DevScreen.cpp)
+        std::string tipTitle, tipDesc;
+        bool on = false;           // highlighted (current speed / target ball / invuln)
+    };
+    void rebuild(App& app);
+    std::vector<Button> buttons_;
+    std::vector<std::pair<sf::Vector2f, std::string>> heads_;   // section titles, laid out with the buttons
+    int hover_ = -1;
     sf::Vector2f mouse_;
 };
 

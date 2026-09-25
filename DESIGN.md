@@ -800,6 +800,26 @@ Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
     Legendary con destello y cartel en su color; reacciones con un pequeño
     sacudón de cámara; paneles de pelotas con fondo sólido.
 
+- **Fase L — refresco visual + animaciones + panel de dev. [IMPLEMENTADO 2026-09-25]**
+  - **Kit de dibujo** `render/Draw.*` (`draw::glow` aditivo, `disc` con gradiente
+    radial, `polygon`, `ring`/arcos, `box` redondeada con gradiente vertical).
+  - **Pelotas:** brillo suave, cuerpo con gradiente, borde, reflejo especular,
+    cola tipo cometa, anillo extra si tienen maestría, aparecen con rebote.
+    **Enemigos:** forma por tipo (runner/shard = triángulo que apunta hacia
+    donde va, tank = hexágono que gira, el resto círculos), gradiente, brillo,
+    arco de vida alrededor (solo si están heridos), aparecen con rebote
+    (`Enemy::age`) y al morir revientan en un destello (`Effects::addPop`).
+    **Núcleo:** halo que respira, vida como arco, tres segmentos que giran.
+  - **Recuadros:** cartas, paneles, slots, tooltips, botones e info de la web
+    con esquinas redondeadas y gradiente.
+  - **Panel de dev (F1 en pelea, `SB_DEV`):** `ui/DevScreen.cpp`. Pausa la
+    pelea. Todos los picks en columnas con color de tier (click = dárselo a la
+    pelota objetivo, 1-5 para elegirla), spawnear cada tipo de enemigo,
+    velocidad 0.25x-4x (`App::devTimeScale_`), abrir tienda / forja / pick
+    normal / élite / tesoro de boss / recluta, saltar al boss, ganar oleada,
+    matar todo, curar, invulnerable, +100 oro, sumar / vaciar pelota. Sale en el
+    modo foto como `09_dev.png`.
+
 - **Pendiente (idea del usuario, 2026-09-24):** como las mejoras ya no llegan
   en cada oleada, cada una tiene que **sentirse mucho** al conseguirla: repasar
   items / modificadores / reliquias para que sean más fuertes y más visibles
