@@ -29,7 +29,7 @@ bool isRightClick(const sf::Event& e) {
 void drawButton(sf::RenderWindow& w, const sf::Font& font, sf::FloatRect r, const std::string& label,
                 sf::Color col, float hover, bool enabled) {
     const float a = enabled ? 1.f : 0.35f;
-    draw::box(w, r, 9.f, withAlpha(lerpColor(theme::bg, col, 0.22f + 0.2f * hover), a),
+    draw::box(w, r, theme::corner, withAlpha(lerpColor(theme::bg, col, 0.22f + 0.2f * hover), a),
               withAlpha(lerpColor(theme::bg, col, 0.06f + 0.1f * hover), a),
               withAlpha(col, (0.4f + 0.45f * hover) * a), 1.5f);
     drawCentered(w, font, label, theme::fsSmall, {r.left + r.width * 0.5f, r.top + r.height * 0.5f - 1.f},

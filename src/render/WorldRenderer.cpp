@@ -31,7 +31,7 @@ void WorldRenderer::drawCore(sf::RenderWindow& window, const Core& c) const {
     const float t = clockSeconds();
     const float breathe = 0.5f + 0.5f * std::sin(t * 2.f);
 
-    draw::glow(window, c.pos, c.radius * 3.2f, tint, 0.16f + 0.05f * breathe + 0.4f * c.hitFlash);
+    draw::glow(window, c.pos, c.radius * 2.8f, tint, 0.09f + 0.04f * breathe + 0.35f * c.hitFlash);
     draw::disc(window, c.pos, c.radius, withAlpha(lighten(tint, 0.15f), 0.55f + 0.3f * c.hitFlash),
                withAlpha(darken(tint, 0.35f), 0.35f));
     // Health as an arc around the core, over a faint full track.
@@ -196,7 +196,7 @@ void WorldRenderer::drawEnemy(sf::RenderWindow& window, const Enemy& e, sf::Vect
     const sf::Color rim = withAlpha(e.mark > 0.f ? sf::Color::White : lighten(fill, 0.35f),
                                     e.mark > 0.f ? 0.85f : 0.55f);
 
-    draw::glow(window, e.pos, r * 1.9f, fill, 0.10f + 0.25f * e.hitFlash);
+    draw::glow(window, e.pos, r * 1.7f, fill, 0.05f + 0.2f * e.hitFlash);
     const float heading = std::atan2(e.vel.y, e.vel.x);
     switch (e.kind) {
         case EnemyKind::Runner:
@@ -276,7 +276,7 @@ void WorldRenderer::drawBall(sf::RenderWindow& window, const Ball& b,
         const int n = static_cast<int>(b.trail.size());
         for (int k = 0; k < n; ++k) {
             const float f = static_cast<float>(k + 1) / static_cast<float>(n + 1);
-            draw::disc(window, b.trail[k], r * (0.25f + 0.6f * f), withAlpha(col, (0.05f + 0.16f * f) * alpha),
+            draw::disc(window, b.trail[k], r * (0.25f + 0.6f * f), withAlpha(col, (0.04f + 0.11f * f) * alpha),
                        withAlpha(col, 0.f), {1.f, 1.f}, 20);
         }
     }
@@ -287,8 +287,8 @@ void WorldRenderer::drawBall(sf::RenderWindow& window, const Ball& b,
     const float perpS = 1.f + 0.22f * b.squash;
     const sf::Vector2f sc{lerpf(perpS, along, ax), lerpf(perpS, along, ay)};
 
-    draw::glow(window, b.pos, r * 2.4f, col, 0.22f * alpha);
-    draw::disc(window, b.pos, r, withAlpha(lighten(col, 0.4f), alpha), withAlpha(darken(col, 0.2f), alpha), sc);
+    draw::glow(window, b.pos, r * 1.9f, col, 0.09f * alpha);
+    draw::disc(window, b.pos, r, withAlpha(lighten(col, 0.18f), alpha), withAlpha(darken(col, 0.22f), alpha), sc);
 
     // Role marks, kept minimal: a Guardian has a heavy rim, a Support a small
     // inner ring, a Striker a small centre dot; a Normal ball is plain.
@@ -304,8 +304,8 @@ void WorldRenderer::drawBall(sf::RenderWindow& window, const Ball& b,
         draw::ring(window, b.pos, r + 5.f, 1.5f, withAlpha(lighten(col, 0.5f), 0.6f * alpha));
 
     // A specular highlight, top-left: reads as a solid, shiny ball.
-    draw::disc(window, b.pos + sf::Vector2f{-0.34f, -0.38f} * r, r * 0.3f,
-               withAlpha(sf::Color::White, 0.5f * alpha), withAlpha(sf::Color::White, 0.f), {1.f, 0.8f}, 16);
+    draw::disc(window, b.pos + sf::Vector2f{-0.34f, -0.38f} * r, r * 0.26f,
+               withAlpha(sf::Color::White, 0.22f * alpha), withAlpha(sf::Color::White, 0.f), {1.f, 0.8f}, 16);
 
     if (b.held) draw::ring(window, b.pos, r + 8.f, 2.f, withAlpha(theme::accent, 0.75f));
 }

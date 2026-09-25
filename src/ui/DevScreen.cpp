@@ -241,7 +241,7 @@ void DevScreen::draw(App& app, sf::RenderWindow& w) {
     for (std::size_t i = 0; i < buttons_.size(); ++i) {
         const Button& b = buttons_[i];
         const bool hot = static_cast<int>(i) == hover_;
-        draw::box(w, b.rect, 5.f, withAlpha(lerpColor(theme::bg, b.color, b.on ? 0.45f : (hot ? 0.3f : 0.12f)), 0.95f),
+        draw::box(w, b.rect, theme::corner, withAlpha(lerpColor(theme::bg, b.color, b.on ? 0.45f : (hot ? 0.3f : 0.12f)), 0.95f),
                   withAlpha(lerpColor(theme::bg, b.color, b.on ? 0.3f : 0.05f), 0.95f),
                   withAlpha(b.color, b.on || hot ? 0.9f : 0.35f), 1.f);
         sf::Text t = makeText(f, b.label, theme::fsSmall, b.on ? theme::textHi : lerpColor(b.color, theme::textHi, 0.35f));

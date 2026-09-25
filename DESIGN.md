@@ -811,7 +811,9 @@ Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
     (`Enemy::age`) y al morir revientan en un destello (`Effects::addPop`).
     **Núcleo:** halo que respira, vida como arco, tres segmentos que giran.
   - **Recuadros:** cartas, paneles, slots, tooltips, botones e info de la web
-    con esquinas redondeadas y gradiente.
+    con gradiente suave y **esquinas rectas** (el usuario prefirió estética recta;
+    `theme::corner` = 0 controla el radio en un solo lugar). Brillo de pelotas,
+    enemigos y núcleo bajado a pedido ("mucho brillo").
   - **Panel de dev (F1 en pelea, `SB_DEV`):** `ui/DevScreen.cpp`. Pausa la
     pelea. Todos los picks en columnas con color de tier (click = dárselo a la
     pelota objetivo, 1-5 para elegirla), spawnear cada tipo de enemigo,

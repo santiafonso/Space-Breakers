@@ -192,13 +192,13 @@ void drawTierFrame(sf::RenderWindow& w, sf::FloatRect r, Tier t, float hover, fl
     if (rank >= static_cast<int>(Tier::Epic)) {   // a slow breathing halo behind the rare ones
         const float pulse = 0.5f + 0.5f * std::sin(time * (rank == 4 ? 4.f : 2.6f));
         const float grow = 4.f + 6.f * pulse;
-        draw::box(w, {r.left - grow, r.top - grow, r.width + 2.f * grow, r.height + 2.f * grow}, 14.f + grow,
+        draw::box(w, {r.left - grow, r.top - grow, r.width + 2.f * grow, r.height + 2.f * grow}, theme::corner,
                   withAlpha(col, 0.05f * pulse * alpha), withAlpha(col, 0.f),
                   withAlpha(col, (0.18f + 0.3f * pulse) * alpha), rank == 4 ? 3.f : 2.f);
     }
     // A dark card lit from the top by its tier colour; brighter under the pointer.
     const float lit = 0.14f + 0.04f * static_cast<float>(rank) + 0.14f * hover;
-    draw::box(w, r, 12.f, withAlpha(lerpColor(theme::bg, col, lit), 0.97f * alpha),
+    draw::box(w, r, theme::corner, withAlpha(lerpColor(theme::bg, col, lit), 0.97f * alpha),
               withAlpha(lerpColor(theme::bg, col, lit * 0.3f), 0.97f * alpha),
               withAlpha(col, (0.45f + 0.45f * hover) * alpha), rank >= 3 ? 2.5f : 1.5f);
 }
@@ -221,7 +221,7 @@ void drawLoadoutPanel(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f c,
     const float a = alpha * (dim ? 0.35f : 1.f);
     // Solid, so the arena never shows through; lit a touch from the top.
     const sf::FloatRect pr{c.x - kPanelW * 0.5f, c.y - kPanelH * 0.5f, kPanelW, kPanelH};
-    draw::box(w, pr, 12.f, withAlpha(lerpColor(theme::bg, theme::accent, 0.10f + 0.12f * hover), 0.96f * alpha),
+    draw::box(w, pr, theme::corner, withAlpha(lerpColor(theme::bg, theme::accent, 0.10f + 0.12f * hover), 0.96f * alpha),
               withAlpha(lerpColor(theme::bg, theme::accent, 0.02f), 0.96f * alpha),
               withAlpha(theme::accent, (0.30f + 0.5f * hover) * a), 1.5f);
 
@@ -231,8 +231,8 @@ void drawLoadoutPanel(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f c,
     const sf::Vector2f bp{c.x, c.y - kPanelH * 0.5f + 30.f};
     // The same look as in the arena: glow, shaded body, role mark, highlight.
     const bool guardian = L.role() == BallRole::Guardian;
-    draw::glow(w, bp, r * 2.2f, ec, 0.22f * a);
-    draw::disc(w, bp, r, withAlpha(lerpColor(ec, sf::Color::White, 0.4f), a),
+    draw::glow(w, bp, r * 1.9f, ec, 0.09f * a);
+    draw::disc(w, bp, r, withAlpha(lerpColor(ec, sf::Color::White, 0.18f), a),
                withAlpha(lerpColor(ec, theme::bg, 0.2f), a));
     draw::ring(w, bp, r, guardian ? 3.5f : 1.5f, withAlpha(sf::Color::White, (guardian ? 0.55f : 0.22f) * a));
     if (L.role() == BallRole::Support)
@@ -240,7 +240,7 @@ void drawLoadoutPanel(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f c,
     else if (L.role() == BallRole::Striker)
         draw::disc(w, bp, r * 0.26f, withAlpha(sf::Color::White, 0.85f * a), withAlpha(sf::Color::White, 0.6f * a));
     if (L.mastery()) draw::ring(w, bp, r + 5.f, 1.5f, withAlpha(lerpColor(ec, sf::Color::White, 0.5f), 0.7f * a));
-    draw::disc(w, bp + sf::Vector2f{-0.34f, -0.38f} * r, r * 0.3f, withAlpha(sf::Color::White, 0.5f * a),
+    draw::disc(w, bp + sf::Vector2f{-0.34f, -0.38f} * r, r * 0.26f, withAlpha(sf::Color::White, 0.22f * a),
                withAlpha(sf::Color::White, 0.f), {1.f, 0.8f}, 16);
 
     std::string name = roleName(L.role());
@@ -251,7 +251,7 @@ void drawLoadoutPanel(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f c,
     for (int i = 0; i < kBallSlots; ++i) {
         const sf::FloatRect sr = slotRect(c, i);
         const bool hot = hoverSlot == i;
-        draw::box(w, sr, 6.f, withAlpha(theme::textLo, (hot ? 0.24f : 0.09f) * a),
+        draw::box(w, sr, theme::corner, withAlpha(theme::textLo, (hot ? 0.24f : 0.09f) * a),
                   withAlpha(theme::textLo, (hot ? 0.14f : 0.03f) * a),
                   withAlpha(theme::accent, (hot ? 0.8f : 0.18f) * a), 1.f);
         std::string t = "empty slot";
@@ -339,7 +339,7 @@ void drawTooltip(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f mouse, 
     x = std::max(4.f, x);
     y = std::max(4.f, y);
 
-    draw::box(w, {x, y, wd, ht}, 8.f, sf::Color(24, 26, 36, 242), sf::Color(12, 12, 18, 242),
+    draw::box(w, {x, y, wd, ht}, theme::corner, sf::Color(24, 26, 36, 242), sf::Color(12, 12, 18, 242),
               withAlpha(titleColor, 0.5f), 1.f);
 
     sf::Text t = makeText(font, title, theme::fsBody, titleColor);

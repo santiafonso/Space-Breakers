@@ -11,6 +11,7 @@ inline const sf::Color bg{13, 13, 19};
 inline const sf::Color bgHot{58, 22, 38};   // the backdrop warms toward this as the combo climbs
 inline const sf::Color panel{0, 0, 0};  // paired with alpha
 inline const sf::Color arenaEdge{54, 58, 78};
+inline constexpr float corner = 0.f;   // box corner radius: square, clean edges (the user's call)
 
 // Text
 inline const sf::Color textHi{236, 238, 245};
