@@ -10,6 +10,8 @@
 namespace sb {
 
 // Small shared drawing helpers used across every screen.
+// Text at heading size and up is set in the title face when one is registered.
+void setTitleFont(const sf::Font* font);
 sf::Text makeText(const sf::Font& font, const std::string& str, unsigned size, sf::Color color);
 void centerOrigin(sf::Text& t);
 

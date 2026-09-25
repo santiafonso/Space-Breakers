@@ -421,6 +421,10 @@ inline constexpr float windfallChance = 0.20f;  // "Windfall" node: chance a won
 inline constexpr float bountyPerKillPerLevel = 0.10f;  // "Fortune" node: cores per enemy kill, per level
 inline constexpr float salvagePerKillPerLevel = 0.06f; // "Salvage" node: extra cores per enemy kill, per level
 inline constexpr float interestPerLevel = 4.f;         // "Interest" node: cores for a no-damage wave, per level
+inline constexpr float armoryEpicPerLevel = 0.5f;      // "Armory": Epic odds x (1 + this * level)
+inline constexpr float luckyStarShift = 0.12f;         // "Lucky star": share of each tier nudged up one, per level
+inline constexpr float hagglerPerLevel = 0.10f;        // "Haggler": shop prices -this per level
+inline constexpr float eliteSpoilsPerLevel = 0.5f;     // "Elite spoils": elite gold x (1 + this * level)
 }  // namespace meta
 
 // Power-up orbs drift in and buff the balls for a few seconds. Spawn cadence is

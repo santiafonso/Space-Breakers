@@ -36,6 +36,8 @@ void Hud::update(float dt, int act, int stage, int stages, int enemiesLeft, floa
 
     comboPop_ *= std::exp(-7.f * dt);
     goldPop_ *= std::exp(-9.f * dt);
+    goldShown_ += (static_cast<float>(gold_) - goldShown_) * (1.f - std::exp(-8.f * dt));
+    if (std::fabs(static_cast<float>(gold_) - goldShown_) < 0.5f) goldShown_ = static_cast<float>(gold_);
     const float target = effect ? 1.f : 0.f;
     effectAlpha_ = lerpf(effectAlpha_, target, 1.f - std::exp(-10.f * dt));
 }
@@ -108,7 +110,8 @@ void Hud::draw(sf::RenderWindow& window) const {
 
     // Run gold, under the score.
     {
-        sf::Text gd = makeText(*font_, "GOLD  " + std::to_string(gold_), theme::fsSmall, theme::puGolden);
+        sf::Text gd = makeText(*font_, "GOLD  " + std::to_string(static_cast<int>(std::lround(goldShown_))),
+                               theme::fsSmall, theme::puGolden);
         const sf::FloatRect gb = gd.getLocalBounds();
         gd.setOrigin(gb.left + gb.width, gb.top);
         const float gs = 1.f + 0.3f * goldPop_;   // bumps as coins land

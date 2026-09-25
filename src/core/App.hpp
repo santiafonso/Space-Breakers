@@ -145,6 +145,11 @@ private:
     void update(float frameDt);
     void render();
     void drawDevOverlay(sf::RenderWindow& w) const;   // dev key cheat-sheet, always top-right in SB_DEV
+    // Dev "photo mode" (SB_SNAPSHOT=<dir>): stage every screen, save a PNG of
+    // each and quit - a way to look at the UI without playing.
+    int runSnapshots(const std::string& dir);
+    void snapFrame(const std::string& file);
+    std::string capturePath_;   // non-empty: render() saves this frame here
     void processEvents(const FrameEvents& ev);
     sf::Vector2f worldToUi(sf::Vector2f p) const;   // arena point -> UI units (for coins / labels)
     sf::Vector2f goldCounterPos() const;            // where kill coins fly to (HUD gold)
@@ -152,6 +157,7 @@ private:
 
     Window window_;
     sf::Font font_;
+    sf::Font titleFont_;   // heavy face for titles / headings (see setTitleFont)
     Audio audio_;
     World world_;
     Effects effects_;

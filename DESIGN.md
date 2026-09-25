@@ -776,6 +776,30 @@ Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
   - Sim sin jugador (2 pelotas, 8 corridas): Seeker 2 → 22 kills, Gemini+
     Satellite ~20, Satellite 13, Storm 9; ningún NaN, <1.5 µs por paso.
 
+- **Fase K — web con contenido nuevo + tipografía + feedback + modo foto. [IMPLEMENTADO 2026-09-25]**
+  - **Modo foto (dev):** `SB_SNAPSHOT=<carpeta> ./space_breakers` arma cada
+    pantalla (menú, web, mapa, pelea, cartas, tienda, selector, TAB), guarda un
+    PNG de cada una y se cierra (`App::runSnapshots`). Usa un save aparte en esa
+    carpeta: el save real no se toca. Sirve para revisar la UI sin jugar (en
+    este entorno el display cierra las ventanas a los segundos).
+  - **Tipografía:** Lato (OFL, `assets/fonts/`, licencia incluida). Lato Bold
+    para la UI; Lato Black automática para todo texto de tamaño `fsHeading` o
+    más (`setTitleFont` en Widgets). Arial queda de fallback.
+  - **Web (save v12, append-only):** anillos más separados (`kRingGap` 36→56),
+    nodos más grandes, se ven los nombres de la frontera comprable y los
+    puntitos de nivel, leyenda de ramas, Start/Back abajo a la derecha. Rama
+    nueva **Arsenal** (prismas): Armory (+50% odds de Epic por nivel) y los
+    desbloqueos de 4 legendarios (Satellite, Gravity well, Gemini, Prism core;
+    bloqueados hasta comprarlos vía `UpgradeCtx::locked`; Seeker y Railgun
+    siempre disponibles). Economía: Lucky star (odds de tier), Haggler (-10%
+    precios/nivel), Starter kit (item gratis al empezar: Uncommon, luego Rare),
+    Elite spoils (+50% oro de élite/nivel). Combate pasó a rosa para no
+    confundirse con Power-ups.
+  - **Feedback:** título del menú grande con halo que respira; cartas que se
+    levantan al pasar el cursor; contador de oro que "rueda"; picks Epic /
+    Legendary con destello y cartel en su color; reacciones con un pequeño
+    sacudón de cámara; paneles de pelotas con fondo sólido.
+
 - **Pendiente (idea del usuario, 2026-09-24):** como las mejoras ya no llegan
   en cada oleada, cada una tiene que **sentirse mucho** al conseguirla: repasar
   items / modificadores / reliquias para que sean más fuertes y más visibles

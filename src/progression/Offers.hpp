@@ -88,6 +88,7 @@ enum class UpgradeKind {
 };
 inline constexpr int kUpgradeKindCount = 56;
 static_assert(static_cast<int>(UpgradeKind::Overcharge) + 1 == kUpgradeKindCount, "update kUpgradeKindCount");
+static_assert(kUpgradeKindCount <= 64, "UpgradeCtx::locked is a 64-bit mask");
 inline constexpr int kChoiceCount = 4;
 inline constexpr int kBallSlots = 4;          // item slots per ball
 inline constexpr int kElementItemCount = 6;
@@ -465,7 +466,10 @@ struct UpgradeCtx {
     bool phoenix = false;
     bool timeDilation = false;
     bool overcharge = false;
+    std::uint64_t locked = 0;   // bit k set => UpgradeKind k is locked behind the web
 };
+
+inline constexpr std::uint64_t upgradeBit(UpgradeKind k) { return std::uint64_t{1} << static_cast<int>(k); }
 
 inline int elementsUnlocked(const UpgradeCtx& c) {
     int n = 0;
@@ -475,6 +479,7 @@ inline int elementsUnlocked(const UpgradeCtx& c) {
 }
 
 inline bool upgradeEligible(UpgradeKind k, const UpgradeCtx& c) {
+    if (c.locked & upgradeBit(k)) return false;
     const int ballCount = c.balls ? static_cast<int>(c.balls->size()) : 0;
     auto anyBallFits = [&] {
         if (!c.balls) return false;
@@ -558,10 +563,20 @@ enum MetaUnlock {
     MetaAfterglow,    // Afterglow  - continuous power-ups fade out instead of cutting
     MetaCharged,      // Charged    - power-ups start with part of their duration
     MetaEmber,        // Ember      - fire ball hits apply a burn (fire has no DoT alone)
+    // ---- v12 append (indices 32+, never reorder) ----
+    MetaArmory,       // Armory       - epic picks turn up more often          (Arsenal hub)
+    MetaSatellite,    // Satellite    - the Satellite legendary can appear
+    MetaGravity,      // Singularity  - the Gravity well legendary can appear
+    MetaGemini,       // Twins        - the Gemini legendary can appear
+    MetaPrism,        // Prism        - the Prism core legendary relic can appear
+    MetaLuckyStar,    // Lucky star   - better tier odds on every roll
+    MetaHaggler,      // Haggler      - shop prices drop
+    MetaStarterKit,   // Starter kit  - start the run with a free item
+    MetaEliteSpoils,  // Elite spoils - elites pay more gold
     MetaUnlockCount
 };
 
-enum class MetaBranch { Root, Base, Combat, Eco, Special, Pickups };
+enum class MetaBranch { Root, Base, Combat, Eco, Special, Pickups, Arsenal };
 enum class MetaCurrency { Cores, Prisms };
 
 struct MetaUnlockDef {
@@ -644,6 +659,25 @@ inline const MetaUnlockDef& metaUnlockDef(int u) {
                          10u, 2, MetaBranch::Pickups, MetaCurrency::Cores,  14,  4.00f, -2.00f},
         /* Ember     */ {"Ember",     "fire ball hits set enemies alight for a burn; scales with Ignition",
                          2u,  3, MetaBranch::Special, MetaCurrency::Prisms,  3,  1.00f,  1.00f},
+        // ---- v12: the Arsenal (down-left) and a few Economy nodes (up-left). ----
+        /* Armory    */ {"Armory",    "Epic picks turn up more often (+50% odds per level). Opens the Arsenal.",
+                         2u,  2, MetaBranch::Arsenal, MetaCurrency::Prisms, 11, -1.00f,  2.00f},
+        /* Satellite */ {"Satellite", "the Satellite legendary can appear: a ball that orbits the core",
+                         2u,  1, MetaBranch::Arsenal, MetaCurrency::Prisms, 32, -0.80f,  3.00f},
+        /* Singularity*/{"Singularity","the Gravity well legendary can appear: a ball that drags enemies in",
+                         3u,  1, MetaBranch::Arsenal, MetaCurrency::Prisms, 32, -2.00f,  3.00f},
+        /* Twins     */ {"Twins",     "the Gemini legendary can appear: a permanent ghost twin",
+                         3u,  1, MetaBranch::Arsenal, MetaCurrency::Prisms, 34, -3.00f,  2.20f},
+        /* Prism     */ {"Prism",     "the Prism core legendary relic can appear: reactions everywhere",
+                         4u,  1, MetaBranch::Arsenal, MetaCurrency::Prisms, 35, -2.50f,  4.00f},
+        /* Lucky star*/ {"Lucky star","better odds of rarer picks on every roll",
+                         12u, 3, MetaBranch::Eco,     MetaCurrency::Cores,  20, -3.00f, -1.10f},
+        /* Haggler   */ {"Haggler",   "shop prices drop 10% per level",
+                         10u, 3, MetaBranch::Eco,     MetaCurrency::Cores,  24, -1.10f, -3.00f},
+        /* StarterKit*/ {"Starter kit","start every run with a free item on your first ball (Uncommon, then Rare)",
+                         14u, 2, MetaBranch::Eco,     MetaCurrency::Cores,  40, -4.00f, -2.30f},
+        /* EliteSpoils*/{"Elite spoils","elite fights pay +50% gold per level",
+                         12u, 2, MetaBranch::Eco,     MetaCurrency::Cores,  26, -3.00f, -3.00f},
     };
     return defs[u];
 }

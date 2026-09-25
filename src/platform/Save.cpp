@@ -10,7 +10,7 @@
 namespace sb {
 
 namespace {
-constexpr int kSaveVersion = 11;  // v11: appended Aegis..Ember (32 nodes); append-only, v9/v10 load fine
+constexpr int kSaveVersion = 12;  // v12: appended Armory..Elite spoils (41 nodes); append-only since v9
 }  // namespace
 
 bool hasSavedGame(const std::string& path) {

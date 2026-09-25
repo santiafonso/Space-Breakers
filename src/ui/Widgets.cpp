@@ -23,8 +23,14 @@ std::string formatTime(double seconds) {
 
 }  // namespace
 
+namespace {
+const sf::Font* gTitleFont = nullptr;
+}
+
+void setTitleFont(const sf::Font* font) { gTitleFont = font; }
+
 sf::Text makeText(const sf::Font& font, const std::string& str, unsigned size, sf::Color color) {
-    sf::Text t(str, font, size);
+    sf::Text t(str, (gTitleFont && size >= theme::fsHeading) ? *gTitleFont : font, size);
     t.setFillColor(color);
     return t;
 }
@@ -215,6 +221,11 @@ sf::Color catColor(UpgradeCat c) {
 void drawLoadoutPanel(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f c,
                       const BallLoadout& L, float alpha, float hover, int hoverSlot, bool dim) {
     const float a = alpha * (dim ? 0.35f : 1.f);
+    sf::RectangleShape back({kPanelW, kPanelH});   // solid backing: the arena must not show through
+    back.setOrigin(kPanelW * 0.5f, kPanelH * 0.5f);
+    back.setPosition(c);
+    back.setFillColor(withAlpha(theme::bg, 0.94f * alpha));
+    w.draw(back);
     sf::RectangleShape box({kPanelW, kPanelH});
     box.setOrigin(kPanelW * 0.5f, kPanelH * 0.5f);
     box.setPosition(c);

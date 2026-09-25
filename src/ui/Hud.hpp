@@ -35,6 +35,7 @@ private:
     int score_ = 0;
     int gold_ = 0;
     float goldPop_ = 0.f;
+    float goldShown_ = 0.f;   // the counter rolls toward gold_ instead of jumping
     bool bossWave_ = false;
     float coreFrac_ = 1.f;
     float comboMul_ = 1.f;

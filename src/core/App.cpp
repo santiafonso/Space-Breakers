@@ -35,22 +35,10 @@ int envInt(const char* key, int fallback) {
     }
 }
 
-bool loadFont(sf::Font& font) {
-    // Next to the binary first (packaged build), then the project-root layouts
-    // used when running straight from a build tree.
-    const std::filesystem::path dir = exeDir();
-    const std::filesystem::path candidates[] = {
-        dir / "assets" / "arial.ttf", dir / "arial.ttf",
-        dir / ".." / "assets" / "arial.ttf",
-        "assets/arial.ttf", "../assets/arial.ttf", "arial.ttf",
-    };
-    for (const std::filesystem::path& path : candidates)
-        if (std::filesystem::exists(path) && font.loadFromFile(path.string())) return true;
-    return false;
-}
 
-// First existing path for an asset given as "music/menu.ogg" etc., searching the
-// same layouts as the font. Empty string when nothing matches.
+// First existing path for an asset given as "music/menu.ogg" etc.: next to the
+// binary first (packaged build), then the project-root layouts used when
+// running straight from a build tree. Empty string when nothing matches.
 std::string findAsset(const std::string& rel) {
     const std::filesystem::path dir = exeDir();
     const std::filesystem::path candidates[] = {
@@ -68,10 +56,19 @@ std::string findAsset(const std::string& rel) {
 App::App() : window_(kLogical()), world_(kLogical()) {
     savePath_ = (exeDir() / "saves" / "save.txt").string();
 
-    if (!loadFont(font_)) {
-        std::cerr << "Space-Breakers: could not load assets/arial.ttf (run from the project root)\n";
-        std::exit(1);
+    // Lato Bold for the UI, Lato Black for titles (Widgets picks it for big
+    // text); the old Arial is the fallback.
+    const std::string body = findAsset("fonts/Lato-Bold.ttf");
+    if (!(!body.empty() && font_.loadFromFile(body))) {
+        const std::string fallback = findAsset("arial.ttf");
+        if (fallback.empty() || !font_.loadFromFile(fallback)) {
+            std::cerr << "Space-Breakers: could not load a font from assets/ (run from the project root)\n";
+            std::exit(1);
+        }
     }
+    if (const std::string title = findAsset("fonts/Lato-Black.ttf");
+        !title.empty() && titleFont_.loadFromFile(title))
+        setTitleFont(&titleFont_);
     if (!audio_.init())
         std::cerr << "Space-Breakers: audio unavailable, continuing without sound\n";
     audio_.loadMusic(findAsset("music/menu.ogg"), findAsset("music/game.ogg"));
@@ -308,6 +305,20 @@ void App::newRun() {
     // (or when a dev shortcut drops us past the boss already).
     continueUnlocked_ = data_.meta.stats.wins > 0 || startWave > cfg::run::bossWave;
 
+    // "Starter kit": a free item on the first ball (Uncommon, then Rare).
+    if (const int kit = data_.meta.unlock[MetaStarterKit]; kit > 0 && !r.balls.empty()) {
+        const Tier want = kit >= 2 ? Tier::Rare : Tier::Uncommon;
+        std::vector<UpgradeKind> pool;
+        for (int i = 0; i < kUpgradeKindCount; ++i) {
+            const auto k = static_cast<UpgradeKind>(i);
+            if (upgradeCat(k) == UpgradeCat::Item && upgradeTier(k) == want && upgradeFitsBall(k, r.balls[0]))
+                pool.push_back(k);
+        }
+        if (!pool.empty()) {
+            r.balls[0].gear[0] = static_cast<int>(pool[static_cast<std::size_t>(rng_.irange(0, static_cast<int>(pool.size()) - 1))]);
+            r.balls[0].gearLvl[0] = 1;
+        }
+    }
     world_.startRun(params(), ballSpecs(), r.coreHp, r.coreMaxHp);
     world_.setPhoenix(0);   // no Phoenix until it's picked
     effects_.clear();
@@ -383,6 +394,12 @@ UpgradeCtx App::buildUpgradeCtx() const {
     c.phoenix = r.mods.phoenix;
     c.timeDilation = r.mods.timeDilation;
     c.overcharge = r.mods.overcharge;
+    // Legendaries that still sit behind their web node.
+    const int* u = data_.meta.unlock;
+    if (u[MetaSatellite] == 0) c.locked |= upgradeBit(UpgradeKind::Satellite);
+    if (u[MetaGravity] == 0)   c.locked |= upgradeBit(UpgradeKind::GravityWell);
+    if (u[MetaGemini] == 0)    c.locked |= upgradeBit(UpgradeKind::Gemini);
+    if (u[MetaPrism] == 0)     c.locked |= upgradeBit(UpgradeKind::PrismCore);
     return c;
 }
 
@@ -394,9 +411,15 @@ UpgradeKind App::rollPick(RollSource src, const std::vector<UpgradeKind>& exclud
                                                : cfg::tier::weightsNormal;
     float w[kTierCount];
     for (int t = 0; t < kTierCount; ++t) w[t] = static_cast<float>(base[t]);
-    if (data_.run.mods.luckyClover)   // luck nudges every tier's odds one step up
+    const int* u = data_.meta.unlock;
+    w[static_cast<int>(Tier::Epic)] *= 1.f + cfg::meta::armoryEpicPerLevel * static_cast<float>(u[MetaArmory]);
+    // Luck (the Lucky clover relic, the Lucky star node) nudges every tier's
+    // odds one step up.
+    const float shift = (data_.run.mods.luckyClover ? cfg::tier::luckShift : 0.f) +
+                        cfg::meta::luckyStarShift * static_cast<float>(u[MetaLuckyStar]);
+    if (shift > 0.f)
         for (int t = kTierCount - 2; t >= 0; --t) {
-            const float moved = w[t] * cfg::tier::luckShift;
+            const float moved = w[t] * std::min(shift, 0.9f);
             w[t] -= moved;
             w[t + 1] += moved;
         }
@@ -495,6 +518,12 @@ bool App::autoTarget(UpgradeKind k, int& ball, int& slot) const {
 void App::applyUpgradeKind(UpgradeKind k, int ball, int slot) {
     RunState& r = data_.run;
     RunMods& m = r.mods;
+    // A big pick deserves a moment: flash + banner in its tier colour.
+    if (const Tier t = upgradeTier(k); t >= Tier::Epic) {
+        effects_.flash(tierColor(t), t == Tier::Legendary ? 0.9f : 0.6f);
+        effects_.addLabel(std::string(t == Tier::Legendary ? "LEGENDARY  " : "EPIC  ") + upgradeInfo(k).title,
+                          {size().x * 0.5f, size().y * 0.3f}, tierColor(t), t == Tier::Legendary ? 34 : 28, 1.6f);
+    }
     if (upgradeNeedsTarget(k)) {
         if (ball < 0 && !autoTarget(k, ball, slot)) return;
         if (ball >= static_cast<int>(r.balls.size()) || !upgradeFitsBall(k, r.balls[ball])) return;
@@ -716,11 +745,14 @@ void App::cancelEquip() {
 // ---------------------------------------------------------------- shop
 
 int App::shopPrice(UpgradeKind k) const {
+    int base = 0;
     switch (upgradeCat(k)) {
-        case UpgradeCat::NewBall:  return cfg::gold::priceNewBall;
-        case UpgradeCat::Modifier: return cfg::gold::priceModifier;
-        default:                   return cfg::gold::priceByTier[static_cast<int>(upgradeTier(k))];
+        case UpgradeCat::NewBall:  base = cfg::gold::priceNewBall; break;
+        case UpgradeCat::Modifier: base = cfg::gold::priceModifier; break;
+        default:                   base = cfg::gold::priceByTier[static_cast<int>(upgradeTier(k))]; break;
     }
+    const float off = cfg::meta::hagglerPerLevel * static_cast<float>(data_.meta.unlock[MetaHaggler]);   // "Haggler"
+    return std::max(1, static_cast<int>(std::lround(static_cast<float>(base) * (1.f - off))));
 }
 
 void App::rollShop() {
@@ -1066,8 +1098,9 @@ void App::processEvents(const FrameEvents& ev) {
     for (const BurstFx& b : ev.bursts) {
         effects_.addBurst(b.pos, b.radius, b.color);
         if (b.label && reactLabelCd_ <= 0.f) {
-            effects_.addLabel(b.label, worldToUi(b.pos) + sf::Vector2f{0.f, -18.f}, b.color, 18, 0.8f);
+            effects_.addLabel(b.label, worldToUi(b.pos) + sf::Vector2f{0.f, -18.f}, b.color, 20, 0.8f);
             audio_.comboUp(4);
+            camKick_ = std::max(camKick_, 3.5f);   // a reaction lands with a small jolt
             reactLabelCd_ = 0.25f;
         }
     }
@@ -1136,7 +1169,9 @@ void App::processEvents(const FrameEvents& ev) {
         RunState& r = data_.run;
         const int row = w - (r.map.act - 1) * cfg::run::bossWave;
         int pay = cfg::gold::combatBase + cfg::gold::perRow * row;
-        if (r.eliteWave) pay *= cfg::gold::elitePerRowMul;
+        if (r.eliteWave)
+            pay = static_cast<int>(std::lround(static_cast<float>(pay * cfg::gold::elitePerRowMul) *
+                (1.f + cfg::meta::eliteSpoilsPerLevel * static_cast<float>(data_.meta.unlock[MetaEliteSpoils]))));
         r.gold += pay;
         effects_.addLabel("+" + std::to_string(pay) + " gold", {size().x * 0.5f, size().y * 0.4f},
                           theme::puGolden, 26, 1.2f);
@@ -1289,7 +1324,85 @@ void App::render() {
     effects_.drawOverlay(w);
     if (fade_ > 0.01f) drawDim(w, size(), fade_ * 0.5f);
     if (devMode()) drawDevOverlay(w);
+    if (!capturePath_.empty()) {   // photo mode: grab the finished frame before it's shown
+        sf::Texture shot;
+        if (shot.create(w.getSize().x, w.getSize().y)) {
+            shot.update(w);
+            shot.copyToImage().saveToFile(capturePath_);
+        }
+        capturePath_.clear();
+    }
     w.display();
+}
+
+void App::snapFrame(const std::string& file) {
+    for (int i = 0; i < 12; ++i) update(0.1f);   // let intros / fades settle
+    capturePath_ = file;
+    render();
+}
+
+int App::runSnapshots(const std::string& dir) {
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+    savePath_ = dir + "/snapshot_save.txt";   // never touch the real save
+    const std::string d = dir + "/";
+
+    snapFrame(d + "01_menu.png");
+
+    data_.meta.cores = 480;
+    data_.meta.prisms = 6;
+    for (int u : {MetaStartBalls, MetaCoreHp, MetaFireItem, MetaVenom, MetaTide, MetaBounty, MetaHeft, MetaUplink})
+        data_.meta.unlock[u] = 1;
+    openLoadout();
+    snapFrame(d + "02_web.png");
+
+    newRun();
+    snapFrame(d + "03_map.png");
+
+    // A dressed-up squad so the arena and the panels have something to show.
+    RunState& r = data_.run;
+    r.gold = 187;
+    r.balls.assign(3, BallLoadout{});
+    r.balls[0].gear[0] = static_cast<int>(UpgradeKind::ElemFire);
+    r.balls[0].gear[1] = static_cast<int>(UpgradeKind::Cleave);
+    r.balls[0].gear[2] = static_cast<int>(UpgradeKind::Crit);
+    r.balls[0].gearLvl[0] = r.balls[0].gearLvl[1] = r.balls[0].gearLvl[2] = 1;
+    r.balls[1].gear[0] = static_cast<int>(UpgradeKind::ElemIce);
+    r.balls[1].gear[1] = static_cast<int>(UpgradeKind::Rampart);
+    r.balls[1].gearLvl[0] = r.balls[1].gearLvl[1] = 1;
+    r.balls[1].mods[0] = 2;
+    r.balls[2].gear[0] = static_cast<int>(UpgradeKind::ElemElectric);
+    r.balls[2].gear[1] = static_cast<int>(UpgradeKind::Storm);
+    r.balls[2].gearLvl[0] = r.balls[2].gearLvl[1] = 1;
+    r.mods.catalyst = true;
+    syncWorldBalls();
+    for (int i = 0; i < static_cast<int>(r.map.nodes.size()); ++i)
+        if (mapNodeOpen(i)) { travelTo(i); break; }
+    for (int i = 0; i < 300; ++i) update(1.f / 60.f);   // five seconds of fighting
+    capturePath_ = d + "04_play.png";
+    render();
+
+    choices_ = {UpgradeKind::Railgun, UpgradeKind::Storm, UpgradeKind::Cleave, UpgradeKind::WallRush};
+    rollSource_ = RollSource::Normal;
+    push(ScreenId::Choice);
+    snapFrame(d + "05_choice.png");
+    back();
+
+    rollShop();
+    push(ScreenId::Shop);
+    snapFrame(d + "06_shop.png");
+    back();
+
+    beginEquip(EquipSource::Choice, UpgradeKind::Railgun, 0);
+    snapFrame(d + "07_equip.png");
+    back();
+
+    sf::Event tab{};
+    tab.type = sf::Event::KeyPressed;
+    tab.key.code = sf::Keyboard::Tab;
+    stack_.back()->handleEvent(*this, tab, {0.f, 0.f});
+    snapFrame(d + "08_tab.png");
+    return 0;
 }
 
 // A fixed cheat-sheet of the dev keys, top-right on every screen, so there's no
@@ -1323,6 +1436,7 @@ void App::drawDevOverlay(sf::RenderWindow& w) const {
 }
 
 int App::run() {
+    if (const char* snap = std::getenv("SB_SNAPSHOT"); snap && *snap) return runSnapshots(snap);
     sf::Clock clock;
     while (window_.isOpen()) {
         sf::Event e;

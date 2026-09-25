@@ -54,21 +54,22 @@ std::string currencyLine(const MetaState& m) {
 // The web is drawn small on purpose: it will grow to many more nodes and levels,
 // so every element (ring gap, node radius, label offsets, hit radius) is kept
 // tight to fit the graph into the middle of the screen.
-constexpr float kRingGap = 36.f;      // pixels between concentric rings
-constexpr float kNodeR = 7.f;         // branch node radius
-constexpr float kRootR = 10.f;        // centre node radius
-constexpr float kWebCenterY = 0.5f;   // * size.y
-constexpr int   kBackRings = 13;      // faint rings drawn behind the web (room to grow)
+constexpr float kRingGap = 56.f;      // pixels between concentric rings
+constexpr float kNodeR = 11.f;        // branch node radius
+constexpr float kRootR = 16.f;        // centre node radius
+constexpr float kWebCenterY = 0.53f;  // * size.y
+constexpr int   kBackRings = 6;       // faint rings drawn behind the web
 
 const sf::Color kPrismColor = theme::puSurge;   // violet - distinct from the core-blue accent
 
 sf::Color branchColor(MetaBranch b) {
     switch (b) {
         case MetaBranch::Base:    return theme::core;
-        case MetaBranch::Combat:  return theme::ballFast;
+        case MetaBranch::Combat:  return theme::puOverdrive;
         case MetaBranch::Eco:     return theme::accent;
         case MetaBranch::Special: return theme::elemFire;
         case MetaBranch::Pickups: return theme::puPoints;
+        case MetaBranch::Arsenal: return theme::puSurge;
         case MetaBranch::Root:    return theme::textHi;
     }
     return theme::textHi;
@@ -87,6 +88,7 @@ const char* branchLabel(MetaBranch b) {
         case MetaBranch::Eco:     return "Economy";
         case MetaBranch::Special: return "Special balls";
         case MetaBranch::Pickups: return "Power-ups";
+        case MetaBranch::Arsenal: return "Arsenal";
         case MetaBranch::Root:    return "Core";
     }
     return "";
@@ -161,10 +163,19 @@ void MenuScreen::draw(App& app, sf::RenderWindow& w) {
     const sf::Vector2f s = app.size();
     const float it = intro();
     backdrop_.draw(w, clampf(introPop(it, 0.f, 0.9f), 0.f, 1.f));
-    drawCenteredPop(w, app.font(), "Space-Breakers", theme::fsTitle, {s.x * 0.5f, s.y * 0.2f},
-                    theme::textHi, introPop(it, 0.f, 0.34f));
+    // The title: big, heavy, with a slow glow breathing behind it.
+    const float breathe = 0.5f + 0.5f * std::sin(it * 1.6f);
+    const float tp = introPop(it, 0.f, 0.4f);
+    if (tp > 0.9f) {   // a soft halo: faint copies nudged around the title
+        const float ga = (0.05f + 0.05f * breathe) * clampf(tp, 0.f, 1.f);
+        for (const sf::Vector2f o : {sf::Vector2f{-3.f, 0.f}, sf::Vector2f{3.f, 0.f}, sf::Vector2f{0.f, -3.f},
+                                     sf::Vector2f{0.f, 3.f}, sf::Vector2f{-2.f, -2.f}, sf::Vector2f{2.f, 2.f}})
+            drawCentered(w, app.font(), "Space-Breakers", 72, sf::Vector2f{s.x * 0.5f, s.y * 0.19f} + o,
+                         withAlpha(theme::accent, ga));
+    }
+    drawCenteredPop(w, app.font(), "Space-Breakers", 72, {s.x * 0.5f, s.y * 0.19f}, theme::textHi, tp);
     drawCenteredPop(w, app.font(), currencyLine(app.data().meta), theme::fsHeading,
-                    {s.x * 0.5f, s.y * 0.2f + 42.f}, theme::accent, introPop(it, 0.09f));
+                    {s.x * 0.5f, s.y * 0.19f + 62.f}, theme::accent, introPop(it, 0.09f));
     menu_.draw(w, it);
 }
 
@@ -174,7 +185,7 @@ void LoadoutScreen::rebuild(App& app) {
     const sf::Vector2f s = app.size();
     menu_.init(app.font(), theme::fsItem, s.y * 0.050f);
     menu_.setItems({{"Start run", true}, {"Back", true}});
-    menu_.layout({s.x * 0.5f, s.y * 0.85f});
+    menu_.layout({s.x - 150.f, s.y * 0.80f});   // bottom-right, clear of the web
 }
 
 void LoadoutScreen::onEnter(App& app) {
@@ -434,7 +445,20 @@ void LoadoutScreen::draw(App& app, sf::RenderWindow& w) {
 
         // a small pip marks an owned node while it is idle
         if (owned && g < 0.6f)
-            drawDot(w, p, baseR * 0.36f, withAlpha(col, 0.9f * na));
+            drawDot(w, p, baseR * 0.22f, withAlpha(theme::bg, 0.55f * na));
+
+        // Idle labels: the purchase frontier (open, not bought yet) shows its
+        // name, so you can read your options without hovering every node;
+        // owned multi-level nodes show their level pips.
+        if (g < 0.03f && avail && !owned && i != 0)
+            drawCentered(w, app.font(), d.name, theme::fsSmall, {p.x, p.y + baseR + 11.f},
+                         withAlpha(afford ? theme::textLo : theme::textDim, 0.9f * na));
+        if (g < 0.03f && owned && d.maxLevel > 1) {
+            const float span = static_cast<float>(d.maxLevel - 1) * 6.f;
+            for (int k = 0; k < d.maxLevel; ++k)
+                drawDot(w, {p.x - span * 0.5f + static_cast<float>(k) * 6.f, p.y + baseR + 7.f}, 2.f,
+                        withAlpha(k < lvl ? col : theme::textDim, na));
+        }
 
         // name / level / cost only while lit
         if (g > 0.03f) {
@@ -473,9 +497,24 @@ void LoadoutScreen::draw(App& app, sf::RenderWindow& w) {
 
     if (hoverNode_ >= 0 || selUsed_) drawInfoCard(app, w, selNode_);
 
+    // Branch legend, bottom-left.
+    {
+        const float la = clampf(introPop(it, 0.2f), 0.f, 1.f);
+        const MetaBranch branches[] = {MetaBranch::Base, MetaBranch::Combat, MetaBranch::Eco,
+                                       MetaBranch::Pickups, MetaBranch::Special, MetaBranch::Arsenal};
+        float ly = s.y - theme::margin - 6.f * 22.f;
+        for (MetaBranch b : branches) {
+            drawDot(w, {theme::margin + 8.f, ly + 8.f}, 6.f, withAlpha(branchColor(b), la));
+            sf::Text t = makeText(app.font(), branchLabel(b), theme::fsSmall, withAlpha(theme::textLo, la));
+            t.setPosition(theme::margin + 22.f, ly);
+            w.draw(t);
+            ly += 22.f;
+        }
+    }
+
     menu_.draw(w, it);
-    drawCenteredPop(w, app.font(), "Enter starts the run      Esc goes back", theme::fsSmall,
-                    {s.x * 0.5f, s.y * 0.95f}, theme::textDim, introPop(it, 0.28f));
+    drawCenteredPop(w, app.font(), "Enter starts the run   -   Esc goes back", theme::fsSmall,
+                    {s.x - 150.f, s.y * 0.95f}, theme::textDim, introPop(it, 0.28f));
 }
 
 // ================================================================ Play
@@ -847,7 +886,8 @@ void ChoiceScreen::draw(App& app, sf::RenderWindow& w) {
         const float cp = introPop(it, 0.10f + 0.09f * static_cast<float>(i), 0.40f);
         if (cp <= 0.001f) continue;
         const float ca = clampf(cp, 0.f, 1.f);
-        const sf::Vector2f c = c0 + sf::Vector2f(0.f, (1.f - ca) * 46.f);   // rises up into place
+        // rises up into place, and lifts a little more under the pointer
+        const sf::Vector2f c = c0 + sf::Vector2f(0.f, (1.f - ca) * 46.f - 10.f * h);
 
         const UpgradeKind kind = app.choices()[i];
         const Tier tier = upgradeTier(kind);
