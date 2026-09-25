@@ -158,17 +158,22 @@ BallSpec App::ballSpec(const BallLoadout& L) const {
             case UpgradeKind::Shatter:     m.shatter = true; break;
             case UpgradeKind::Conductor:   m.conductor = true; break;
             case UpgradeKind::Bedrock:     m.bedrock = true; break;
-            case UpgradeKind::Echo:        m.echo = true; break;
-            case UpgradeKind::Tesla:       m.tesla = true; break;
-            case UpgradeKind::Bomber:      m.bomber = true; break;
-            case UpgradeKind::SplitShot:   m.splitShot = true; break;
+            case UpgradeKind::Echo:        m.echoChance = cfg::synergy::echoChance * lv; break;
+            case UpgradeKind::Tesla:       m.teslaChance = cfg::synergy::teslaChance * lv; break;
+            case UpgradeKind::Bomber:      m.bomberChance = cfg::synergy::bomberChance * lv; break;
+            case UpgradeKind::SplitShot:   m.splitChance = cfg::synergy::splitChance * lv; break;
             case UpgradeKind::Rampart:     m.rampart = true; break;
-            case UpgradeKind::Mender:      m.mender = true; break;
+            case UpgradeKind::Mender:      m.menderHeal = cfg::synergy::menderHeal * lv; break;
             default: break;   // elements are read via L.element()
         }
     }
     auto stacks = [&L](UpgradeKind k) { return static_cast<float>(L.mods[modifierIndex(k)]); };
     m.damageMult = 1.f + cfg::combat::heavyImpactPerStack * stacks(UpgradeKind::HeavyImpact);
+    // Every forged level on any item also hardens the ball a little, so the
+    // forge is never wasted on an on/off item.
+    for (int i = 0; i < kBallSlots; ++i)
+        if (L.gear[i] >= 0 && L.gearLvl[i] > 1)
+            m.damageMult *= 1.f + cfg::combat::forgeDamagePerLevel * static_cast<float>(L.gearLvl[i] - 1);
     m.radiusMult = std::min(1.f + cfg::combat::bigBallPerStack * stacks(UpgradeKind::BigBall),
                             cfg::combat::bigBallMaxMult);
     m.cruiseMult = 1.f + cfg::combat::swiftPerStack * stacks(UpgradeKind::Swift);

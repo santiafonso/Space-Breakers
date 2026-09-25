@@ -59,6 +59,7 @@ inline constexpr float hitRebound = 0.9f;               // the ball bounces off 
 // past the first. MODIFIERS are per-ball stat bumps with no slot - they stack
 // without limit (the per-stack values below; radius has a physical cap).
 inline constexpr float gearLevelBonus = 0.5f;
+inline constexpr float forgeDamagePerLevel = 0.10f;   // any forged item: + this ball damage per level past 1
 inline constexpr float springBoost = 1.6f;        // "Spring": ball speed x this on a core bounce
 inline constexpr float wallBounceBoost = 1.12f;   // "Wall rush": ball speed x this on a wall bounce
 inline constexpr float pairBounceBoost = 1.16f;   // "Carom": ball speed x this when it clacks another ball

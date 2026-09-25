@@ -165,7 +165,7 @@ void EquipScreen::draw(App& app, sf::RenderWindow& w) {
     std::string title, sub, hint;
     if (forge) {
         title = "Forge - pick an item to level up";
-        sub = "each level adds half of the item's bonus again (max level " +
+        sub = "each level: the item's bonus or chance grows by half, and the ball hits 10% harder (max level " +
               std::to_string(cfg::gold::maxItemLevel) + ")";
         hint = "click an item   -   Esc: leave the forge";
     } else {

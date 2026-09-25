@@ -678,7 +678,7 @@ bool World::strike(Ball& b, Enemy& e, sf::Vector2f normal, const WorldParams& p,
     }
 
     // ---- procs
-    if (b.mods.tesla && chance(S::teslaChance, p)) {   // "Tesla": zap the nearest few
+    if (b.mods.teslaChance > 0.f && chance(b.mods.teslaChance, p)) {   // "Tesla": zap the nearest few
         for (int n = 0; n < S::teslaTargets; ++n) {
             Enemy* t = nullptr;
             float best = S::teslaRange * S::teslaRange;
@@ -698,11 +698,11 @@ bool World::strike(Ball& b, Enemy& e, sf::Vector2f normal, const WorldParams& p,
         areaDamage(e.pos, S::strikerShockRadius, dmg * S::strikerShockFrac, &e);
         ev.bursts.push_back({e.pos, S::strikerShockRadius, theme::ballFast, nullptr});
     }
-    if (kill && b.mods.bomber && chance(S::bomberChance, p)) {   // "Bomber": the kill goes off
+    if (kill && b.mods.bomberChance > 0.f && chance(b.mods.bomberChance, p)) {   // "Bomber": the kill goes off
         areaDamage(e.pos, S::bombRadius, dmg * S::bombFrac, &e);
         ev.bursts.push_back({e.pos, S::bombRadius, theme::elemFire, nullptr});
     }
-    if (!kill && allowEcho && b.mods.echo && e.hp > 0.f && chance(S::echoChance, p))   // "Echo"
+    if (!kill && allowEcho && b.mods.echoChance > 0.f && e.hp > 0.f && chance(b.mods.echoChance, p))   // "Echo"
         return strike(b, e, normal, p, ev, false);
     return kill;
 }
@@ -1006,7 +1006,7 @@ void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
             aimBounce(b, c.normal, nullptr);
             boostSpeed(b, b.mods.wallBoost, p);   // "Wall rush"
             if (b.mods.ricochet) b.ricochetT = cfg::combat::ricochetWindow;   // "Ricochet"
-            if (b.mods.splitShot && !b.ghost && chance(cfg::synergy::splitChance, p)) spawnGhost(b);
+            if (b.mods.splitChance > 0.f && !b.ghost && chance(b.mods.splitChance, p)) spawnGhost(b);
             pushFx(c);
         }
         // The core is solid: balls bounce off it (no damage to the core).
@@ -1016,8 +1016,8 @@ void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
             afterBounce(b, c.normal, false);
             aimBounce(b, c.normal, nullptr, p.magneticCore);   // "Magnetic core": every ball aims
             boostSpeed(b, p.coreBounceBoost, p);   // "Spring core" relic
-            if (b.mods.mender && !b.ghost)   // "Mender": the core patches itself up
-                core_.hp = std::min(core_.maxHp, core_.hp + cfg::synergy::menderHeal);
+            if (b.mods.menderHeal > 0.f && !b.ghost)   // "Mender": the core patches itself up
+                core_.hp = std::min(core_.maxHp, core_.hp + b.mods.menderHeal);
             if (b.role == BallRole::Guardian && b.mods.mastery) guardianPulse(ev);
             pushFx(c);
         }

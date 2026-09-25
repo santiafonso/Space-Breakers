@@ -64,12 +64,12 @@ struct BallMods {
     bool shatter = false;
     bool conductor = false;    // only acts on an electric ball
     bool bedrock = false;      // only acts on a stone ball
-    bool echo = false;         // chance a hit strikes twice
-    bool tesla = false;        // chance a hit zaps nearby enemies
-    bool bomber = false;       // chance a kill explodes
-    bool splitShot = false;    // chance a wall bounce spawns a ghost copy
+    float echoChance = 0.f;    // Echo: chance a hit strikes twice (0 = not equipped)
+    float teslaChance = 0.f;   // Tesla: chance a hit zaps nearby enemies
+    float bomberChance = 0.f;  // Bomber: chance a kill explodes
+    float splitChance = 0.f;   // Split shot: chance a wall bounce spawns a ghost copy
     bool rampart = false;      // hits shove further, stagger longer
-    bool mender = false;       // core bounces repair the core
+    float menderHeal = 0.f;    // Mender: core hp per core bounce
     bool mastery = false;      // 4 items of its role's tag
 };
 

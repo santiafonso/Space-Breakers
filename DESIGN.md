@@ -741,6 +741,9 @@ Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
     oleadas 5-9): ~10 reacciones/min, ~0.6 por kill. Performance: 1-2 µs por
     paso incluso con cascadas. `supportDamageMul` 0.6 → 0.8 (sus items de
     Bomber/Tesla/Split shot necesitan matar).
+  - Forja: cada nivel sube la probabilidad / bono del item (x1.5, x2) **y** +10%
+    de daño a la pelota (`forgeDamagePerLevel`), así forjar un item de sí/no
+    (Cleave, Rampart...) nunca se desperdicia.
   - Falta playtest: frecuencia de reacciones con el jugador tirando, números de
     procs, precio de las reliquias nuevas.
 
