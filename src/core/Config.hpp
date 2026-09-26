@@ -492,7 +492,7 @@ inline constexpr float camKickDecay   = 13.f;    // shake falloff per second
 // The backdrop "heat" follows the damage combo: rises fast, cools slowly.
 inline constexpr float heatRise = 3.0f;
 inline constexpr float heatFall = 0.8f;
-inline constexpr float heatAlpha = 0.85f;        // strength of the warm tint at a full combo
+inline constexpr float heatAlpha = 0.6f;         // strength of the combo tint at a full combo
 }  // namespace app
 
 }  // namespace sb::cfg
