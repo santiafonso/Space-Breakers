@@ -822,6 +822,43 @@ Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
     matar todo, curar, invulnerable, +100 oro, sumar / vaciar pelota. Sale en el
     modo foto como `09_dev.png`.
 
+- **Fase M — identidad visual: "consola orbital". [IMPLEMENTADO 2026-09-26]**
+  - **Estilo:** un tablero de instrumentos oscuro (tinta azul marino). Paneles
+    de vidrio rectos con borde de un pelo, una línea de luz arriba y
+    **corchetes en las esquinas**; **etiquetas chicas en mayúscula con
+    espaciado** (`makeLabel`/`drawLabel` en `ui/Widgets`) para títulos de
+    sección, unidades y leyendas; texto de cuerpo sigue en Lato normal. Todo lo
+    estructural queda en bajo contraste: la pelota sigue siendo lo más brillante.
+  - **Dónde vive:** paleta y constantes en `core/Theme.hpp` (`bg`, `bgDeep`,
+    `grid`, `glassTop/Bottom`, `bracket`, `tracking`; `corner` sigue en 0).
+    Kit en `render/Draw.*`: `line`, `brackets`, `panel` (el panel de la casa),
+    `vignette`, `radar`. Fondo común en `render/Backdrop.*` (grilla de puntos +
+    viñeta, lo dibuja `App::render` en todas las pantallas).
+  - **Arena:** un **radar** tenue (anillos + rayos) centrado en el núcleo; marco
+    de la arena con corchetes y muescas al medio de cada lado (la pared golpeada
+    se ilumina entera). Núcleo = reactor con la vida como dial segmentado y un
+    bisel de marcas que gira lento. Enemigos = **casco oscuro con borde nítido**
+    (nunca más brillantes que una pelota): grunt disco con ojo, runner/shard
+    dardo que apunta a donde va, tank doble hexágono, splitter con grieta en
+    zigzag, shielded con arco doble hacia el núcleo. Jefe = octógono blindado
+    con anillo interno y ojo, barra de vida segmentada con corchetes. Power-ups
+    = rombos (lo único cuadrado de la arena). Pelotas: brillo más bajo todavía,
+    cola como estela afinada en vez de discos apilados; la pelota agarrada lleva
+    corchetes de "fijado". Rayos eléctricos y railgun con núcleo brillante.
+  - **HUD:** "ACT 1  STAGE 3 / 15" en etiquetas, barra del núcleo segmentada con
+    topes, "N LEFT"; SCORE / GOLD como lecturas con leyenda; combo en un chip
+    con corchetes; tecla [TAB] y [Q] dibujadas como teclas.
+  - **Pantallas:** menú con título en mayúsculas espaciadas sobre una regla con
+    marca de acento, radar y pelotitas con estela de fondo; las filas del menú
+    se enmarcan con corchetes al pasar el mouse. Mapa: nodos en **rombo** (jefe
+    octógono), reglas y números de fila a la izquierda (la fila actual en
+    acento), caminos abiertos con **guiones que avanzan**, "YOU" con corchetes
+    que respiran. Cartas (elección / tienda): vidrio teñido por el tier, franja
+    del color del tier arriba, corchetes que **se cierran al aparecer**; Epic y
+    Legendary con un segundo juego de corchetes que respira. Tooltips con lomo
+    de color. Web, panel de dev, stats y botones con el mismo panel/etiquetas.
+  - Modo foto suma `10_horde`, `11_map_late`, `12_boss`, `13_pause`, `14_stats`.
+
 - **Pendiente (idea del usuario, 2026-09-24):** como las mejoras ya no llegan
   en cada oleada, cada una tiene que **sentirse mucho** al conseguirla: repasar
   items / modificadores / reliquias para que sean más fuertes y más visibles
