@@ -121,11 +121,11 @@ void EquipScreen::targetAt(App& app, sf::Vector2f mouse, int& ball, int& slot) c
             return;
         }
         // Items land in the slot under the pointer, else their default slot. An
-        // element always takes over the ball's current element slot. Roles and
-        // modifiers just pick the ball.
+        // element always takes over the ball's current element slot, and a
+        // duplicate levels up its own slot. Modifiers just pick the ball.
         if (!upgradeTakesSlot(k)) return;
         slot = defaultSlot(k, L);
-        if (elementItemSlot(k) < 0 || L.elementSlot() < 0)
+        if (!L.has(k) && (elementItemSlot(k) < 0 || L.elementSlot() < 0))
             for (int sl = 0; sl < kBallSlots; ++sl)
                 if (slotRect(c, sl).contains(mouse)) slot = sl;
         return;
@@ -163,8 +163,8 @@ void EquipScreen::draw(App& app, sf::RenderWindow& w) {
     std::string title, sub, hint;
     if (forge) {
         title = "Forge - pick an item to level up";
-        sub = "each level: the item's bonus or chance grows by half, and the ball hits 10% harder (max level " +
-              std::to_string(cfg::gold::maxItemLevel) + ")";
+        sub = "each level makes the item stronger, and the ball hits 10% harder (max level " +
+              std::to_string(kMaxItemLevel) + ")";
         hint = "click an item   -   Esc: leave the forge";
     } else {
         switch (upgradeCat(k)) {
@@ -172,9 +172,18 @@ void EquipScreen::draw(App& app, sf::RenderWindow& w) {
             default:                   title = std::string("Equip ") + info.title + " - pick a ball and slot"; break;
         }
         sub = info.desc;
+        // Hovering a ball that already has it: this pick levels it up.
+        if (hoverBall_ >= 0 && hoverBall_ < app.runBallCount()) {
+            const BallLoadout& L = app.data().run.balls[static_cast<std::size_t>(hoverBall_)];
+            if (upgradeLevelsUp(k, L)) {
+                const int lv = L.levelOf(k);
+                title = std::string(info.title) + "   Lv " + std::to_string(lv) + " -> " + std::to_string(lv + 1);
+                sub = std::string("level up: ") + upgradeLevelDesc(k);
+            }
+        }
         if (app.equipSource() == EquipSource::Shop) sub += "   (" + std::to_string(app.shopPrice(k)) + " gold)";
         hint = elementItemSlot(k) >= 0 ? "click a ball (one element per ball: it replaces the current one)   -   Esc: back"
-             : upgradeTakesSlot(k)     ? "click a slot (a full one gets replaced)   -   Esc / right-click: back"
+             : upgradeTakesSlot(k)     ? "click a slot (a full one gets replaced; a ball that has it levels it up)   -   Esc: back"
                                        : "click a ball   -   Esc / right-click: back";
     }
 

@@ -888,7 +888,14 @@ void ChoiceScreen::draw(App& app, sf::RenderWindow& w) {
         const float sc = 0.55f + 0.45f * clampf(cp, 0.f, 1.05f);            // springs open
         drawTierFrame(w, {c.x - kCardW * 0.5f * sc, c.y - kCardH * 0.5f * sc, kCardW * sc, kCardH * sc},
                       tier, h, ca, it);
-        drawCenteredPop(w, app.font(), tierName(tier), theme::fsSmall, {c.x, c.y - kCardH * 0.5f + 80.f},
+        // A ball that already has it would level it up: say so on the tier line.
+        std::string tierLine = tierName(tier);
+        for (const BallLoadout& L : app.data().run.balls)
+            if (upgradeLevelsUp(kind, L) && L.levelOf(kind) < kMaxItemLevel) {
+                tierLine += "  -  Lv " + std::to_string(L.levelOf(kind)) + " -> " + std::to_string(L.levelOf(kind) + 1);
+                break;
+            }
+        drawCenteredPop(w, app.font(), tierLine, theme::fsSmall, {c.x, c.y - kCardH * 0.5f + 80.f},
                         tierColor(tier), cp);
         const UpgradeCat cat = upgradeCat(kind);
         std::string head = std::to_string(i + 1) + "   " + upgradeCatName(cat);

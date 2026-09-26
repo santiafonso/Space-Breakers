@@ -55,55 +55,49 @@ inline constexpr float knockback = 190.f;
 inline constexpr float hitRebound = 0.9f;               // the ball bounces off an enemy like a wall
 
 // Between-wave picks. ITEMS sit in one of a ball's 4 slots and only affect
-// that ball; an item's forge level scales its bonus by gearLevelBonus per level
-// past the first. MODIFIERS are per-ball stat bumps with no slot - they stack
-// without limit (the per-stack values below; radius has a physical cap).
-inline constexpr float gearLevelBonus = 0.5f;
-inline constexpr float forgeDamagePerLevel = 0.10f;   // any forged item: + this ball damage per level past 1
+// that ball. Taking an item the ball already has (or forging it) levels it up,
+// to 5 (kMaxItemLevel): each item scales its own numbers per level (the
+// "...PerLevel" values here and in synergy / changer), and every level past the
+// first also makes the ball hit harder (itemLevelDamage). MODIFIERS are
+// per-ball stat bumps with no slot - they stack without limit (radius capped).
+inline constexpr float itemLevelDamage = 0.10f;   // + this ball damage per item level past 1
+inline constexpr float elemPerLevel = 0.30f;      // an element item's potency + this per level past 1
 inline constexpr float springBoost = 1.6f;        // "Spring": ball speed x this on a core bounce
-inline constexpr float wallBounceBoost = 1.12f;   // "Wall rush": ball speed x this on a wall bounce
-inline constexpr float pairBounceBoost = 1.16f;   // "Carom": ball speed x this when it clacks another ball
 inline constexpr float flingPowerBoost = 1.4f;    // "Strong arm": a flung ball leaves your hand x this faster
 inline constexpr float heavyImpactPerStack = 0.15f;  // "Heavy impact": + this contact damage
 inline constexpr float bigBallPerStack = 0.10f;      // "Big ball": + this radius...
-inline constexpr float bigBallMaxMult = 2.0f;        // ...up to x this (so a ball can't fill the arena)
-inline constexpr float swiftPerStack = 0.08f;        // "Swift": + this cruise speed
-inline constexpr float ceilingPerStack = 0.20f;      // "Ceiling break": + this top speed
-inline constexpr float knockPerStack = 0.5f;         // "Heavy knock": + this knockback
-inline constexpr float reflexesPerStack = 0.75f;     // "Reflexes": fling decay x this per stack
+inline constexpr float bigBallKnockPerStack = 0.25f; // ...and + this knockback
+inline constexpr float bigBallMaxMult = 2.0f;        // radius up to x this (so a ball can't fill the arena)
+inline constexpr float swiftPerStack = 0.08f;        // "Swift": + this cruise speed...
+inline constexpr float swiftTopPerStack = 0.15f;     // ...+ this top speed...
+inline constexpr float swiftFlingPerStack = 0.85f;   // ...and fling decay x this per stack
 inline constexpr float heftPerLevel = 0.08f;      // "Heft" web node: + this contact damage, every ball
 inline constexpr float massPerLevel = 0.10f;      // "Mass" web node: + this radius, every ball
 inline constexpr float slowFieldRadius = 210.f;   // "Slow field": zone around the core...
 inline constexpr float slowFieldMul = 0.55f;      // ...enemies inside move at this fraction of speed
 
-// More between-wave items (all booleans, one pick each).
-inline constexpr float ricochetWindow = 0.6f;    // "Ricochet": a wall bounce arms a damage bonus for this long
-inline constexpr float ricochetMult = 1.6f;      // ...contact damage x this while it's armed
-inline constexpr float warmUpTime = 22.f;        // "Warm-up": cruise speed ramps up over this many seconds of a wave
-inline constexpr float warmUpBonus = 0.6f;       // ...up to + this fraction of cruise by the end
-inline constexpr float conductorRange = 240.f;   // "Conductor": the electric arc jumps to a 2nd enemy within this
-inline constexpr float conductorFalloff = 0.6f;  // ...for this fraction of the bolt's damage
-inline constexpr float shatterBonus = 1.8f;      // "Shatter": hitting a frozen enemy does x this damage
-inline constexpr float contagionRadius = 90.f;   // "Contagion": a poisoned enemy dying re-poisons others within this
-inline constexpr float bedrockLifeMult = 4.f;    // "Bedrock": stone rubble lasts x this long
-inline constexpr float primedMult = 1.35f;       // "Primed": +damage to an enemy already under an element effect
-
-// "Ball combat" between-wave items (Fase A). No explicit prereqs - the pick pool
-// just rolls them together, so synergies fall out of what you already have:
-// Keen eye / Overkill / Battering all lean on the same speed & damage picks.
-inline constexpr float critChance = 0.15f;       // "Keen eye": chance a contact hit deals...
-inline constexpr float critMult = 2.0f;          // ...x this damage
-inline constexpr float bruiserPerCruise = 0.28f; // "Battering": + this * (speed / baseCruise) contact damage
-inline constexpr float executeThreshold = 0.30f; // "Executioner": enemies below this HP fraction...
-inline constexpr float executeMult = 2.6f;       // ...take x this contact damage
-inline constexpr float overkillFrac = 0.5f;      // "Overkill": this fraction of a kill's leftover damage...
-inline constexpr float overkillRange = 150.f;    // ...splashes onto the nearest enemy within this
-inline constexpr float tempoRecover = 0.4f;
+// Item numbers at level 1, then + perLevel for each level past it.
+inline constexpr float ricochetWindow = 0.6f;     // "Ricochet": a wall bounce arms a damage bonus for this long...
+inline constexpr float ricochetMult = 1.5f, ricochetMultPerLevel = 0.25f;     // ...contact damage x this while armed
+inline constexpr float ricochetBoost = 1.08f, ricochetBoostPerLevel = 0.04f;  // ...and speed x this per wall bounce
+inline constexpr float cleaveExecPerLevel = 0.08f; // "Cleave" Lv2+: also cuts through / finishes enemies left under this x (level-1) HP
+inline constexpr float conductorRange = 240.f;    // "Conductor": the electric arc jumps to another enemy within this
+inline constexpr float conductorFalloff = 0.6f;   // ...for this fraction of the bolt's damage; one more jump per level
+inline constexpr float shatterBonus = 1.8f, shatterPerLevel = 0.4f;   // "Shatter": frozen enemies take x this
+inline constexpr float contagionRadius = 90.f;    // "Contagion": a poisoned enemy dying re-poisons others within this
+inline constexpr float bedrockLifeMult = 4.f, bedrockPerLevel = 1.5f; // "Bedrock": stone rubble lasts x this long
+inline constexpr float primedMult = 1.35f;        // "Primed": +damage to an enemy already under an element effect
+inline constexpr float critChance = 0.12f, critChancePerLevel = 0.07f;  // "Keen eye": chance a hit deals...
+inline constexpr float critMult = 2.0f, critMultPerLevel = 0.25f;       // ...x this damage
+inline constexpr float executeThreshold = 0.30f, executeThresholdPerLevel = 0.06f;  // "Executioner": below this HP...
+inline constexpr float executeMult = 2.6f, executeMultPerLevel = 0.3f;              // ...take x this
+inline constexpr float overkillFrac = 0.5f, overkillFracPerLevel = 0.25f;  // "Overkill": this share of a kill's leftover...
+inline constexpr float overkillRange = 150.f;     // ...splashes onto the nearest enemies within this (1, 2 at Lv3, 3 at Lv5)
 // Auto-throw option: every autoFlingInterval the game flings one ball at the
 // enemy nearest the core, at autoFlingSpeedMul x its cruise - a helper, weaker
 // than a good hand throw.
 inline constexpr float autoFlingInterval = 1.4f;
-inline constexpr float autoFlingSpeedMul = 2.0f;      // "Tempo": ball eases this far back toward cruise on an enemy hit
+inline constexpr float autoFlingSpeedMul = 2.0f;
 }  // namespace combat
 
 // Ball roles. Every ball is one of three; the role shapes how it wants to be
@@ -140,22 +134,22 @@ inline constexpr float guardianAimJitter = 0.06f;  // rad of wobble so it isn't 
 namespace synergy {
 inline constexpr float luckyCloverMul = 1.6f;
 inline constexpr float chanceCap = 0.9f;
-// procs
-inline constexpr float echoChance = 0.25f;       // "Echo": the hit strikes again
-inline constexpr float teslaChance = 0.20f;      // "Tesla": zap nearby enemies...
-inline constexpr int   teslaTargets = 3;
+// procs (level 1, + perLevel for each item level past it)
+inline constexpr float echoChance = 0.25f, echoPerLevel = 0.10f;     // "Echo": the hit strikes again
+inline constexpr float teslaChance = 0.20f, teslaPerLevel = 0.08f;   // "Tesla": zap nearby enemies...
+inline constexpr int   teslaTargets = 3;                             // ...this many (+1 per level)...
 inline constexpr float teslaRange = 170.f;
 inline constexpr float teslaFrac = 0.6f;         // ...for this fraction of the hit
-inline constexpr float bomberChance = 0.30f;     // "Bomber": a kill explodes...
-inline constexpr float bombRadius = 95.f;
+inline constexpr float bomberChance = 0.30f, bomberPerLevel = 0.12f; // "Bomber": a kill explodes...
+inline constexpr float bombRadius = 95.f, bombRadiusPerLevel = 0.12f;  // ...radius x (1 + this per level)
 inline constexpr float bombFrac = 1.2f;          // ...for this x the killing hit
-inline constexpr float splitChance = 0.15f;      // "Split shot": a wall bounce spawns a ghost
+inline constexpr float splitChance = 0.15f, splitPerLevel = 0.07f;   // "Split shot": a wall bounce spawns a ghost
 inline constexpr float ghostLife = 4.0f;
-inline constexpr int   maxGhosts = 8;
+inline constexpr int   maxGhosts = 12;           // Split shot / Mitosis / Gemini copies alive at once
 inline constexpr float ghostSpread = 0.45f;      // rad the ghost veers off the parent's heading
-inline constexpr float rampartKnock = 2.0f;      // "Rampart": knockback x this...
-inline constexpr float rampartStagger = 1.5f;    // ...and staggers for staggerDuration x this
-inline constexpr float menderHeal = 0.6f;        // "Mender": core hp per core bounce
+inline constexpr float rampartKnock = 2.0f, rampartKnockPerLevel = 0.5f;       // "Rampart": knockback x this...
+inline constexpr float rampartStagger = 1.5f, rampartStaggerPerLevel = 0.3f;   // ...and staggers staggerDuration x this
+inline constexpr float menderHeal = 0.6f, menderPerLevel = 0.3f;     // "Mender": core hp per core bounce
 // relics
 inline constexpr float glassDamage = 1.6f;       // "Glass cannon"
 inline constexpr float glassCoreHp = 0.7f;
@@ -195,25 +189,75 @@ inline constexpr int weightsBoss[5]   = {0, 0, 0, 65, 35};    // the treasure af
 inline constexpr float luckShift = 0.5f;   // Lucky clover moves this share of each tier's weight up one tier
 }  // namespace tier
 
-// Game-changing items (Fase J).
+// Game-changing items (Fase J) and behaviour items (Fase M). Level-1 values,
+// then + perLevel for each item level past it.
 namespace changer {
-inline constexpr float seekerTurn = 2.6f;          // Seeker: rad/s it can curve toward its target
-inline constexpr float seekerRange = 520.f;
-inline constexpr float pierceCooldown = 0.25f;     // Piercing / Satellite: time before the same enemy can be hit again
-inline constexpr float railWidth = 22.f;           // Railgun: beam half-width...
-inline constexpr float railFrac = 2.0f;            // ...damage x the ball's hit
-inline constexpr float berserkPerHit = 0.15f;      // Berserk: + this damage per hit in a row...
-inline constexpr int   berserkMax = 12;            // ...up to this many
+inline constexpr float seekerTurn = 2.6f, seekerPerLevel = 0.3f;   // Seeker: rad/s toward its target (x(1 + this per level))
+inline constexpr float seekerRange = 520.f;                         // ...range grows by the same factor
+inline constexpr float pierceCooldown = 0.25f;     // Piercing / Satellite / Comet: time before the same enemy can be hit again
+inline constexpr float piercePerLevel = 0.15f;     // Piercing: + this damage per level
+inline constexpr float railWidth = 22.f, railWidthPerLevel = 4.f;   // Railgun: beam half-width...
+inline constexpr float railFrac = 2.0f, railFracPerLevel = 0.6f;    // ...damage x the ball's hit
+inline constexpr float berserkPerHit = 0.15f, berserkPerLevel = 0.05f;  // Berserk: + this damage per hit in a row...
+inline constexpr int   berserkMax = 12, berserkMaxPerLevel = 3;         // ...up to this many
 inline constexpr float giantRadius = 1.8f, giantDamage = 1.3f, giantCruise = 0.8f;
+inline constexpr float giantDamagePerLevel = 0.15f;
 inline constexpr float satelliteRadius = 150.f;    // Satellite: orbit radius around the core
 inline constexpr float satelliteSpeed = 1.1f;      // ...orbit speed x its cruise
-inline constexpr float satelliteDamage = 1.8f;     // ...its hits x this (it grinds whatever comes close)
+inline constexpr float satelliteDamage = 1.8f, satellitePerLevel = 0.35f;   // ...its hits x this
 inline constexpr float gravityRadius = 230.f;      // Gravity well: pull radius...
 inline constexpr float gravityPull = 210.f;        // ...px/s drag toward the ball at its centre (fades to 0 at the edge)
+inline constexpr float gravityPerLevel = 0.25f;    // ...pull x (1 + this per level), radius x (1 + 0.4 x this)
 inline constexpr float stormRadius = 150.f;        // Storm: zap radius...
-inline constexpr float stormInterval = 0.55f;      // ...every this many seconds...
-inline constexpr float stormFrac = 0.35f;          // ...for this x the ball's hit
-inline constexpr int   midasGold = 3;
+inline constexpr float stormInterval = 0.55f;      // ...every this many seconds (/ (1 + 0.2 per level))...
+inline constexpr float stormFrac = 0.35f, stormFracPerLevel = 0.08f;   // ...for this x the ball's hit
+inline constexpr int   midasGold = 3;              // Midas: gold per kill, per level
+
+// Hunter: picks the biggest threat (hp, weighted toward the core) and bends
+// hard toward it until it dies. Not a gentle Seeker - it turns almost on a dime.
+inline constexpr float hunterTurn = 3.0f, hunterTurnPerLevel = 0.6f;     // rad/s
+inline constexpr float hunterDamage = 1.25f, hunterDamagePerLevel = 0.2f; // hits on its prey x this
+inline constexpr float hunterCoreBias = 300.f;     // threat = hp / (1 + distance to core / this)
+// Comet: flung harder, holds the speed, and while fast it plows through.
+inline constexpr float cometFling = 1.5f, cometFlingPerLevel = 0.12f;   // throw x this
+inline constexpr float cometCap = 1.6f, cometCapPerLevel = 0.2f;        // top speed x this
+inline constexpr float cometDecay = 0.35f;                              // fling decays at this x the rate
+inline constexpr float cometPlow = 1.9f, cometPlowPerLevel = -0.1f;     // above this x cruise it passes through
+// Mitosis: a kill splits off small ghost copies (they don't split again).
+inline constexpr float mitosisScale = 0.62f;       // copy radius x this
+inline constexpr float mitosisLife = 2.6f, mitosisLifePerLevel = 0.5f;
+inline constexpr float mitosisSpeed = 1.3f;        // copies leave at least this x cruise
+// Boomerang: a hit sends it home; the core bounce aims it at the nearest threat
+// and charges its next hit.
+inline constexpr float boomerangHit = 1.4f, boomerangHitPerLevel = 0.25f;     // charged hit x this
+inline constexpr float boomerangKick = 1.15f, boomerangKickPerLevel = 0.05f;  // speed x this leaving the core
+inline constexpr float boomerangTurn = 6.f;        // rad/s it curves home at
+// Bumper: bigger; balls that clack off it are launched faster.
+inline constexpr float bumperRadius = 1.35f;
+inline constexpr float bumperBoost = 1.35f, bumperBoostPerLevel = 0.1f;
+inline constexpr float bumperKnock = 1.5f;         // its hits shove enemies x this
+// Glutton: every kill this wave grows it.
+inline constexpr float gluttonRadius = 0.06f;      // + radius per stack
+inline constexpr float gluttonDamage = 0.08f, gluttonDamagePerLevel = 0.03f;  // + damage per stack
+inline constexpr int   gluttonMax = 10, gluttonMaxPerLevel = 2;               // stacks cap
+inline constexpr float maxRadiusMult = 3.0f;       // no stack of size bonuses goes past this x base radius
+// Tether: a laser to the nearest other ball, ticking damage on what crosses it.
+inline constexpr float tetherFrac = 1.5f, tetherFracPerLevel = 0.4f;   // damage/s x the ball's hit
+inline constexpr float tetherWidth = 9.f, tetherWidthPerLevel = 2.f;   // half-width of the beam
+inline constexpr float tetherTick = 0.15f;
+inline constexpr float tetherMaxLen = 900.f;       // no partner this close: no beam
+// Black hole: a kill may leave one; it pulls, then bursts with the ball's element.
+inline constexpr float blackHoleChance = 0.35f, blackHolePerLevel = 0.10f;
+inline constexpr float blackHoleLife = 1.5f;
+inline constexpr float blackHoleRadius = 170.f;    // pull radius
+inline constexpr float blackHolePull = 260.f;      // px/s at the centre, x (1 + 0.2 per level)
+inline constexpr float blackHoleBurst = 110.f;     // burst radius
+inline constexpr float blackHoleFrac = 1.5f, blackHoleFracPerLevel = 0.5f;    // burst x the killing hit
+inline constexpr int   maxBlackHoles = 6;
+// Resonance: a hit arcs to every other ball of the same element; each zaps an enemy.
+inline constexpr float resonanceFrac = 0.8f, resonanceFracPerLevel = 0.2f;
+inline constexpr float resonanceRange = 220.f;     // each ball zaps the nearest enemy within this
+inline constexpr float resonanceCooldown = 0.35f, resonanceCooldownPerLevel = -0.04f;
 // relics
 inline constexpr float timeDilation = 0.75f;       // enemies' time scale
 inline constexpr int   overchargeMul = 2;          // combo cap x this
@@ -255,7 +299,7 @@ inline constexpr float boltRadius = 190.f;
 inline constexpr float boltInterval = 0.7f;
 inline constexpr float boltDamage = 2.4f;
 inline constexpr float boltLife = 0.13f;          // the arc is just a brief visual flash
-inline constexpr int   maxBolts = 24;
+inline constexpr int   maxBolts = 40;
 // stone: drops rubble that blocks enemies AND grinds any standing in it
 inline constexpr float stoneInterval = 1.7f;
 inline constexpr float obstacleRadius = 18.f;

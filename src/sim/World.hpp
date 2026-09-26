@@ -60,6 +60,8 @@ public:
     const std::vector<Enemy>& enemies() const { return enemies_; }
     const std::vector<Bolt>& bolts() const { return bolts_; }
     const std::vector<Obstacle>& obstacles() const { return obstacles_; }
+    const std::vector<BlackHole>& blackHoles() const { return blackHoles_; }   // "Black hole"
+    const std::vector<TetherBeam>& tethers() const { return tethers_; }        // "Tether" lasers, this step
     const std::vector<Pickup>& pickups() const { return pickups_; }
     const Core& core() const { return core_; }
     const Boss& boss() const { return boss_; }
@@ -114,6 +116,11 @@ private:
     void fireRail(Ball& b, const WorldParams& p, FrameEvents& ev);                    // "Railgun" beam
     void updateStorm(Ball& b, float dt, const WorldParams& p, FrameEvents& ev);       // "Storm" zaps
     void updateTwins(const WorldParams& p);                                            // "Gemini" twins
+    void steerHunter(Ball& b, float dt);                                               // "Hunter": chase the prey
+    void updateTethers(float dt, const WorldParams& p, FrameEvents& ev);              // "Tether" lasers
+    void updateBlackHoles(float dt, const WorldParams& p, FrameEvents& ev);           // "Black hole" pull + burst
+    void resonate(Ball& b, float dmg, const WorldParams& p, FrameEvents& ev);         // "Resonance" arcs
+    void onKill(Ball& b, Enemy& e, float dmg, const WorldParams& p, FrameEvents& ev); // on-kill items
     void updateAutoFling(float dt, const WorldParams& p, FrameEvents& ev);
     void advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev);
     void emitElement(Ball& b, float dt, const WorldParams& p, FrameEvents& ev);
@@ -130,6 +137,7 @@ private:
     void activateEffect(PowerUp k, const WorldParams& p);   // start an effect (Charged applies here)
     float effStrength(const WorldParams& p) const;          // 1 while live, ramps to 0 over the Afterglow tail
     void afterBounce(Ball& b, sf::Vector2f normal, bool countHit);
+    void addComboHit();   // a hit that doesn't bounce (Cleave, Comet) still feeds the combo
     // Guardian (or any ball when `force`): bounce toward the threat.
     void aimBounce(Ball& b, sf::Vector2f normal, const Enemy* skip, bool force = false);
 
@@ -146,6 +154,7 @@ private:
                          FrameEvents& ev, int depth);
     bool chance(float base, const WorldParams& p);    // roll a proc through the run's luck
     void spawnGhost(const Ball& parent);
+    void spawnMitosis(const Ball& parent, const WorldParams& p);
     void guardianPulse(FrameEvents& ev);
     void regulateSpeed(Ball& b, float dt, const WorldParams& p);
     void updateTrail(Ball& b);
@@ -159,6 +168,8 @@ private:
     std::vector<Enemy> enemies_;
     std::vector<Bolt> bolts_;
     std::vector<Obstacle> obstacles_;
+    std::vector<BlackHole> blackHoles_;
+    std::vector<TetherBeam> tethers_;
     std::vector<Pickup> pickups_;
     Core core_;
     Boss boss_;
@@ -185,7 +196,7 @@ private:
     sf::Vector2f coreSlideTo_{0.f, 0.f};
     int toSpawn_ = 0;
     float spawnTimer_ = 0.f;
-    float waveClock_ = 0.f;   // seconds into the current wave (drives "Warm-up")
+    int nextEnemyId_ = 1;     // Enemy::id source
     float waveHpMul_ = 1.f;   // Elite wave: enemy HP multiplier
     bool eliteWave_ = false;
 
