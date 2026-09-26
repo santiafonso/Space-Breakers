@@ -46,8 +46,19 @@ private:
     int nodeAt(App& app, sf::Vector2f mouse) const;     // 0..count-1, -1 none
     void moveSelection(App& app, int dx, int dy);       // arrow-key navigation
     void drawInfoCard(App& app, sf::RenderWindow& w, int node) const;
+    sf::Vector2f webCentre(App& app) const;             // the root node, after panning
+    void zoomAt(App& app, sf::Vector2f mouse, float factor);
+    int legendAt(App& app, sf::Vector2f mouse) const;   // branch legend row under the pointer, -1 none
 
     Menu menu_;
+    // Pan / zoom: the web grows past one screen, so it can be dragged around
+    // and zoomed with the wheel. Labels keep their size; only the layout scales.
+    float zoom_ = 1.f;
+    sf::Vector2f pan_{0.f, 0.f};
+    bool panning_ = false;
+    sf::Vector2f panStart_{0.f, 0.f};
+    sf::Vector2f panFrom_{0.f, 0.f};
+    int legendHover_ = -1;                // MetaBranch under the pointer in the legend: light that branch
     int hoverNode_ = -1;
     int selNode_ = 0;
     bool selUsed_ = false;                // hovered a node or used the arrows at least once
@@ -167,7 +178,8 @@ private:
     sf::Vector2f mouse_;
 };
 
-// A Shop node: spend gold on a few rolled picks or on core repairs.
+// A Shop node: spend gold on a few rolled picks (one on sale), a mystery box,
+// core repairs, a paid forge, selling an item back, or a reroll of the stock.
 class ShopScreen : public Screen {
 public:
     void handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) override;
@@ -175,10 +187,11 @@ public:
     void draw(App& app, sf::RenderWindow& w) override;
 
 private:
+    int cardCount(App& app) const;                 // offers + the mystery box while it's there
     sf::FloatRect offerRect(App& app, int i) const;
-    sf::FloatRect repairRect(App& app) const;
-    sf::FloatRect leaveRect(App& app) const;
-    int hover_ = -1;          // offer index, 100 = repair, 101 = leave
+    sf::FloatRect buttonRect(App& app, int b) const;   // 0 repair, 1 forge, 2 sell, 3 reroll, 4 leave
+    int hover_ = -1;          // card index, 100 + b = a button
+    float clock_ = 0.f;
     sf::Vector2f mouse_;
 };
 

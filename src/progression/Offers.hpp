@@ -573,10 +573,21 @@ enum MetaUnlock {
     MetaHaggler,      // Haggler      - shop prices drop
     MetaStarterKit,   // Starter kit  - start the run with a free item
     MetaEliteSpoils,  // Elite spoils - elites pay more gold
+    // ---- v13 append (indices 41+, never reorder): the Pacts branch + shop / start nodes ----
+    MetaOath,         // Oath          - the boss offers 4 pacts instead of 3        (Pacts hub)
+    MetaCovenant,     // Covenant      - start every run by choosing a pact
+    MetaPactHunters,  // Hunters       - the Hunters pact can be offered
+    MetaPactLegion,   // Legion        - the Legion pact can be offered
+    MetaPactDice,     // Loaded dice   - the Loaded Dice pact can be offered
+    MetaPactAlchemy,  // Alchemy       - the Alchemy pact can be offered
+    MetaMerchant,     // Merchant      - shops stock more and their sale is deeper
+    MetaTreasury,     // Treasury      - start each run with gold
+    MetaQuartermaster,// Quartermaster - choose the Starter kit item from 4 cards
+    MetaLastStand,    // Last stand    - once per run the core comes back from 0
     MetaUnlockCount
 };
 
-enum class MetaBranch { Root, Base, Combat, Eco, Special, Pickups, Arsenal };
+enum class MetaBranch { Root, Base, Combat, Eco, Special, Pickups, Arsenal, Pacts };
 enum class MetaCurrency { Cores, Prisms };
 
 struct MetaUnlockDef {
@@ -678,6 +689,27 @@ inline const MetaUnlockDef& metaUnlockDef(int u) {
                          14u, 2, MetaBranch::Eco,     MetaCurrency::Cores,  40, -4.00f, -2.30f},
         /* EliteSpoils*/{"Elite spoils","elite fights pay +50% gold per level",
                          12u, 2, MetaBranch::Eco,     MetaCurrency::Cores,  26, -3.00f, -3.00f},
+        // ---- v13: the Pacts branch (down-right, off Heft) and a few shop / start nodes. ----
+        /* Oath      */ {"Oath",      "after the act-1 boss, choose from 4 pacts instead of 3. Opens the Pacts.",
+                         14u, 1, MetaBranch::Pacts,   MetaCurrency::Cores,  11,  1.00f,  2.00f},
+        /* Covenant  */ {"Covenant",  "start every run by choosing a pact (1 of 3) - with the boss's, a run can hold two",
+                         3u,  1, MetaBranch::Pacts,   MetaCurrency::Prisms, 41,  2.00f,  3.00f},
+        /* Hunters   */ {"Hunters",   "the Hunters pact can be offered: every ball chases its own prey, hands off",
+                         2u,  1, MetaBranch::Pacts,   MetaCurrency::Prisms, 41,  0.50f,  4.00f},
+        /* Legion    */ {"Legion",    "the Legion pact can be offered: two more balls at once, clacks throw sparks",
+                         2u,  1, MetaBranch::Pacts,   MetaCurrency::Prisms, 41,  1.50f,  4.00f},
+        /* Dice      */ {"Loaded dice","the Loaded Dice pact can be offered: luck x2, fight gold is double or nothing",
+                         3u,  1, MetaBranch::Pacts,   MetaCurrency::Prisms, 43,  0.90f,  5.00f},
+        /* Alchemy   */ {"Alchemy",   "the Alchemy pact can be offered: random extra elements, a ball reacts with itself",
+                         3u,  1, MetaBranch::Pacts,   MetaCurrency::Prisms, 44,  2.00f,  5.00f},
+        /* Merchant  */ {"Merchant",  "shops stock one more pick and their sale gets 15% deeper per level",
+                         12u, 2, MetaBranch::Eco,     MetaCurrency::Cores,  38, -1.80f, -4.00f},
+        /* Treasury  */ {"Treasury",  "start every run with +20 gold per level",
+                         10u, 3, MetaBranch::Eco,     MetaCurrency::Cores,  38, -0.60f, -4.00f},
+        /* Quartermaster*/{"Quartermaster","choose your Starter kit item from 4 cards instead of getting a random one",
+                         16u, 1, MetaBranch::Eco,     MetaCurrency::Cores,  39, -5.00f, -2.60f},
+        /* Last stand*/ {"Last stand","once per run, when the core breaks it comes back at half health",
+                         20u, 1, MetaBranch::Base,    MetaCurrency::Cores,  23, -4.00f,  0.80f},
     };
     return defs[u];
 }

@@ -12,6 +12,7 @@
 #include "core/Config.hpp"
 #include "core/Theme.hpp"
 #include "render/Draw.hpp"
+#include "ui/PactScreen.hpp"
 #include "ui/Widgets.hpp"
 
 namespace sb {
@@ -59,7 +60,12 @@ constexpr float kRingGap = 56.f;      // pixels between concentric rings
 constexpr float kNodeR = 11.f;        // branch node radius
 constexpr float kRootR = 16.f;        // centre node radius
 constexpr float kWebCenterY = 0.53f;  // * size.y
-constexpr int   kBackRings = 6;       // faint rings drawn behind the web
+constexpr int   kBackRings = 7;       // faint rings drawn behind the web
+constexpr float kZoomMin = 0.55f, kZoomMax = 1.9f;
+constexpr MetaBranch kLegend[] = {MetaBranch::Base,    MetaBranch::Combat,  MetaBranch::Eco,  MetaBranch::Pickups,
+                                  MetaBranch::Special, MetaBranch::Arsenal, MetaBranch::Pacts};
+constexpr int kLegendCount = 7;
+constexpr float kLegendRow = 22.f;
 
 const sf::Color kPrismColor = theme::puSurge;   // violet - distinct from the core-blue accent
 
@@ -71,6 +77,7 @@ sf::Color branchColor(MetaBranch b) {
         case MetaBranch::Special: return theme::elemFire;
         case MetaBranch::Pickups: return theme::puPoints;
         case MetaBranch::Arsenal: return theme::puSurge;
+        case MetaBranch::Pacts:   return sf::Color(226, 70, 84);   // crimson: a pact is a bargain
         case MetaBranch::Root:    return theme::textHi;
     }
     return theme::textHi;
@@ -90,6 +97,7 @@ const char* branchLabel(MetaBranch b) {
         case MetaBranch::Special: return "Special balls";
         case MetaBranch::Pickups: return "Power-ups";
         case MetaBranch::Arsenal: return "Arsenal";
+        case MetaBranch::Pacts:   return "Pacts";
         case MetaBranch::Root:    return "Core";
     }
     return "";
@@ -197,20 +205,50 @@ void LoadoutScreen::onEnter(App& app) {
     keyNav_ = false;
     lastMouse_ = {-1.f, -1.f};
     for (int i = 0; i < MetaUnlockCount; ++i) glow_[i] = 0.f;
+    // Start zoomed to fit the whole web between the title and the bottom edge.
+    float outer = 1.f;
+    for (int i = 0; i < MetaUnlockCount; ++i) outer = std::max(outer, nodeRing(i));
+    const sf::Vector2f s = app.size();
+    const float room = std::min(s.y * kWebCenterY - 118.f, s.y * (1.f - kWebCenterY) - 34.f);
+    zoom_ = clampf(room / (outer * kRingGap), kZoomMin, 1.f);
+    pan_ = {0.f, 0.f};
+    panning_ = false;
+    legendHover_ = -1;
+}
+
+sf::Vector2f LoadoutScreen::webCentre(App& app) const {
+    const sf::Vector2f s = app.size();
+    return sf::Vector2f{s.x * 0.5f, s.y * kWebCenterY} + pan_;
 }
 
 sf::Vector2f LoadoutScreen::nodePos(App& app, int i) const {
-    const sf::Vector2f s = app.size();
     const MetaUnlockDef& d = metaUnlockDef(i);
-    const sf::Vector2f centre{s.x * 0.5f, s.y * kWebCenterY};
+    const sf::Vector2f centre = webCentre(app);
     const float ring = std::max(std::fabs(d.gx), std::fabs(d.gy));
     if (ring < 0.01f) return centre;
-    return centre + normalized({d.gx, d.gy}) * (ring * kRingGap);
+    return centre + normalized({d.gx, d.gy}) * (ring * kRingGap * zoom_);
+}
+
+// Zoom by `factor`, keeping the web point under the pointer where it is.
+void LoadoutScreen::zoomAt(App& app, sf::Vector2f mouse, float factor) {
+    const float nz = clampf(zoom_ * factor, kZoomMin, kZoomMax);
+    const sf::Vector2f c = webCentre(app);
+    pan_ += (mouse - c) * (1.f - nz / zoom_);
+    zoom_ = nz;
+}
+
+int LoadoutScreen::legendAt(App& app, sf::Vector2f mouse) const {
+    const sf::Vector2f s = app.size();
+    const float top = s.y - theme::margin - static_cast<float>(kLegendCount) * kLegendRow;
+    for (int i = 0; i < kLegendCount; ++i)
+        if (sf::FloatRect(theme::margin, top + static_cast<float>(i) * kLegendRow - 2.f, 150.f, kLegendRow).contains(mouse))
+            return static_cast<int>(kLegend[i]);
+    return -1;
 }
 
 int LoadoutScreen::nodeAt(App& app, sf::Vector2f mouse) const {
     for (int i = 0; i < MetaUnlockCount; ++i) {
-        const float r = (i == 0 ? kRootR : kNodeR) + 9.f;   // generous but < half the ring gap
+        const float r = ((i == 0 ? kRootR : kNodeR) + 9.f) * clampf(zoom_, 0.8f, 1.3f);   // generous but < half the ring gap
         const sf::Vector2f d = mouse - nodePos(app, i);
         if (d.x * d.x + d.y * d.y <= r * r) return i;
     }
@@ -236,6 +274,28 @@ void LoadoutScreen::moveSelection(App& app, int dx, int dy) {
 
 void LoadoutScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
     if (isKey(e, sf::Keyboard::Escape)) { app.back(); return; }
+    // Pan / zoom: wheel zooms at the pointer, a drag on empty space (or with
+    // the right / middle button anywhere) moves the web, +/- and 0 by key.
+    if (e.type == sf::Event::MouseWheelScrolled) {
+        zoomAt(app, mouse, std::pow(1.12f, e.mouseWheelScroll.delta));
+        return;
+    }
+    if (e.type == sf::Event::MouseButtonReleased) { panning_ = false; return; }
+    if (e.type == sf::Event::MouseButtonPressed &&
+        (e.mouseButton.button == sf::Mouse::Right || e.mouseButton.button == sf::Mouse::Middle)) {
+        panning_ = true;
+        panStart_ = mouse;
+        panFrom_ = pan_;
+        return;
+    }
+    if (e.type == sf::Event::KeyPressed) {
+        switch (e.key.code) {
+            case sf::Keyboard::Add: case sf::Keyboard::Equal:     zoomAt(app, webCentre(app), 1.15f); return;
+            case sf::Keyboard::Subtract: case sf::Keyboard::Hyphen: zoomAt(app, webCentre(app), 1.f / 1.15f); return;
+            case sf::Keyboard::Num0: case sf::Keyboard::Home:     onEnter(app); return;
+            default: break;
+        }
+    }
     if (isKey(e, sf::Keyboard::Enter) || isKey(e, sf::Keyboard::Space)) { app.newRun(); return; }
     if (e.type == sf::Event::KeyPressed) {
         switch (e.key.code) {
@@ -252,14 +312,25 @@ void LoadoutScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse
     const int n = nodeAt(app, mouse);
     if (n >= 0) { selNode_ = n; app.buyMetaUnlock(n); return; }
     switch (menu_.clickIndex(mouse)) {
-        case 0: app.newRun(); break;
-        case 1: app.back(); break;
+        case 0: app.newRun(); return;
+        case 1: app.back(); return;
         default: break;
     }
+    if (legendAt(app, mouse) >= 0) return;
+    panning_ = true;   // a left drag on empty space moves the web
+    panStart_ = mouse;
+    panFrom_ = pan_;
 }
 
 void LoadoutScreen::update(App& app, float dt, sf::Vector2f mouse) {
     menu_.update(dt, mouse);
+    if (panning_) {
+        const sf::Vector2f s = app.size();
+        pan_ = panFrom_ + (mouse - panStart_);
+        pan_.x = clampf(pan_.x, -s.x * 0.6f, s.x * 0.6f);   // never lose the web off-screen
+        pan_.y = clampf(pan_.y, -s.y * 0.6f, s.y * 0.6f);
+    }
+    legendHover_ = legendAt(app, mouse);
     if (length(mouse - lastMouse_) > 0.5f) { keyNav_ = false; lastMouse_ = mouse; }
     hoverNode_ = nodeAt(app, mouse);
     if (hoverNode_ >= 0) { selNode_ = hoverNode_; selUsed_ = true; }   // hover drives card + E key
@@ -335,7 +406,7 @@ void LoadoutScreen::draw(App& app, sf::RenderWindow& w) {
 
     drawCenteredPop(w, app.font(), "Skill web", theme::fsTitle, {s.x * 0.5f, s.y * 0.055f},
                     theme::textHi, introPop(it, 0.f, 0.32f));
-    drawCenteredPop(w, app.font(), "click a node to unlock      arrows move, E unlocks",
+    drawCenteredPop(w, app.font(), "click a node to unlock   -   drag to move, wheel to zoom, 0 resets   -   arrows move, E unlocks",
                     theme::fsSmall, {s.x * 0.5f, s.y * 0.10f}, theme::textDim, introPop(it, 0.06f));
 
     {
@@ -363,7 +434,7 @@ void LoadoutScreen::draw(App& app, sf::RenderWindow& w) {
     const sf::Vector2f centre = nodePos(app, 0);
     const float ringsA = clampf(introPop(it, 0.10f, 0.4f), 0.f, 1.f);
     for (int ring = 1; ring <= kBackRings; ++ring) {
-        const float rad = static_cast<float>(ring) * kRingGap;
+        const float rad = static_cast<float>(ring) * kRingGap * zoom_;
         sf::CircleShape halo(rad);
         halo.setOrigin(rad, rad);
         halo.setPosition(centre);
@@ -386,9 +457,10 @@ void LoadoutScreen::draw(App& app, sf::RenderWindow& w) {
         const sf::Color col = branchColor(d.branch);
         const bool lit = m.unlock[i] > 0;
         const bool open = !lit && m.unlock[d.parent] > 0;
+        const float focus = (legendHover_ < 0 || static_cast<int>(d.branch) == legendHover_) ? 1.f : 0.25f;
         drawLink(w, a, b, lit ? 2.5f : 1.5f,
-                 lit ? withAlpha(col, 0.5f * la)
-                     : withAlpha(open ? col : theme::arenaEdge, 0.22f * la));
+                 lit ? withAlpha(col, 0.5f * la * focus)
+                     : withAlpha(open ? col : theme::arenaEdge, 0.22f * la * focus));
     }
 
     // Nodes. Only the one under the cursor / keyboard selection lights up.
@@ -407,8 +479,10 @@ void LoadoutScreen::draw(App& app, sf::RenderWindow& w) {
         const float g = glow_[i];                 // 0 = idle, 1 = lit
         const float pop = introPop(it, 0.12f + 0.06f * nodeRing(i), 0.34f);
         if (pop <= 0.001f) continue;
-        const float na = clampf(pop, 0.f, 1.f);                 // intro alpha
-        const float r = baseR * clampf(pop, 0.f, 1.12f) * (1.f + 0.45f * g);
+        const bool inFocus = legendHover_ < 0 || static_cast<int>(d.branch) == legendHover_ || i == 0;
+        const float na = clampf(pop, 0.f, 1.f) * (inFocus ? 1.f : 0.25f);   // intro alpha, legend focus
+        const float r = baseR * clampf(zoom_, 0.75f, 1.3f) * clampf(pop, 0.f, 1.12f) *
+                        (1.f + (legendHover_ >= 0 && inFocus && i != 0 ? 0.2f : 0.f) + 0.45f * g);
 
         if (g > 0.01f) {
             const float gr = r + 4.f + 12.f * g;
@@ -443,7 +517,7 @@ void LoadoutScreen::draw(App& app, sf::RenderWindow& w) {
         // Idle labels: the purchase frontier (open, not bought yet) shows its
         // name, so you can read your options without hovering every node;
         // owned multi-level nodes show their level pips.
-        if (g < 0.03f && avail && !owned && i != 0)
+        if (g < 0.03f && avail && !owned && i != 0 && inFocus)
             drawCentered(w, app.font(), d.name, theme::fsSmall, {p.x, p.y + baseR + 11.f},
                          withAlpha(afford ? theme::textLo : theme::textDim, 0.9f * na));
         if (g < 0.03f && owned && d.maxLevel > 1) {
@@ -490,18 +564,21 @@ void LoadoutScreen::draw(App& app, sf::RenderWindow& w) {
 
     if (hoverNode_ >= 0 || selUsed_) drawInfoCard(app, w, selNode_);
 
-    // Branch legend, bottom-left.
+    // Branch legend, bottom-left. Hovering a row lights that branch alone.
     {
         const float la = clampf(introPop(it, 0.2f), 0.f, 1.f);
-        const MetaBranch branches[] = {MetaBranch::Base, MetaBranch::Combat, MetaBranch::Eco,
-                                       MetaBranch::Pickups, MetaBranch::Special, MetaBranch::Arsenal};
-        float ly = s.y - theme::margin - 6.f * 22.f;
-        for (MetaBranch b : branches) {
-            drawDot(w, {theme::margin + 8.f, ly + 8.f}, 6.f, withAlpha(branchColor(b), la));
-            sf::Text t = makeText(app.font(), branchLabel(b), theme::fsSmall, withAlpha(theme::textLo, la));
+        float ly = s.y - theme::margin - static_cast<float>(kLegendCount) * kLegendRow;
+        for (MetaBranch b : kLegend) {
+            const bool hot = legendHover_ == static_cast<int>(b);
+            int owned = 0, total = 0;
+            for (int i = 0; i < MetaUnlockCount; ++i)
+                if (metaUnlockDef(i).branch == b) { ++total; owned += m.unlock[i] > 0 ? 1 : 0; }
+            drawDot(w, {theme::margin + 8.f, ly + 8.f}, hot ? 7.5f : 6.f, withAlpha(branchColor(b), la));
+            sf::Text t = makeText(app.font(), std::string(branchLabel(b)) + "   " + std::to_string(owned) + "/" +
+                                  std::to_string(total), theme::fsSmall, withAlpha(hot ? theme::textHi : theme::textLo, la));
             t.setPosition(theme::margin + 22.f, ly);
             w.draw(t);
-            ly += 22.f;
+            ly += kLegendRow;
         }
     }
 
@@ -532,6 +609,7 @@ sf::Vector2f PlayScreen::pointerVelocity() const {
 }
 
 void PlayScreen::grab(App& app, sf::Vector2f mouse) {
+    if (!app.canGrab()) return;   // "Hunters" / "Clockwork" pacts: hands off
     if (app.world().grabAt(mouse, cfg::app::catchRadius)) {
         dragging_ = true;
         samples_.clear();
@@ -545,7 +623,7 @@ void PlayScreen::grab(App& app, sf::Vector2f mouse) {
 
 void PlayScreen::release(App& app) {
     if (!dragging_) return;
-    const float power = app.data().run.mods.strongArm ? cfg::combat::flingPowerBoost : 1.f;
+    const float power = app.flingPower();   // Strong arm, Hot Hands / Pinball pacts
     sf::Vector2f v = pointerVelocity() * cfg::app::throwVelScale * power;
     if (app.data().meta.slingshot) {
         app.setAiming(false);
@@ -574,6 +652,11 @@ void PlayScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
     if (isKey(e, sf::Keyboard::Escape)) { app.openPause(); return; }
     if (isKey(e, sf::Keyboard::M)) { app.toggleSound(); return; }
     if (isKey(e, sf::Keyboard::Q)) { app.useReserve(); return; }   // "Stockpile" reserve power-up
+    if (isKey(e, sf::Keyboard::Space) ||                               // "Nova" pact
+        (e.type == sf::Event::MouseButtonPressed && e.mouseButton.button == sf::Mouse::Right)) {
+        app.usePactAbility();
+        return;
+    }
     if (isKey(e, sf::Keyboard::Tab)) { showPicks_ = true; return; }
     if (e.type == sf::Event::KeyReleased && e.key.code == sf::Keyboard::Tab) {
         showPicks_ = false;
@@ -667,6 +750,7 @@ void PlayScreen::drawAim(App& app, sf::RenderWindow& w) const {
 void PlayScreen::draw(App& app, sf::RenderWindow& w) {
     app.useWorldView();
     renderer_.draw(w, app.world());
+    drawPactWorld(app, w);   // Hunters tethers, Living Core overcharge
     app.effects().drawRings(w);
     if (dragging_ && app.data().meta.slingshot) drawAim(app, w);
     app.useUiView();
@@ -695,6 +779,7 @@ void PlayScreen::draw(App& app, sf::RenderWindow& w) {
 
     drawCentered(w, app.font(), "hold TAB for your balls", theme::fsSmall,
                  {theme::margin + 60.f, s.y - theme::margin - 56.f}, theme::textDim);
+    drawPactHud(app, w, app.uiMouse(), !showPicks_ && !dragging_);
 
     if (showPicks_) {
         drawPicks(app, w);
@@ -778,6 +863,7 @@ void PlayScreen::drawPicks(App& app, sf::RenderWindow& w) const {
     const float relicY = s.y * 0.48f + kPanelH * 0.5f + 30.f;
     drawCentered(w, app.font(), relics.empty() ? "no relics yet" : "Relics:  " + relics, theme::fsSmall,
                  {s.x * 0.5f, relicY}, relics.empty() ? theme::textDim : theme::puGolden);
+    if (drawPactStrip(app, w, {s.x * 0.5f, relicY + 20.f}, true, app.uiMouse(), true)) return;   // pacts
 
     // Hover help on the panels and the relic line.
     const sf::Vector2f um = app.uiMouse();
@@ -869,7 +955,7 @@ void ChoiceScreen::draw(App& app, sf::RenderWindow& w) {
     const float it = intro();
 
     drawDim(w, s, 0.82f * clampf(introPop(it, 0.f, 0.2f), 0.f, 1.f));
-    drawCenteredPop(w, app.font(), app.choiceIsBossTreasure() ? "Boss treasure - choose one" : "Choose one",
+    drawCenteredPop(w, app.font(), app.choiceTitle(),
                     theme::fsTitle,
                     {s.x * 0.5f, s.y * 0.26f}, theme::textHi, introPop(it, 0.04f, 0.3f));
 
@@ -1118,7 +1204,7 @@ void BossWinScreen::draw(App& app, sf::RenderWindow& w) {
                     {s.x * 0.5f, s.y * 0.28f}, theme::core, introPop(it, 0.05f, 0.34f));
 
     if (goingOn) {
-        drawCenteredPop(w, app.font(), "the run goes on - push through to wave 20", theme::fsBody,
+        drawCenteredPop(w, app.font(), "the run goes on: seal a pact, take the boss treasure, push on to wave 20", theme::fsBody,
                         {s.x * 0.5f, s.y * 0.28f + 52.f}, theme::textDim, introPop(it, 0.16f));
     } else {
         const int pr = app.lastRunPrisms();

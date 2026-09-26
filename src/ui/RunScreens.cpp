@@ -9,6 +9,7 @@
 #include "core/Config.hpp"
 #include "core/Theme.hpp"
 #include "render/Draw.hpp"
+#include "ui/PactScreen.hpp"
 #include "ui/Screens.hpp"
 #include "ui/Widgets.hpp"
 
@@ -104,7 +105,9 @@ void EquipScreen::targetAt(App& app, sf::Vector2f mouse, int& ball, int& slot) c
     ball = slot = -1;
     const sf::Vector2f s = app.size();
     const int n = app.runBallCount();
-    const bool forge = app.equipSource() == EquipSource::Forge;
+    // Forge, the shop's forge and selling all point at an item already on a ball.
+    const EquipSource src = app.equipSource();
+    const bool forge = src == EquipSource::Forge || src == EquipSource::ShopForge || src == EquipSource::Sell;
     const UpgradeKind k = app.equipKind();
     for (int i = 0; i < n; ++i) {
         const sf::Vector2f c = panelCenter(s, i, n, s.y * 0.52f);
@@ -156,16 +159,26 @@ void EquipScreen::update(App& app, float, sf::Vector2f mouse) {
 void EquipScreen::draw(App& app, sf::RenderWindow& w) {
     const sf::Vector2f s = app.size();
     const float it = intro();
-    const bool forge = app.equipSource() == EquipSource::Forge;
+    const EquipSource src = app.equipSource();
+    const bool forge = src == EquipSource::Forge || src == EquipSource::ShopForge;
+    const bool sell = src == EquipSource::Sell;
     const UpgradeKind k = app.equipKind();
     const UpgradeInfo info = upgradeInfo(k);
 
     std::string title, sub, hint;
     if (forge) {
-        title = "Forge - pick an item to level up";
+        title = src == EquipSource::ShopForge
+            ? "Forge - pick an item to level up (" + std::to_string(cfg::gold::forgeServicePrice) + " gold)"
+            : "Forge - pick an item to level up";
         sub = "each level: the item's bonus or chance grows by half, and the ball hits 10% harder (max level " +
-              std::to_string(cfg::gold::maxItemLevel) + ")";
-        hint = "click an item   -   Esc: leave the forge";
+              std::to_string(app.forgeCap()) + ")";
+        hint = src == EquipSource::ShopForge ? "click an item   -   Esc: back to the shop"
+                                             : "click an item   -   Esc: leave the forge";
+    } else if (sell) {
+        title = "Sell - pick an item to sell";
+        sub = "it pays " + std::to_string(static_cast<int>(cfg::gold::sellFrac * 100.f)) +
+              "% of its tier price per forge level; its slot is freed";
+        hint = "click an item   -   Esc: back to the shop";
     } else {
         switch (upgradeCat(k)) {
             case UpgradeCat::Modifier: title = std::string(info.title) + " - pick a ball"; break;
@@ -199,8 +212,11 @@ void EquipScreen::draw(App& app, sf::RenderWindow& w) {
     for (int i = 0; i < n; ++i) {   // what's in the slot / on the ball under the pointer
         const int part = panelPartAt(panelCenter(s, i, n, s.y * 0.52f), mouse_);
         std::string tt, td;
-        if (part >= 0 && loadoutTooltip(balls[static_cast<std::size_t>(i)], part, tt, td))
+        if (part >= 0 && loadoutTooltip(balls[static_cast<std::size_t>(i)], part, tt, td)) {
+            if (sell && part < kBallSlots && balls[static_cast<std::size_t>(i)].gear[part] >= 0)
+                tt = "Sell " + tt + "  for " + std::to_string(app.sellValue(i, part)) + " gold";
             drawTooltip(w, app.font(), mouse_, s, tt, td);
+        }
     }
 }
 
@@ -330,6 +346,15 @@ void MapScreen::draw(App& app, sf::RenderWindow& w) {
     keys.setPosition(theme::margin + 12.f, ly + 10.f);
     w.draw(keys);
 
+    // The run's pacts, under the legend (hover a chip for its rule).
+    bool pactHover = false;
+    if (!r.pacts.empty()) {
+        sf::Text ph = makeText(app.font(), "Pacts", theme::fsSmall, theme::textLo);
+        ph.setPosition(theme::margin + 12.f, ly + 44.f);
+        w.draw(ph);
+        pactHover = drawPactStrip(app, w, {theme::margin + 10.f, ly + 64.f}, false, mouse_, info_ < 0);
+    }
+
     if (info_ >= 0) {
         const MapNode& n = nodes[static_cast<std::size_t>(info_)];
         std::string d = mapNodeDesc(n.type);
@@ -339,7 +364,7 @@ void MapScreen::draw(App& app, sf::RenderWindow& w) {
     } else if (legendHover >= 0) {
         const auto t = static_cast<MapNodeType>(legendHover);
         drawTooltip(w, app.font(), mouse_, s, mapNodeName(t), mapNodeDesc(t), nodeColor(t));
-    } else if (std::fabs(mouse_.y - 82.f) < 12.f && std::fabs(mouse_.x - s.x * 0.5f) < 170.f) {
+    } else if (!pactHover && std::fabs(mouse_.y - 82.f) < 12.f && std::fabs(mouse_.x - s.x * 0.5f) < 170.f) {
         drawTooltip(w, app.font(), mouse_, s, "Gold and core",
                     "gold buys things in shops; the core must survive - rests and shops repair it");
     }
@@ -348,67 +373,89 @@ void MapScreen::draw(App& app, sf::RenderWindow& w) {
 // ================================================================ Shop
 
 namespace {
-constexpr float kOfferW = 200.f;
-constexpr float kOfferH = 178.f;
-constexpr float kOfferGap = 16.f;
+constexpr float kOfferH = 186.f;
+constexpr float kOfferGap = 14.f;
+constexpr float kOfferTop = 0.27f;   // * size.y
+constexpr float kBtnW = 204.f, kBtnH = 36.f, kBtnGap = 12.f;
 }  // namespace
+
+int ShopScreen::cardCount(App& app) const {
+    const RunState& r = app.data().run;
+    return static_cast<int>(r.shopOffers.size()) + (r.shopMystery == 1 ? 1 : 0);
+}
 
 sf::FloatRect ShopScreen::offerRect(App& app, int i) const {
     const sf::Vector2f s = app.size();
-    const int n = static_cast<int>(app.data().run.shopOffers.size());
-    const float total = static_cast<float>(n) * kOfferW + static_cast<float>(n - 1) * kOfferGap;
-    const float x = s.x * 0.5f - total * 0.5f + static_cast<float>(i) * (kOfferW + kOfferGap);
-    return {x, s.y * 0.30f, kOfferW, kOfferH};
+    const int n = std::max(1, cardCount(app));
+    const float wd = std::min(200.f, (s.x - 2.f * (theme::margin + 14.f) - static_cast<float>(n - 1) * kOfferGap) /
+                                         static_cast<float>(n));   // room for the Epic halo at the edges
+    const float total = static_cast<float>(n) * wd + static_cast<float>(n - 1) * kOfferGap;
+    const float x = s.x * 0.5f - total * 0.5f + static_cast<float>(i) * (wd + kOfferGap);
+    return {x, s.y * kOfferTop, wd, kOfferH};
 }
 
-sf::FloatRect ShopScreen::repairRect(App& app) const {
+sf::FloatRect ShopScreen::buttonRect(App& app, int b) const {
     const sf::Vector2f s = app.size();
-    return {s.x * 0.5f - 290.f, s.y * 0.30f + kOfferH + 40.f, 280.f, 36.f};
-}
-
-sf::FloatRect ShopScreen::leaveRect(App& app) const {
-    const sf::Vector2f s = app.size();
-    return {s.x * 0.5f + 10.f, s.y * 0.30f + kOfferH + 40.f, 280.f, 36.f};
+    const float total = 5.f * kBtnW + 4.f * kBtnGap;
+    return {s.x * 0.5f - total * 0.5f + static_cast<float>(b) * (kBtnW + kBtnGap), s.y * kOfferTop + kOfferH + 48.f,
+            kBtnW, kBtnH};
 }
 
 void ShopScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
     if (isKey(e, sf::Keyboard::Escape)) { app.leaveShop(); return; }
+    if (isKey(e, sf::Keyboard::R)) { app.rerollShop(); return; }
     if (!isLeftClick(e)) return;
-    const int n = static_cast<int>(app.data().run.shopOffers.size());
-    for (int i = 0; i < n; ++i)
-        if (offerRect(app, i).contains(mouse)) { app.buyShopOffer(i); return; }
-    if (repairRect(app).contains(mouse)) { app.buyRepair(); return; }
-    if (leaveRect(app).contains(mouse)) app.leaveShop();
+    const RunState& r = app.data().run;
+    const int offers = static_cast<int>(r.shopOffers.size());
+    for (int i = 0; i < cardCount(app); ++i) {
+        if (!offerRect(app, i).contains(mouse)) continue;
+        if (i < offers) app.buyShopOffer(i);
+        else app.buyMystery();
+        return;
+    }
+    for (int b = 0; b < 5; ++b) {
+        if (!buttonRect(app, b).contains(mouse)) continue;
+        switch (b) {
+            case 0: app.buyRepair(); break;
+            case 1: app.beginShopForge(); break;
+            case 2: app.beginSell(); break;
+            case 3: app.rerollShop(); break;
+            case 4: app.leaveShop(); break;
+        }
+        return;
+    }
 }
 
-void ShopScreen::update(App& app, float, sf::Vector2f mouse) {
+void ShopScreen::update(App& app, float dt, sf::Vector2f mouse) {
     mouse_ = mouse;
+    clock_ += dt;
     hover_ = -1;
-    const int n = static_cast<int>(app.data().run.shopOffers.size());
-    for (int i = 0; i < n; ++i)
+    for (int i = 0; i < cardCount(app); ++i)
         if (offerRect(app, i).contains(mouse)) hover_ = i;
-    if (repairRect(app).contains(mouse)) hover_ = 100;
-    if (leaveRect(app).contains(mouse)) hover_ = 101;
+    for (int b = 0; b < 5; ++b)
+        if (buttonRect(app, b).contains(mouse)) hover_ = 100 + b;
 }
 
 void ShopScreen::draw(App& app, sf::RenderWindow& w) {
     const sf::Vector2f s = app.size();
     const float it = intro();
     const RunState& r = app.data().run;
+    const sf::Font& f = app.font();
 
-    drawCenteredPop(w, app.font(), "Shop", theme::fsTitle, {s.x * 0.5f, s.y * 0.12f}, theme::puGolden,
-                    introPop(it, 0.f, 0.3f));
-    drawRunStatus(app, w, s.y * 0.12f + 42.f);
+    drawCenteredPop(w, f, "Shop", theme::fsTitle, {s.x * 0.5f, s.y * 0.09f}, theme::puGolden, introPop(it, 0.f, 0.3f));
+    drawRunStatus(app, w, s.y * 0.09f + 40.f);
+    drawPactStrip(app, w, {s.x * 0.5f, s.y * 0.09f + 60.f}, true, mouse_, hover_ < 0);
 
-    const int n = static_cast<int>(r.shopOffers.size());
-    for (int i = 0; i < n; ++i) {
+    const int offers = static_cast<int>(r.shopOffers.size());
+    for (int i = 0; i < offers; ++i) {
         const auto k = static_cast<UpgradeKind>(r.shopOffers[static_cast<std::size_t>(i)]);
         const UpgradeInfo info = upgradeInfo(k);
         const UpgradeCat cat = upgradeCat(k);
         const bool sold = r.shopSold[static_cast<std::size_t>(i)];
-        const int price = app.shopPrice(k);
+        const int deal = i < static_cast<int>(r.shopDeal.size()) ? r.shopDeal[static_cast<std::size_t>(i)] : 0;
+        const int price = app.shopOfferPrice(i);
         const bool afford = app.gold() >= price;
-        const float cp = clampf(introPop(it, 0.08f + 0.06f * static_cast<float>(i), 0.3f), 0.f, 1.f);
+        const float cp = clampf(introPop(it, 0.08f + 0.05f * static_cast<float>(i), 0.3f), 0.f, 1.f);
         const float a = cp * (sold ? 0.3f : 1.f);
         const float h = (hover_ == i && !sold) ? 1.f : 0.f;
         const sf::FloatRect rc = offerRect(app, i);
@@ -416,43 +463,110 @@ void ShopScreen::draw(App& app, sf::RenderWindow& w) {
 
         const Tier tier = upgradeTier(k);
         drawTierFrame(w, rc, tier, h, a, it);
-        drawCentered(w, app.font(), tierName(tier), theme::fsSmall, {cx, rc.top + 64.f},
-                     withAlpha(tierColor(tier), a));
+        drawCentered(w, f, tierName(tier), theme::fsSmall, {cx, rc.top + 64.f}, withAlpha(tierColor(tier), a));
 
         std::string head = upgradeCatName(cat);
         if (itemTag(k) != ItemTag::None) head += std::string("  -  ") + itemTagName(itemTag(k));
-        drawCentered(w, app.font(), head, theme::fsSmall, {cx, rc.top + 16.f},
+        drawCentered(w, f, head, theme::fsSmall, {cx, rc.top + 16.f},
                      withAlpha(itemTag(k) != ItemTag::None ? tagColor(itemTag(k)) : catColor(cat), a));
         const int es = elementItemSlot(k);
-        drawCentered(w, app.font(), info.title, theme::fsHeading, {cx, rc.top + 46.f},
+        drawCentered(w, f, info.title, theme::fsHeading, {cx, rc.top + 46.f},
                      withAlpha(es >= 0 ? elementColor(static_cast<Element>(es + 1)) : theme::textHi, a));
-        const auto lines = wrapText(app.font(), info.desc, theme::fsSmall, rc.width - 22.f);
         float y = rc.top + 86.f;
-        for (const std::string& l : lines) {
-            drawCentered(w, app.font(), l, theme::fsSmall, {cx, y}, withAlpha(theme::textLo, a));
+        for (const std::string& l : wrapText(f, info.desc, theme::fsSmall, rc.width - 22.f)) {
+            drawCentered(w, f, l, theme::fsSmall, {cx, y}, withAlpha(theme::textLo, a));
             y += 17.f;
         }
-        drawCentered(w, app.font(), sold ? "SOLD" : std::to_string(price) + " gold", theme::fsBody,
-                     {cx, rc.top + rc.height - 18.f},
-                     withAlpha(sold ? theme::textDim : (afford ? theme::puGolden : theme::coreLow), a));
+
+        // Price line: SOLD / FREE (a revealed mystery box) / sale price with the old one / price.
+        std::string pl;
+        sf::Color pc = afford ? theme::puGolden : theme::coreLow;
+        if (sold) { pl = "SOLD"; pc = theme::textDim; }
+        else if (deal == 2) { pl = "PAID - take it"; pc = theme::core; }
+        else if (deal == 1) pl = std::to_string(price) + " gold  (was " + std::to_string(app.shopPrice(k)) + ")";
+        else pl = std::to_string(price) + " gold";
+        drawCentered(w, f, pl, theme::fsBody, {cx, rc.top + rc.height - 18.f}, withAlpha(pc, a));
+        if (deal == 1 && !sold) {   // a SALE tag on the card's top edge
+            const std::string tag = "SALE  -" + std::to_string(app.saleOffPercent()) + "%";
+            const sf::FloatRect tr{cx - 48.f, rc.top - 11.f, 96.f, 20.f};
+            draw::box(w, tr, theme::corner, withAlpha(theme::coreLow, a), withAlpha(lerpColor(theme::coreLow, theme::bg, 0.3f), a));
+            drawCentered(w, f, tag, theme::fsSmall, {cx, tr.top + 9.f}, withAlpha(theme::textHi, a));
+        }
     }
 
+    if (r.shopMystery == 1) {   // the mystery box: a pulsing "?" card
+        const int i = offers;
+        const float cp = clampf(introPop(it, 0.08f + 0.05f * static_cast<float>(i), 0.3f), 0.f, 1.f);
+        const float h = hover_ == i ? 1.f : 0.f;
+        const sf::FloatRect rc = offerRect(app, i);
+        const float cx = rc.left + rc.width * 0.5f;
+        drawTierFrame(w, rc, Tier::Epic, h, cp, clock_);
+        drawCentered(w, f, "MYSTERY BOX", theme::fsSmall, {cx, rc.top + 16.f}, withAlpha(tierColor(Tier::Epic), cp));
+        const float bob = 3.f * std::sin(clock_ * 3.f);
+        drawCentered(w, f, "?", theme::fsTitle + 14u, {cx, rc.top + 66.f + bob}, withAlpha(theme::textHi, cp));
+        float y = rc.top + 106.f;
+        for (const std::string& l : wrapText(f, "a random pick at elite odds - often Rare or better", theme::fsSmall, rc.width - 22.f)) {
+            drawCentered(w, f, l, theme::fsSmall, {cx, y}, withAlpha(theme::textLo, cp));
+            y += 17.f;
+        }
+        const bool afford = app.gold() >= app.mysteryPrice();
+        drawCentered(w, f, std::to_string(app.mysteryPrice()) + " gold", theme::fsBody, {cx, rc.top + rc.height - 18.f},
+                     withAlpha(afford ? theme::puGolden : theme::coreLow, cp));
+    }
+
+    // Services row.
     const Core& c = app.world().core();
     const bool hurt = c.hp < c.maxHp - 0.5f;
-    drawButton(w, app.font(), repairRect(app),
-               "Repair core +" + std::to_string(app.repairAmount()) + "  -  " +
-                   std::to_string(cfg::gold::priceRepair) + " gold",
-               theme::core, hover_ == 100 ? 1.f : 0.f, hurt && app.gold() >= cfg::gold::priceRepair);
-    drawButton(w, app.font(), leaveRect(app), "Leave (Esc)", theme::accent, hover_ == 101 ? 1.f : 0.f, true);
+    bool forgeable = false, sellable = false;
+    for (const BallLoadout& L : r.balls)
+        for (int sl = 0; sl < kBallSlots; ++sl) {
+            if (L.gear[sl] < 0) continue;
+            sellable = true;
+            if (L.gearLvl[sl] < app.forgeCap()) forgeable = true;
+        }
+    const int g = app.gold();
+    drawButton(w, f, buttonRect(app, 0),
+               "Repair core +" + std::to_string(app.repairAmount()) + "  -  " + std::to_string(cfg::gold::priceRepair) + "g",
+               theme::core, hover_ == 100 ? 1.f : 0.f, hurt && g >= cfg::gold::priceRepair);
+    drawButton(w, f, buttonRect(app, 1), "Forge an item  -  " + std::to_string(cfg::gold::forgeServicePrice) + "g",
+               theme::accent, hover_ == 101 ? 1.f : 0.f, forgeable && g >= cfg::gold::forgeServicePrice);
+    drawButton(w, f, buttonRect(app, 2), "Sell an item", theme::puGolden, hover_ == 102 ? 1.f : 0.f, sellable);
+    drawButton(w, f, buttonRect(app, 3), "Reroll stock (R)  -  " + std::to_string(app.shopRerollPrice()) + "g",
+               theme::puSurge, hover_ == 103 ? 1.f : 0.f, g >= app.shopRerollPrice());
+    drawButton(w, f, buttonRect(app, 4), "Leave (Esc)", theme::accent, hover_ == 104 ? 1.f : 0.f, true);
+    drawCentered(w, f, "one pick is always on sale  -  the mystery box rolls at elite odds  -  hover anything for details",
+                 theme::fsSmall, {s.x * 0.5f, buttonRect(app, 0).top + kBtnH + 26.f}, theme::textDim);
 
-    if (hover_ >= 0 && hover_ < n) {
+    // Hover help.
+    if (hover_ >= 0 && hover_ < offers) {
         const auto k = static_cast<UpgradeKind>(r.shopOffers[static_cast<std::size_t>(hover_)]);
         const UpgradeCat cat = upgradeCat(k);
-        drawTooltip(w, app.font(), mouse_, s, upgradeCatName(cat), upgradeCatDesc(cat), catColor(cat));
+        std::string d = upgradeCatDesc(cat);
+        const int deal = hover_ < static_cast<int>(r.shopDeal.size()) ? r.shopDeal[static_cast<std::size_t>(hover_)] : 0;
+        if (deal == 1) d += "  On sale: " + std::to_string(app.saleOffPercent()) + "% off, this visit only.";
+        if (deal == 2) d += "  You already paid for it (mystery box): click to take it.";
+        drawTooltip(w, f, mouse_, s, upgradeCatName(cat), d, catColor(cat));
+    } else if (hover_ == offers && r.shopMystery == 1) {
+        drawTooltip(w, f, mouse_, s, "Mystery box",
+                    "pay now, see it after: one random pick rolled at elite odds (18% Common, 32% Uncommon, 28% Rare, "
+                    "15% Epic, 7% Legendary). It stays on the shelf, paid, until you take it.", tierColor(Tier::Epic));
     } else if (hover_ == 100) {
-        drawTooltip(w, app.font(), mouse_, s, "Repair",
+        drawTooltip(w, f, mouse_, s, "Repair",
                     "restores " + std::to_string(app.repairAmount()) +
                         " core HP. The core also heals a little before every fight.", theme::core);
+    } else if (hover_ == 101) {
+        drawTooltip(w, f, mouse_, s, "Forge",
+                    "level up one item a ball carries, like a Forge node: its bonus or chance grows by half and the "
+                    "ball hits 10% harder. Max level " + std::to_string(app.forgeCap()) + ".", theme::accent);
+    } else if (hover_ == 102) {
+        drawTooltip(w, f, mouse_, s, "Sell",
+                    "sell an item back for gold (" + std::to_string(static_cast<int>(cfg::gold::sellFrac * 100.f)) +
+                        "% of its tier price per forge level) and free its slot. Pick the item on the next screen.",
+                    theme::puGolden);
+    } else if (hover_ == 103) {
+        drawTooltip(w, f, mouse_, s, "Reroll",
+                    "replace the stock with new picks (and a new sale). Each reroll at this shop costs " +
+                        std::to_string(cfg::gold::rerollStep) + " more. The mystery box stays.", theme::puSurge);
     }
 }
 

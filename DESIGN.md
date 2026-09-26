@@ -822,6 +822,64 @@ Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
     matar todo, curar, invulnerable, +100 oro, sumar / vaciar pelota. Sale en el
     modo foto como `09_dev.png`.
 
+- **Fase O — pactos de boss, tiendas y web ampliada. [IMPLEMENTADO 2026-09-26]**
+  Pedido (usuario): al ganarle a un boss, una mejora GLOBAL fuerte que te haga
+  elegir una ruta clara (tirar mucho / mirar lo que hacen las pelotas / pocas
+  pelotas muy mejoradas...), "reglas locas que sean divertidas de ver"; tiendas
+  más interesantes; la web se estaba quedando chica.
+  - **Pactos** (`progression/Pacts.hpp`, 12): después del miniboss, al darle
+    "Continue", elegís 1 de 3 (4 con el nodo **Oath**) — cada carta es un
+    arquetipo distinto — y recién después viene el tesoro de boss. Con el nodo
+    **Covenant** también elegís uno al empezar la run (máx. 2 por run). Se
+    pueden rechazar todos por `refuseGold` de oro. Cada pacto trae su costo:
+    | Pacto | Arquetipo | Te da | Te cuesta |
+    |---|---|---|---|
+    | Hot Hands | Tirador | tiros x1.7, techo de velocidad x3, mantienen la velocidad | sueltas, las pelotas van 35% más lento |
+    | Nova | Tirador | ESPACIO / click derecho: todas salen del núcleo en anillo a x3 y el núcleo empuja (7 s) | núcleo -20% vida máx. |
+    | Hunters | Espectador | cada pelota elige su presa y la persigue hasta matarla (+20% daño) | no podés agarrar pelotas |
+    | Clockwork | Espectador | auto-tiro cada 0.6 s a x2.5 (+15% daño) | no podés agarrar pelotas |
+    | Pinball | Espectador | las paredes son bumpers: aceleran, suman combo y chispean | tus tiros 40% más débiles |
+    | Duet | Pocas pero fuertes | tus 2 mejores pelotas absorben al resto (items → niveles de forja, modificadores pasan), forja hasta Lv5, 2 items de un tag = maestría, x1.5 daño, +20% tamaño | nunca más de 2 pelotas |
+    | Legion | Enjambre | +2 pelotas con un item cada una; los choques entre pelotas chispean y suman combo | -25% daño |
+    | Living Core | Núcleo | el núcleo electrocuta cada 0.8 s; rebotar en el núcleo sobrecarga la pelota (+60% daño 2 s) | enemigos +15% velocidad |
+    | Fortress | Núcleo | núcleo x1.75 vida; lo que lo toca explota y empuja | no cura antes de pelear, los descansos curan la mitad |
+    | Loaded Dice | Apostador | toda probabilidad x2, las cartas salen un tier más arriba | el oro de cada pelea: doble o nada |
+    | Alchemy | Alquimista | la mitad de los golpes deja un elemento extra al azar y una pelota reacciona consigo misma | -25% daño |
+    | Bloodlust | Berserker | el combo no se enfría y sube el doble de rápido | lo que llega al núcleo borra el combo y pega +50% |
+    Incompatibles (`pactsConflict`): Duet/Legion, Hot Hands con los que te
+    sacan las manos, Hunters/Clockwork entre sí. Hunters, Legion, Loaded Dice y
+    Alchemy se desbloquean en la web.
+  - Sim: `sim/PactRules.hpp` (`WorldParams::pact`) + `sim/WorldPacts.cpp` (cada
+    hook es un no-op sin su pacto; World.cpp solo los llama en una línea). El
+    resto (daño, crucero, suerte, cantidad de pelotas, vida del núcleo) lo
+    pliega `App::foldPacts`. Medido sin jugador (6 semillas x oleadas 5/9/13/17):
+    sin pacto 78 kills / 13 derrotas de 24; Hunters ~1000 / 6 y Clockwork ~830 / 6
+    (reemplazan tus tiros); Living Core 377, Fortress 773 / 9, Pinball 173;
+    sin NaN, <2 µs por paso (5 µs con las 5 pelotas de Legion).
+  - UI: `ui/PactScreen` (cartas grandes con GANA / CUESTA y tooltip "combina
+    con..."), chips de pactos en el mapa, la tienda, el TAB y abajo a la
+    izquierda en pelea (con la carga de Nova). Hunters dibuja una línea tenue
+    de cada pelota a su presa; Living Core un anillo en la pelota sobrecargada.
+  - **Tiendas:** una oferta siempre en **oferta** (-40%, más con Merchant) ·
+    **caja misteriosa** (55 de oro, sale con odds de élite y queda pagada en el
+    estante) · **reroll** del stock (12 + 6 por reroll) · **vender** un item
+    (45% de su precio por tier x nivel, libera el slot) · **forja paga** (45).
+    Tooltips en todo.
+  - **Web (save v13, append-only, 51 nodos):** rama nueva **Pacts** (carmesí,
+    abajo a la derecha desde Heft): Oath, Covenant y los desbloqueos de Hunters,
+    Legion, Loaded Dice y Alchemy. Más: **Merchant** (+1 oferta y oferta más
+    profunda), **Treasury** (+20 de oro inicial por nivel), **Quartermaster**
+    (el Starter kit se elige de 4 cartas al empezar), **Last stand** (una vez
+    por run el núcleo vuelve con 50%). La web ahora se **arrastra** y hace
+    **zoom** con la rueda (0 resetea); la leyenda muestra comprados/total por
+    rama y al pasar el cursor por una rama la resalta.
+  - Inicio de run: `App::advanceRunIntro` (pacto de Covenant → carta de
+    Quartermaster → mapa).
+  - Panel de dev: sección PACTS (click = dar / sacar cada pacto) y "Pact choice
+    (boss / start)". Modo foto: `10_pact` … `18_intro_map`.
+  - Falta playtest: números de cada pacto con el jugador tirando, sobre todo
+    Hot Hands, Duet y Bloodlust.
+
 - **Pendiente (idea del usuario, 2026-09-24):** como las mejoras ya no llegan
   en cada oleada, cada una tiene que **sentirse mucho** al conseguirla: repasar
   items / modificadores / reliquias para que sean más fuertes y más visibles

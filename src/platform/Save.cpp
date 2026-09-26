@@ -10,7 +10,7 @@
 namespace sb {
 
 namespace {
-constexpr int kSaveVersion = 12;  // v12: appended Armory..Elite spoils (41 nodes); append-only since v9
+constexpr int kSaveVersion = 13;  // v13: appended Oath..Last stand (51 nodes); append-only since v9
 }  // namespace
 
 bool hasSavedGame(const std::string& path) {
