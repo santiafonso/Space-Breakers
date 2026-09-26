@@ -1476,6 +1476,35 @@ int App::runSnapshots(const std::string& dir) {
 
     push(ScreenId::Dev);
     snapFrame(d + "09_dev.png");
+    back();
+
+    // A crowded field with every enemy kind, to judge readability under load.
+    for (EnemyKind k : {EnemyKind::Grunt, EnemyKind::Runner, EnemyKind::Tank, EnemyKind::Splitter,
+                        EnemyKind::Shielded})
+        world_.devSpawn(k, 3);
+    for (int i = 0; i < 90; ++i) update(1.f / 60.f);
+    capturePath_ = d + "10_horde.png";
+    render();
+
+    // Straight to the act's boss row: the map late in the act, then the fight.
+    // Walk a path up the map (first branch each time) so the walked trail and
+    // the "you are here" marker show.
+    for (int node = r.mapNode; node >= 0;) {
+        MapNode& n = r.map.nodes[static_cast<std::size_t>(node)];
+        n.visited = true;
+        r.mapNode = node;
+        r.mapRow = n.row;
+        if (n.row >= cfg::map::rows || n.next.empty()) break;
+        node = n.next[static_cast<std::size_t>(n.row) % n.next.size()];
+    }
+    world_.devWinWave();
+    openMap();
+    snapFrame(d + "11_map_late.png");
+    for (int i = 0; i < static_cast<int>(r.map.nodes.size()); ++i)
+        if (mapNodeOpen(i)) { travelTo(i); break; }
+    for (int i = 0; i < 240; ++i) update(1.f / 60.f);
+    capturePath_ = d + "12_boss.png";
+    render();
     return 0;
 }
 
