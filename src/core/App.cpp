@@ -1,4 +1,5 @@
 #include "core/App.hpp"
+#include "render/Backdrop.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -1374,6 +1375,7 @@ void App::render() {
     sf::RenderWindow& w = window_.handle();
     window_.useUiView();
     w.clear(theme::bg);
+    backdrop::draw(w, size());
     if (heat_ > 0.01f) {   // warm tint over the arena (not the letterbox bars)
         sf::RectangleShape hot(size());
         hot.setFillColor(withAlpha(theme::bgHot, heat_ * cfg::app::heatAlpha));
@@ -1505,6 +1507,11 @@ int App::runSnapshots(const std::string& dir) {
     for (int i = 0; i < 240; ++i) update(1.f / 60.f);
     capturePath_ = d + "12_boss.png";
     render();
+
+    openPause();
+    snapFrame(d + "13_pause.png");
+    openStats();
+    snapFrame(d + "14_stats.png");
     return 0;
 }
 

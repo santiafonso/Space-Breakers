@@ -4,15 +4,26 @@
 
 // The whole visual identity in one place: palette, type sizes and the ball
 // speed-to-colour ramp. Nothing here knows about gameplay.
+//
+// Style: "orbital console" - a dark ink-navy instrument panel. Square glass
+// panels with hairline edges and corner brackets, small tracked uppercase
+// labels, a faint radar grid centred on the core. Everything structural stays
+// low-contrast so the balls are always the brightest thing on screen.
 namespace sb::theme {
 
 // Backdrop / surfaces
-inline const sf::Color bg{13, 13, 19};
+inline const sf::Color bg{11, 13, 20};
+inline const sf::Color bgDeep{5, 6, 11};        // where the vignette darkens to at the screen corners
+inline const sf::Color grid{86, 110, 150};      // backdrop grid / radar lines (always at low alpha)
+inline const sf::Color glassTop{24, 29, 43};    // panel fill, top -> bottom
+inline const sf::Color glassBottom{13, 15, 24};
 inline const sf::Color bgHot{24, 26, 58};   // the backdrop charges toward this deep blue-violet as the combo climbs
                                             // (was a red that read as "taking damage")
-inline const sf::Color panel{0, 0, 0};  // paired with alpha
-inline const sf::Color arenaEdge{54, 58, 78};
+inline const sf::Color panel{3, 4, 9};  // overlay dim, paired with alpha (ink, not pure black)
+inline const sf::Color arenaEdge{52, 60, 84};
 inline constexpr float corner = 0.f;   // box corner radius: square, clean edges (the user's call)
+inline constexpr float bracket = 9.f;  // corner-bracket arm on panels and frames
+inline constexpr float tracking = 2.2f; // letter spacing of the small uppercase labels
 
 // Text
 inline const sf::Color textHi{236, 238, 245};

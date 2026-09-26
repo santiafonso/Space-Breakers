@@ -1,5 +1,7 @@
 #include "render/Draw.hpp"
 
+#include "core/Theme.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <vector>
@@ -137,6 +139,101 @@ void box(sf::RenderTarget& t, sf::FloatRect r, float corner, sf::Color top, sf::
         edge[i * 2].color = edge[i * 2 + 1].color = outline;
     }
     t.draw(edge);
+}
+
+void line(sf::RenderTarget& t, sf::Vector2f a, sf::Vector2f b, float thickness, sf::Color color) {
+    const sf::Vector2f d = b - a;
+    const float len = std::sqrt(d.x * d.x + d.y * d.y);
+    if (len < 0.01f || color.a == 0) return;
+    const sf::Vector2f n = sf::Vector2f{-d.y, d.x} / len * (thickness * 0.5f);
+    sf::Vertex q[4] = {{a + n, color}, {b + n, color}, {b - n, color}, {a - n, color}};
+    t.draw(q, 4, sf::Quads);
+}
+
+void brackets(sf::RenderTarget& t, sf::FloatRect r, float arm, float thickness, sf::Color color,
+              float out) {
+    if (color.a == 0) return;
+    const float l = r.left - out, tp = r.top - out;
+    const float rt = r.left + r.width + out, bt = r.top + r.height + out;
+    const float th = thickness;
+    sf::VertexArray q(sf::Quads);
+    auto rect = [&](float x, float y, float w, float h) {
+        q.append({{x, y}, color});
+        q.append({{x + w, y}, color});
+        q.append({{x + w, y + h}, color});
+        q.append({{x, y + h}, color});
+    };
+    rect(l, tp, arm, th);            rect(l, tp + th, th, arm - th);             // top-left
+    rect(rt - arm, tp, arm, th);     rect(rt - th, tp + th, th, arm - th);       // top-right
+    rect(l, bt - th, arm, th);       rect(l, bt - arm, th, arm - th);            // bottom-left
+    rect(rt - arm, bt - th, arm, th); rect(rt - th, bt - arm, th, arm - th);     // bottom-right
+    t.draw(q);
+}
+
+void panel(sf::RenderTarget& t, sf::FloatRect r, sf::Color edge, float alpha, float lit) {
+    const sf::Color top = theme::glassTop, bottom = theme::glassBottom;
+    box(t, r, 0.f, alphaScaled(mix(top, edge, 0.10f + 0.14f * lit), 0.96f * alpha),
+        alphaScaled(mix(bottom, edge, 0.03f + 0.05f * lit), 0.96f * alpha),
+        alphaScaled(edge, (0.22f + 0.4f * lit) * alpha), 1.f);
+    // A hairline of light along the inside of the top edge: reads as glass.
+    line(t, {r.left + 1.f, r.top + 1.5f}, {r.left + r.width - 1.f, r.top + 1.5f}, 1.f,
+         alphaScaled(sf::Color::White, (0.05f + 0.05f * lit) * alpha));
+    brackets(t, r, theme::bracket, 2.f, alphaScaled(edge, (0.55f + 0.45f * lit) * alpha));
+}
+
+void vignette(sf::RenderTarget& t, sf::Vector2f size, sf::Color edge, float strength) {
+    // Concentric annuli from mid-screen out past the corners, each band's alpha
+    // following a smooth ease: a clean radial falloff with no fan artefacts.
+    const sf::Vector2f c = size * 0.5f;
+    const float maxD = std::sqrt(c.x * c.x + c.y * c.y);
+    const int bands = 24, seg = 64;
+    const float r0 = 0.35f * maxD;
+    auto alphaAt = [&](float r) {
+        const float x = std::clamp((r - r0) / (maxD - r0), 0.f, 1.f);
+        return alphaScaled(edge, strength * x * x * (3.f - 2.f * x));
+    };
+    sf::VertexArray strip(sf::Triangles);
+    for (int b = 0; b < bands; ++b) {
+        const float ra = r0 + (maxD * 1.02f - r0) * static_cast<float>(b) / static_cast<float>(bands);
+        const float rb = r0 + (maxD * 1.02f - r0) * static_cast<float>(b + 1) / static_cast<float>(bands);
+        const sf::Color ca = alphaAt(ra), cb = alphaAt(rb);
+        for (int i = 0; i < seg; ++i) {
+            const float a0 = kTau * static_cast<float>(i) / static_cast<float>(seg);
+            const float a1 = kTau * static_cast<float>(i + 1) / static_cast<float>(seg);
+            const sf::Vector2f d0{std::cos(a0), std::sin(a0)}, d1{std::cos(a1), std::sin(a1)};
+            strip.append({c + d0 * ra, ca});
+            strip.append({c + d0 * rb, cb});
+            strip.append({c + d1 * rb, cb});
+            strip.append({c + d0 * ra, ca});
+            strip.append({c + d1 * rb, cb});
+            strip.append({c + d1 * ra, ca});
+        }
+    }
+    t.draw(strip);
+}
+
+void radar(sf::RenderTarget& t, sf::Vector2f c, float maxR, float gap, int spokes, sf::Color color,
+           float alpha) {
+    if (alpha <= 0.003f) return;
+    const sf::Color ringCol = alphaScaled(color, alpha);
+    int k = 1;
+    for (float rad = gap; rad <= maxR; rad += gap, ++k)
+        ring(t, c, rad, 1.f, alphaScaled(ringCol, k % 2 == 0 ? 1.f : 0.6f), 0.f, kTau,
+             std::max(48, static_cast<int>(rad * 0.35f)));
+    sf::VertexArray lines(sf::Lines);
+    for (int i = 0; i < spokes; ++i) {
+        const float a = kTau * static_cast<float>(i) / static_cast<float>(spokes);
+        const sf::Vector2f d{std::cos(a), std::sin(a)};
+        lines.append({c + d * gap * 0.5f, alphaScaled(ringCol, 0.f)});   // fades in off the centre
+        lines.append({c + d * maxR, alphaScaled(ringCol, 0.7f)});
+        // small ticks across each ring where a spoke crosses it
+        const sf::Vector2f n{-d.y, d.x};
+        for (float rad = gap; rad <= maxR; rad += gap) {
+            lines.append({c + d * rad - n * 4.f, alphaScaled(ringCol, 1.6f)});
+            lines.append({c + d * rad + n * 4.f, alphaScaled(ringCol, 1.6f)});
+        }
+    }
+    t.draw(lines);
 }
 
 }  // namespace sb::draw

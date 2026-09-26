@@ -32,4 +32,25 @@ void ring(sf::RenderTarget& t, sf::Vector2f pos, float radius, float thickness, 
 void box(sf::RenderTarget& t, sf::FloatRect r, float corner, sf::Color top, sf::Color bottom,
          sf::Color outline = sf::Color::Transparent, float thickness = 0.f);
 
+// A straight bar from a to b.
+void line(sf::RenderTarget& t, sf::Vector2f a, sf::Vector2f b, float thickness, sf::Color color);
+
+// Four L-shaped corner marks just inside `r`, each arm `arm` long. `out` pushes
+// them outward (used to make them snap in on reveal / breathe on hover).
+void brackets(sf::RenderTarget& t, sf::FloatRect r, float arm, float thickness, sf::Color color,
+              float out = 0.f);
+
+// The house panel: dark glass lit faintly from the top, a hairline edge, a
+// 1px highlight along the inside of the top edge and corner brackets in
+// `edge`. `lit` (0..1) brightens fill and edge (hover / selection).
+void panel(sf::RenderTarget& t, sf::FloatRect r, sf::Color edge, float alpha, float lit = 0.f);
+
+// Darkens the screen toward its corners (radial), drawn over the backdrop.
+void vignette(sf::RenderTarget& t, sf::Vector2f size, sf::Color edge, float strength);
+
+// Radar backdrop: concentric rings every `gap` out to `maxR` plus `spokes`
+// radial lines, with small ticks on the rings. Low alpha on purpose.
+void radar(sf::RenderTarget& t, sf::Vector2f c, float maxR, float gap, int spokes, sf::Color color,
+           float alpha);
+
 }  // namespace sb::draw

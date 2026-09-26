@@ -146,20 +146,26 @@ void Effects::update(float dt) {
 }
 
 void Effects::drawBorder(sf::RenderWindow& window) const {
-    const float thickness = 2.f;
-    const struct {
-        sf::Vector2f size;
-        sf::Vector2f pos;
-    } bars[4] = {
-        {{thickness, size_.y}, {0.f, 0.f}},
-        {{thickness, size_.y}, {size_.x - thickness, 0.f}},
-        {{size_.x, thickness}, {0.f, 0.f}},
-        {{size_.x, thickness}, {0.f, size_.y - thickness}},
-    };
+    // The arena frame: a hairline all round, corner brackets and a small notch
+    // at the middle of each side, like the bezel of an instrument. A wall that
+    // was just hit lights up along its whole length.
+    const float W = size_.x, H = size_.y;
+    const sf::Color hair = withAlpha(theme::arenaEdge, 0.9f);
+    draw::box(window, {0.5f, 0.5f, W - 1.f, H - 1.f}, 0.f, sf::Color::Transparent, sf::Color::Transparent, hair, 1.f);
+    const sf::Color mark = lerpColor(theme::arenaEdge, theme::accent, 0.3f);
+    draw::brackets(window, {3.f, 3.f, W - 6.f, H - 6.f}, 26.f, 2.f, mark);
+    draw::line(window, {W * 0.5f - 14.f, 3.f}, {W * 0.5f + 14.f, 3.f}, 2.f, mark);
+    draw::line(window, {W * 0.5f - 14.f, H - 3.f}, {W * 0.5f + 14.f, H - 3.f}, 2.f, mark);
+    draw::line(window, {3.f, H * 0.5f - 14.f}, {3.f, H * 0.5f + 14.f}, 2.f, mark);
+    draw::line(window, {W - 3.f, H * 0.5f - 14.f}, {W - 3.f, H * 0.5f + 14.f}, 2.f, mark);
+
+    const float th = 3.f;
+    const sf::FloatRect bars[4] = {{0.f, 0.f, th, H}, {W - th, 0.f, th, H}, {0.f, 0.f, W, th}, {0.f, H - th, W, th}};
     for (int i = 0; i < 4; ++i) {
-        sf::RectangleShape bar(bars[i].size);
-        bar.setPosition(bars[i].pos);
-        bar.setFillColor(lerpColor(theme::arenaEdge, theme::accent, edge_[i]));
+        if (edge_[i] < 0.02f) continue;
+        sf::RectangleShape bar({bars[i].width, bars[i].height});
+        bar.setPosition(bars[i].left, bars[i].top);
+        bar.setFillColor(withAlpha(theme::accent, 0.8f * edge_[i]));
         window.draw(bar);
     }
 }
