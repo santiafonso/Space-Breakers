@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <string>
 
 #include "core/App.hpp"
@@ -29,21 +30,41 @@ bool isRightClick(const sf::Event& e) {
 void drawButton(sf::RenderWindow& w, const sf::Font& font, sf::FloatRect r, const std::string& label,
                 sf::Color col, float hover, bool enabled) {
     const float a = enabled ? 1.f : 0.35f;
-    draw::box(w, r, theme::corner, withAlpha(lerpColor(theme::bg, col, 0.22f + 0.2f * hover), a),
-              withAlpha(lerpColor(theme::bg, col, 0.06f + 0.1f * hover), a),
-              withAlpha(col, (0.4f + 0.45f * hover) * a), 1.5f);
-    drawCentered(w, font, label, theme::fsSmall, {r.left + r.width * 0.5f, r.top + r.height * 0.5f - 1.f},
-                 withAlpha(theme::textHi, a));
+    draw::panel(w, r, col, a, hover);
+    drawLabel(w, font, label, 12, {r.left + r.width * 0.5f, r.top + r.height * 0.5f},
+              withAlpha(lerpColor(theme::textLo, theme::textHi, 0.5f + 0.5f * hover), a));
 }
 
 // Gold + core line shown on the map and in the shop.
 void drawRunStatus(App& app, sf::RenderWindow& w, float y) {
     const sf::Vector2f s = app.size();
     const Core& c = app.world().core();
-    const std::string line = std::to_string(app.gold()) + " gold      core " +
-                             std::to_string(static_cast<int>(std::ceil(c.hp))) + " / " +
+    const std::string gold = std::to_string(app.gold());
+    const std::string core = std::to_string(static_cast<int>(std::ceil(c.hp))) + " / " +
                              std::to_string(static_cast<int>(std::ceil(c.maxHp)));
-    drawCentered(w, app.font(), line, theme::fsBody, {s.x * 0.5f, y}, theme::puGolden);
+    const sf::Color coreCol = lerpColor(theme::coreLow, theme::core, c.maxHp > 0.f ? c.hp / c.maxHp : 1.f);
+    // "GOLD 187      CORE 80 / 80", centred as one line.
+    const float capW1 = makeLabel(app.font(), "gold", 11, theme::textDim).getLocalBounds().width;
+    const float capW2 = makeLabel(app.font(), "core", 11, theme::textDim).getLocalBounds().width;
+    const float v1 = makeText(app.font(), gold, theme::fsBody, theme::puGolden).getLocalBounds().width;
+    const float v2 = makeText(app.font(), core, theme::fsBody, coreCol).getLocalBounds().width;
+    const float gap = 8.f, sep = 34.f;
+    float x = s.x * 0.5f - (capW1 + gap + v1 + sep + capW2 + gap + v2) * 0.5f;
+    auto value = [&](const std::string& str, sf::Color col) {
+        sf::Text t = makeText(app.font(), str, theme::fsBody, col);
+        const sf::FloatRect b = t.getLocalBounds();
+        t.setOrigin(b.left, b.top + b.height * 0.5f);
+        t.setPosition(std::round(x), std::round(y));
+        w.draw(t);
+        x += b.width;
+    };
+    drawLabel(w, app.font(), "gold", 11, {x, y}, withAlpha(theme::puGolden, 0.6f), -1);
+    x += capW1 + gap;
+    value(gold, theme::puGolden);
+    x += sep;
+    drawLabel(w, app.font(), "core", 11, {x, y}, withAlpha(coreCol, 0.6f), -1);
+    x += capW2 + gap;
+    value(core, coreCol);
 }
 
 sf::Color nodeColor(MapNodeType t) {
@@ -76,23 +97,28 @@ const char* nodeGlyph(MapNodeType t) {
 
 void drawNode(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f p, MapNodeType t, float r,
               float alpha, bool filled) {
+    // Map nodes are diamonds - straight-edged like the rest of the console -
+    // and the boss an octagon, the same silhouette as in the arena.
     const sf::Color col = nodeColor(t);
-    sf::CircleShape c(r, 32);
-    c.setOrigin(r, r);
-    c.setPosition(p);
-    c.setFillColor(withAlpha(col, (filled ? 0.85f : 0.16f) * alpha));
-    c.setOutlineThickness(2.f);
-    c.setOutlineColor(withAlpha(col, 0.9f * alpha));
-    w.draw(c);
-    if (t == MapNodeType::Combat) {   // a plain fight: just an enemy dot
-        sf::CircleShape d(r * 0.32f, 16);
-        d.setOrigin(r * 0.32f, r * 0.32f);
-        d.setPosition(p);
-        d.setFillColor(withAlpha(filled ? theme::bg : col, alpha));
-        w.draw(d);
+    const bool boss = t == MapNodeType::Boss;
+    const int sides = boss ? 8 : 4;
+    const float rot = boss ? kPi / 8.f : 0.f;
+    const float rr = boss ? r : r * 1.2f;   // a diamond needs a longer radius to match a disc's weight
+    if (filled) {
+        draw::polygon(w, p, rr, sides, rot, withAlpha(lerpColor(col, sf::Color::White, 0.15f), 0.9f * alpha),
+                      withAlpha(col, 0.8f * alpha));
     } else {
-        drawCentered(w, font, nodeGlyph(t), t == MapNodeType::Boss ? theme::fsHeading : theme::fsBody,
-                     {p.x, p.y - 2.f}, withAlpha(filled ? theme::bg : theme::textHi, alpha));
+        draw::polygon(w, p, rr, sides, rot, withAlpha(lerpColor(theme::glassTop, col, 0.2f), 0.95f * alpha),
+                      withAlpha(theme::glassBottom, 0.95f * alpha));
+    }
+    draw::polygonOutline(w, p, rr, sides, rot, 1.5f, withAlpha(col, 0.95f * alpha));
+    if (t == MapNodeType::Combat) {   // a plain fight: just a small enemy pip
+        const float d = r * 0.28f;
+        draw::polygon(w, p, d * 1.3f, 4, 0.f, withAlpha(filled ? theme::bg : col, alpha),
+                      withAlpha(filled ? theme::bg : col, alpha));
+    } else {
+        drawCentered(w, font, nodeGlyph(t), boss ? theme::fsHeading : theme::fsSmall + 1u,
+                     {p.x, p.y - 1.f}, withAlpha(filled ? theme::bg : theme::textHi, alpha));
     }
 }
 
@@ -263,9 +289,30 @@ void MapScreen::draw(App& app, sf::RenderWindow& w) {
     const auto& nodes = r.map.nodes;
     const int count = static_cast<int>(nodes.size());
 
-    drawCenteredPop(w, app.font(), "Act " + std::to_string(r.map.act) + "  -  choose your path",
-                    theme::fsTitle, {s.x * 0.5f, 42.f}, theme::textHi, introPop(it, 0.f, 0.3f));
-    drawRunStatus(app, w, 82.f);
+    drawLabel(w, app.font(), "act " + std::to_string(r.map.act), 12, {s.x * 0.5f, 16.f},
+              withAlpha(theme::accent, clampf(introPop(it, 0.f), 0.f, 1.f)));
+    drawCenteredPop(w, app.font(), "Choose your path", theme::fsTitle, {s.x * 0.5f, 46.f}, theme::textHi,
+                    introPop(it, 0.f, 0.3f));
+    drawRunStatus(app, w, 84.f);
+
+    // Row guides: a faint rule per stage and its number down the left edge of
+    // the map, the row you stand on picked out - the map reads like a scale.
+    {
+        const float ga = clampf(introPop(it, 0.05f, 0.4f), 0.f, 1.f);
+        const float x0 = nodePos(app, 0).x - 150.f * 0.5f * static_cast<float>(cfg::map::lanes - 1) - 40.f;
+        const float x1 = s.x - x0;
+        for (int row = 1; row <= cfg::map::rows; ++row) {
+            float y = 0.f;
+            for (const MapNode& n : nodes)
+                if (n.row == row) { y = nodePos(app, static_cast<int>(&n - nodes.data())).y; break; }
+            if (y <= 0.f) continue;
+            const bool cur = row == r.mapRow;
+            draw::line(w, {x0, y}, {x1, y}, 1.f, withAlpha(cur ? theme::accent : theme::grid, (cur ? 0.18f : 0.06f) * ga));
+            char num[8];
+            std::snprintf(num, sizeof(num), "%02d", row);
+            drawLabel(w, app.font(), num, 10, {x0 - 8.f, y}, withAlpha(cur ? theme::accent : theme::textDim, ga), 1);
+        }
+    }
 
     // Links first. The path you walked is bright, the ways open to you are lit,
     // everything else stays faint.
@@ -276,14 +323,19 @@ void MapScreen::draw(App& app, sf::RenderWindow& w) {
             const bool walked = a.visited && b.visited;
             const bool open = i == r.mapNode && app.mapNodeOpen(j);
             const sf::Vector2f pa = nodePos(app, i), pb = nodePos(app, j);
-            const sf::Vector2f d = pb - pa;
-            sf::RectangleShape bar({length(d), walked || open ? 3.f : 1.5f});
-            bar.setOrigin(0.f, bar.getSize().y * 0.5f);
-            bar.setPosition(pa);
-            bar.setRotation(std::atan2(d.y, d.x) * 180.f / kPi);
-            bar.setFillColor(withAlpha(walked ? theme::textHi : theme::accent,
-                                       walked ? 0.55f : (open ? 0.6f : 0.12f)));
-            w.draw(bar);
+            if (open) {   // the ways open to you: dashes marching toward the next node
+                const sf::Vector2f d = pb - pa;
+                const float len = length(d);
+                const sf::Vector2f u = d / len;
+                const float dash = 7.f, period = 13.f, off = std::fmod(clock_ * 22.f, period);
+                for (float t = off - period; t < len; t += period) {
+                    const float a0 = std::max(0.f, t), a1 = std::min(len, t + dash);
+                    if (a1 > a0) draw::line(w, pa + u * a0, pa + u * a1, 2.f, withAlpha(theme::accent, 0.8f));
+                }
+            } else {
+                draw::line(w, pa, pb, walked ? 2.5f : 1.f,
+                           withAlpha(walked ? theme::textHi : theme::grid, walked ? 0.6f : 0.16f));
+            }
         }
     }
 
@@ -298,14 +350,11 @@ void MapScreen::draw(App& app, sf::RenderWindow& w) {
         if (open) rad *= 1.f + 0.08f * std::sin(clock_ * 5.f) + (hover_ == i ? 0.18f : 0.f);
         const float a = cp * (open || here ? 1.f : (past ? (n.visited ? 0.7f : 0.2f) : 0.45f));
         drawNode(w, app.font(), nodePos(app, i), n.type, rad, a, n.visited || hover_ == i);
-        if (here) {   // you are here
-            sf::CircleShape ring(rad + 7.f, 32);
-            ring.setOrigin(rad + 7.f, rad + 7.f);
-            ring.setPosition(nodePos(app, i));
-            ring.setFillColor(sf::Color::Transparent);
-            ring.setOutlineThickness(2.f);
-            ring.setOutlineColor(withAlpha(theme::textHi, 0.8f));
-            w.draw(ring);
+        if (here) {   // you are here: a target lock that breathes
+            const sf::Vector2f p = nodePos(app, i);
+            const float h = rad + 9.f + 2.f * std::sin(clock_ * 3.f);
+            draw::brackets(w, {p.x - h, p.y - h, 2.f * h, 2.f * h}, 7.f, 2.f, withAlpha(theme::textHi, 0.9f * cp));
+            drawLabel(w, app.font(), "you", 10, {p.x + h + 8.f, p.y}, withAlpha(theme::textHi, 0.8f * cp), -1);
         }
     }
 
@@ -314,20 +363,19 @@ void MapScreen::draw(App& app, sf::RenderWindow& w) {
                                   MapNodeType::Forge,  MapNodeType::Rest,    MapNodeType::Upgrade,
                                   MapNodeType::Recruit};
     float ly = s.y * 0.36f;
+    drawLabel(w, app.font(), "legend", 10, {theme::margin + 8.f, ly - 32.f}, theme::textDim, -1);
+    draw::line(w, {theme::margin + 8.f, ly - 22.f}, {theme::margin + 150.f, ly - 22.f}, 1.f,
+               withAlpha(theme::arenaEdge, 0.8f));
     int legendHover = -1;
     for (MapNodeType t : legend) {
         if (sf::FloatRect(theme::margin + 8.f, ly - 15.f, 150.f, 30.f).contains(mouse_))
             legendHover = static_cast<int>(t);
-        drawNode(w, app.font(), {theme::margin + 24.f, ly}, t, 11.f, 0.9f, false);
-        sf::Text tx = makeText(app.font(), mapNodeName(t), theme::fsSmall, theme::textLo);
-        const sf::FloatRect b = tx.getLocalBounds();
-        tx.setOrigin(b.left, b.top + b.height * 0.5f);
-        tx.setPosition(theme::margin + 44.f, ly);
-        w.draw(tx);
+        drawNode(w, app.font(), {theme::margin + 24.f, ly}, t, 10.f, 0.9f, false);
+        drawLabel(w, app.font(), mapNodeName(t), 11, {theme::margin + 44.f, ly}, theme::textLo, -1);
         ly += 34.f;
     }
     sf::Text keys = makeText(app.font(), "click a lit node (or 1-4)", theme::fsSmall, theme::textDim);
-    keys.setPosition(theme::margin + 12.f, ly + 10.f);
+    keys.setPosition(theme::margin + 8.f, ly + 6.f);
     w.draw(keys);
 
     if (info_ >= 0) {
@@ -339,7 +387,7 @@ void MapScreen::draw(App& app, sf::RenderWindow& w) {
     } else if (legendHover >= 0) {
         const auto t = static_cast<MapNodeType>(legendHover);
         drawTooltip(w, app.font(), mouse_, s, mapNodeName(t), mapNodeDesc(t), nodeColor(t));
-    } else if (std::fabs(mouse_.y - 82.f) < 12.f && std::fabs(mouse_.x - s.x * 0.5f) < 170.f) {
+    } else if (std::fabs(mouse_.y - 84.f) < 12.f && std::fabs(mouse_.x - s.x * 0.5f) < 170.f) {
         drawTooltip(w, app.font(), mouse_, s, "Gold and core",
                     "gold buys things in shops; the core must survive - rests and shops repair it");
     }
@@ -416,13 +464,12 @@ void ShopScreen::draw(App& app, sf::RenderWindow& w) {
 
         const Tier tier = upgradeTier(k);
         drawTierFrame(w, rc, tier, h, a, it);
-        drawCentered(w, app.font(), tierName(tier), theme::fsSmall, {cx, rc.top + 64.f},
-                     withAlpha(tierColor(tier), a));
+        drawLabel(w, app.font(), tierName(tier), 10, {cx, rc.top + 66.f}, withAlpha(tierColor(tier), a));
 
         std::string head = upgradeCatName(cat);
         if (itemTag(k) != ItemTag::None) head += std::string("  -  ") + itemTagName(itemTag(k));
-        drawCentered(w, app.font(), head, theme::fsSmall, {cx, rc.top + 16.f},
-                     withAlpha(itemTag(k) != ItemTag::None ? tagColor(itemTag(k)) : catColor(cat), a));
+        drawLabel(w, app.font(), head, 10, {cx, rc.top + 18.f},
+                  withAlpha(itemTag(k) != ItemTag::None ? tagColor(itemTag(k)) : catColor(cat), a));
         const int es = elementItemSlot(k);
         drawCentered(w, app.font(), info.title, theme::fsHeading, {cx, rc.top + 46.f},
                      withAlpha(es >= 0 ? elementColor(static_cast<Element>(es + 1)) : theme::textHi, a));

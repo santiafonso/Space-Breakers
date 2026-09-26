@@ -15,6 +15,13 @@ void setTitleFont(const sf::Font* font);
 sf::Text makeText(const sf::Font& font, const std::string& str, unsigned size, sf::Color color);
 void centerOrigin(sf::Text& t);
 
+// The console's small caption style: uppercase, letter-spaced. Use for
+// kickers, units and section headers - never for body text.
+sf::Text makeLabel(const sf::Font& font, const std::string& str, unsigned size, sf::Color color);
+// A label centred on `pos` (align 0), ending at `pos.x` (1) or starting at it (-1).
+void drawLabel(sf::RenderTarget& t, const sf::Font& font, const std::string& str, unsigned size,
+               sf::Vector2f pos, sf::Color color, int align = 0);
+
 // Draw a string centred on `pos`.
 void drawCentered(sf::RenderWindow& window, const sf::Font& font, const std::string& str,
                   unsigned size, sf::Vector2f pos, sf::Color color);
@@ -54,9 +61,12 @@ std::string modifierLine(const BallLoadout& L);
 sf::Color catColor(UpgradeCat c);
 sf::Color tagColor(ItemTag t);   // Striker / Guardian / Support item colour
 sf::Color tierColor(Tier t);     // Common grey .. Legendary gold
-// A pick's card frame: tier-coloured fill + outline; Epic / Legendary get a
-// pulsing halo so the rare ones jump out. `time` drives the pulse.
-void drawTierFrame(sf::RenderWindow& w, sf::FloatRect r, Tier t, float hover, float alpha, float time);
+// A pick's card frame: dark glass lit from the top by the tier colour, a tier
+// band along the top edge and corner brackets; Epic / Legendary get a second
+// set of brackets outside that breathes, so the rare ones jump out. `time`
+// drives the pulse; `reveal` (0..1) snaps the brackets in as the card appears.
+void drawTierFrame(sf::RenderWindow& w, sf::FloatRect r, Tier t, float hover, float alpha, float time,
+                   float reveal = 1.f);
 
 // What part of a loadout panel centred at `c` the pointer is on: 0..3 = item
 // slot, kPanelPartBall = the ball / role name, kPanelPartMods = the modifier

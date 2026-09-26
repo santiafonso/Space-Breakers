@@ -6,6 +6,7 @@
 #include <string>
 
 #include "core/Theme.hpp"
+#include "render/Draw.hpp"
 #include "ui/Widgets.hpp"
 
 namespace sb {
@@ -83,101 +84,115 @@ bool Hud::tooltipAt(sf::Vector2f m, std::string& title, std::string& desc, sf::C
     return false;
 }
 
+namespace {
+
+// A value with a small tracked caption to its left, right-aligned at `right`.
+// Returns the left edge of the whole thing.
+float readout(sf::RenderWindow& w, const sf::Font& font, const std::string& caption, const std::string& value,
+              unsigned size, float right, float cy, sf::Color capCol, sf::Color valCol, float scale = 1.f) {
+    sf::Text v = makeText(font, value, size, valCol);
+    const sf::FloatRect vb = v.getLocalBounds();
+    v.setOrigin(vb.left + vb.width, vb.top + vb.height * 0.5f);
+    v.setScale(scale, scale);
+    v.setPosition(std::round(right), std::round(cy));
+    w.draw(v);
+    const float capRight = right - vb.width * scale - 9.f;
+    drawLabel(w, font, caption, 11, {capRight, cy}, capCol, 1);
+    return capRight - makeLabel(font, caption, 11, capCol).getLocalBounds().width;
+}
+
+// A thin horizontal gauge with square end ticks: the console's bar style.
+void gauge(sf::RenderWindow& w, float x, float y, float wd, float ht, float frac, sf::Color col, float alpha,
+           int segments) {
+    sf::RectangleShape track({wd, ht});
+    track.setPosition(x, y);
+    track.setFillColor(withAlpha(theme::arenaEdge, 0.75f * alpha));
+    w.draw(track);
+    sf::RectangleShape fill({wd * clampf(frac, 0.f, 1.f), ht});
+    fill.setPosition(x, y);
+    fill.setFillColor(withAlpha(col, alpha));
+    w.draw(fill);
+    for (int i = 1; i < segments; ++i) {   // cut into cells, like a meter
+        const float sx = std::round(x + wd * static_cast<float>(i) / static_cast<float>(segments));
+        draw::line(w, {sx, y}, {sx, y + ht}, 2.f, withAlpha(theme::bg, alpha));
+    }
+    const sf::Color tick = withAlpha(lerpColor(theme::arenaEdge, theme::textLo, 0.5f), alpha);
+    draw::line(w, {x - 5.f, y - 4.f}, {x - 5.f, y + ht + 4.f}, 2.f, tick);
+    draw::line(w, {x + wd + 5.f, y - 4.f}, {x + wd + 5.f, y + ht + 4.f}, 2.f, tick);
+}
+
+}  // namespace
+
 void Hud::draw(sf::RenderWindow& window) const {
     if (!font_) return;
+    const float mg = theme::margin;
 
-    // Damage-combo chip, top-left.
+    // Damage-combo chip, top-left: a bracketed readout.
     if (comboMul_ > 1.001f) {
-        char chip[16];
-        std::snprintf(chip, sizeof(chip), "dmg x%.1f", comboMul_);
-        sf::Text combo = makeText(*font_, chip, 18, theme::accent);
+        const sf::FloatRect chip{mg - 4.f, mg - 6.f, 118.f, 30.f};
+        const float heat = clampf((comboMul_ - 1.f) / 2.f, 0.f, 1.f);
+        draw::box(window, chip, 0.f, withAlpha(theme::accent, 0.05f + 0.06f * heat), withAlpha(theme::accent, 0.f));
+        draw::brackets(window, chip, 6.f, 1.5f, withAlpha(theme::accent, 0.55f + 0.45f * comboPop_));
+        drawLabel(window, *font_, "dmg", 11, {chip.left + 10.f, chip.top + chip.height * 0.5f},
+                  withAlpha(theme::accent, 0.7f), -1);
+        char val[16];
+        std::snprintf(val, sizeof(val), "x%.1f", comboMul_);
+        sf::Text combo = makeText(*font_, val, 20, theme::accent);
         const sf::FloatRect cb = combo.getLocalBounds();
-        combo.setOrigin(cb.left, cb.top);
+        combo.setOrigin(cb.left, cb.top + cb.height * 0.5f);
         const float cs = 1.f + 0.22f * comboPop_;
         combo.setScale(cs, cs);
-        combo.setPosition(theme::margin, theme::margin - 2.f);
+        combo.setPosition(chip.left + 50.f, std::round(chip.top + chip.height * 0.5f));
         window.draw(combo);
     }
 
-    // Run score, top-right.
-    {
-        sf::Text sc = makeText(*font_, "SCORE  " + std::to_string(score_), 18, theme::textLo);
-        const sf::FloatRect sb = sc.getLocalBounds();
-        sc.setOrigin(sb.left + sb.width, sb.top);
-        sc.setPosition(size_.x - theme::margin, theme::margin - 2.f);
-        window.draw(sc);
-    }
-
-    // Run gold, under the score.
-    {
-        sf::Text gd = makeText(*font_, "GOLD  " + std::to_string(static_cast<int>(std::lround(goldShown_))),
-                               theme::fsSmall, theme::puGolden);
-        const sf::FloatRect gb = gd.getLocalBounds();
-        gd.setOrigin(gb.left + gb.width, gb.top);
-        const float gs = 1.f + 0.3f * goldPop_;   // bumps as coins land
-        gd.setScale(gs, gs);
-        gd.setPosition(size_.x - theme::margin, theme::margin + 22.f);
-        window.draw(gd);
-    }
+    // Run score and gold, top-right, as captioned readouts.
+    const float right = size_.x - mg;
+    readout(window, *font_, "score", std::to_string(score_), 18, right, mg + 6.f, theme::textDim, theme::textHi);
+    readout(window, *font_, "gold", std::to_string(static_cast<int>(std::lround(goldShown_))), theme::fsBody, right,
+            mg + 30.f, withAlpha(theme::puGolden, 0.6f), theme::puGolden, 1.f + 0.3f * goldPop_);
 
     // "Stockpile" reserve power-up, under the gold.
     if (hasReserve_) {
         const sf::Color col = powerUpColor(reservePu_);
-        sf::Text rs = makeText(*font_, std::string("[Q] ") + powerUpName(reservePu_),
-                               theme::fsSmall, col);
-        const sf::FloatRect rb = rs.getLocalBounds();
-        rs.setOrigin(rb.left + rb.width, rb.top);
-        rs.setPosition(size_.x - theme::margin, theme::margin + 40.f);
-        window.draw(rs);
+        const float cy = mg + 52.f;
+        drawLabel(window, *font_, powerUpName(reservePu_), 11, {right, cy}, col, 1);
+        const float lw = makeLabel(*font_, powerUpName(reservePu_), 11, col).getLocalBounds().width;
+        const sf::FloatRect key{right - lw - 28.f, cy - 9.f, 18.f, 18.f};   // a [Q] key cap
+        draw::box(window, key, 0.f, withAlpha(col, 0.12f), withAlpha(col, 0.04f), withAlpha(col, 0.7f), 1.f);
+        drawLabel(window, *font_, "q", 11, {key.left + key.width * 0.5f + 1.f, cy}, col);
     }
 
-    // Wave / core-health banner, top centre.
-    char banner[48];
-    if (bossWave_)
-        std::snprintf(banner, sizeof(banner), "Act %d  -  %s", act_, act_ == 1 ? "MINIBOSS" : "FINAL BOSS");
-    else
-        std::snprintf(banner, sizeof(banner), "Act %d  -  Stage %d / %d", act_, stage_, stages_);
-    drawCentered(window, *font_, banner, theme::fsHeading, {size_.x * 0.5f, theme::margin + 6.f},
-                 bossWave_ ? theme::coreLow : theme::textHi);
+    // Stage readout, top centre: "ACT 1  STAGE 3 / 15" over the core gauge.
+    {
+        char stage[32];
+        if (bossWave_) std::snprintf(stage, sizeof(stage), "%s", act_ == 1 ? "miniboss" : "final boss");
+        else std::snprintf(stage, sizeof(stage), "stage %d / %d", stage_, stages_);
+        const std::string act = "act " + std::to_string(act_);
+        sf::Text at = makeLabel(*font_, act, 12, theme::textLo);
+        sf::Text st = makeLabel(*font_, stage, 16, bossWave_ ? theme::coreLow : theme::textHi);
+        const float aw = at.getLocalBounds().width, sw = st.getLocalBounds().width, gap = 16.f;
+        const float x0 = size_.x * 0.5f - (aw + gap + sw) * 0.5f;
+        drawLabel(window, *font_, act, 12, {x0, mg + 4.f}, theme::textLo, -1);
+        drawLabel(window, *font_, stage, 16, {x0 + aw + gap, mg + 3.f}, bossWave_ ? theme::coreLow : theme::textHi, -1);
+    }
 
-    const float barW = 260.f;
+    const float barW = 280.f;
     const float x = size_.x * 0.5f - barW * 0.5f;
-    const float y = theme::margin + 28.f;
-    const sf::Color hpCol = lerpColor(theme::coreLow, theme::core, coreFrac_);
-
-    sf::RectangleShape track({barW, 4.f});
-    track.setPosition(x, y);
-    track.setFillColor(withAlpha(theme::arenaEdge, 0.9f));
-    window.draw(track);
-
-    sf::RectangleShape fill({barW * coreFrac_, 4.f});
-    fill.setPosition(x, y);
-    fill.setFillColor(hpCol);
-    window.draw(fill);
-
-    drawCentered(window, *font_, std::to_string(enemiesLeft_) + " left", theme::fsSmall,
-                 {size_.x * 0.5f, y + 16.f}, theme::textLo);
+    const float y = mg + 20.f;
+    gauge(window, x, y, barW, 6.f, coreFrac_, lerpColor(theme::coreLow, theme::core, coreFrac_), 1.f, 20);
+    drawLabel(window, *font_, std::to_string(enemiesLeft_) + " left", 11, {size_.x * 0.5f, y + 20.f}, theme::textLo);
 
     // Active power-up bar, a bit lower so it clears the banner.
     if (effectAlpha_ > 0.01f && effect_) {
         const float w = 172.f;
         const float px = size_.x * 0.5f - w / 2.f;
-        const float py = theme::margin + 64.f;
+        const float py = mg + 64.f;
         const sf::Color col = powerUpColor(effect_->kind);
         const float frac = clampf(effect_->remaining / effect_->duration, 0.f, 1.f);
-
-        drawCentered(window, *font_, powerUpName(effect_->kind), theme::fsSmall,
-                     {size_.x * 0.5f, py - 6.f}, withAlpha(col, effectAlpha_));
-
-        sf::RectangleShape t({w, 3.f});
-        t.setPosition(px, py + 8.f);
-        t.setFillColor(withAlpha(theme::arenaEdge, effectAlpha_));
-        window.draw(t);
-
-        sf::RectangleShape ff({w * frac, 3.f});
-        ff.setPosition(px, py + 8.f);
-        ff.setFillColor(withAlpha(col, effectAlpha_));
-        window.draw(ff);
+        drawLabel(window, *font_, powerUpName(effect_->kind), 11, {size_.x * 0.5f, py - 4.f},
+                  withAlpha(col, effectAlpha_));
+        gauge(window, px, py + 8.f, w, 3.f, frac, col, effectAlpha_, 1);
     }
 }
 

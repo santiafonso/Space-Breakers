@@ -206,12 +206,9 @@ void DevScreen::draw(App& app, sf::RenderWindow& w) {
     drawDim(w, s, 0.8f);
     const sf::Font& f = app.font();
 
-    sf::Text title = makeText(f, "DEV PANEL", theme::fsHeading, theme::coreLow);
-    title.setPosition(24.f, 18.f);
-    w.draw(title);
-    sf::Text target = makeText(f, "target ball:", theme::fsSmall, theme::textLo);
-    target.setPosition(24.f, 63.f);
-    w.draw(target);
+    drawLabel(w, f, "dev panel", 18, {24.f, 32.f}, theme::coreLow, -1);
+    draw::line(w, {24.f, 48.f}, {s.x - 24.f, 48.f}, 1.f, withAlpha(theme::arenaEdge, 0.9f));
+    drawLabel(w, f, "target ball", 10, {24.f, 71.f}, theme::textLo, -1);
 
     // What the target ball carries right now.
     if (app.runBallCount() > 0) {
@@ -228,22 +225,26 @@ void DevScreen::draw(App& app, sf::RenderWindow& w) {
 
     const char* heads[] = {"BALLS / ELEMENTS", "ITEMS", "", "MODIFIERS / RELICS"};
     for (int c = 0; c < 4; ++c) {
-        sf::Text h = makeText(f, heads[c], theme::fsSmall, theme::textDim);
-        h.setPosition(26.f + static_cast<float>(c) * 172.f, 92.f);
+        sf::Text h = makeLabel(f, heads[c], 10, theme::textDim);
+        h.setPosition(26.f + static_cast<float>(c) * 172.f, 96.f);
         w.draw(h);
     }
     for (const auto& [pos, txt] : heads_) {
-        sf::Text h = makeText(f, txt, theme::fsSmall, theme::textDim);
-        h.setPosition(pos);
+        sf::Text h = makeLabel(f, txt, 10, theme::textDim);
+        h.setPosition(pos + sf::Vector2f{0.f, 4.f});
         w.draw(h);
     }
 
     for (std::size_t i = 0; i < buttons_.size(); ++i) {
         const Button& b = buttons_[i];
         const bool hot = static_cast<int>(i) == hover_;
-        draw::box(w, b.rect, theme::corner, withAlpha(lerpColor(theme::bg, b.color, b.on ? 0.45f : (hot ? 0.3f : 0.12f)), 0.95f),
-                  withAlpha(lerpColor(theme::bg, b.color, b.on ? 0.3f : 0.05f), 0.95f),
-                  withAlpha(b.color, b.on || hot ? 0.9f : 0.35f), 1.f);
+        // Glass keys with a colour tick on the left; lit when on, bracketed under the pointer.
+        draw::box(w, b.rect, theme::corner,
+                  withAlpha(lerpColor(theme::glassTop, b.color, b.on ? 0.4f : (hot ? 0.22f : 0.06f)), 0.95f),
+                  withAlpha(lerpColor(theme::glassBottom, b.color, b.on ? 0.25f : 0.03f), 0.95f),
+                  withAlpha(b.color, b.on || hot ? 0.7f : 0.18f), 1.f);
+        draw::box(w, {b.rect.left, b.rect.top, 2.f, b.rect.height}, 0.f, withAlpha(b.color, 0.8f), withAlpha(b.color, 0.8f));
+        if (hot) draw::brackets(w, b.rect, 5.f, 1.5f, b.color);
         sf::Text t = makeText(f, b.label, theme::fsSmall, b.on ? theme::textHi : lerpColor(b.color, theme::textHi, 0.35f));
         const sf::FloatRect tb = t.getLocalBounds();
         t.setOrigin(tb.left + tb.width * 0.5f, tb.top + tb.height * 0.5f);

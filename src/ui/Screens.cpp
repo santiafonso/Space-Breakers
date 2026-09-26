@@ -164,19 +164,28 @@ void MenuScreen::draw(App& app, sf::RenderWindow& w) {
     const sf::Vector2f s = app.size();
     const float it = intro();
     backdrop_.draw(w, clampf(introPop(it, 0.f, 0.9f), 0.f, 1.f));
-    // The title: big, heavy, with a slow glow breathing behind it.
-    const float breathe = 0.5f + 0.5f * std::sin(it * 1.6f);
+    // The title: heavy, wide-tracked caps over a hairline rule that wipes open
+    // from an accent centre mark - the console's nameplate.
     const float tp = introPop(it, 0.f, 0.4f);
-    if (tp > 0.9f) {   // a soft halo: faint copies nudged around the title
-        const float ga = (0.05f + 0.05f * breathe) * clampf(tp, 0.f, 1.f);
-        for (const sf::Vector2f o : {sf::Vector2f{-3.f, 0.f}, sf::Vector2f{3.f, 0.f}, sf::Vector2f{0.f, -3.f},
-                                     sf::Vector2f{0.f, 3.f}, sf::Vector2f{-2.f, -2.f}, sf::Vector2f{2.f, 2.f}})
-            drawCentered(w, app.font(), "Space-Breakers", 72, sf::Vector2f{s.x * 0.5f, s.y * 0.19f} + o,
-                         withAlpha(theme::accent, ga));
+    const sf::Vector2f tc{s.x * 0.5f, s.y * 0.19f};
+    if (tp > 0.001f) {
+        const float a = clampf(tp, 0.f, 1.f);
+        sf::Text t = makeText(app.font(), "SPACE-BREAKERS", 64, withAlpha(theme::textHi, a));
+        t.setLetterSpacing(1.5f);
+        centerOrigin(t);
+        const float sc = 0.8f + 0.2f * tp;
+        t.setScale(sc, sc);
+        t.setPosition(std::round(tc.x), std::round(tc.y + (1.f - a) * 10.f));
+        w.draw(t);
+        const float rw = t.getGlobalBounds().width * clampf(introPop(it, 0.12f, 0.5f), 0.f, 1.f);
+        const float ry = tc.y + 50.f;
+        draw::line(w, {tc.x - rw * 0.5f, ry}, {tc.x + rw * 0.5f, ry}, 1.f, withAlpha(theme::arenaEdge, a));
+        draw::line(w, {tc.x - 28.f, ry}, {tc.x + 28.f, ry}, 3.f, withAlpha(theme::accent, a));
+        draw::line(w, {tc.x - rw * 0.5f, ry - 4.f}, {tc.x - rw * 0.5f, ry + 4.f}, 1.f, withAlpha(theme::arenaEdge, a));
+        draw::line(w, {tc.x + rw * 0.5f, ry - 4.f}, {tc.x + rw * 0.5f, ry + 4.f}, 1.f, withAlpha(theme::arenaEdge, a));
     }
-    drawCenteredPop(w, app.font(), "Space-Breakers", 72, {s.x * 0.5f, s.y * 0.19f}, theme::textHi, tp);
-    drawCenteredPop(w, app.font(), currencyLine(app.data().meta), theme::fsHeading,
-                    {s.x * 0.5f, s.y * 0.19f + 62.f}, theme::accent, introPop(it, 0.09f));
+    drawLabel(w, app.font(), currencyLine(app.data().meta), 14, {tc.x, tc.y + 76.f},
+              withAlpha(theme::accent, clampf(introPop(it, 0.09f), 0.f, 1.f)));
     menu_.draw(w, it);
 }
 
@@ -284,25 +293,18 @@ void LoadoutScreen::drawInfoCard(App& app, sf::RenderWindow& w, int node) const 
     const float cw = 300.f, ch = 116.f;
     const sf::Vector2f o(theme::margin, s.y * 0.15f);
 
-    draw::box(w, {o.x, o.y, cw, ch}, theme::corner, withAlpha(lerpColor(theme::bg, col, 0.16f), 0.95f),
-              withAlpha(theme::bg, 0.95f), withAlpha(col, 0.55f), 1.5f);
-    draw::box(w, {o.x, o.y + 10.f, 4.f, ch - 20.f}, theme::corner, col, col);   // branch colour tab
+    draw::panel(w, {o.x, o.y, cw, ch}, col, 1.f, 0.3f);
+    draw::box(w, {o.x, o.y, 3.f, ch}, 0.f, col, col);   // branch colour spine
 
     sf::Text name = makeText(app.font(), d.name, theme::fsItem, theme::textHi);
     name.setPosition(o.x + 14.f, o.y + 8.f);
     w.draw(name);
 
-    sf::Text br = makeText(app.font(), branchLabel(d.branch), theme::fsSmall, col);
-    const sf::FloatRect brb = br.getLocalBounds();
-    br.setOrigin(brb.left + brb.width, brb.top);
-    br.setPosition(o.x + cw - 14.f, o.y + 14.f);
-    w.draw(br);
+    drawLabel(w, app.font(), branchLabel(d.branch), 10, {o.x + cw - 14.f, o.y + 21.f}, col, 1);
 
     char lv[48];
     std::snprintf(lv, sizeof(lv), "Level %d / %d", lvl, d.maxLevel);
-    sf::Text lvt = makeText(app.font(), lv, theme::fsSmall, theme::textLo);
-    lvt.setPosition(o.x + 14.f, o.y + 38.f);
-    w.draw(lvt);
+    drawLabel(w, app.font(), lv, 10, {o.x + 14.f, o.y + 46.f}, theme::textLo, -1);
 
     float y = o.y + 58.f;
     for (const std::string& dl : wrapText(app.font(), d.effect, theme::fsSmall, cw - 28.f)) {
@@ -338,14 +340,19 @@ void LoadoutScreen::draw(App& app, sf::RenderWindow& w) {
     drawCenteredPop(w, app.font(), "click a node to unlock      arrows move, E unlocks",
                     theme::fsSmall, {s.x * 0.5f, s.y * 0.10f}, theme::textDim, introPop(it, 0.06f));
 
-    {
+    {   // wallet, top-right: "CORES 480" and, once you have any, "PRISMS 6" under it
         const float ca = clampf(introPop(it, 0.05f), 0.f, 1.f);
-        sf::Text ct = makeText(app.font(), currencyLine(m), theme::fsHeading,
-                               withAlpha(theme::accent, ca));
-        const sf::FloatRect cb = ct.getLocalBounds();
-        ct.setOrigin(cb.left + cb.width, cb.top);
-        ct.setPosition(s.x - theme::margin, theme::margin + (1.f - ca) * 8.f);
-        w.draw(ct);
+        const float right = s.x - theme::margin, y0 = theme::margin + 10.f + (1.f - ca) * 8.f;
+        auto row = [&](const char* cap, std::uint32_t v, sf::Color col, float y) {
+            sf::Text t = makeText(app.font(), std::to_string(v), theme::fsHeading, withAlpha(col, ca));
+            const sf::FloatRect b = t.getLocalBounds();
+            t.setOrigin(b.left + b.width, b.top + b.height * 0.5f);
+            t.setPosition(std::round(right), std::round(y));
+            w.draw(t);
+            drawLabel(w, app.font(), cap, 11, {right - b.width - 10.f, y}, withAlpha(col, 0.65f * ca), 1);
+        };
+        row("cores", m.cores, theme::accent, y0);
+        if (m.prisms > 0) row("prisms", m.prisms, kPrismColor, y0 + 30.f);
     }
 
     if (app.lastRunWave() > 0) {
@@ -496,11 +503,13 @@ void LoadoutScreen::draw(App& app, sf::RenderWindow& w) {
         const MetaBranch branches[] = {MetaBranch::Base, MetaBranch::Combat, MetaBranch::Eco,
                                        MetaBranch::Pickups, MetaBranch::Special, MetaBranch::Arsenal};
         float ly = s.y - theme::margin - 6.f * 22.f;
+        drawLabel(w, app.font(), "branches", 10, {theme::margin + 2.f, ly - 14.f}, withAlpha(theme::textDim, la), -1);
+        draw::line(w, {theme::margin + 2.f, ly - 4.f}, {theme::margin + 140.f, ly - 4.f}, 1.f,
+                   withAlpha(theme::arenaEdge, 0.8f * la));
         for (MetaBranch b : branches) {
-            drawDot(w, {theme::margin + 8.f, ly + 8.f}, 6.f, withAlpha(branchColor(b), la));
-            sf::Text t = makeText(app.font(), branchLabel(b), theme::fsSmall, withAlpha(theme::textLo, la));
-            t.setPosition(theme::margin + 22.f, ly);
-            w.draw(t);
+            drawDot(w, {theme::margin + 8.f, ly + 9.f}, 5.f, withAlpha(branchColor(b), la));
+            drawLabel(w, app.font(), branchLabel(b), 11, {theme::margin + 22.f, ly + 9.f},
+                      withAlpha(theme::textLo, la), -1);
             ly += 22.f;
         }
     }
@@ -677,24 +686,32 @@ void PlayScreen::draw(App& app, sf::RenderWindow& w) {
     const std::vector<Ball>& balls = app.world().balls();
     const sf::Vector2f s = app.size();
     const std::string n = std::to_string(balls.size());
-    sf::Text tally = makeText(app.font(), n + (balls.size() == 1 ? " ball" : " balls"),
-                              theme::fsBody, theme::textLo);
-    tally.setPosition(theme::margin, s.y - theme::margin - 40.f);
-    w.draw(tally);
-
+    {   // "3  BALLS" as a captioned readout, a row of element pips under it
+        sf::Text num = makeText(app.font(), n, 18, theme::textHi);
+        const sf::FloatRect nb = num.getLocalBounds();
+        num.setOrigin(nb.left, nb.top + nb.height * 0.5f);
+        num.setPosition(theme::margin, s.y - theme::margin - 30.f);
+        w.draw(num);
+        drawLabel(w, app.font(), balls.size() == 1 ? "ball" : "balls", 11,
+                  {theme::margin + nb.width + 8.f, s.y - theme::margin - 30.f}, theme::textLo, -1);
+    }
     float dx = theme::margin + 5.f;
-    const float dy = s.y - theme::margin - 12.f;
+    const float dy = s.y - theme::margin - 8.f;
     for (const Ball& b : balls) {
-        sf::CircleShape dot(5.f);
-        dot.setOrigin(5.f, 5.f);
-        dot.setPosition(dx, dy);
-        dot.setFillColor(b.element == Element::Plain ? theme::textLo : elementColor(b.element));
-        w.draw(dot);
-        dx += 15.f;
+        const sf::Color ec = b.element == Element::Plain ? theme::textLo : elementColor(b.element);
+        draw::disc(w, {dx, dy}, 4.5f, lerpColor(ec, sf::Color::White, 0.2f), ec, {1.f, 1.f}, 16);
+        dx += 14.f;
     }
 
-    drawCentered(w, app.font(), "hold TAB for your balls", theme::fsSmall,
-                 {theme::margin + 60.f, s.y - theme::margin - 56.f}, theme::textDim);
+    {   // a [TAB] key cap hint
+        const sf::FloatRect key{theme::margin, s.y - theme::margin - 66.f, 34.f, 17.f};
+        draw::box(w, key, 0.f, withAlpha(theme::textDim, 0.18f), withAlpha(theme::textDim, 0.05f),
+                  withAlpha(theme::textDim, 0.8f), 1.f);
+        drawLabel(w, app.font(), "tab", 10, {key.left + key.width * 0.5f + 1.f, key.top + key.height * 0.5f},
+                  theme::textLo);
+        drawLabel(w, app.font(), "loadout", 10, {key.left + key.width + 8.f, key.top + key.height * 0.5f},
+                  theme::textDim, -1);
+    }
 
     if (showPicks_) {
         drawPicks(app, w);
@@ -736,6 +753,8 @@ void PlayScreen::drawWaveBanner(App& app, sf::RenderWindow& w) const {
     const int act = bannerWave_ / 100, row = bannerWave_ % 100;
     std::string label = "Stage " + std::to_string(row);
     if (row > cfg::map::rows) label = act == 1 ? "Miniboss" : "Final boss";
+    drawLabel(w, app.font(), "act " + std::to_string(act), 12,
+              {s.x * 0.5f, s.y * 0.40f - 46.f - (1.f - out) * 16.f}, withAlpha(theme::accent, a));
 
     const sf::Vector2f c{s.x * 0.5f, s.y * 0.40f - (1.f - out) * 16.f};
 
@@ -746,13 +765,11 @@ void PlayScreen::drawWaveBanner(App& app, sf::RenderWindow& w) const {
     t.setPosition(std::round(c.x), std::round(c.y));
     w.draw(t);
 
-    // accent underline that wipes open from the centre
-    const float uw = t.getGlobalBounds().width;
-    sf::RectangleShape bar({uw, 2.f});
-    bar.setOrigin(uw * 0.5f, 1.f);
-    bar.setPosition(c.x, c.y + static_cast<float>(theme::fsTitle) * 0.55f + 10.f);
-    bar.setFillColor(withAlpha(theme::accent, a));
-    w.draw(bar);
+    // corner brackets that close in on the title as it lands
+    const sf::FloatRect tb = t.getGlobalBounds();
+    const float pad = 18.f + 30.f * (1.f - clampf(in, 0.f, 1.f));
+    draw::brackets(w, {tb.left - pad, tb.top - pad * 0.6f, tb.width + 2.f * pad, tb.height + 1.2f * pad}, 12.f, 2.f,
+                   withAlpha(theme::accent, 0.8f * a));
 }
 
 void PlayScreen::drawPicks(App& app, sf::RenderWindow& w) const {
@@ -887,14 +904,13 @@ void ChoiceScreen::draw(App& app, sf::RenderWindow& w) {
         const Tier tier = upgradeTier(kind);
         const float sc = 0.55f + 0.45f * clampf(cp, 0.f, 1.05f);            // springs open
         drawTierFrame(w, {c.x - kCardW * 0.5f * sc, c.y - kCardH * 0.5f * sc, kCardW * sc, kCardH * sc},
-                      tier, h, ca, it);
-        drawCenteredPop(w, app.font(), tierName(tier), theme::fsSmall, {c.x, c.y - kCardH * 0.5f + 80.f},
-                        tierColor(tier), cp);
+                      tier, h, ca, it, ca);
+        drawLabel(w, app.font(), tierName(tier), 10, {c.x, c.y - kCardH * 0.5f + 80.f}, withAlpha(tierColor(tier), ca));
         const UpgradeCat cat = upgradeCat(kind);
         std::string head = std::to_string(i + 1) + "   " + upgradeCatName(cat);
         if (itemTag(kind) != ItemTag::None) head += std::string("  -  ") + itemTagName(itemTag(kind));
-        drawCenteredPop(w, app.font(), head, theme::fsSmall, {c.x, c.y - kCardH * 0.5f + 16.f},
-                        itemTag(kind) != ItemTag::None ? tagColor(itemTag(kind)) : catColor(cat), cp);
+        drawLabel(w, app.font(), head, 10, {c.x, c.y - kCardH * 0.5f + 18.f},
+                  withAlpha(itemTag(kind) != ItemTag::None ? tagColor(itemTag(kind)) : catColor(cat), ca));
         const int es = elementItemSlot(kind);
         drawCenteredPop(w, app.font(), info.title, theme::fsItem,
                         {c.x, c.y - kCardH * 0.5f + 52.f},
@@ -916,8 +932,7 @@ void ChoiceScreen::draw(App& app, sf::RenderWindow& w) {
             draw::box(w, {c.x - wd * 0.5f, ry - ht * 0.5f, wd, ht}, theme::corner,
                       withAlpha(theme::textLo, (0.10f + 0.14f * rh) * ca), withAlpha(theme::textLo, (0.04f + 0.08f * rh) * ca),
                       withAlpha(theme::accent, (0.22f + 0.4f * rh) * ca), 1.f);
-            drawCenteredPop(w, app.font(), "reroll", theme::fsSmall, {c.x, ry - 1.f},
-                            theme::textLo, cp);
+            drawLabel(w, app.font(), "reroll", 10, {c.x, ry}, withAlpha(theme::textLo, ca));
         }
     }
 
@@ -929,9 +944,7 @@ void ChoiceScreen::draw(App& app, sf::RenderWindow& w) {
     if (coreHurt(app)) {
         const sf::FloatRect r = healRect(s);
         const float a = clampf(hintPop, 0.f, 1.f);
-        draw::box(w, r, theme::corner, withAlpha(lerpColor(theme::bg, theme::core, 0.2f + 0.18f * healHover_), a),
-                  withAlpha(lerpColor(theme::bg, theme::core, 0.05f), a),
-                  withAlpha(theme::core, (0.4f + 0.45f * healHover_) * a), 1.5f);
+        draw::panel(w, r, theme::core, a, healHover_);
         drawCenteredPop(w, app.font(), "Repair the core instead  -  skip this item", theme::fsSmall,
                         {s.x * 0.5f, r.top + r.height * 0.5f - 1.f}, theme::textHi, hintPop);
         drawCenteredPop(w, app.font(), hint, theme::fsSmall,

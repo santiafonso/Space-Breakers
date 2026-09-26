@@ -3,6 +3,7 @@
 #include <cmath>
 
 #include "core/Theme.hpp"
+#include "render/Draw.hpp"
 #include "ui/Widgets.hpp"
 
 namespace sb {
@@ -61,16 +62,16 @@ void Menu::draw(sf::RenderWindow& window, float intro) {
         centerOrigin(t);
         const float sc = 0.82f + 0.18f * pop;
         t.setScale(sc, sc);
-        t.setPosition(std::round(c.x + h * 6.f), std::round(c.y + (1.f - ia) * 9.f));
+        t.setPosition(std::round(c.x), std::round(c.y + (1.f - ia) * 9.f));
         window.draw(t);
 
-        if (h > 0.02f) {
+        if (h > 0.02f) {   // corner brackets close in on the row under the pointer
             const sf::FloatRect b = t.getGlobalBounds();
-            sf::RectangleShape bar({3.f, static_cast<float>(fontSize_) * 0.9f});
-            bar.setOrigin(0.f, bar.getSize().y / 2.f);
-            bar.setPosition(b.left - 16.f, c.y);
-            bar.setFillColor(withAlpha(theme::accent, h * ia));
-            window.draw(bar);
+            const float px = 18.f + 12.f * (1.f - h), py = 8.f + 5.f * (1.f - h);
+            draw::box(window, {b.left - px, b.top - py, b.width + 2.f * px, b.height + 2.f * py}, 0.f,
+                      withAlpha(theme::accent, 0.07f * h * ia), withAlpha(theme::accent, 0.f));
+            draw::brackets(window, {b.left - px, b.top - py, b.width + 2.f * px, b.height + 2.f * py}, 8.f, 2.f,
+                           withAlpha(theme::accent, h * ia));
         }
     }
 }

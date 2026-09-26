@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <vector>
@@ -35,6 +36,25 @@ sf::Text makeText(const sf::Font& font, const std::string& str, unsigned size, s
     sf::Text t(str, (gTitleFont && size >= theme::fsHeading) ? *gTitleFont : font, size);
     t.setFillColor(color);
     return t;
+}
+
+sf::Text makeLabel(const sf::Font& font, const std::string& str, unsigned size, sf::Color color) {
+    std::string up = str;
+    for (char& ch : up) ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+    sf::Text t(up, font, size);   // always the UI face: labels stay light, never Black
+    t.setLetterSpacing(theme::tracking);
+    t.setFillColor(color);
+    return t;
+}
+
+void drawLabel(sf::RenderTarget& target, const sf::Font& font, const std::string& str, unsigned size,
+               sf::Vector2f pos, sf::Color color, int align) {
+    sf::Text t = makeLabel(font, str, size, color);
+    const sf::FloatRect b = t.getLocalBounds();
+    const float ox = align == 0 ? b.left + b.width * 0.5f : (align > 0 ? b.left + b.width : b.left);
+    t.setOrigin(ox, b.top + b.height * 0.5f);
+    t.setPosition(std::round(pos.x), std::round(pos.y));
+    target.draw(t);
 }
 
 void centerOrigin(sf::Text& t) {
@@ -103,9 +123,10 @@ void drawStatsPanel(sf::RenderWindow& window, const sf::Font& font, sf::Vector2f
         const float a = clampf(pop, 0.f, 1.f);
         const float y = y0 + gap * static_cast<float>(i) - 12.f + (1.f - a) * 8.f;
 
-        sf::Text label = makeText(font, rows[i].first, 18, withAlpha(theme::textLo, a));
-        label.setPosition(labelX, y);
-        window.draw(label);
+        // caption on the left, value on the right, a hairline between rows
+        drawLabel(window, font, rows[i].first, 12, {labelX, y + 11.f}, withAlpha(theme::textLo, a), -1);
+        draw::line(window, {labelX, y + gap * 0.5f + 12.f}, {valueX, y + gap * 0.5f + 12.f}, 1.f,
+                   withAlpha(theme::arenaEdge, 0.6f * a));
 
         sf::Text value = makeText(font, rows[i].second, 18, withAlpha(theme::textHi, a));
         const sf::FloatRect vb = value.getLocalBounds();
@@ -186,21 +207,22 @@ sf::Color tierColor(Tier t) {
     return theme::textLo;
 }
 
-void drawTierFrame(sf::RenderWindow& w, sf::FloatRect r, Tier t, float hover, float alpha, float time) {
+void drawTierFrame(sf::RenderWindow& w, sf::FloatRect r, Tier t, float hover, float alpha, float time,
+                   float reveal) {
     const sf::Color col = tierColor(t);
     const int rank = static_cast<int>(t);
-    if (rank >= static_cast<int>(Tier::Epic)) {   // a slow breathing halo behind the rare ones
-        const float pulse = 0.5f + 0.5f * std::sin(time * (rank == 4 ? 4.f : 2.6f));
-        const float grow = 4.f + 6.f * pulse;
-        draw::box(w, {r.left - grow, r.top - grow, r.width + 2.f * grow, r.height + 2.f * grow}, theme::corner,
-                  withAlpha(col, 0.05f * pulse * alpha), withAlpha(col, 0.f),
-                  withAlpha(col, (0.18f + 0.3f * pulse) * alpha), rank == 4 ? 3.f : 2.f);
+    const float snap = (1.f - clampf(reveal, 0.f, 1.f)) * 16.f;   // brackets fly in from outside
+    if (rank >= static_cast<int>(Tier::Epic)) {   // a slow breathing second frame round the rare ones
+        const float pulse = 0.5f + 0.5f * std::sin(time * (rank == 4 ? 3.2f : 2.4f));
+        draw::brackets(w, r, 16.f, 2.f, withAlpha(col, (0.35f + 0.4f * pulse) * alpha), 5.f + 3.f * pulse + snap);
     }
-    // A dark card lit from the top by its tier colour; brighter under the pointer.
-    const float lit = 0.14f + 0.04f * static_cast<float>(rank) + 0.14f * hover;
-    draw::box(w, r, theme::corner, withAlpha(lerpColor(theme::bg, col, lit), 0.97f * alpha),
-              withAlpha(lerpColor(theme::bg, col, lit * 0.3f), 0.97f * alpha),
-              withAlpha(col, (0.45f + 0.45f * hover) * alpha), rank >= 3 ? 2.5f : 1.5f);
+    // Glass lit from the top by the tier colour; brighter under the pointer.
+    const float lit = 0.10f + 0.035f * static_cast<float>(rank) + 0.12f * hover;
+    draw::box(w, r, theme::corner, withAlpha(lerpColor(theme::glassTop, col, lit), 0.97f * alpha),
+              withAlpha(lerpColor(theme::glassBottom, col, lit * 0.25f), 0.97f * alpha),
+              withAlpha(col, (0.30f + 0.4f * hover) * alpha), 1.f);
+    draw::box(w, {r.left, r.top, r.width, 3.f}, 0.f, withAlpha(col, 0.85f * alpha), withAlpha(col, 0.85f * alpha));
+    draw::brackets(w, r, theme::bracket + 3.f, 2.f, withAlpha(col, (0.7f + 0.3f * hover) * alpha), snap);
 }
 
 sf::Color catColor(UpgradeCat c) {
@@ -221,9 +243,7 @@ void drawLoadoutPanel(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f c,
     const float a = alpha * (dim ? 0.35f : 1.f);
     // Solid, so the arena never shows through; lit a touch from the top.
     const sf::FloatRect pr{c.x - kPanelW * 0.5f, c.y - kPanelH * 0.5f, kPanelW, kPanelH};
-    draw::box(w, pr, theme::corner, withAlpha(lerpColor(theme::bg, theme::accent, 0.10f + 0.12f * hover), 0.96f * alpha),
-              withAlpha(lerpColor(theme::bg, theme::accent, 0.02f), 0.96f * alpha),
-              withAlpha(theme::accent, (0.30f + 0.5f * hover) * a), 1.5f);
+    draw::panel(w, pr, dim ? theme::textDim : theme::accent, alpha, hover);
 
     const Element el = L.element();
     const sf::Color ec = el == Element::Plain ? theme::textLo : elementColor(el);
@@ -231,8 +251,8 @@ void drawLoadoutPanel(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f c,
     const sf::Vector2f bp{c.x, c.y - kPanelH * 0.5f + 30.f};
     // The same look as in the arena: glow, shaded body, role mark, highlight.
     const bool guardian = L.role() == BallRole::Guardian;
-    draw::glow(w, bp, r * 1.9f, ec, 0.09f * a);
-    draw::disc(w, bp, r, withAlpha(lerpColor(ec, sf::Color::White, 0.18f), a),
+    draw::glow(w, bp, r * 1.6f, ec, 0.06f * a);
+    draw::disc(w, bp, r, withAlpha(lerpColor(ec, sf::Color::White, 0.2f), a),
                withAlpha(lerpColor(ec, theme::bg, 0.2f), a));
     draw::ring(w, bp, r, guardian ? 3.5f : 1.5f, withAlpha(sf::Color::White, (guardian ? 0.55f : 0.22f) * a));
     if (L.role() == BallRole::Support)
@@ -251,22 +271,30 @@ void drawLoadoutPanel(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f c,
     for (int i = 0; i < kBallSlots; ++i) {
         const sf::FloatRect sr = slotRect(c, i);
         const bool hot = hoverSlot == i;
-        draw::box(w, sr, theme::corner, withAlpha(theme::textLo, (hot ? 0.24f : 0.09f) * a),
-                  withAlpha(theme::textLo, (hot ? 0.14f : 0.03f) * a),
-                  withAlpha(theme::accent, (hot ? 0.8f : 0.18f) * a), 1.f);
-        std::string t = "empty slot";
+        draw::box(w, sr, theme::corner, withAlpha(theme::bgDeep, (hot ? 0.5f : 0.7f) * a),
+                  withAlpha(theme::bgDeep, (hot ? 0.3f : 0.55f) * a),
+                  withAlpha(theme::accent, (hot ? 0.8f : 0.14f) * a), 1.f);
+        if (hot) draw::box(w, sr, 0.f, withAlpha(theme::accent, 0.14f * a), withAlpha(theme::accent, 0.04f * a));
+        std::string t = "empty";
         sf::Color tc = theme::textDim;
         if (L.gear[i] >= 0) {
             const auto k = static_cast<UpgradeKind>(L.gear[i]);
             t = upgradeInfo(k).title;
             if (L.gearLvl[i] > 1) t += "  Lv" + std::to_string(L.gearLvl[i]);
             tc = tagColor(itemTag(k));   // the tag shows which role it pushes toward
+            // a tier tick on the left edge of a filled slot
+            draw::box(w, {sr.left, sr.top, 3.f, sr.height}, 0.f, withAlpha(tierColor(upgradeTier(k)), a),
+                      withAlpha(tierColor(upgradeTier(k)), a));
+            drawCentered(w, font, t, theme::fsSmall, {c.x, sr.top + sr.height * 0.5f - 1.f}, withAlpha(tc, a));
+        } else {
+            drawLabel(w, font, t, 10, {c.x, sr.top + sr.height * 0.5f}, withAlpha(tc, a));
         }
-        drawCentered(w, font, t, theme::fsSmall, {c.x, sr.top + sr.height * 0.5f - 1.f}, withAlpha(tc, a));
     }
     const std::string ml = modifierLine(L);
-    drawCentered(w, font, ml.empty() ? "no modifiers" : ml, theme::fsSmall,
-                 {c.x, c.y + kPanelH * 0.5f - 18.f}, withAlpha(ml.empty() ? theme::textDim : theme::ballMid, a));
+    draw::line(w, {c.x - kPanelW * 0.5f + 14.f, c.y + kPanelH * 0.5f - 34.f},
+               {c.x + kPanelW * 0.5f - 14.f, c.y + kPanelH * 0.5f - 34.f}, 1.f, withAlpha(theme::arenaEdge, 0.8f * a));
+    drawLabel(w, font, ml.empty() ? "no modifiers" : ml, 11, {c.x, c.y + kPanelH * 0.5f - 18.f},
+              withAlpha(ml.empty() ? theme::textDim : theme::ballMid, a));
 }
 
 int panelPartAt(sf::Vector2f c, sf::Vector2f mouse) {
@@ -339,8 +367,10 @@ void drawTooltip(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f mouse, 
     x = std::max(4.f, x);
     y = std::max(4.f, y);
 
-    draw::box(w, {x, y, wd, ht}, theme::corner, sf::Color(24, 26, 36, 242), sf::Color(12, 12, 18, 242),
-              withAlpha(titleColor, 0.5f), 1.f);
+    draw::box(w, {x, y, wd, ht}, theme::corner, withAlpha(theme::glassTop, 0.96f), withAlpha(theme::glassBottom, 0.96f),
+              withAlpha(titleColor, 0.3f), 1.f);
+    draw::box(w, {x, y, 2.f, ht}, 0.f, titleColor, titleColor);   // a colour spine on the left edge
+    draw::brackets(w, {x, y, wd, ht}, 7.f, 1.5f, withAlpha(titleColor, 0.7f));
 
     sf::Text t = makeText(font, title, theme::fsBody, titleColor);
     t.setPosition(std::round(x + pad), std::round(y + pad - 2.f));
