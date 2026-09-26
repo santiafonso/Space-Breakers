@@ -44,43 +44,75 @@ const char* roleDesc(BallRole r);
 
 // What a ball's equipped gear adds up to. Built by App from the run loadout and
 // pushed into the World (World::syncBalls) - the sim never sees gear kinds.
+// Item levels are already folded into these numbers; 0 means "not equipped"
+// for the per-item values.
 struct BallMods {
-    float damageMult = 1.f;    // Heavy impact
-    float radiusMult = 1.f;    // Big ball
-    float cruiseMult = 1.f;    // Swift
-    float wallBoost = 1.f;     // Wall rush: speed x this per wall bounce
-    float pairBoost = 1.f;     // Carom: speed x this per ball-vs-ball clack
-    float flingDecay = 1.f;    // Reflexes (< 1 keeps a fling's speed longer)
-    float maxSpeedMult = 1.f;  // Ceiling break
-    float knockMult = 1.f;     // Heavy knock
-    float critChance = 0.f;    // Keen eye
-    bool ricochet = false;
-    bool warmUp = false;
+    float damageMult = 1.f;    // Heavy impact, item levels, Giant
+    float radiusMult = 1.f;    // Big ball, Giant, Bumper
+    float cruiseMult = 1.f;    // Swift, Giant
+    float flingDecay = 1.f;    // Swift (< 1 keeps a fling's speed longer), Comet
+    float maxSpeedMult = 1.f;  // Swift, Comet
+    float knockMult = 1.f;     // Big ball, Bumper
+    float elemMult = 1.f;      // element item level
+    // items
+    float ricochetMult = 0.f;  // Ricochet: armed-hit damage x this...
+    float wallBoost = 1.f;     // ...and speed x this per wall bounce
     bool cleave = false;
-    bool bruiser = false;
-    bool executioner = false;
-    bool overkill = false;
-    bool tempo = false;
-    bool shatter = false;
-    bool conductor = false;    // only acts on an electric ball
-    bool bedrock = false;      // only acts on a stone ball
-    float echoChance = 0.f;    // Echo: chance a hit strikes twice (0 = not equipped)
-    float teslaChance = 0.f;   // Tesla: chance a hit zaps nearby enemies
-    float bomberChance = 0.f;  // Bomber: chance a kill explodes
+    float cleaveExec = 0.f;    // Cleave Lv2+: also finishes enemies left under this HP fraction
+    float critChance = 0.f;    // Keen eye
+    float critMult = 2.f;
+    float executeThreshold = 0.f;   // Executioner
+    float executeMult = 1.f;
+    float overkillFrac = 0.f;  // Overkill
+    int overkillTargets = 0;
+    float shatterMult = 0.f;   // Shatter
+    int conductorJumps = 0;    // only acts on an electric ball
+    float bedrockLife = 0.f;   // only acts on a stone ball
+    float echoChance = 0.f;    // Echo: chance a hit strikes twice
+    float teslaChance = 0.f;   // Tesla: chance a hit zaps nearby enemies...
+    int teslaTargets = 0;      // ...this many
+    float bomberChance = 0.f;  // Bomber: chance a kill explodes...
+    float bombRadius = 0.f;    // ...this wide
     float splitChance = 0.f;   // Split shot: chance a wall bounce spawns a ghost copy
-    bool rampart = false;      // hits shove further, stagger longer
+    float rampartKnock = 0.f;  // Rampart: knockback x this...
+    float rampartStagger = 0.f;// ...stagger x this
     float menderHeal = 0.f;    // Mender: core hp per core bounce
     bool mastery = false;      // 4 items of its role's tag
+    // behaviour items (Fase M)
+    float hunterMult = 0.f;    // Hunter: hits on its prey x this
+    float hunterTurn = 0.f;
+    float cometFling = 0.f;    // Comet: throw x this
+    float cometPlow = 0.f;     // ...passes through enemies above this x cruise
+    int mitosis = 0;           // Mitosis: copies per kill
+    float mitosisLife = 0.f;
+    float boomerangHit = 0.f;  // Boomerang: charged hit x this...
+    float boomerangKick = 1.f; // ...speed x this leaving the core
+    float bumperBoost = 0.f;   // Bumper: balls clacking off it x this speed
+    float gluttonDamage = 0.f; // Glutton: + damage per kill-stack...
+    int gluttonMax = 0;        // ...up to this many stacks
+    float tetherFrac = 0.f;    // Tether: beam damage/s x the ball's hit...
+    float tetherWidth = 0.f;   // ...half-width
+    float blackHoleChance = 0.f;   // Black hole: chance a kill leaves one...
+    float blackHoleFrac = 0.f;     // ...burst x the killing hit
+    float blackHolePull = 1.f;     // ...pull x this
+    float resonanceFrac = 0.f;     // Resonance: zap x the hit...
+    float resonanceCd = 0.f;       // ...at most this often
     // game-changers (Fase J)
-    bool seeker = false;
+    float seekerTurn = 0.f;    // Seeker: rad/s (0 = off)
+    float seekerRange = 0.f;
     bool piercing = false;
-    bool railgun = false;
-    bool berserk = false;
+    float pierceMult = 1.f;
+    float railFrac = 0.f;      // Railgun (0 = off)
+    float railWidth = 0.f;
+    float berserkPerHit = 0.f; // Berserk (0 = off)
+    int berserkMax = 0;
     bool satellite = false;
-    bool gravityWell = false;
-    bool storm = false;
-    bool gemini = false;
-    bool midas = false;
+    float satelliteDamage = 1.f;
+    float gravityMult = 0.f;   // Gravity well: pull x this (0 = off)
+    float stormFrac = 0.f;     // Storm (0 = off)
+    float stormInterval = 0.f;
+    int twins = 0;             // Gemini: ghost twins
+    int midasGold = 0;         // Midas: extra gold per kill
 };
 
 // Everything the World needs to build / refresh one ball.
@@ -108,13 +140,21 @@ struct Ball {
     std::deque<sf::Vector2f> trail;
     std::deque<sf::Vector2f> waterTrail;   // water ball only: the damaging "worm" wake
     int owner = -1;          // index of the (real) ball this is / was copied from - reactions need two owners
-    bool ghost = false;      // "Split shot" copy: temporary, fades out
+    bool ghost = false;      // "Split shot" / "Mitosis" copy: temporary, fades out
     float ghostLife = 0.f;
+    float scale = 1.f;       // body size x this ("Mitosis" copies are small)
     bool twin = false;       // "Gemini": a permanent ghost that follows its parent's items
+    int twinIdx = 0;         // which of its parent's twins
     int berserkStacks = 0;   // "Berserk": hits in a row since the last wall
     float stormT = 0.f;      // "Storm": time to the next zap
     float orbitAng = 0.f;    // "Satellite": angle around the core
     float age = 0.f;         // seconds since it appeared (spawn pop-in)
+    int preyId = -1;         // "Hunter": the enemy it's locked on (Enemy::id)
+    bool homing = false;     // "Boomerang": flying home to the core
+    bool charged = false;    // "Boomerang": next enemy hit is the big one
+    int gluttonStacks = 0;   // "Glutton": kills this wave
+    float tetherT = 0.f;     // "Tether": time to the next damage tick
+    float resonanceT = 0.f;  // "Resonance": cooldown
 };
 
 // Grunt = the plain walker. The rest each want a different answer (cfg::enemy).
@@ -125,6 +165,7 @@ const char* enemyDesc(EnemyKind k);
 
 // An enemy walks straight at the core. Balls damage it on contact.
 struct Enemy {
+    int id = 0;             // unique per run ("Hunter" locks on by id)
     EnemyKind kind = EnemyKind::Grunt;
     float knockTaken = 1.f;                     // Tank: barely moves when hit
     float coreDamage = cfg::core::enemyDamage;  // hp the core loses if it arrives
@@ -168,6 +209,26 @@ struct Obstacle {
     float radius = cfg::element::obstacleRadius;
     float life = cfg::element::obstacleLife;
     float maxLife = cfg::element::obstacleLife;
+};
+
+// "Black hole": left where a kill landed. Pulls enemies in, then bursts with
+// the element of the ball that made it.
+struct BlackHole {
+    sf::Vector2f pos;
+    float life = cfg::changer::blackHoleLife;
+    float pull = 1.f;       // pull strength x this (item level)
+    float dmg = 0.f;        // burst damage
+    Element elem = Element::Plain;
+    int owner = -1;
+};
+
+// "Tether": this step's laser between a ball and its partner (visual; the
+// damage is dealt by World).
+struct TetherBeam {
+    sf::Vector2f a;
+    sf::Vector2f b;
+    float width = 8.f;
+    sf::Color color;
 };
 
 // The thing you defend.
@@ -248,7 +309,7 @@ struct FrameEvents {
     bool coreHit = false;
     bool shieldBlock = false;             // a hit bounced off a Shielded enemy's shield
     bool autoFlung = false;               // the auto-throw option launched a ball
-    int midasKills = 0;                   // kills by a Midas ball (extra gold)
+    int midasGold = 0;                    // extra gold from kills by Midas balls
     bool phoenix = false;                 // the Phoenix relic just saved the core
     bool bossHit = false;                 // a ball landed on the miniboss this step
     bool waveCleared = false;

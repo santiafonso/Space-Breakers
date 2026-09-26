@@ -859,6 +859,78 @@ Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
     de color. Web, panel de dev, stats y botones con el mismo panel/etiquetas.
   - Modo foto suma `10_horde`, `11_map_late`, `12_boss`, `13_pause`, `14_stats`.
 
+- **Fase N — items que definen la pelota + niveles por duplicado. [IMPLEMENTADO 2026-09-26]**
+  Pedido (usuario): pocos items aburridos pero que mejoren si los tomás varias
+  veces, y items que hagan a cada pelota **completamente distinta**.
+  - **Niveles por duplicado.** Tomar un item (o elemento) que la pelota ya tiene
+    **lo sube de nivel** en vez de ser inelegible: `upgradeFitsBall` lo acepta
+    hasta `kMaxItemLevel` = **5** y `applyUpgradeKind` sube `gearLvl` del slot
+    que ya lo tiene (cartel "Item Lv N"). La forja usa el mismo nivel y el mismo
+    tope (`cfg::gold::maxItemLevel` quedó sin uso). Cada item escala a su manera
+    (`App::ballSpec`: valor de nivel 1 + `...PerLevel` × (nivel − 1), constantes
+    en `cfg::combat` / `synergy` / `changer`) y todo nivel extra además suma +10%
+    de daño a la pelota (`itemLevelDamage`). Un elemento repetido es +30% de
+    potencia (`BallMods::elemMult`). Texto: la carta dice "Rare - Lv 2 -> 3" si
+    alguna pelota lo tiene; en el selector, al pasar por esa pelota, el título
+    dice "Lv 2 -> 3" y abajo qué da el nivel (`upgradeLevelDesc`); el tooltip del
+    slot muestra "Lv N/5" + el próximo nivel.
+  - **Recortes / fusiones.** Fuera **Wall rush**, **Carom**, **Warm-up**,
+    **Tempo** y **Battering**. Wall rush se fusionó en **Ricochet** (Common,
+    Striker: cada rebote en pared acelera y arma un golpe fuerte); Carom lo
+    reemplaza **Bumper**. **Keen eye** baja a Common (12% +7%/nivel). Los
+    modificadores pasan de 6 a 3: **Heavy impact**, **Big ball** (+radio y
+    +empuje; absorbe Heavy knock) y **Swift** (+crucero, +techo y el tiro dura
+    más; absorbe Ceiling break y Reflexes). Bugfix: Cleave ahora sí atraviesa
+    (antes el choque ya había reflejado la velocidad) y su golpe cuenta para el
+    combo.
+  - **Items nuevos** (`UpgradeKind` 56 → 57; los `BallMods` pasaron a números ya
+    escalados por nivel, 0 = no equipado):
+    - **Hunter** (Epic, Striker): se traba en la mayor amenaza (vida pesada por
+      cercanía al núcleo, `Enemy::id`) y dobla fuerte hacia ella hasta matarla;
+      x1.25 de daño a su presa. Dos arquitos giran sobre la presa.
+    - **Comet** (Rare, Striker): tirada sale x1.5, techo x1.6, el tiro casi no
+      decae, y por encima de x1.9 del crucero **atraviesa** enemigos.
+    - **Mitosis** (Rare, Striker): cada kill suelta una copia chica (fantasma,
+      x0.62, ~2.6 s) con sus items; 2 copias en Lv3, 3 en Lv5; las copias no se
+      dividen.
+    - **Boomerang** (Rare, Guardian): tras golpear vuelve curvando al núcleo;
+      al rebotar ahí sale apuntada a la amenaza, más rápida y con el próximo
+      golpe **cargado** (x1.4).
+    - **Bumper** (Uncommon, Guardian): más grande; las pelotas que chocan contra
+      ella salen x1.35 más rápido (ideal para Strikers), empuja fuerte.
+    - **Glutton** (Rare, Guardian): cada kill de la oleada la agranda y le suma
+      daño (tope 10 stacks; se resetea al cambiar de oleada).
+    - **Tether** (Epic, Support): láser a la pelota más cercana (gemelos y
+      copias cuentan) que quema lo que cruza y deja el elemento de la pelota.
+      Línea fina que late.
+    - **Black hole** (Epic, Support): 35% de que una kill deje un agujero negro
+      que chupa ~1.5 s y revienta con el elemento de la pelota (x1.5 del golpe).
+    - **Resonance** (Epic, Support): cada golpe manda un arco a **todas** las
+      pelotas del mismo elemento (gemelos y copias incluidos) y cada una zapea al
+      enemigo más cercano con ese elemento.
+    - Todos los ítems viejos también escalan: Conductor salta a un enemigo más
+      por nivel, Tesla +1 objetivo, Overkill llega a 2-3 vecinos, Gemini 2
+      gemelos en Lv3 y 3 en Lv5, Midas +3 oro por nivel, etc.
+  - **Sinergias pensadas:** Tether + Satellite (láser que barre alrededor del
+    núcleo) · Tether + Gemini (el láser une a la pelota con sus gemelos) ·
+    Resonance + 3 pelotas del mismo elemento + Gemini / Mitosis (telaraña de
+    rayos) · Mitosis + Cleave + Bomber (copias que atraviesan y explotan) ·
+    Black hole + dos elementos + Catalyst (junta el racimo y lo hace reaccionar) ·
+    Bumper + Comet/Ricochet Striker (pinball: sale disparada y el Striker pega
+    por velocidad) · Hunter + Berserk + Executioner (no toca pared, apila Berserk
+    sobre una sola presa).
+  - Dibujo mínimo en `WorldRenderer` (el otro agente reestiliza): línea del
+    Tether, agujero negro (disco oscuro + aro que se cierra), traba del Hunter.
+  - **Sim headless** (3 pelotas, oleadas 1-9, auto-tiro, 16 corridas; ±0.4 de
+    ruido): base 5.3 oleadas / 43 kills · Hunter L1 6.9 / L5 8.5 (Seeker de
+    referencia 7.4) · Mitosis L1 5.4 / L5 6.8 · Tether L1 5.4 / L5 6.3 · Black
+    hole L1 5.4 / L5 6.1 · Boomerang 6.0 · Mitosis+Cleave+Bomber 7.1 · Resonance
+    fuego x3 + Gemini 7.3 · Gemini L5 + Tether 8.3. Sin auto-tiro: base 2.3,
+    Hunter L1 4.7 (Seeker 4.5), Satellite+Tether 4.2. Ningún NaN; ≤2 µs por paso
+    (Gemini L5 + Tether el más caro, ~1.7 µs).
+  - Falta playtest: Comet y Bumper solo brillan tirando (el sim casi no tira);
+    Hunter puede sentirse "autopiloto" (bajar `hunterTurn` si pasa).
+
 - **Pendiente (idea del usuario, 2026-09-24):** como las mejoras ya no llegan
   en cada oleada, cada una tiene que **sentirse mucho** al conseguirla: repasar
   items / modificadores / reliquias para que sean más fuertes y más visibles

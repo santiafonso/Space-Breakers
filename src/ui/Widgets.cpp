@@ -176,7 +176,7 @@ sf::FloatRect slotRect(sf::Vector2f c, int slot) {
 
 // "DMG 2  SPD 1" - a ball's stacked modifiers, compact.
 std::string modifierLine(const BallLoadout& L) {
-    static const char* kShort[kModifierCount] = {"DMG", "SIZE", "SPD", "TOP", "KNOCK", "FLING"};
+    static const char* kShort[kModifierCount] = {"DMG", "SIZE", "SPD"};
     std::string out;
     for (int i = 0; i < kModifierCount; ++i) {
         if (L.mods[i] <= 0) continue;
@@ -317,8 +317,10 @@ bool loadoutTooltip(const BallLoadout& L, int part, std::string& title, std::str
         const auto k = static_cast<UpgradeKind>(L.gear[part]);
         const UpgradeInfo info = upgradeInfo(k);
         title = info.title;
-        if (L.gearLvl[part] > 1) title += "  (level " + std::to_string(L.gearLvl[part]) + ")";
+        title += "  Lv " + std::to_string(L.gearLvl[part]) + "/" + std::to_string(kMaxItemLevel);
         desc = info.desc;
+        if (L.gearLvl[part] < kMaxItemLevel && *upgradeLevelDesc(k))
+            desc += std::string(".  Next level: ") + upgradeLevelDesc(k);
         desc += std::string("  [") + tierName(upgradeTier(k));
         if (itemTag(k) != ItemTag::None) desc += std::string(", ") + itemTagName(itemTag(k));
         desc += "]";

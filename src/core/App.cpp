@@ -133,68 +133,149 @@ WorldParams App::params() const {
     return p;
 }
 
-// Fold one ball's items + modifiers into the numbers the sim uses. An item's
-// forge level past the first scales its bonus by cfg::combat::gearLevelBonus.
+// Fold one ball's items + modifiers into the numbers the sim uses. Every item
+// scales with its level (1..kMaxItemLevel, raised by duplicates and the forge):
+// value = level-1 value + perLevel * (level - 1). Every level past the first
+// also hardens the ball a little (itemLevelDamage).
 BallSpec App::ballSpec(const BallLoadout& L) const {
+    namespace C = cfg::combat;
+    namespace S = cfg::synergy;
+    namespace G = cfg::changer;
     BallSpec s;
     s.role = L.role();   // from its item tags (2 = role, 4 = mastery)
     s.mods.mastery = L.mastery();
     s.element = L.element();
     BallMods& m = s.mods;
+    auto stacks = [&L](UpgradeKind k) { return static_cast<float>(L.mods[modifierIndex(k)]); };
+    m.damageMult = 1.f + C::heavyImpactPerStack * stacks(UpgradeKind::HeavyImpact);
+    m.radiusMult = std::min(1.f + C::bigBallPerStack * stacks(UpgradeKind::BigBall), C::bigBallMaxMult);
+    m.knockMult = 1.f + C::bigBallKnockPerStack * stacks(UpgradeKind::BigBall);
+    m.cruiseMult = 1.f + C::swiftPerStack * stacks(UpgradeKind::Swift);
+    m.maxSpeedMult = 1.f + C::swiftTopPerStack * stacks(UpgradeKind::Swift);
+    m.flingDecay = std::pow(C::swiftFlingPerStack, stacks(UpgradeKind::Swift));
+
     for (int i = 0; i < kBallSlots; ++i) {
         if (L.gear[i] < 0) continue;
-        const float lv = 1.f + cfg::combat::gearLevelBonus * static_cast<float>(std::max(0, L.gearLvl[i] - 1));
-        auto boost = [lv](float mult) { return 1.f + (mult - 1.f) * lv; };
+        const int lvl = std::clamp(L.gearLvl[i], 1, kMaxItemLevel);
+        const float n = static_cast<float>(lvl - 1);   // levels past the first
+        m.damageMult *= 1.f + C::itemLevelDamage * n;
         switch (static_cast<UpgradeKind>(L.gear[i])) {
-            case UpgradeKind::WallRush:    m.wallBoost = boost(cfg::combat::wallBounceBoost); break;
-            case UpgradeKind::Carom:       m.pairBoost = boost(cfg::combat::pairBounceBoost); break;
-            case UpgradeKind::Ricochet:    m.ricochet = true; break;
-            case UpgradeKind::WarmUp:      m.warmUp = true; break;
-            case UpgradeKind::Cleave:      m.cleave = true; break;
-            case UpgradeKind::Crit:        m.critChance = cfg::combat::critChance * lv; break;
-            case UpgradeKind::Bruiser:     m.bruiser = true; break;
-            case UpgradeKind::Executioner: m.executioner = true; break;
-            case UpgradeKind::Overkill:    m.overkill = true; break;
-            case UpgradeKind::Tempo:       m.tempo = true; break;
-            case UpgradeKind::Shatter:     m.shatter = true; break;
-            case UpgradeKind::Conductor:   m.conductor = true; break;
-            case UpgradeKind::Bedrock:     m.bedrock = true; break;
-            case UpgradeKind::Echo:        m.echoChance = cfg::synergy::echoChance * lv; break;
-            case UpgradeKind::Tesla:       m.teslaChance = cfg::synergy::teslaChance * lv; break;
-            case UpgradeKind::Bomber:      m.bomberChance = cfg::synergy::bomberChance * lv; break;
-            case UpgradeKind::SplitShot:   m.splitChance = cfg::synergy::splitChance * lv; break;
-            case UpgradeKind::Rampart:     m.rampart = true; break;
-            case UpgradeKind::Mender:      m.menderHeal = cfg::synergy::menderHeal * lv; break;
-            case UpgradeKind::Seeker:      m.seeker = true; break;
-            case UpgradeKind::Piercing:    m.piercing = true; break;
-            case UpgradeKind::Railgun:     m.railgun = true; break;
-            case UpgradeKind::Berserk:     m.berserk = true; break;
-            case UpgradeKind::Satellite:   m.satellite = true; break;
-            case UpgradeKind::GravityWell: m.gravityWell = true; break;
-            case UpgradeKind::Storm:       m.storm = true; break;
-            case UpgradeKind::Gemini:      m.gemini = true; break;
-            case UpgradeKind::Midas:       m.midas = true; break;
-            case UpgradeKind::Giant:       break;   // folded in after the modifiers below
-            default: break;   // elements are read via L.element()
+            case UpgradeKind::ElemFire: case UpgradeKind::ElemPoison: case UpgradeKind::ElemWater:
+            case UpgradeKind::ElemIce: case UpgradeKind::ElemStone: case UpgradeKind::ElemElectric:
+                m.elemMult = 1.f + C::elemPerLevel * n;   // the element itself is read via L.element()
+                break;
+            case UpgradeKind::Ricochet:
+                m.ricochetMult = C::ricochetMult + C::ricochetMultPerLevel * n;
+                m.wallBoost = C::ricochetBoost + C::ricochetBoostPerLevel * n;
+                break;
+            case UpgradeKind::Cleave:
+                m.cleave = true;
+                m.cleaveExec = C::cleaveExecPerLevel * n;
+                break;
+            case UpgradeKind::Crit:
+                m.critChance = C::critChance + C::critChancePerLevel * n;
+                m.critMult = C::critMult + C::critMultPerLevel * n;
+                break;
+            case UpgradeKind::Executioner:
+                m.executeThreshold = C::executeThreshold + C::executeThresholdPerLevel * n;
+                m.executeMult = C::executeMult + C::executeMultPerLevel * n;
+                break;
+            case UpgradeKind::Overkill:
+                m.overkillFrac = C::overkillFrac + C::overkillFracPerLevel * n;
+                m.overkillTargets = 1 + (lvl - 1) / 2;
+                break;
+            case UpgradeKind::Shatter:   m.shatterMult = C::shatterBonus + C::shatterPerLevel * n; break;
+            case UpgradeKind::Conductor: m.conductorJumps = lvl; break;
+            case UpgradeKind::Bedrock:   m.bedrockLife = C::bedrockLifeMult + C::bedrockPerLevel * n; break;
+            case UpgradeKind::Echo:      m.echoChance = S::echoChance + S::echoPerLevel * n; break;
+            case UpgradeKind::Tesla:
+                m.teslaChance = S::teslaChance + S::teslaPerLevel * n;
+                m.teslaTargets = S::teslaTargets + (lvl - 1);
+                break;
+            case UpgradeKind::Bomber:
+                m.bomberChance = S::bomberChance + S::bomberPerLevel * n;
+                m.bombRadius = S::bombRadius * (1.f + S::bombRadiusPerLevel * n);
+                break;
+            case UpgradeKind::SplitShot: m.splitChance = S::splitChance + S::splitPerLevel * n; break;
+            case UpgradeKind::Rampart:
+                m.rampartKnock = S::rampartKnock + S::rampartKnockPerLevel * n;
+                m.rampartStagger = S::rampartStagger + S::rampartStaggerPerLevel * n;
+                break;
+            case UpgradeKind::Mender:    m.menderHeal = S::menderHeal + S::menderPerLevel * n; break;
+            case UpgradeKind::Hunter:
+                m.hunterMult = G::hunterDamage + G::hunterDamagePerLevel * n;
+                m.hunterTurn = G::hunterTurn + G::hunterTurnPerLevel * n;
+                break;
+            case UpgradeKind::Comet:
+                m.cometFling = G::cometFling + G::cometFlingPerLevel * n;
+                m.cometPlow = G::cometPlow + G::cometPlowPerLevel * n;
+                m.maxSpeedMult *= G::cometCap + G::cometCapPerLevel * n;
+                m.flingDecay *= G::cometDecay;
+                break;
+            case UpgradeKind::Mitosis:
+                m.mitosis = 1 + (lvl >= 3 ? 1 : 0) + (lvl >= 5 ? 1 : 0);
+                m.mitosisLife = G::mitosisLife + G::mitosisLifePerLevel * n;
+                break;
+            case UpgradeKind::Boomerang:
+                m.boomerangHit = G::boomerangHit + G::boomerangHitPerLevel * n;
+                m.boomerangKick = G::boomerangKick + G::boomerangKickPerLevel * n;
+                break;
+            case UpgradeKind::Bumper:
+                m.bumperBoost = G::bumperBoost + G::bumperBoostPerLevel * n;
+                m.radiusMult *= G::bumperRadius;
+                m.knockMult *= G::bumperKnock;
+                break;
+            case UpgradeKind::Glutton:
+                m.gluttonDamage = G::gluttonDamage + G::gluttonDamagePerLevel * n;
+                m.gluttonMax = G::gluttonMax + G::gluttonMaxPerLevel * (lvl - 1);
+                break;
+            case UpgradeKind::Tether:
+                m.tetherFrac = G::tetherFrac + G::tetherFracPerLevel * n;
+                m.tetherWidth = G::tetherWidth + G::tetherWidthPerLevel * n;
+                break;
+            case UpgradeKind::BlackHole:
+                m.blackHoleChance = G::blackHoleChance + G::blackHolePerLevel * n;
+                m.blackHoleFrac = G::blackHoleFrac + G::blackHoleFracPerLevel * n;
+                m.blackHolePull = 1.f + 0.2f * n;
+                break;
+            case UpgradeKind::Resonance:
+                m.resonanceFrac = G::resonanceFrac + G::resonanceFracPerLevel * n;
+                m.resonanceCd = G::resonanceCooldown + G::resonanceCooldownPerLevel * n;
+                break;
+            case UpgradeKind::Seeker:
+                m.seekerTurn = G::seekerTurn * (1.f + G::seekerPerLevel * n);
+                m.seekerRange = G::seekerRange * (1.f + G::seekerPerLevel * n);
+                break;
+            case UpgradeKind::Piercing:
+                m.piercing = true;
+                m.pierceMult = 1.f + G::piercePerLevel * n;
+                break;
+            case UpgradeKind::Railgun:
+                m.railFrac = G::railFrac + G::railFracPerLevel * n;
+                m.railWidth = G::railWidth + G::railWidthPerLevel * n;
+                break;
+            case UpgradeKind::Berserk:
+                m.berserkPerHit = G::berserkPerHit + G::berserkPerLevel * n;
+                m.berserkMax = G::berserkMax + G::berserkMaxPerLevel * (lvl - 1);
+                break;
+            case UpgradeKind::Giant:   // huge, heavy, a touch slower
+                m.radiusMult *= G::giantRadius;
+                m.damageMult *= G::giantDamage + G::giantDamagePerLevel * n;
+                m.cruiseMult *= G::giantCruise;
+                break;
+            case UpgradeKind::Satellite:
+                m.satellite = true;
+                m.satelliteDamage = G::satelliteDamage + G::satellitePerLevel * n;
+                break;
+            case UpgradeKind::GravityWell: m.gravityMult = 1.f + G::gravityPerLevel * n; break;
+            case UpgradeKind::Storm:
+                m.stormFrac = G::stormFrac + G::stormFracPerLevel * n;
+                m.stormInterval = G::stormInterval / (1.f + 0.2f * n);
+                break;
+            case UpgradeKind::Gemini: m.twins = 1 + (lvl >= 3 ? 1 : 0) + (lvl >= 5 ? 1 : 0); break;
+            case UpgradeKind::Midas:  m.midasGold = G::midasGold * lvl; break;
+            default: break;
         }
-    }
-    auto stacks = [&L](UpgradeKind k) { return static_cast<float>(L.mods[modifierIndex(k)]); };
-    m.damageMult = 1.f + cfg::combat::heavyImpactPerStack * stacks(UpgradeKind::HeavyImpact);
-    // Every forged level on any item also hardens the ball a little, so the
-    // forge is never wasted on an on/off item.
-    for (int i = 0; i < kBallSlots; ++i)
-        if (L.gear[i] >= 0 && L.gearLvl[i] > 1)
-            m.damageMult *= 1.f + cfg::combat::forgeDamagePerLevel * static_cast<float>(L.gearLvl[i] - 1);
-    m.radiusMult = std::min(1.f + cfg::combat::bigBallPerStack * stacks(UpgradeKind::BigBall),
-                            cfg::combat::bigBallMaxMult);
-    m.cruiseMult = 1.f + cfg::combat::swiftPerStack * stacks(UpgradeKind::Swift);
-    m.maxSpeedMult = 1.f + cfg::combat::ceilingPerStack * stacks(UpgradeKind::CeilingBreak);
-    m.knockMult = 1.f + cfg::combat::knockPerStack * stacks(UpgradeKind::HeavyKnock);
-    m.flingDecay = std::pow(cfg::combat::reflexesPerStack, stacks(UpgradeKind::FlingMomentum));
-    if (L.has(UpgradeKind::Giant)) {   // "Giant": huge, heavy, a touch slower
-        m.radiusMult *= cfg::changer::giantRadius;
-        m.damageMult *= cfg::changer::giantDamage;
-        m.cruiseMult *= cfg::changer::giantCruise;
     }
     return s;
 }
@@ -532,6 +613,11 @@ void App::applyUpgradeKind(UpgradeKind k, int ball, int slot) {
         BallLoadout& b = r.balls[ball];
         if (const int mi = modifierIndex(k); mi >= 0) {
             ++b.mods[mi];
+        } else if (upgradeLevelsUp(k, b)) {
+            // A duplicate levels up the copy the ball already has.
+            const int lvl = ++b.gearLvl[b.slotOf(k)];
+            effects_.addLabel(std::string(upgradeInfo(k).title) + "  Lv " + std::to_string(lvl),
+                              {size().x * 0.5f, size().y * 0.36f}, tierColor(upgradeTier(k)), 26, 1.3f);
         } else {
             // One element per ball: a new element always replaces the current one.
             if (elementItemSlot(k) >= 0 && b.elementSlot() >= 0) slot = b.elementSlot();
@@ -662,7 +748,7 @@ void App::travelTo(int node) {
             for (int b = 0; b < runBallCount() && !any; ++b)
                 for (int sl = 0; sl < kBallSlots; ++sl)
                     if (r.balls[static_cast<std::size_t>(b)].gear[sl] >= 0 &&
-                        r.balls[static_cast<std::size_t>(b)].gearLvl[sl] < cfg::gold::maxItemLevel) any = true;
+                        r.balls[static_cast<std::size_t>(b)].gearLvl[sl] < kMaxItemLevel) any = true;
             if (any) {
                 equipSrc_ = EquipSource::Forge;
                 equipRef_ = -1;
@@ -691,7 +777,7 @@ bool App::equipFitsSlot(int ball, int slot) const {
     const BallLoadout& b = data_.run.balls[static_cast<std::size_t>(ball)];
     if (equipSrc_ == EquipSource::Forge)
         return slot >= 0 && slot < kBallSlots && b.gear[slot] >= 0 &&
-               b.gearLvl[slot] < cfg::gold::maxItemLevel;
+               b.gearLvl[slot] < kMaxItemLevel;
     return upgradeFitsBall(equipKind_, b);
 }
 
@@ -1179,8 +1265,8 @@ void App::processEvents(const FrameEvents& ev) {
         audio_.ballHit(clampf(b.speed / 900.f, 0.f, 1.f), harmony, b.ballPair);
     }
     if (ev.autoFlung) audio_.thrown(0.35f);
-    if (ev.midasKills > 0 && data_.run.active)   // "Midas": extra gold per kill
-        data_.run.gold += ev.midasKills * cfg::changer::midasGold;
+    if (ev.midasGold > 0 && data_.run.active)   // "Midas": extra gold per kill
+        data_.run.gold += ev.midasGold;
     if (ev.phoenix) {
         effects_.flash(theme::puGolden, 1.f);
         effects_.addLabel("PHOENIX", {size().x * 0.5f, size().y * 0.4f}, theme::puGolden, 40, 1.6f);
@@ -1453,7 +1539,7 @@ int App::runSnapshots(const std::string& dir) {
     capturePath_ = d + "04_play.png";
     render();
 
-    choices_ = {UpgradeKind::Railgun, UpgradeKind::Storm, UpgradeKind::Cleave, UpgradeKind::WallRush};
+    choices_ = {UpgradeKind::Railgun, UpgradeKind::Storm, UpgradeKind::Cleave, UpgradeKind::Hunter};
     rollSource_ = RollSource::Normal;
     push(ScreenId::Choice);
     snapFrame(d + "05_choice.png");

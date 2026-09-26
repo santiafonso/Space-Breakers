@@ -54,6 +54,46 @@ void dart(sf::RenderTarget& t, sf::Vector2f p, float r, float heading, sf::Color
     for (int i = 0; i < 4; ++i) draw::line(t, pts[i], pts[(i + 1) % 4], rimW, rim);
 }
 
+// ---- behaviour-item overlays (Fase M): thin lines and rings only.
+
+// "Tether": a faint band showing the damage width, a bright pulsing core line.
+void drawTether(sf::RenderWindow& w, const TetherBeam& t) {
+    const sf::Vector2f d = t.b - t.a;
+    const float len = length(d);
+    if (len < 1.f) return;
+    const float ang = std::atan2(d.y, d.x) * 180.f / kPi;
+    const float pulse = 0.5f + 0.5f * std::sin(clockSeconds() * 14.f);
+    for (int k = 0; k < 2; ++k) {
+        const float thick = k == 0 ? t.width * 2.f : 2.f + pulse;
+        sf::RectangleShape r({len, thick});
+        r.setOrigin(0.f, thick * 0.5f);
+        r.setPosition(t.a);
+        r.setRotation(ang);
+        r.setFillColor(k == 0 ? withAlpha(t.color, 0.10f) : withAlpha(lighten(t.color, 0.5f), 0.8f));
+        w.draw(r);
+    }
+}
+
+// "Black hole": a dark pit with a rim in its element colour, and a faint ring
+// closing in on it as it charges toward the burst.
+void drawBlackHole(sf::RenderWindow& w, const BlackHole& h) {
+    const float f = clampf(h.life / cfg::changer::blackHoleLife, 0.f, 1.f);   // 1 -> 0
+    const sf::Color col = h.elem == Element::Plain ? theme::accent : elementColor(h.elem);
+    const float r = 12.f + 6.f * (1.f - f);
+    draw::disc(w, h.pos, r, withAlpha(theme::bg, 0.95f), withAlpha(theme::bg, 0.7f));
+    draw::ring(w, h.pos, r, 2.f, withAlpha(col, 0.85f));
+    draw::ring(w, h.pos, r + 70.f * f, 1.5f, withAlpha(col, 0.15f + 0.35f * (1.f - f)));
+}
+
+// "Hunter": two small arcs turning around its prey - the lock.
+void drawHunterLock(sf::RenderWindow& w, const Ball& b, const Enemy& e) {
+    const float a = clockSeconds() * 3.f;
+    const float r = e.radius + 12.f;
+    const sf::Color col = withAlpha(lighten(b.color, 0.3f), 0.75f);
+    draw::ring(w, e.pos, r, 2.f, col, a, a + 1.1f, 12);
+    draw::ring(w, e.pos, r, 2.f, col, a + kPi, a + kPi + 1.1f, 12);
+}
+
 }  // namespace
 
 void WorldRenderer::drawCore(sf::RenderWindow& window, const Core& c) const {
@@ -361,9 +401,16 @@ void WorldRenderer::draw(sf::RenderWindow& window, const World& world) const {
     for (const Ball& b : world.balls())
         if (b.element == Element::Water) drawWaterTrail(window, b);
     for (const Obstacle& o : world.obstacles()) drawObstacle(window, o);
+    for (const BlackHole& h : world.blackHoles()) drawBlackHole(window, h);
     drawCore(window, world.core());
     drawBoss(window, world.boss(), world.core().pos);
     for (const Enemy& e : world.enemies()) drawEnemy(window, e, world.core().pos);
+    for (const Ball& b : world.balls()) {
+        if (b.mods.hunterMult <= 0.f || b.preyId < 0) continue;
+        for (const Enemy& e : world.enemies())
+            if (e.id == b.preyId) drawHunterLock(window, b, e);
+    }
+    for (const TetherBeam& t : world.tethers()) drawTether(window, t);
     for (const Bolt& bo : world.bolts()) drawBolt(window, bo);
     for (const Pickup& pu : world.pickups()) drawPickup(window, pu);
     for (const Ball& g : world.ghosts()) drawBall(window, g, world.effect());
