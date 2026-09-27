@@ -250,7 +250,8 @@ inline constexpr int maxMissiles = 40;
 // Rare and up were made scarcer (2026-09-26, usuario): the good stuff is earned.
 namespace tier {
 inline constexpr int weightsNormal[5] = {53, 30, 12, 4, 1};   // upgrade nodes, shops (was 45/30/16/7/2)
-inline constexpr int weightsElite[5]  = {26, 35, 24, 11, 4};  // elite fights (was 18/32/28/15/7)
+inline constexpr int weightsElite[5]  = {16, 32, 29, 16, 7};  // elite fights: items are scarce, so rare ones turn up
+inline constexpr int weightsShop[5]   = {32, 33, 21, 10, 4};  // the shop's shelf
 inline constexpr int weightsBoss[5]   = {0, 0, 0, 65, 35};    // the treasure after a boss
 }  // namespace tier
 
@@ -418,14 +419,13 @@ inline constexpr int wRecruit = 8;      // a new ball or a free pick (unused: se
 // Every path leans one way, never said out loud: a "recruit" path turns up
 // Recruit stops (new balls) and few elites; an "item" path turns up elites and
 // shops (the only places items come from) and no Recruit. Where two paths
-// share a node it's neutral. Balls stay scarce: about one Recruit per recruit
-// path in act 1.
-inline constexpr int wRecruitLean = 10;     // Recruit weight on a recruit path (act 1)
-inline constexpr int wRecruitLeanAct2 = 14;
+// share a node it's neutral. Balls stay scarce: exactly one Recruit per
+// recruit path in act 1, two in act 2.
+inline constexpr int recruitsPerPathAct1 = 1;   // Recruit stops placed on each recruit path (not rolled)
+inline constexpr int recruitsPerPathAct2 = 2;
 inline constexpr int wEliteRecruitPath = 4;
 inline constexpr int wEliteItemPath = 28;
 inline constexpr int wShopItemPath = 9;
-inline constexpr int wRecruitNeutral = 3;
 inline constexpr int wEliteNeutral = 12;
 inline constexpr int wShopNeutral = 5;
 // Elite waves: tougher and more of them.

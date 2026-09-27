@@ -655,6 +655,7 @@ UpgradeKind App::rollPick(RollSource src, const std::vector<UpgradeKind>& exclud
     const UpgradeCtx c = buildUpgradeCtx();
     const int* base = src == RollSource::Elite ? cfg::tier::weightsElite
                     : src == RollSource::Boss  ? cfg::tier::weightsBoss
+                    : src == RollSource::Shop  ? cfg::tier::weightsShop
                                                : cfg::tier::weightsNormal;
     float w[kTierCount];
     for (int t = 0; t < kTierCount; ++t) w[t] = static_cast<float>(base[t]);
@@ -775,6 +776,10 @@ void App::rollRecruitChoices() {
 void App::openChoice(RollSource src) {
     rollChoices(src);
     push(ScreenId::Choice);
+    // An Epic / Legendary on the table: a flash in its colour as the cards land.
+    Tier top = Tier::Common;
+    for (UpgradeKind k : choices_) top = std::max(top, upgradeTier(k));
+    if (top >= Tier::Epic) effects_.flash(tierColor(top), top == Tier::Legendary ? 0.7f : 0.4f);
 }
 
 // First ball the pick fits, preferring one with a free slot (dev tools use

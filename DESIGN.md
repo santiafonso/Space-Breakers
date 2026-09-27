@@ -1731,9 +1731,16 @@ Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
   - **Rutas con carácter (sin decirlo):** cada camino se inclina a *Recruit*
     (Recruit, pocos élites, sin tienda) o a *items* (muchos élites y tiendas,
     sin Recruit); se alternan, una bifurcación toma la inclinación contraria,
-    nodos compartidos son neutros (`PathLean`, `cfg::map::w*Path`). Sim de
-    3000 mapas del acto 1: la ruta con más Recruit trae ~0.83, la con menos
-    ~0 → terminar el acto 1 con 3 pelotas es raro.
+    nodos compartidos son neutros (`PathLean`, `cfg::map::w*Path`). El
+    Recruit **no se sortea**: `generateMap` pone exactamente 1 por ruta de
+    reclutar en el acto 1 (2 en el acto 2; `recruitsPerPathAct*`), repartidos
+    a lo largo de la ruta. Al azar salía en ~39% de mapas del acto 1 sin
+    ningún Recruit. Sim 3000 mapas acto 1: 0% sin Recruit, 1–2 por mapa; la
+    ruta con más trae ~1.1, la con menos ~0.
+  - **Rarezas:** élite `{16,32,29,16,7}`, tienda `{32,33,21,10,4}` (antes
+    usaba las normales). Una carta Epic / Legendary en la mesa hace un flash
+    de su color.
+  - TAB / equipar: zoom máx. 1.2 / 1.15 (con pocas pelotas quedaba enorme).
   - **Élite se distingue:** en el mapa naranja propio (`ember`), más grande
     y con doble marco; en la pelea el cartel dice "Elite - item spoils" y el
     HUD "ELITE" con barra naranja.

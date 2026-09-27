@@ -83,13 +83,14 @@ enum class PathLean { Neutral, Recruit, Item };
 inline MapNodeType rollNodeType(Rng& rng, int row, int act, PathLean lean) {
     if (row == 1) return MapNodeType::Combat;              // always open on a fight
     namespace M = cfg::map;
-    int recruit = M::wRecruitNeutral, elite = M::wEliteNeutral, shop = M::wShopNeutral;
+    // Recruit stops aren't rolled: generateMap places them on the recruit paths.
+    (void)act;
+    const int recruit = 0;
+    int elite = M::wEliteNeutral, shop = M::wShopNeutral;
     if (lean == PathLean::Recruit) {
-        recruit = act == 1 ? M::wRecruitLean : M::wRecruitLeanAct2;
         elite = M::wEliteRecruitPath;
         shop = 0;
     } else if (lean == PathLean::Item) {
-        recruit = 0;
         elite = M::wEliteItemPath;
         shop = M::wShopItemPath;
     }
@@ -138,6 +139,7 @@ inline RunMap generateMap(Rng& rng, int act) {
     // Walk the paths: walkers[k] = path k's lane on the current row.
     std::vector<std::vector<int>> laneRows;   // lanes used per row 2..R-1
     std::vector<std::vector<detail::PathLean>> leanRows;   // each of those nodes' leaning
+    std::vector<std::vector<std::pair<int, int>>> recruitTrails;   // (row, lane) of every recruit path's nodes
     std::vector<std::vector<std::pair<int, int>>> steps;   // lane -> lane moves out of each of those rows
     {
         std::vector<int> walkers;
@@ -155,6 +157,7 @@ inline RunMap generateMap(Rng& rng, int act) {
         const bool firstRecruit = rng.irange(0, 1) == 0;
         for (int k = 0; k < paths; ++k)
             leans.push_back((k % 2 == 0) == firstRecruit ? PathLean::Recruit : PathLean::Item);
+        std::vector<std::vector<std::pair<int, int>>> trail(walkers.size());   // each walker's nodes so far
         for (int r = 2; r < R; ++r) {
             std::vector<int> row = walkers;
             row.erase(std::unique(row.begin(), row.end()), row.end());
@@ -168,7 +171,12 @@ inline RunMap generateMap(Rng& rng, int act) {
                 lr.push_back(kinds == 1 ? l : PathLean::Neutral);
             }
             leanRows.push_back(lr);
-            if (r + 1 == R) break;
+            for (std::size_t k = 0; k < walkers.size(); ++k) trail[k].emplace_back(r, walkers[k]);
+            if (r + 1 == R) {
+                for (std::size_t k = 0; k < walkers.size(); ++k)
+                    if (leans[k] == PathLean::Recruit) recruitTrails.push_back(trail[k]);
+                break;
+            }
             // Step every walker to the next row without crossing another's
             // step (walkers stay in lane order); keep at least 2 lanes lit.
             std::vector<int> next;
@@ -199,10 +207,12 @@ inline RunMap generateMap(Rng& rng, int act) {
                     walkers.insert(walkers.begin() + static_cast<long>(k) + 1, walkers[k]);
                     next.insert(next.begin() + static_cast<long>(k) + 1, right);
                     leans.insert(leans.begin() + static_cast<long>(k) + 1, other);
+                    trail.insert(trail.begin() + static_cast<long>(k) + 1, trail[k]);
                 } else if (canL) {
                     walkers.insert(walkers.begin() + static_cast<long>(k), walkers[k]);
                     next.insert(next.begin() + static_cast<long>(k), left);
                     leans.insert(leans.begin() + static_cast<long>(k), other);
+                    trail.insert(trail.begin() + static_cast<long>(k), trail[k]);
                 }
             }
             // A merged pair may split again later: walkers on one lane keep
@@ -236,6 +246,45 @@ inline RunMap generateMap(Rng& rng, int act) {
     std::vector<int> all(static_cast<std::size_t>(L));
     for (int i = 0; i < L; ++i) all[static_cast<std::size_t>(i)] = i;
     addRow(R, all, true);
+
+    // Every recruit path gets its Recruit stops (1 in act 1, 2 in act 2) on
+    // its own recruit-leaning nodes from row 3 up, spread out; a path whose
+    // nodes already hold enough (shared with another recruit path) gets none.
+    {
+        auto nodeAt = [&](int row, int lane) -> MapNode* {
+            for (int id : rowNodes[static_cast<std::size_t>(row - 1)])
+                if (m.nodes[static_cast<std::size_t>(id)].lane == lane) return &m.nodes[static_cast<std::size_t>(id)];
+            return nullptr;
+        };
+        const int want = act == 1 ? cfg::map::recruitsPerPathAct1 : cfg::map::recruitsPerPathAct2;
+        for (const auto& tr : recruitTrails) {
+            std::vector<MapNode*> spots, fallback;   // recruit-leaning nodes; else neutral ones
+            int have = 0;
+            for (const auto& [row, lane] : tr) {
+                MapNode* n = nodeAt(row, lane);
+                if (!n) continue;
+                if (n->type == MapNodeType::Recruit) ++have;
+                else if (row >= 3 && leanRows[static_cast<std::size_t>(row - 2)][static_cast<std::size_t>(
+                                         std::find(laneRows[static_cast<std::size_t>(row - 2)].begin(),
+                                                   laneRows[static_cast<std::size_t>(row - 2)].end(), lane) -
+                                         laneRows[static_cast<std::size_t>(row - 2)].begin())] == detail::PathLean::Recruit)
+                    spots.push_back(n);
+                else if (row >= 3 && n->type != MapNodeType::Elite && n->type != MapNodeType::Shop)
+                    fallback.push_back(n);
+            }
+            if (spots.empty()) spots = fallback;   // every node shared with an item path: use a neutral one
+            for (int k = have; k < want && !spots.empty(); ++k) {
+                // one per equal slice of the path, so two don't sit back to back
+                const int slices = want - have;
+                const int slice = k - have;
+                const std::size_t lo = spots.size() * static_cast<std::size_t>(slice) / static_cast<std::size_t>(slices);
+                const std::size_t hi = std::max(lo + 1, spots.size() * static_cast<std::size_t>(slice + 1) /
+                                                            static_cast<std::size_t>(slices));
+                spots[static_cast<std::size_t>(rng.irange(static_cast<int>(lo), static_cast<int>(hi) - 1))]->type =
+                    MapNodeType::Recruit;
+            }
+        }
+    }
 
     MapNode boss;
     boss.type = MapNodeType::Boss;

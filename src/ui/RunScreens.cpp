@@ -144,7 +144,7 @@ void drawNode(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f p, MapNode
 namespace {
 // The equip picker's panels are magnified to fill the screen (few balls: big
 // panels); they lay out in UI units / this.
-float equipZoom(App& app) { return panelRowZoom(app.size(), app.runBallCount(), 0.f, 1.35f); }
+float equipZoom(App& app) { return panelRowZoom(app.size(), app.runBallCount(), 0.f, 1.15f); }
 float equipRowY(App& app) { return app.size().y * 0.58f / equipZoom(app); }
 }  // namespace
 
