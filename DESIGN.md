@@ -990,6 +990,18 @@ Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
     Hot Hands, Duet y Bloodlust.
   - Merge con la Fase N: el tope de forja es `kMaxItemLevel` (5) para todos, así que Duet perdió su "forja hasta Lv5" (`App::forgeCap` quedó fijo).
 
+- **TAB pausa la pelea y también anda en el mapa. [IMPLEMENTADO 2026-09-26]**
+  - En pelea, mientras el overlay de TAB (pelotas + items + reliquias + pactos)
+    está abierto, la simulación se congela (`Screen::frozen()`: no corre el
+    mundo, ni timers, ni el combo, ni el banner de etapa). Dice "paused". Si
+    tenías una pelota agarrada se suelta sin tirarla; clicks, Q, espacio y Esc
+    no hacen nada hasta cerrarlo (Esc lo cierra).
+  - En el mapa, TAB muestra el mismo overlay (`drawLoadoutOverlay`) y bloquea
+    elegir nodo mientras está abierto. Hint `[tab] loadout` bajo la leyenda.
+  - Regla única (`TabPeek`): **mantener** TAB = mirar, al soltar se cierra; un
+    **toque rápido** (< 0,25 s) lo deja abierto hasta otro TAB (o Esc), y ahí
+    avisa "tab to close". Snapshot nuevo: `14_map_tab.png`.
+
 - **Pendiente (idea del usuario, 2026-09-24):** como las mejoras ya no llegan
   en cada oleada, cada una tiene que **sentirse mucho** al conseguirla: repasar
   items / modificadores / reliquias para que sean más fuertes y más visibles

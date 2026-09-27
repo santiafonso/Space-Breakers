@@ -10,7 +10,8 @@ class App;
 //   - input goes only to the top screen;
 //   - drawing walks the stack from the topmost `opaque()` screen upward, so an
 //     overlay (pause, shop) can render on top of the still-visible game;
-//   - the simulation ticks only while the top screen `simulates()`.
+//   - the simulation ticks only while the top screen `simulates()` and isn't
+//     `frozen()` (a fight screen holding its clock still, e.g. the TAB peek).
 class Screen {
 public:
     virtual ~Screen() = default;
@@ -22,6 +23,7 @@ public:
 
     virtual bool opaque() const { return true; }
     virtual bool simulates() const { return false; }
+    virtual bool frozen() const { return false; }
 
     // Seconds since this screen last became the active one. Screens read it to
     // stagger their contents popping in on entry; App resets and advances it.

@@ -67,7 +67,26 @@ private:
     float glow_[MetaUnlockCount] = {};    // 0 = idle, 1 = lit; only the active node rises
 };
 
+// The TAB loadout peek, shared by the fight and the map. Hold TAB to look and
+// let go to close; a quick tap leaves it open until TAB (or Esc) again.
+struct TabPeek {
+    bool open = false;
+    bool down = false;     // TAB is physically held
+    float held = 0.f;      // seconds since this press
+    bool handle(const sf::Event& e);   // true if it consumed the event
+    void update(float dt) { if (down) held += dt; }
+    void close() { open = down = false; held = 0.f; }
+    bool latched() const { return open && !down; }
+};
+
+// The peek itself: every ball's loadout, the relics and the pacts, dimming
+// whatever is underneath. `paused` adds the fight's "paused" note.
+void drawLoadoutOverlay(App& app, sf::RenderWindow& w, bool paused, bool latched);
+// A small [tab] key cap with "loadout" beside it; `topLeft` in UI units.
+void drawTabHint(App& app, sf::RenderWindow& w, sf::Vector2f topLeft);
+
 // Combat. One or more balls bounce freely; you fling them into the enemies.
+// The fight holds still while the TAB peek is open.
 class PlayScreen : public Screen {
 public:
     void onEnter(App& app) override;
@@ -75,18 +94,19 @@ public:
     void update(App& app, float dt, sf::Vector2f mouse) override;
     void draw(App& app, sf::RenderWindow& w) override;
     bool simulates() const override { return true; }
+    bool frozen() const override { return peek_.open; }
 
 private:
     void grab(App& app, sf::Vector2f mouse);
     void release(App& app);
+    void dropHeld(App& app);   // let go of a held ball without throwing it
     sf::Vector2f pointerVelocity() const;
-    void drawPicks(App& app, sf::RenderWindow& w) const;
 
     void drawWaveBanner(App& app, sf::RenderWindow& w) const;
 
     WorldRenderer renderer_;
     bool dragging_ = false;
-    bool showPicks_ = false;   // Tab held: show the balls' loadouts + relics
+    TabPeek peek_;             // TAB: the balls' loadouts + relics + pacts
     sf::Vector2f worldMouse_;  // pointer in arena units (enemy hover help)
     sf::Vector2f anchor_;      // slingshot: where the held ball sits
     void drawAim(App& app, sf::RenderWindow& w) const;
@@ -150,6 +170,7 @@ private:
     int info_ = -1;           // any node under the pointer (for the tooltip)
     float clock_ = 0.f;
     sf::Vector2f mouse_;
+    TabPeek peek_;            // TAB: the same loadout overlay as in a fight
 };
 
 // The F1 dev panel (SB_DEV): grant any pick to a chosen ball, spawn enemy
