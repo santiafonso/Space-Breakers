@@ -106,10 +106,37 @@ struct ShooterWorld {
 };
 
 // ==================================================================== Assassin
-// Teleports to the nearest enemy on a kill.
-struct AssassinMods {};
-struct AssassinState {};
-struct AssassinWorld {};
+// Teleports ("blinks") to the nearest enemy on a kill.
+struct AssassinMods {
+    float backstab = 0.f;     // "Backstab": first hit after a blink x this (0 = off)
+    float cull = 0.f;         // "Cull": a hit leaving an enemy under this HP fraction kills it
+    float spreePer = 0.f;     // "Killing spree": + damage per blink in a chain...
+    int spreeMax = 0;         // ...up to this many
+    float trailFrac = 0.f;    // "Shadow trail": the blink path hits for this x its hit
+    float smokeFrac = 0.f;    // "Smoke bomb": burst on arrival, x its hit...
+    float smokeRadius = 0.f;  // ...this wide, leaving its element
+    float phantomLife = 0.f;  // "Phantom": a shadow copy stays behind this long (0 = off)
+};
+struct AssassinState {
+    float cd = 0.f;           // seconds until it can blink again
+    bool pending = false;     // a kill queued a blink (done on its next tick)
+    float pendingAt = 0.f;    // AssassinWorld::clock when it was queued
+    float armedT = 0.f;       // "Backstab": seconds the next hit stays the big one
+    int spree = 0;            // "Killing spree": blinks in the current chain
+    float spreeT = 0.f;       // ...seconds before the chain breaks
+};
+struct AssassinWorld {
+    // A blink's fading line (from where it left to where it landed) for the
+    // renderer; `r` = the ball's radius (the afterimage left behind).
+    struct Blink {
+        sf::Vector2f a, b;
+        float life = 0.f;
+        float r = 0.f;
+        bool cuts = false;    // the path dealt damage (Shadow trail / Shadow Assassin)
+    };
+    std::vector<Blink> blinks;
+    float clock = 0.f;        // seconds since the run started (drops stale queued blinks)
+};
 
 // ==================================================================== Summoner
 // Summons things: short-lived balls, turrets, a small dragon...

@@ -1383,6 +1383,47 @@ Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
       bajar el misil por tiempo); ver si Meteor opaca a Nova; cómo se leen 3
       arcos de cooldown + el destello del rombito con mucha acción.
 
+  - **Clase Asesino. [IMPLEMENTADO 2026-09-26]** (fase 2; pedido: "al matar un
+    enemigo se teletransporta al enemigo más cercano")
+    - **Rol (2 items):** una kill encola un **blink**; en su próximo tick la
+      pelota aparece junto al enemigo vivo más cercano (dentro de la arena, a
+      ≤480 px) y sale apuntada a él a ≥x1.15 de su crucero. Guardas: cooldown
+      0.45 s entre blinks, un blink encolado que espera más de 0.2 s se
+      descarta (así nunca salta al soltarla después de agarrarla), nunca
+      agarrada ni en Satellite, solo con la oleada corriendo; el punto de
+      llegada se busca girando alrededor del objetivo hasta que no quede en
+      una pared, el núcleo u otro enemigo (si no hay lugar, no salta).
+    - **Shadow Assassin (4 items):** el blink primero **corta una cadena** de
+      hasta 3 enemigos (x0.6 del golpe cada uno + su elemento) y aterriza
+      junto al cuarto; cooldown a la mitad.
+    - **Items** (`cfg::assassin`; todos cuelgan del blink salvo Cull):
+      | Item | Tier | Efecto (Lv1) | Por nivel |
+      |---|---|---|---|
+      | Backstab | Common | el primer golpe tras un blink (ventana 1 s) x1.5 | +0.2x |
+      | Cull | Common | un golpe que deja al enemigo bajo 14% de vida lo mata (y encadena el blink) | +3% |
+      | Killing spree | Uncommon | +8% de daño por blink seguido (tope 5; 2.5 s sin blink corta) | +3% y +1 de tope |
+      | Shadow trail | Uncommon | el camino del blink corta lo que cruza (45% del golpe) | +15% |
+      | Smoke bomb | Rare | ráfaga al aterrizar (70 px, 60% del golpe) que deja su elemento | +15%, +8 px |
+      | Phantom | Epic | cada blink deja una copia sombra (1.6 s, mismos items) que se tira al siguiente enemigo | +0.4 s |
+      Como todo lo de clase, los items solo actúan si la pelota **tiene** la
+      clase (2+ items del tag); Calling Asesino arranca con Backstab + Cull.
+    - **Visual:** la marca de siempre (arco fino atrás); cada blink deja una
+      línea blanca tenue que se apaga en 0.35 s + un aro fantasma donde
+      estaba; si el camino hizo daño (Shadow trail / cadena) la línea es un
+      poco más gruesa y del color de la clase. `AssassinWorld::blinks`.
+    - **Sim headless** (misma tabla que arriba, 16 corridas, click cada 2 s /
+      1 s): Asesino Calling (Backstab + Cull) **10.6 / 12.9** (todas: 1/16 y
+      15/16) contra Striker 7.5 / 11.8 y Guardian 12.2 / 12.9; los mismos 2
+      items **sin** la clase 6.9 / 10.8 (= pelota lisa), o sea el blink vale
+      ~+3.7 peleas. Spree + Trail 9.2 / 12.9, Smoke + Backstab 10.4 / 13,
+      Phantom + Backstab 12.8 / 13, Shadow Assassin L1 12.4 / 13, L5 13 / 13,
+      3 Asesinos 12.4 / 13. Sin tocarla el blink no alcanza (1.8). Sin NaN;
+      0.5-2.4 µs por paso (ruido de otros procesos).
+    - Falta playtest: si el blink "roba" el tiro (la pelota tirada puede
+      desaparecer al matar), si Phantom + Mitosis llena la pantalla (tope de
+      fantasmas `maxGhosts`), y el Asesino en la arena ancha / boss (salta a
+      enemigos, nunca al boss ni a los escudos orbitales).
+
 - **Pendiente (idea del usuario, 2026-09-26): más clases, doble rol,
   habilidades y elemento como slot.** **[PARCIAL 2026-09-26: el marco está
   hecho (Fase P): 8 clases, doble rol, ascendidas, slot de tipo, habilidades,

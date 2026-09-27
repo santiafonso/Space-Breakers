@@ -86,7 +86,17 @@ void markAssassin(sf::RenderTarget& t, sf::Vector2f p, float r, float heading, f
     const float back = heading + kPi;   // a thin cloak trailing behind it
     draw::ring(t, p, r * 0.72f, 1.5f, white(0.6f * a), back - 0.9f, back + 0.9f, 16);
 }
-void worldAssassin(sf::RenderTarget&, const World&) {}
+// Each blink: a thin fading line from where it left to where it landed, and
+// a faint afterimage ring where it was. A path that cut (Shadow trail /
+// Shadow Assassin) is a touch thicker, in the class colour.
+void worldAssassin(sf::RenderTarget& t, const World& world) {
+    for (const AssassinWorld::Blink& f : world.classWorld().assassin.blinks) {
+        const float k = clampf(f.life / cfg::assassin::blinkFxLife, 0.f, 1.f);
+        const sf::Color c = f.cuts ? withAlpha(theme::classAssassin, 0.55f * k) : white(0.3f * k);
+        draw::line(t, f.a, f.b, f.cuts ? 2.5f : 1.5f, c);
+        if (f.r > 0.f) draw::ring(t, f.a, f.r * (1.f + 0.25f * (1.f - k)), 1.5f, white(0.35f * k));
+    }
+}
 
 // ==================================================================== Summoner
 void markSummoner(sf::RenderTarget& t, sf::Vector2f p, float r, float, float a) {

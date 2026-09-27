@@ -88,6 +88,12 @@ enum class UpgradeKind {
     HairTrigger,       // a hit fires a burst at the enemies around it     [Shooter]
 
     // ---- Assassin items ----
+    Backstab,          // the first hit after a blink hits much harder    [Assassin]
+    Cull,              // a hit that leaves an enemy nearly dead kills it  [Assassin]
+    KillingSpree,      // each blink in a chain adds damage               [Assassin]
+    ShadowTrail,       // the blink path cuts what it crosses             [Assassin]
+    SmokeBomb,         // a burst with its element where it lands         [Assassin]
+    Phantom,           // a shadow copy stays behind where it blinked from [Assassin]
 
     // ---- Summoner items ----
 
