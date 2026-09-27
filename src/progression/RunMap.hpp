@@ -75,10 +75,6 @@ namespace detail {
 
 inline MapNodeType rollNodeType(Rng& rng, int row) {
     if (row == 1) return MapNodeType::Combat;              // always open on a fight
-    if (row == cfg::map::rows) {                            // last stop before the boss
-        const int r = rng.irange(0, 99);
-        return r < 55 ? MapNodeType::Rest : (r < 80 ? MapNodeType::Shop : MapNodeType::Forge);
-    }
     struct W { MapNodeType t; int w; };
     const W table[] = {
         {MapNodeType::Combat,  cfg::map::wCombat},
@@ -101,10 +97,17 @@ inline MapNodeType rollNodeType(Rng& rng, int row) {
 
 }  // namespace detail
 
+// The last row before the boss is a fixed stop with no fight, one node per lane.
+inline constexpr MapNodeType kPreBossRow[] = {MapNodeType::Shop, MapNodeType::Rest,
+                                              MapNodeType::Upgrade, MapNodeType::Recruit};
+static_assert(sizeof(kPreBossRow) / sizeof(kPreBossRow[0]) == cfg::map::lanes);
+
 // Build an act's map: row 1 is a single fight (the trunk) linked to every node
 // of row 2; after that each row picks 2..lanes lanes, nodes link to the nodes
 // in the next row within one lane of theirs, and every node gets at least one
-// way in and one way out. All last-row nodes feed the boss.
+// way in and one way out. The last row is kPreBossRow: every node of the row
+// before links to all of it, so the player always picks among the four, and
+// all of it feeds the boss.
 inline RunMap generateMap(Rng& rng, int act) {
     RunMap m;
     m.act = act;
@@ -117,7 +120,8 @@ inline RunMap generateMap(Rng& rng, int act) {
         for (int i = L - 1; i > 0; --i) std::swap(lanes[static_cast<std::size_t>(i)], lanes[static_cast<std::size_t>(rng.irange(0, i))]);
         // Row 1 is the trunk: one fight, drawn centred (lane -1), that every
         // path starts from.
-        const int count = r == 1 ? 1 : rng.irange(cfg::map::minPerRow, L);
+        const bool preBoss = r == cfg::map::rows;
+        const int count = r == 1 ? 1 : (preBoss ? L : rng.irange(cfg::map::minPerRow, L));
         lanes.resize(static_cast<std::size_t>(count));
         std::sort(lanes.begin(), lanes.end());
         if (r == 1) lanes[0] = -1;
@@ -127,7 +131,7 @@ inline RunMap generateMap(Rng& rng, int act) {
             MapNode n;
             n.row = r;
             n.lane = lane;
-            n.type = detail::rollNodeType(rng, r);
+            n.type = preBoss ? kPreBossRow[lane] : detail::rollNodeType(rng, r);
             ids.push_back(static_cast<int>(m.nodes.size()));
             m.nodes.push_back(n);
         }
@@ -158,7 +162,8 @@ inline RunMap generateMap(Rng& rng, int act) {
         };
         for (int a : cur)
             for (int b : nxt)
-                if (r == 0 ||   // the trunk opens onto every branch of row 2
+                if (r == 0 ||                       // the trunk opens onto every branch of row 2
+                    r + 2 == rowNodes.size() ||     // and every node reaches the whole pre-boss row
                     std::abs(m.nodes[static_cast<std::size_t>(a)].lane -
                              m.nodes[static_cast<std::size_t>(b)].lane) <= 1)
                     link(a, b);
