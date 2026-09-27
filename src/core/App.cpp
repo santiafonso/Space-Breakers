@@ -1701,9 +1701,24 @@ void App::processEvents(const FrameEvents& ev) {
                               theme::core, 24, 1.5f);
             effects_.flash(theme::core, 0.3f);
         }
-        if (r.eliteWave) openChoice(RollSource::Elite);
-        else openMap();
+        postFight();
     }
+}
+
+// After a cleared fight: the build grows. The run's first fight hands the
+// first ball its first ability; then every fight offers a pick (an Elite's at
+// elite odds) before the map.
+void App::postFight() {
+    RunState& r = data_.run;
+    const bool firstFight = r.map.act == 1 && r.mapRow <= 1;
+    const bool abilityless = !r.balls.empty() && std::all_of(std::begin(r.balls[0].ability),
+                                                             std::end(r.balls[0].ability),
+                                                             [](int a) { return a < 0; });
+    if (firstFight && abilityless && openAbilityChoice()) {
+        abilityAfterFight_ = true;
+        return;
+    }
+    openChoice(r.eliteWave ? RollSource::Elite : RollSource::Normal);
 }
 
 void App::update(float frameDt) {

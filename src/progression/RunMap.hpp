@@ -50,8 +50,8 @@ inline const char* mapNodeName(MapNodeType t) {
 
 inline const char* mapNodeDesc(MapNodeType t) {
     switch (t) {
-        case MapNodeType::Combat:  return "a wave of enemies - pays gold";
-        case MapNodeType::Elite:   return "a much harder wave - pays more gold and a pick of 1 of 4";
+        case MapNodeType::Combat:  return "a wave of enemies - pays a little gold and a pick of 1 of 4";
+        case MapNodeType::Elite:   return "a much harder wave - more gold and a rarer pick";
         case MapNodeType::Shop:    return "spend gold on balls, items, modifiers, relics or repairs";
         case MapNodeType::Forge:   return "level up one item a ball already carries";
         case MapNodeType::Rest:    return "no fight: the core is repaired to full";
@@ -102,44 +102,100 @@ inline constexpr MapNodeType kPreBossRow[] = {MapNodeType::Shop, MapNodeType::Re
                                               MapNodeType::Upgrade, MapNodeType::Recruit};
 static_assert(sizeof(kPreBossRow) / sizeof(kPreBossRow[0]) == cfg::map::lanes);
 
-// Build an act's map: row 1 is a single fight (the trunk) linked to every node
-// of row 2; after that each row picks 2..lanes lanes, nodes link to the nodes
-// in the next row within one lane of theirs, and every node gets at least one
-// way in and one way out. The last row is kPreBossRow: every node of the row
-// before links to all of it, so the player always picks among the four, and
-// all of it feeds the boss.
+// Build an act's map. Row 1 is a single fight (the trunk). Above it a few
+// paths climb toward the boss: each path mostly keeps its lane and now and
+// then drifts one lane over, splitting off or merging into a neighbour, and
+// paths never cross - so a branch you take is a commitment, not a detour.
+// Every row between has 2..lanes nodes. The last row is kPreBossRow: each
+// node of the row before links to the stops in its lane and the lanes beside
+// it, and all of it feeds the boss.
 inline RunMap generateMap(Rng& rng, int act) {
     RunMap m;
     m.act = act;
     const int L = cfg::map::lanes;
-    std::vector<std::vector<int>> rowNodes;   // node indices per row (0-based row)
+    const int R = cfg::map::rows;
 
-    for (int r = 1; r <= cfg::map::rows; ++r) {
+    // Walk the paths: walkers[k] = path k's lane on the current row.
+    std::vector<std::vector<int>> laneRows;   // lanes used per row 2..R-1
+    std::vector<std::vector<std::pair<int, int>>> steps;   // lane -> lane moves out of each of those rows
+    {
+        std::vector<int> walkers;
+        const int paths = rng.irange(cfg::map::minPerRow, L);   // 2..4 paths leave the trunk
         std::vector<int> lanes(static_cast<std::size_t>(L));
         for (int i = 0; i < L; ++i) lanes[static_cast<std::size_t>(i)] = i;
-        for (int i = L - 1; i > 0; --i) std::swap(lanes[static_cast<std::size_t>(i)], lanes[static_cast<std::size_t>(rng.irange(0, i))]);
-        // Row 1 is the trunk: one fight, drawn centred (lane -1), that every
-        // path starts from.
-        const bool preBoss = r == cfg::map::rows;
-        const int count = r == 1 ? 1 : (preBoss ? L : rng.irange(cfg::map::minPerRow, L));
-        lanes.resize(static_cast<std::size_t>(count));
-        std::sort(lanes.begin(), lanes.end());
-        if (r == 1) lanes[0] = -1;
+        for (int i = L - 1; i > 0; --i)
+            std::swap(lanes[static_cast<std::size_t>(i)], lanes[static_cast<std::size_t>(rng.irange(0, i))]);
+        walkers.assign(lanes.begin(), lanes.begin() + paths);
+        std::sort(walkers.begin(), walkers.end());
+        for (int r = 2; r < R; ++r) {
+            std::vector<int> row = walkers;
+            row.erase(std::unique(row.begin(), row.end()), row.end());
+            laneRows.push_back(row);
+            if (r + 1 == R) break;
+            // Step every walker to the next row without crossing another's
+            // step (walkers stay in lane order); keep at least 2 lanes lit.
+            std::vector<int> next;
+            for (int tries = 0; tries < 30; ++tries) {
+                next.clear();
+                int floor = 0;   // lane order: no walker may pass the one on its left
+                for (int wv : walkers) {
+                    const int roll = rng.irange(0, 99);
+                    int to = wv + (roll < cfg::map::driftPct / 2 ? -1 : (roll < cfg::map::driftPct ? 1 : 0));
+                    to = std::clamp(to, std::max(0, floor), L - 1);
+                    next.push_back(to);
+                    floor = to;
+                }
+                std::vector<int> uniq = next;
+                uniq.erase(std::unique(uniq.begin(), uniq.end()), uniq.end());
+                if (static_cast<int>(uniq.size()) >= cfg::map::minPerRow) break;
+            }
+            // Now and then a path forks: a new walker leaves from the same
+            // node toward a free neighbouring lane (never across another path).
+            if (walkers.size() < static_cast<std::size_t>(L) && rng.irange(0, 99) < cfg::map::splitPct) {
+                const std::size_t k = static_cast<std::size_t>(rng.irange(0, static_cast<int>(walkers.size()) - 1));
+                const int right = next[k] + 1, left = next[k] - 1;
+                const bool canR = right < L && (k + 1 >= next.size() || right <= next[k + 1]);
+                const bool canL = left >= 0 && (k == 0 || left >= next[k - 1]);
+                if (canR && (!canL || rng.irange(0, 1) == 0)) {
+                    walkers.insert(walkers.begin() + static_cast<long>(k) + 1, walkers[k]);
+                    next.insert(next.begin() + static_cast<long>(k) + 1, right);
+                } else if (canL) {
+                    walkers.insert(walkers.begin() + static_cast<long>(k), walkers[k]);
+                    next.insert(next.begin() + static_cast<long>(k), left);
+                }
+            }
+            // A merged pair may split again later: walkers on one lane keep
+            // walking separately.
+            std::vector<std::pair<int, int>> mv;
+            for (std::size_t k = 0; k < walkers.size(); ++k) mv.emplace_back(walkers[k], next[k]);
+            steps.push_back(mv);
+            walkers = next;
+        }
+    }
 
+    std::vector<std::vector<int>> rowNodes;   // node indices per row (0-based row)
+    auto addRow = [&](int r, const std::vector<int>& lanes, bool preBoss) {
         std::vector<int> ids;
         for (int lane : lanes) {
             MapNode n;
             n.row = r;
             n.lane = lane;
-            n.type = preBoss ? kPreBossRow[lane] : detail::rollNodeType(rng, r);
+            n.type = r == 1 ? MapNodeType::Combat
+                            : (preBoss ? kPreBossRow[lane] : detail::rollNodeType(rng, r));
             ids.push_back(static_cast<int>(m.nodes.size()));
             m.nodes.push_back(n);
         }
         rowNodes.push_back(ids);
-    }
+    };
+    addRow(1, {-1}, false);   // the trunk, drawn centred
+    for (int r = 2; r < R; ++r) addRow(r, laneRows[static_cast<std::size_t>(r - 2)], false);
+    std::vector<int> all(static_cast<std::size_t>(L));
+    for (int i = 0; i < L; ++i) all[static_cast<std::size_t>(i)] = i;
+    addRow(R, all, true);
+
     MapNode boss;
     boss.type = MapNodeType::Boss;
-    boss.row = cfg::map::rows + 1;
+    boss.row = R + 1;
     boss.lane = -1;   // drawn centred
     const int bossId = static_cast<int>(m.nodes.size());
     m.nodes.push_back(boss);
@@ -148,34 +204,30 @@ inline RunMap generateMap(Rng& rng, int act) {
         auto& nx = m.nodes[static_cast<std::size_t>(a)].next;
         if (std::find(nx.begin(), nx.end(), b) == nx.end()) nx.push_back(b);
     };
-    for (std::size_t r = 0; r + 1 < rowNodes.size(); ++r) {
-        const auto& cur = rowNodes[r];
-        const auto& nxt = rowNodes[r + 1];
-        auto nearest = [&](int from, const std::vector<int>& pool) {
-            int best = pool.front(), bd = 1 << 20;
-            for (int id : pool) {
-                const int d = std::abs(m.nodes[static_cast<std::size_t>(id)].lane -
-                                       m.nodes[static_cast<std::size_t>(from)].lane);
-                if (d < bd) { bd = d; best = id; }
-            }
-            return best;
-        };
-        for (int a : cur)
-            for (int b : nxt)
-                if (r == 0 ||                       // the trunk opens onto every branch of row 2
-                    r + 2 == rowNodes.size() ||     // and every node reaches the whole pre-boss row
-                    std::abs(m.nodes[static_cast<std::size_t>(a)].lane -
-                             m.nodes[static_cast<std::size_t>(b)].lane) <= 1)
-                    link(a, b);
-        for (int a : cur)   // a way out for everyone
-            if (m.nodes[static_cast<std::size_t>(a)].next.empty()) link(a, nearest(a, nxt));
-        for (int b : nxt) {  // a way in for everyone
-            bool reached = false;
-            for (int a : cur)
-                for (int t : m.nodes[static_cast<std::size_t>(a)].next)
-                    if (t == b) reached = true;
-            if (!reached) link(nearest(b, cur), b);
-        }
+    auto nodeOn = [&](std::size_t row, int lane) {
+        for (int id : rowNodes[row])
+            if (m.nodes[static_cast<std::size_t>(id)].lane == lane) return id;
+        return -1;
+    };
+    for (int b : rowNodes[1]) link(rowNodes[0][0], b);   // the trunk opens onto every path
+    for (std::size_t i = 0; i < steps.size(); ++i)        // rows 2..R-2: the walkers' own steps
+        for (const auto& [from, to] : steps[i]) link(nodeOn(i + 1, from), nodeOn(i + 2, to));
+    for (int a : rowNodes[rowNodes.size() - 2])           // the pre-boss stops beside you
+        for (int b : rowNodes.back())
+            if (std::abs(m.nodes[static_cast<std::size_t>(a)].lane - m.nodes[static_cast<std::size_t>(b)].lane) <= 1)
+                link(a, b);
+    for (int b : rowNodes.back()) {   // a stop no lane runs beside: reached from the nearest
+        const auto& prev = rowNodes[rowNodes.size() - 2];
+        bool reached = false;
+        for (int a : prev)
+            for (int t : m.nodes[static_cast<std::size_t>(a)].next) reached = reached || t == b;
+        if (reached) continue;
+        int best = prev.front();
+        for (int a : prev)
+            if (std::abs(m.nodes[static_cast<std::size_t>(a)].lane - m.nodes[static_cast<std::size_t>(b)].lane) <
+                std::abs(m.nodes[static_cast<std::size_t>(best)].lane - m.nodes[static_cast<std::size_t>(b)].lane))
+                best = a;
+        link(best, b);
     }
     for (int a : rowNodes.back()) link(a, bossId);
     for (auto& n : m.nodes) std::sort(n.next.begin(), n.next.end());

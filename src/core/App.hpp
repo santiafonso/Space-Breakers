@@ -200,6 +200,7 @@ private:
     void advanceRunIntro();
     bool openStarterChoice();
     std::vector<UpgradeKind> starterPool(Tier want);          // Starter kit candidates, nearest tier first
+    void postFight();
     bool openAbilityChoice();                                 // the run's first ability (false = nothing to pick)
     void grantMageMissiles();                                 // a Mage ball gets Magic missile in a free slot
     // Pacts.
@@ -277,6 +278,7 @@ private:
     std::vector<PactId> pactChoices_;
     std::vector<UpgradeKind> abilityChoices_;   // the first-ability pick's cards
     PactSource pactSrc_ = PactSource::Boss;
+    bool abilityAfterFight_ = false;   // the ability pick came from postFight: its pick follows
     int introStep_ = -1;      // >= 0 while the run intro (pact / starter pick) is still running
     float novaCd_ = 0.f;      // "Nova" pact cooldown (s)
 public:

@@ -299,25 +299,47 @@ void EquipScreen::draw(App& app, sf::RenderWindow& w) {
 
 // ================================================================ Map
 
+namespace {
+// The map is taller than the screen: a strip of rows you scroll through, the
+// status line pinned on top. Rows are kMapStep apart, row 1 sits at the
+// bottom of the view when scroll = 0.
+constexpr float kMapStep = 104.f;
+constexpr float kMapLaneGap = 190.f;
+constexpr float kMapTop = 104.f;      // the view's top edge (under the status line)
+constexpr float kMapBottomPad = 70.f; // row 1's distance from the bottom edge at scroll 0
+constexpr float kNodeR = 21.f;
+constexpr float kBossR = 36.f;
+constexpr float kStatusY = 52.f;
+}  // namespace
+
+float MapScreen::scrollMax(App& app) const {
+    const sf::Vector2f s = app.size();
+    return std::max(0.f, static_cast<float>(cfg::map::rows) * kMapStep - (s.y - kMapBottomPad - kMapTop - 60.f));
+}
+
+float MapScreen::scrollFor(App& app, int row) const {
+    const sf::Vector2f s = app.size();
+    // Where you stand sits low in the view so the rows ahead fill it.
+    const float want = s.y * 0.74f;
+    const float atZero = s.y - kMapBottomPad - static_cast<float>(std::max(row, 1) - 1) * kMapStep;
+    return clampf(want - atZero, 0.f, scrollMax(app));
+}
+
 sf::Vector2f MapScreen::nodePos(App& app, int node) const {
     const sf::Vector2f s = app.size();
     const MapNode& n = app.data().run.map.nodes[static_cast<std::size_t>(node)];
-    // Bottom to top, like a tree: row 1 at the base, the boss at the crown
-    // just under the title.
-    const float top = 140.f, bottom = s.y - 50.f;
-    const float step = (bottom - top) / static_cast<float>(cfg::map::rows);   // rows 1..9 + boss
-    const float y = bottom - static_cast<float>(n.row - 1) * step;
-    const float laneGap = 150.f;
-    const float left = s.x * 0.5f - laneGap * 0.5f * static_cast<float>(cfg::map::lanes - 1);
-    const float x = n.lane < 0 ? s.x * 0.5f : left + laneGap * static_cast<float>(n.lane);
+    // Bottom to top, like a tree: row 1 at the base, the boss at the crown.
+    const float y = s.y - kMapBottomPad - static_cast<float>(n.row - 1) * kMapStep + scroll_;
+    const float left = s.x * 0.5f - kMapLaneGap * 0.5f * static_cast<float>(cfg::map::lanes - 1);
+    const float x = n.lane < 0 ? s.x * 0.5f : left + kMapLaneGap * static_cast<float>(n.lane);
     return {x, y};
 }
 
 int MapScreen::nodeAt(App& app, sf::Vector2f mouse, bool openOnly) const {
-    // Nearest node within reach (rows sit close together on a long map).
+    if (mouse.y < kMapTop) return -1;   // under the pinned status line
     const int count = static_cast<int>(app.data().run.map.nodes.size());
     int best = -1;
-    float bestD = 22.f;
+    float bestD = kNodeR + 12.f;
     for (int i = 0; i < count; ++i) {
         const float d = length(nodePos(app, i) - mouse);
         if (d < bestD && (!openOnly || app.mapNodeOpen(i))) { bestD = d; best = i; }
@@ -329,6 +351,23 @@ void MapScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
     if (peek_.handle(e)) return;   // TAB loadout peek: the map waits under it
     if (peek_.open) { loadoutDragEvent(app, peek_, e); return; }
     if (isKey(e, sf::Keyboard::Escape)) { app.openPause(); return; }
+    // Scroll: wheel, arrows / W S; Space jumps back to where you stand.
+    if (e.type == sf::Event::MouseWheelScrolled) {
+        scrollTarget_ = clampf(scrollTarget_ + e.mouseWheelScroll.delta * kMapStep * 0.8f, 0.f, scrollMax(app));
+        return;
+    }
+    if (e.type == sf::Event::KeyPressed) {
+        const auto k = e.key.code;
+        if (k == sf::Keyboard::Up || k == sf::Keyboard::W || k == sf::Keyboard::Down || k == sf::Keyboard::S) {
+            const float dir = (k == sf::Keyboard::Up || k == sf::Keyboard::W) ? 1.f : -1.f;
+            scrollTarget_ = clampf(scrollTarget_ + dir * kMapStep * 2.f, 0.f, scrollMax(app));
+            return;
+        }
+        if (k == sf::Keyboard::Space) {
+            scrollTarget_ = scrollFor(app, app.data().run.mapRow + 1);
+            return;
+        }
+    }
     if (e.type == sf::Event::KeyPressed && e.key.code >= sf::Keyboard::Num1 &&
         e.key.code <= sf::Keyboard::Num4) {
         // 1-4: the open nodes, left to right
@@ -348,13 +387,16 @@ void MapScreen::update(App& app, float dt, sf::Vector2f mouse) {
     clock_ += dt;
     mouse_ = mouse;
     peek_.update(dt);
+    if (!scrollInit_) {   // open on where you stand: the next row just above centre
+        scrollInit_ = true;
+        const float from = scrollFor(app, app.data().run.mapRow);
+        scroll_ = from;
+        scrollTarget_ = scrollFor(app, app.data().run.mapRow + 1);
+    }
+    scroll_ += (scrollTarget_ - scroll_) * (1.f - std::exp(-9.f * dt));
     hover_ = peek_.open ? -1 : nodeAt(app, mouse);
     info_ = peek_.open ? -1 : nodeAt(app, mouse, false);
     uisound::hover(this, hover_);
-}
-
-namespace {
-constexpr float kIronY = 84.f;   // the "iron core" marker sits at the end of the status line
 }
 
 void MapScreen::draw(App& app, sf::RenderWindow& w) {
@@ -364,38 +406,14 @@ void MapScreen::draw(App& app, sf::RenderWindow& w) {
     const auto& nodes = r.map.nodes;
     const int count = static_cast<int>(nodes.size());
 
-    drawLabel(w, app.font(), "act " + std::to_string(r.map.act), 12, {s.x * 0.5f, 16.f},
-              withAlpha(theme::accent, clampf(introPop(it, 0.f), 0.f, 1.f)));
-    drawCenteredPop(w, app.font(), "Choose your path", theme::fsTitle, {s.x * 0.5f, 46.f}, theme::textHi,
-                    introPop(it, 0.f, 0.3f));
-    const float ironX = drawRunStatus(app, w, kIronY) + 34.f;
-    // "Iron core": a quiet marker while no repair has been made this act, on
-    // the status line (below it, the boss row's "you" brackets would cover it).
-    if (app.ironCoreAlive())
-        drawLabel(w, app.font(), "iron core", 11, {ironX, kIronY},
-                  withAlpha(theme::core, 0.55f * clampf(introPop(it, 0.1f), 0.f, 1.f)), -1);
+    // Nodes fade out toward the top and bottom edges of the view rather than
+    // being cut off.
+    auto edgeFade = [&](float y) {
+        return clampf((y - kMapTop) / 70.f, 0.f, 1.f) * clampf((s.y - 8.f - y) / 50.f, 0.f, 1.f);
+    };
 
-    // Row guides: a faint rule per stage and its number down the left edge of
-    // the map, the row you stand on picked out - the map reads like a scale.
-    {
-        const float ga = clampf(introPop(it, 0.05f, 0.4f), 0.f, 1.f);
-        const float x0 = nodePos(app, 0).x - 150.f * 0.5f * static_cast<float>(cfg::map::lanes - 1) - 40.f;
-        const float x1 = s.x - x0;
-        for (int row = 1; row <= cfg::map::rows; ++row) {
-            float y = 0.f;
-            for (const MapNode& n : nodes)
-                if (n.row == row) { y = nodePos(app, static_cast<int>(&n - nodes.data())).y; break; }
-            if (y <= 0.f) continue;
-            const bool cur = row == r.mapRow;
-            draw::line(w, {x0, y}, {x1, y}, 1.f, withAlpha(cur ? theme::accent : theme::grid, (cur ? 0.18f : 0.06f) * ga));
-            char num[8];
-            std::snprintf(num, sizeof(num), "%02d", row);
-            drawLabel(w, app.font(), num, 10, {x0 - 8.f, y}, withAlpha(cur ? theme::accent : theme::textDim, ga), 1);
-        }
-    }
-
-    // Links first. The path you walked is bright, the ways open to you are lit,
-    // everything else stays faint.
+    // Links first. The path you walked is bright, the ways open to you are
+    // clear lines, everything else stays faint. Nothing moves.
     for (int i = 0; i < count; ++i) {
         const MapNode& a = nodes[static_cast<std::size_t>(i)];
         for (int j : a.next) {
@@ -403,71 +421,74 @@ void MapScreen::draw(App& app, sf::RenderWindow& w) {
             const bool walked = a.visited && b.visited;
             const bool open = i == r.mapNode && app.mapNodeOpen(j);
             const sf::Vector2f pa = nodePos(app, i), pb = nodePos(app, j);
-            if (open) {   // the ways open to you: dashes marching toward the next node
-                const sf::Vector2f d = pb - pa;
-                const float len = length(d);
-                const sf::Vector2f u = d / len;
-                const float dash = 7.f, period = 13.f, off = std::fmod(clock_ * 22.f, period);
-                for (float t = off - period; t < len; t += period) {
-                    const float a0 = std::max(0.f, t), a1 = std::min(len, t + dash);
-                    if (a1 > a0) draw::line(w, pa + u * a0, pa + u * a1, 2.f, withAlpha(theme::accent, 0.8f));
-                }
-            } else {
-                draw::line(w, pa, pb, walked ? 2.5f : 1.f,
-                           withAlpha(walked ? theme::textHi : theme::grid, walked ? 0.6f : 0.16f));
-            }
+            const float fa = std::min(edgeFade(pa.y), edgeFade(pb.y)) * 0.5f +
+                             0.5f * std::max(edgeFade(pa.y), edgeFade(pb.y));
+            if (fa <= 0.01f) continue;
+            // stop short of the nodes so a line never runs through an icon
+            const sf::Vector2f d = pb - pa;
+            const float len = length(d);
+            const sf::Vector2f u = d / len;
+            const float ra = a.type == MapNodeType::Boss ? kBossR : kNodeR * 1.25f;
+            const float rb = b.type == MapNodeType::Boss ? kBossR : kNodeR * 1.25f;
+            const sf::Vector2f p0 = pa + u * (ra + 6.f), p1 = pb - u * (rb + 6.f);
+            if (open) draw::line(w, p0, p1, 2.f, withAlpha(theme::accent, 0.7f * fa));
+            else draw::line(w, p0, p1, walked ? 2.5f : 1.f,
+                            withAlpha(walked ? theme::textLo : theme::grid, (walked ? 0.7f : 0.22f) * fa));
         }
     }
 
     for (int i = 0; i < count; ++i) {
         const MapNode& n = nodes[static_cast<std::size_t>(i)];
-        const float cp = clampf(introPop(it, 0.05f + 0.025f * static_cast<float>(n.row), 0.3f), 0.f, 1.f);
-        if (cp <= 0.001f) continue;
+        const sf::Vector2f p = nodePos(app, i);
+        const float fade = edgeFade(p.y);
+        const float cp = clampf(introPop(it, 0.05f + 0.02f * static_cast<float>(std::abs(n.row - r.mapRow)), 0.3f),
+                                0.f, 1.f);
+        if (cp * fade <= 0.001f) continue;
         const bool open = app.mapNodeOpen(i);
         const bool here = i == r.mapNode;
         const bool past = n.row <= r.mapRow && !here;
-        float rad = n.type == MapNodeType::Boss ? 25.f : 15.f;
-        if (open) rad *= 1.f + 0.08f * std::sin(clock_ * 5.f) + (hover_ == i ? 0.18f : 0.f);
-        const float a = cp * (open || here ? 1.f : (past ? (n.visited ? 0.7f : 0.2f) : 0.45f));
-        drawNode(w, app.font(), nodePos(app, i), n.type, rad, a, n.visited || hover_ == i);
-        if (here) {   // you are here: a target lock that breathes
-            const sf::Vector2f p = nodePos(app, i);
-            const float h = rad + 9.f + 2.f * std::sin(clock_ * 3.f);
-            draw::brackets(w, {p.x - h, p.y - h, 2.f * h, 2.f * h}, 7.f, 2.f, withAlpha(theme::textHi, 0.9f * cp));
-            drawLabel(w, app.font(), "you", 10, {p.x + h + 8.f, p.y}, withAlpha(theme::textHi, 0.8f * cp), -1);
+        float rad = n.type == MapNodeType::Boss ? kBossR : kNodeR;
+        if (open && hover_ == i) rad *= 1.12f;
+        // Ahead: plain but readable. Open: full. Behind: only the path you took.
+        const float a = cp * fade * (open || here ? 1.f : (past ? (n.visited ? 0.55f : 0.14f) : 0.5f));
+        drawNode(w, app.font(), p, n.type, rad, a, open && hover_ == i);
+        if (here) {   // you are here: still brackets around the node
+            const float h = rad * 1.25f + 10.f;
+            draw::brackets(w, {p.x - h, p.y - h, 2.f * h, 2.f * h}, 8.f, 2.f, withAlpha(theme::textHi, 0.8f * cp * fade));
         }
     }
 
-    // Left column: the legend. Right column: the hovered node's name + what it does.
-    const MapNodeType legend[] = {MapNodeType::Combat, MapNodeType::Elite,   MapNodeType::Shop,
-                                  MapNodeType::Forge,  MapNodeType::Rest,    MapNodeType::Upgrade,
-                                  MapNodeType::Recruit};
-    float ly = s.y * 0.36f;
-    drawLabel(w, app.font(), "legend", 10, {theme::margin + 8.f, ly - 32.f}, theme::textDim, -1);
-    draw::line(w, {theme::margin + 8.f, ly - 22.f}, {theme::margin + 150.f, ly - 22.f}, 1.f,
-               withAlpha(theme::arenaEdge, 0.8f));
-    int legendHover = -1;
-    for (MapNodeType t : legend) {
-        if (sf::FloatRect(theme::margin + 8.f, ly - 15.f, 150.f, 30.f).contains(mouse_))
-            legendHover = static_cast<int>(t);
-        drawNode(w, app.font(), {theme::margin + 24.f, ly}, t, 10.f, 0.9f, false);
-        drawLabel(w, app.font(), mapNodeName(t), 11, {theme::margin + 44.f, ly}, theme::textLo, -1);
-        ly += 34.f;
+    // Pinned header: a band over the scrolled map with the act and the run's
+    // status line.
+    {
+        sf::RectangleShape band({s.x, kMapTop});
+        band.setFillColor(withAlpha(theme::bg, 0.92f));
+        w.draw(band);
+        draw::line(w, {0.f, kMapTop}, {s.x, kMapTop}, 1.f, withAlpha(theme::arenaEdge, 0.5f));
     }
-    sf::Text keys = makeText(app.font(), "click a lit node (or 1-4)", theme::fsSmall, theme::textDim);
-    keys.setPosition(theme::margin + 8.f, ly + 6.f);
-    w.draw(keys);
-    drawTabHint(app, w, {theme::margin + 8.f, ly + 32.f});
+    const float ha = clampf(introPop(it, 0.f), 0.f, 1.f);
+    drawLabel(w, app.font(), "act " + std::to_string(r.map.act), 14, {theme::margin, kStatusY},
+              withAlpha(theme::accent, ha), -1);
+    const float statusEnd = drawRunStatus(app, w, kStatusY);
+    const float ironX = statusEnd + 34.f;
+    if (app.ironCoreAlive())   // "Iron core": a quiet marker while no repair has been made this act
+        drawLabel(w, app.font(), "iron core", 12, {ironX, kStatusY}, withAlpha(theme::core, 0.55f * ha), -1);
 
-    // The run's pacts, under the legend (hover a chip for its rule).
+    // Scroll cue: a small caret at an edge while there's more map that way.
+    if (scroll_ < scrollMax(app) - 4.f)
+        draw::polygon(w, {s.x * 0.5f, kMapTop + 16.f}, 6.f, 3, -kPi / 2.f, withAlpha(theme::textDim, 0.8f),
+                      withAlpha(theme::textDim, 0.8f));
+    if (scroll_ > 4.f)
+        draw::polygon(w, {s.x * 0.5f, s.y - 16.f}, 6.f, 3, kPi / 2.f, withAlpha(theme::textDim, 0.8f),
+                      withAlpha(theme::textDim, 0.8f));
+
+    drawTabHint(app, w, {theme::margin, s.y - theme::margin - keyCapSize(app.font(), "tab").y});
+
+    // The run's pacts, top-right under the header (hover a chip for its rule).
     bool pactHover = false;
-    if (!r.pacts.empty()) {
-        sf::Text ph = makeText(app.font(), "Pacts", theme::fsSmall, theme::textLo);
-        ph.setPosition(theme::margin + 12.f, ly + 66.f);
-        w.draw(ph);
-        pactHover = drawPactStrip(app, w, {theme::margin + 10.f, ly + 86.f}, false, mouse_,
+    if (!r.pacts.empty())
+        pactHover = drawPactStrip(app, w, {s.x - theme::margin - 160.f, kMapTop + 24.f}, false, mouse_,
                                   info_ < 0 && !peek_.open);
-    }
 
     if (peek_.open) {   // the loadout peek covers the map; its own hover help only
         drawLoadoutOverlay(app, w, false, peek_);
@@ -481,16 +502,13 @@ void MapScreen::draw(App& app, sf::RenderWindow& w) {
         if (!app.mapNodeOpen(info_) && info_ != r.mapNode)
             d += n.row <= r.mapRow ? "  (behind you)" : "  (not reachable from here yet)";
         drawTooltip(w, app.font(), mouse_, s, mapNodeName(n.type), d, nodeColor(n.type));
-    } else if (legendHover >= 0) {
-        const auto t = static_cast<MapNodeType>(legendHover);
-        drawTooltip(w, app.font(), mouse_, s, mapNodeName(t), mapNodeDesc(t), nodeColor(t));
-    } else if (!pactHover && app.ironCoreAlive() && std::fabs(mouse_.y - kIronY) < 8.f &&
-               mouse_.x > ironX - 4.f && mouse_.x < ironX + 80.f) {
+    } else if (!pactHover && app.ironCoreAlive() && std::fabs(mouse_.y - kStatusY) < 10.f &&
+               mouse_.x > ironX - 4.f && mouse_.x < ironX + 90.f) {
         drawTooltip(w, app.font(), mouse_, s, "Iron core",
                     "no repairs yet this act. Beat the boss without resting, buying a repair or skipping a pick "
                     "to repair, and the run banks +" + std::to_string(cfg::meta::ironCoreCores) +
                         " cores. The heal before each fight doesn't count.", theme::core);
-    } else if (!pactHover && std::fabs(mouse_.y - 84.f) < 12.f && std::fabs(mouse_.x - s.x * 0.5f) < 220.f) {
+    } else if (!pactHover && std::fabs(mouse_.y - kStatusY) < 12.f && std::fabs(mouse_.x - s.x * 0.5f) < 220.f) {
         drawTooltip(w, app.font(), mouse_, s, "Gold, core and luck",
                     "gold buys things in shops; the core must survive - rests and shops repair it. Luck (" +
                         std::to_string(app.luck()) + "): each point makes every chance " +

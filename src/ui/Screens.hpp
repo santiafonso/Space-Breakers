@@ -186,7 +186,12 @@ public:
 private:
     sf::Vector2f nodePos(App& app, int node) const;
     int nodeAt(App& app, sf::Vector2f mouse, bool openOnly = true) const;
+    float scrollMax(App& app) const;
+    float scrollFor(App& app, int row) const;   // the scroll that puts `row` in view, a bit below centre
     int hover_ = -1;          // open node under the pointer
+    float scroll_ = 0.f;      // how far the map is scrolled up (px): 0 = row 1 at the bottom
+    float scrollTarget_ = 0.f;
+    bool scrollInit_ = false;
     int info_ = -1;           // any node under the pointer (for the tooltip)
     float clock_ = 0.f;
     sf::Vector2f mouse_;

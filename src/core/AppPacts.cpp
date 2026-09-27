@@ -286,10 +286,7 @@ void App::advanceRunIntro() {
         introStep_ = 1;
         if (u[MetaCovenant] > 0 && openPactChoice(PactSource::Start)) return;   // "Covenant"
     }
-    if (introStep_ == 1) {
-        introStep_ = 2;
-        if (openAbilityChoice()) return;   // the first ball's first ability ("Calling": a 4th card)
-    }
+    if (introStep_ == 1) introStep_ = 2;   // (the first ability now comes after the first fight - postFight)
     if (introStep_ == 2) {
         introStep_ = 3;
         if (u[MetaQuartermaster] > 0 && u[MetaStarterKit] > 0 && openStarterChoice()) return;   // "Quartermaster"
@@ -334,6 +331,10 @@ void App::chooseAbility(int idx) {
     back();   // close the pick
     chooseAbilityCard(idx);
     if (introStep_ >= 0) advanceRunIntro();   // (the dev panel can open it mid-run too)
+    else if (abilityAfterFight_) {             // the first fight's ability: then its usual pick
+        abilityAfterFight_ = false;
+        openChoice(data_.run.eliteWave ? RollSource::Elite : RollSource::Normal);
+    }
     save();
 }
 
