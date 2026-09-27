@@ -76,7 +76,10 @@ void drawLoadoutOverlay(App& app, sf::RenderWindow& w, bool paused, const TabPee
 // letting go on another slot / ball moves or swaps it (App::moveSlot).
 // True if it used the event.
 bool loadoutDragEvent(App& app, TabPeek& peek, const sf::Event& e);
-sf::Vector2f loadoutPanelCenter(App& app, int i);   // ball i's panel in the peek, UI units
+// The peek scales up to fill the screen when there are few balls: it lays out
+// in UI units / loadoutZoom(app). Ball i's panel centre is in those units.
+float loadoutZoom(App& app);
+sf::Vector2f loadoutPanelCenter(App& app, int i);
 // A small [tab] key cap with "loadout" beside it; `topLeft` in UI units.
 void drawTabHint(App& app, sf::RenderWindow& w, sf::Vector2f topLeft);
 // The fight's bottom-left ball tally: [TAB] cap on top, a chip per ball below.

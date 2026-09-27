@@ -46,6 +46,7 @@ public:
     sf::Vector2f size() const { return window_.logicalSize(); }
     void useWorldView() { window_.useWorldView(); }
     void useUiView() { window_.useUiView(); }
+    void useUiZoom(float k) { window_.useUiZoom(k); }
     sf::Vector2f uiMouse() const {   // pointer in UI units, any screen (photo mode can pin it)
         return snapMouseOn_ ? snapMouse_ : window_.uiMousePosition();
     }

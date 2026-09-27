@@ -18,6 +18,14 @@ public:
     void setWorldView(sf::Vector2f size, sf::Vector2f center);
     void useWorldView() { win_.setView(worldView_); }
     void useUiView() { win_.setView(uiView_); }
+    // The UI view magnified k times about the top-left: code that lays out in
+    // a (logical / k) canvas fills the screen at k x size.
+    void useUiZoom(float k) {
+        sf::View v = uiView_;
+        v.setSize(logical_ / k);
+        v.setCenter(logical_ / (2.f * k));
+        win_.setView(v);
+    }
 
     sf::RenderWindow& handle() { return win_; }
     bool isOpen() const { return win_.isOpen(); }

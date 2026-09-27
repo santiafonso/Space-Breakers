@@ -181,6 +181,12 @@ std::vector<std::string> wrapText(const sf::Font& font, const std::string& str, 
 
 // ---- ball loadout panels (Equip picker, Tab overlay) -----------------------
 
+float panelRowZoom(sf::Vector2f size, int n, float reserve, float maxZoom) {
+    const float fn = static_cast<float>(std::max(1, n));
+    const float need = fn * kPanelW + (fn - 1.f) * kPanelGap + reserve + 2.f * theme::margin + 40.f;
+    return clampf(std::min(size.x / need, size.y * 0.66f / kPanelH), 0.75f, maxZoom);
+}
+
 sf::Vector2f panelCenter(sf::Vector2f size, int i, int n, float cy, float cx) {
     if (cx < 0.f) cx = size.x * 0.5f;
     const float total = static_cast<float>(n) * kPanelW + static_cast<float>(n - 1) * kPanelGap;

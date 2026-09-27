@@ -62,6 +62,10 @@ inline constexpr float kPanelGap = 16.f;
 inline constexpr float kSlotH = 23.f;
 inline constexpr float kSlotStep = 27.f;
 
+// How much a row of n loadout panels can be magnified to use the screen
+// (`reserve` = width kept for something beside the row): few balls, big panels.
+float panelRowZoom(sf::Vector2f size, int n, float reserve = 0.f, float maxZoom = 1.45f);
+
 // Centre of panel i of n in a row at height cy, the row centred on cx (the
 // screen centre by default).
 sf::Vector2f panelCenter(sf::Vector2f size, int i, int n, float cy, float cx = -1.f);

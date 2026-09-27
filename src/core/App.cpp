@@ -1983,7 +1983,7 @@ int App::runSnapshots(const std::string& dir) {
     {   // a drag in the peek: ball 1's Cleave in hand over ball 3's free item slot
         auto slotMid = [&](int ball, int slot) {
             const sf::FloatRect sr = slotRect(loadoutPanelCenter(*this, ball), slot, r.balls[static_cast<std::size_t>(ball)]);
-            return sf::Vector2f{sr.left + sr.width * 0.6f, sr.top + sr.height * 0.5f};
+            return sf::Vector2f{sr.left + sr.width * 0.6f, sr.top + sr.height * 0.5f} * loadoutZoom(*this);
         };
         sf::Event press{};
         press.type = sf::Event::MouseButtonPressed;

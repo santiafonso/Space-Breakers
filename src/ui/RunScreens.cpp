@@ -138,16 +138,25 @@ void drawNode(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f p, MapNode
 
 // ================================================================ Equip
 
+namespace {
+// The equip picker's panels are magnified to fill the screen (few balls: big
+// panels); they lay out in UI units / this.
+float equipZoom(App& app) { return panelRowZoom(app.size(), app.runBallCount(), 0.f, 1.35f); }
+float equipRowY(App& app) { return app.size().y * 0.58f / equipZoom(app); }
+}  // namespace
+
 void EquipScreen::targetAt(App& app, sf::Vector2f mouse, int& ball, int& slot) const {
     ball = slot = -1;
-    const sf::Vector2f s = app.size();
+    const float zoom = equipZoom(app);
+    const sf::Vector2f s = app.size() / zoom;
+    mouse /= zoom;
     const int n = app.runBallCount();
     // Forge, the shop's forge and selling all point at an item already on a ball.
     const EquipSource src = app.equipSource();
     const bool forge = src == EquipSource::Forge || src == EquipSource::ShopForge || src == EquipSource::Sell;
     const UpgradeKind k = app.equipKind();
     for (int i = 0; i < n; ++i) {
-        const sf::Vector2f c = panelCenter(s, i, n, s.y * 0.52f);
+        const sf::Vector2f c = panelCenter(s, i, n, equipRowY(app));
         if (std::fabs(mouse.x - c.x) > kPanelW * 0.5f || std::fabs(mouse.y - c.y) > kPanelH * 0.5f) continue;
         if (!app.equipFitsBall(i)) return;
         ball = i;
@@ -259,30 +268,33 @@ void EquipScreen::draw(App& app, sf::RenderWindow& w) {
                     introPop(it, 0.f, 0.25f));
     drawCentered(w, app.font(), sub, theme::fsSmall, {s.x * 0.5f, s.y * 0.20f + 30.f}, theme::textLo);
 
+    (void)hint;   // how to click is on hover (the slot tooltips), not a line of text
+
     const auto& balls = app.data().run.balls;
     const int n = static_cast<int>(balls.size());
+    const float zoom = equipZoom(app);
+    app.useUiZoom(zoom);
+    const sf::Vector2f zs = s / zoom, zm = mouse_ / zoom;
+    const float rowY = equipRowY(app);
     for (int i = 0; i < n; ++i) {
         const float cp = clampf(introPop(it, 0.04f * static_cast<float>(i), 0.3f), 0.f, 1.f);
-        const sf::Vector2f c = panelCenter(s, i, n, s.y * 0.52f) + sf::Vector2f(0.f, (1.f - cp) * 30.f);
+        const sf::Vector2f c = panelCenter(zs, i, n, rowY) + sf::Vector2f(0.f, (1.f - cp) * 30.f);
         const bool hot = hoverBall_ == i;
         drawLoadoutPanel(w, app.font(), c, balls[static_cast<std::size_t>(i)], cp, hot ? 1.f : 0.f,
                          hot ? hoverSlot_ : -1, !app.equipFitsBall(i),
                          forge || sell || !upgradeTakesSlot(k) ? -1 : static_cast<int>(k));
-        drawCentered(w, app.font(), std::to_string(i + 1), theme::fsSmall,
-                     {c.x, c.y + kPanelH * 0.5f + 14.f}, withAlpha(theme::textDim, cp));
     }
-    drawCentered(w, app.font(), hint, theme::fsSmall, {s.x * 0.5f, s.y * 0.52f + kPanelH * 0.5f + 44.f},
-                 theme::textDim);
 
     for (int i = 0; i < n; ++i) {   // what's in the slot / on the ball under the pointer
-        const int part = panelPartAt(panelCenter(s, i, n, s.y * 0.52f), mouse_, balls[static_cast<std::size_t>(i)]);
+        const int part = panelPartAt(panelCenter(zs, i, n, rowY), zm, balls[static_cast<std::size_t>(i)]);
         std::string tt, td;
         if (part >= 0 && loadoutTooltip(balls[static_cast<std::size_t>(i)], part, tt, td)) {
             if (sell && isItemSlot(part) && balls[static_cast<std::size_t>(i)].gear[part] >= 0)
                 tt = "Sell " + tt + "  for " + std::to_string(app.sellValue(i, part)) + " gold";
-            drawTooltip(w, app.font(), mouse_, s, tt, td);
+            drawTooltip(w, app.font(), zm, zs, tt, td);
         }
     }
+    app.useUiView();
 }
 
 // ================================================================ Map
