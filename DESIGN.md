@@ -1109,6 +1109,37 @@ Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
     pantalla de abajo no recibe input mientras está abierto. `TabPeek` vive
     ahora en `ui/Screen.hpp`.
 
+- **TAB: arrastrar items entre pelotas. [IMPLEMENTADO 2026-09-27]** Pedido
+  (usuario): "que puedas cambiar los items entre pelotas arrastrando con el
+  TAB, así podés cambiar habilidades e items entre pelotas".
+  - Con el TAB abierto (mantenido o fijado con un toque; en pelea ya está en
+    pausa) se agarra un slot lleno con el mouse y se suelta en otro slot de
+    cualquier pelota (o de la misma, para reordenar). **Mismo tipo de slot**:
+    item↔item, tipo↔tipo, habilidad↔habilidad. Slot lleno = **intercambio**,
+    vacío = se mueve. Soltar sobre el panel de una pelota (no en un slot) lo
+    pone en su primer slot libre de ese tipo (el tipo, que es uno solo, se
+    intercambia); si no hay lugar, vuelve a su sitio. El **nivel viaja** con el
+    item.
+  - Se rechaza (vuelve solo): dos copias del mismo item en una pelota,
+    habilidad a un slot cerrado, Conductor / Bedrock sin su elemento (misma
+    regla que `upgradeFitsBall`). Si se sacan items de Mago, las habilidades de
+    los slots que se cierran quedan **dormidas** (regla de siempre).
+  - Todo lo derivado sale del loadout: clases, ascendida, slots de habilidad;
+    `App::moveSlot` / `App::slotMoveTarget` validan, mueven y hacen
+    `syncWorldBalls()`. Una habilidad movida **reinicia su cooldown** como una
+    carta nueva (`World::applySpec`), así no se pasa una cargada para
+    dispararla dos veces. Las copias fantasma de la oleada no cambian.
+  - Feedback: el slot de origen se apaga, los destinos válidos tienen borde
+    suave (el que está bajo el puntero, más fuerte), un chip con el nombre
+    sigue al puntero; sonido `grab` al agarrar, `uiClick` al soltar bien,
+    `letGo` si vuelve. Sin tooltips mientras arrastrás. Hint bajo los paneles:
+    "drag items between balls" ("drag to reorder slots" con 1 pelota).
+  - Soltar TAB a mitad de arrastre no cierra el overlay hasta que soltás el
+    mouse. Funciona en la pelea, el mapa y el TAB del App (tienda, cartas...).
+    Estado en `TabPeek` (`dragBall/dragSlot/closeOnDrop`), input en
+    `loadoutDragEvent` (ui/Screens.cpp). Modo foto: `08_tab_drag.png`.
+  - Falta playtest (arrastre real con el mouse; no se probó en pantalla).
+
 - **Pendiente (usuario, 2026-09-26): más música.** El usuario va a sumar
   más pistas (menú, boss, etc.); ahí se retoma el sonido (qué pista suena en
   cada pantalla, transiciones, y el resto de ajustes de la pantalla Sound).

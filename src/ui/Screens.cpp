@@ -685,7 +685,10 @@ void PlayScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
         return;
     }
     if (isKey(e, sf::Keyboard::M)) { app.toggleSound(); return; }
-    if (peek_.open) return;
+    if (peek_.open) {
+        loadoutDragEvent(app, peek_, e);   // drag slots between the balls
+        return;
+    }
     if (isKey(e, sf::Keyboard::Escape)) { app.openPause(); return; }
     if (isKey(e, sf::Keyboard::Q)) { app.useReserve(); return; }   // "Stockpile" reserve power-up
     if (isKey(e, sf::Keyboard::Space) ||                               // "Nova" pact
@@ -806,7 +809,7 @@ void PlayScreen::draw(App& app, sf::RenderWindow& w) {
     drawPactHud(app, w, app.uiMouse(), !peek_.open && !dragging_);
 
     if (peek_.open) {
-        drawLoadoutOverlay(app, w, true, peek_.latched());
+        drawLoadoutOverlay(app, w, true, peek_);
     } else if (!dragging_) {
         // Hover help for the HUD and the ball tally (pointer in UI units).
         const sf::Vector2f um = app.uiMouse();
@@ -876,12 +879,16 @@ bool TabPeek::handle(const sf::Event& e) {
         if (latched()) { close(); return true; }   // tapped open earlier: this press closes it
         open = down = true;
         held = 0.f;
+        closeOnDrop = false;
         return true;
     }
     if (e.type == sf::Event::KeyReleased && e.key.code == sf::Keyboard::Tab) {
         if (!down) return true;
         down = false;
-        if (held >= kTabTapTime) close();   // held to look: letting go closes it
+        if (held >= kTabTapTime) {   // held to look: letting go closes it (mid-drag: once it lands)
+            if (dragBall >= 0) closeOnDrop = true;
+            else close();
+        }
         return true;
     }
     if (open && isKey(e, sf::Keyboard::Escape)) { close(); return true; }
@@ -915,15 +922,76 @@ std::vector<UpgradeKind> runRelics(const RunMods& m) {
     return out;
 }
 
-void drawLoadoutOverlay(App& app, sf::RenderWindow& w, bool paused, bool latched) {
+namespace {
+constexpr float kPeekSideW = 210.f;   // the relics / pacts column on the right of the peek
+
+// The (ball, slot) of the peek under the pointer: slot -1 = on a ball's panel
+// but not on one of its slots; ball -1 = on no panel.
+void peekSlotAt(App& app, sf::Vector2f m, int& ball, int& slot) {
+    ball = slot = -1;
+    const std::vector<BallLoadout>& balls = app.data().run.balls;
+    for (int i = 0; i < static_cast<int>(balls.size()); ++i) {
+        const sf::Vector2f c = loadoutPanelCenter(app, i);
+        if (std::fabs(m.x - c.x) > kPanelW * 0.5f || std::fabs(m.y - c.y) > kPanelH * 0.5f) continue;
+        ball = i;
+        const int part = panelPartAt(c, m, balls[static_cast<std::size_t>(i)]);
+        if (part >= 0 && part < kLoadoutSlots) slot = part;
+        return;
+    }
+}
+
+// A pick's text colour on a slot: its class tag, its element, or the ability blue.
+sf::Color pickColor(UpgradeKind k) {
+    if (upgradeCat(k) == UpgradeCat::Element) return elementColor(static_cast<Element>(elementItemSlot(k) + 1));
+    if (upgradeCat(k) == UpgradeCat::Ability) return theme::ability;
+    return tagColor(itemTag(k));
+}
+}  // namespace
+
+sf::Vector2f loadoutPanelCenter(App& app, int i) {
+    const sf::Vector2f s = app.size();
+    const float sideX = s.x - theme::margin - kPeekSideW;
+    const float rowCx = (theme::margin + sideX - 16.f) * 0.5f;
+    return panelCenter(s, i, app.runBallCount(), s.y * 0.5f, rowCx);
+}
+
+bool loadoutDragEvent(App& app, TabPeek& peek, const sf::Event& e) {
+    if (!peek.open) return false;
+    const bool left = (e.type == sf::Event::MouseButtonPressed || e.type == sf::Event::MouseButtonReleased) &&
+                      e.mouseButton.button == sf::Mouse::Left;
+    if (!left) return false;
+    int ball, slot;
+    peekSlotAt(app, app.uiMouse(), ball, slot);
+    if (e.type == sf::Event::MouseButtonPressed) {   // pick up a filled slot
+        peek.dragBall = peek.dragSlot = -1;
+        if (ball >= 0 && slot >= 0 && app.data().run.balls[static_cast<std::size_t>(ball)].kindAt(slot) >= 0) {
+            peek.dragBall = ball;
+            peek.dragSlot = slot;
+            app.audio().grab();
+        }
+        return true;
+    }
+    if (peek.dragBall < 0) return true;
+    // Drop: on a slot, or on a panel (its first free slot of that kind).
+    // Anything the move refuses snaps back.
+    const bool home = ball == peek.dragBall && (slot == peek.dragSlot || slot < 0);
+    if (ball >= 0 && app.moveSlot(peek.dragBall, peek.dragSlot, ball, slot)) app.audio().uiClick();
+    else if (!home) app.audio().letGo();
+    peek.dragBall = peek.dragSlot = -1;
+    if (peek.closeOnDrop) peek.close();
+    return true;
+}
+
+void drawLoadoutOverlay(App& app, sf::RenderWindow& w, bool paused, const TabPeek& peek) {
     const sf::Vector2f s = app.size();
     const RunState& r = app.data().run;
     const sf::Vector2f um = app.uiMouse();
+    const bool latched = peek.latched();
     drawDim(w, s, 0.7f);
 
     // The balls on the left, the run-wide passives (relics, pacts) in a column
     // on the right.
-    constexpr float kSideW = 210.f;
+    constexpr float kSideW = kPeekSideW;
     const float sideX = s.x - theme::margin - kSideW;
     const float rowCx = (theme::margin + sideX - 16.f) * 0.5f;
     const float rowY = s.y * 0.5f;
@@ -941,6 +1009,38 @@ void drawLoadoutOverlay(App& app, sf::RenderWindow& w, bool paused, bool latched
     for (int i = 0; i < n; ++i)
         drawLoadoutPanel(w, app.font(), panelCenter(s, i, n, rowY, rowCx), r.balls[static_cast<std::size_t>(i)],
                          1.f, 0.f, -1, false);
+    if (n > 0)
+        drawLabel(w, app.font(), n > 1 ? "drag items between balls" : "drag to reorder slots", 10,
+                  {rowCx, rowY + kPanelH * 0.5f + 22.f}, theme::textDim);
+
+    // A slot in hand: its spot on the panel empties, the slots it may land on
+    // get a faint edge (the one under the pointer lit), and a chip follows the
+    // pointer.
+    const bool dragging = peek.dragging() && peek.dragBall < n &&
+                          r.balls[static_cast<std::size_t>(peek.dragBall)].kindAt(peek.dragSlot) >= 0;
+    int land = -1;   // where the slot in hand would land, -1 = nowhere
+    if (dragging) {
+        int hb, hs;
+        peekSlotAt(app, um, hb, hs);
+        land = hb >= 0 ? app.slotMoveTarget(peek.dragBall, peek.dragSlot, hb, hs) : -1;
+        for (int i = 0; i < n; ++i) {
+            const BallLoadout& L = r.balls[static_cast<std::size_t>(i)];
+            const sf::Vector2f c = panelCenter(s, i, n, rowY, rowCx);
+            for (int sl = 0; sl < kSlotAbility + abilityBoxes(L); ++sl) {
+                const sf::FloatRect sr = slotRect(c, sl, L);
+                if (i == peek.dragBall && sl == peek.dragSlot) {
+                    draw::box(w, sr, theme::corner, withAlpha(theme::bgDeep, 0.8f), withAlpha(theme::bgDeep, 0.8f),
+                              withAlpha(theme::accent, 0.3f), 1.f);
+                    continue;
+                }
+                if (app.slotMoveTarget(peek.dragBall, peek.dragSlot, i, sl) != sl) continue;
+                const bool hot = i == hb && sl == land;
+                draw::box(w, sr, theme::corner, withAlpha(theme::accent, hot ? 0.16f : 0.f),
+                          withAlpha(theme::accent, hot ? 0.06f : 0.f), withAlpha(theme::accent, hot ? 0.85f : 0.42f),
+                          1.f);
+            }
+        }
+    }
 
     // ---- side column: relics, then pacts
     const float colTop = rowY - kPanelH * 0.5f;
@@ -957,7 +1057,7 @@ void drawLoadoutOverlay(App& app, sf::RenderWindow& w, bool paused, bool latched
     }
     for (const UpgradeKind& k : relics) {
         const sf::FloatRect row{sideX + 8.f, y - kRelicStep * 0.5f, kSideW - 16.f, kRelicStep};
-        const bool hot = row.contains(um);
+        const bool hot = !dragging && row.contains(um);
         if (hot) {
             hotRelic = &k;
             draw::box(w, row, 0.f, withAlpha(theme::puGolden, 0.10f), withAlpha(theme::puGolden, 0.03f));
@@ -975,7 +1075,21 @@ void drawLoadoutOverlay(App& app, sf::RenderWindow& w, bool paused, bool latched
     y += 16.f;
     bool pactTip = false;
     if (r.pacts.empty()) drawLabel(w, app.font(), "none", 10, {sideX + 14.f, y + 10.f}, theme::textDim, -1);
-    else pactTip = drawPactStrip(app, w, {sideX + 12.f, y}, false, um, true);
+    else pactTip = drawPactStrip(app, w, {sideX + 12.f, y}, false, um, !dragging);
+    if (dragging) {   // the chip in hand, over everything; no hover help meanwhile
+        const BallLoadout& L = r.balls[static_cast<std::size_t>(peek.dragBall)];
+        const auto k = static_cast<UpgradeKind>(L.kindAt(peek.dragSlot));
+        std::string t = upgradeInfo(k).title;
+        if (L.levelAt(peek.dragSlot) > 1) t += "  Lv" + std::to_string(L.levelAt(peek.dragSlot));
+        const sf::FloatRect chip{um.x + 10.f, um.y + 8.f, 128.f, kSlotH};   // beside the pointer, off the target
+        draw::box(w, chip, theme::corner, withAlpha(theme::bgDeep, 0.92f), withAlpha(theme::bgDeep, 0.85f),
+                  withAlpha(land >= 0 ? theme::accent : theme::textDim, 0.7f), 1.f);
+        const sf::Color tc = tierColor(upgradeTier(k));
+        draw::box(w, {chip.left, chip.top, 3.f, chip.height}, 0.f, tc, tc);
+        drawCentered(w, app.font(), t, theme::fsSmall, {chip.left + chip.width * 0.5f, chip.top + chip.height * 0.5f - 1.f},
+                     pickColor(k));
+        return;
+    }
     if (pactTip) return;
 
     // Hover help on the panels and the relics.
