@@ -24,6 +24,9 @@ public:
     virtual bool opaque() const { return true; }
     virtual bool simulates() const { return false; }
     virtual bool frozen() const { return false; }
+    // The screen runs its own TAB peek (the fight, the map). On every other
+    // screen of a live run the App opens the same peek over it.
+    virtual bool ownsTab() const { return false; }
 
     // Seconds since this screen last became the active one. Screens read it to
     // stagger their contents popping in on entry; App resets and advances it.
@@ -33,6 +36,19 @@ public:
 
 private:
     float intro_ = 0.f;
+};
+
+// The TAB loadout peek: the fight and the map run their own, the App one over
+// every other screen of a live run. Hold TAB to look and
+// let go to close; a quick tap leaves it open until TAB (or Esc) again.
+struct TabPeek {
+    bool open = false;
+    bool down = false;     // TAB is physically held
+    float held = 0.f;      // seconds since this press
+    bool handle(const sf::Event& e);   // true if it consumed the event
+    void update(float dt) { if (down) held += dt; }
+    void close() { open = down = false; held = 0.f; }
+    bool latched() const { return open && !down; }
 };
 
 }  // namespace sb

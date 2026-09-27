@@ -6,7 +6,8 @@
 
 namespace sb {
 
-// Sound settings (main menu "Sound", pause "Sound"): master / music / effects
+// Options (main menu, pause, or O / the corner button anywhere): fullscreen,
+// and the sound: master / music / effects
 // volume, each with an on-off switch, and for each category of sound a volume and a synthesised
 // style (Soft / Bright / Retro / Off). Picking a style or letting go of a
 // slider previews the sound. Saved on the way out.
@@ -23,6 +24,7 @@ private:
     // 200 + c * 4 + s a style chip, kBack.
     static constexpr int kMute = 10;
     static constexpr int kBack = 20;
+    static constexpr int kFull = 21;   // the fullscreen switch
     int itemAt(App& app, sf::Vector2f mouse) const;
     void setSlider(App& app, int id, float x);
     void close(App& app);

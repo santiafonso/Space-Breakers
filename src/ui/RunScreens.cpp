@@ -37,21 +37,26 @@ void drawButton(sf::RenderWindow& w, const sf::Font& font, sf::FloatRect r, cons
               withAlpha(lerpColor(theme::textLo, theme::textHi, 0.5f + 0.5f * hover), a));
 }
 
-// Gold + core line shown on the map and in the shop.
-void drawRunStatus(App& app, sf::RenderWindow& w, float y) {
+// Gold + core + luck line shown on the map and in the shop. Returns the x
+// where the line ends.
+float drawRunStatus(App& app, sf::RenderWindow& w, float y) {
     const sf::Vector2f s = app.size();
     const Core& c = app.world().core();
     const std::string gold = std::to_string(app.gold());
     const std::string core = std::to_string(static_cast<int>(std::ceil(c.hp))) + " / " +
                              std::to_string(static_cast<int>(std::ceil(c.maxHp)));
     const sf::Color coreCol = lerpColor(theme::coreLow, theme::core, c.maxHp > 0.f ? c.hp / c.maxHp : 1.f);
-    // "GOLD 187      CORE 80 / 80", centred as one line.
+    const std::string luck = std::to_string(app.luck());
+    const sf::Color luckCol = app.luck() > 0 ? theme::puSurge : theme::textLo;
+    // "GOLD 187      CORE 80 / 80      LUCK 6", centred as one line.
     const float capW1 = makeLabel(app.font(), "gold", 11, theme::textDim).getLocalBounds().width;
     const float capW2 = makeLabel(app.font(), "core", 11, theme::textDim).getLocalBounds().width;
+    const float capW3 = makeLabel(app.font(), "luck", 11, theme::textDim).getLocalBounds().width;
     const float v1 = makeText(app.font(), gold, theme::fsBody, theme::puGolden).getLocalBounds().width;
     const float v2 = makeText(app.font(), core, theme::fsBody, coreCol).getLocalBounds().width;
+    const float v3 = makeText(app.font(), luck, theme::fsBody, luckCol).getLocalBounds().width;
     const float gap = 8.f, sep = 34.f;
-    float x = s.x * 0.5f - (capW1 + gap + v1 + sep + capW2 + gap + v2) * 0.5f;
+    float x = s.x * 0.5f - (capW1 + gap + v1 + sep + capW2 + gap + v2 + sep + capW3 + gap + v3) * 0.5f;
     auto value = [&](const std::string& str, sf::Color col) {
         sf::Text t = makeText(app.font(), str, theme::fsBody, col);
         const sf::FloatRect b = t.getLocalBounds();
@@ -67,6 +72,11 @@ void drawRunStatus(App& app, sf::RenderWindow& w, float y) {
     drawLabel(w, app.font(), "core", 11, {x, y}, withAlpha(coreCol, 0.6f), -1);
     x += capW2 + gap;
     value(core, coreCol);
+    x += sep;
+    drawLabel(w, app.font(), "luck", 11, {x, y}, withAlpha(luckCol, 0.6f), -1);
+    x += capW3 + gap;
+    value(luck, luckCol);
+    return x;
 }
 
 sf::Color nodeColor(MapNodeType t) {
@@ -313,7 +323,7 @@ void MapScreen::update(App& app, float dt, sf::Vector2f mouse) {
 }
 
 namespace {
-constexpr float kIronX = 130.f, kIronY = 84.f;   // the "iron core" marker, left edge off centre
+constexpr float kIronY = 84.f;   // the "iron core" marker sits at the end of the status line
 }
 
 void MapScreen::draw(App& app, sf::RenderWindow& w) {
@@ -327,11 +337,11 @@ void MapScreen::draw(App& app, sf::RenderWindow& w) {
               withAlpha(theme::accent, clampf(introPop(it, 0.f), 0.f, 1.f)));
     drawCenteredPop(w, app.font(), "Choose your path", theme::fsTitle, {s.x * 0.5f, 46.f}, theme::textHi,
                     introPop(it, 0.f, 0.3f));
-    drawRunStatus(app, w, 84.f);
+    const float ironX = drawRunStatus(app, w, kIronY) + 34.f;
     // "Iron core": a quiet marker while no repair has been made this act, on
     // the status line (below it, the boss row's "you" brackets would cover it).
     if (app.ironCoreAlive())
-        drawLabel(w, app.font(), "iron core", 11, {s.x * 0.5f + kIronX, kIronY},
+        drawLabel(w, app.font(), "iron core", 11, {ironX, kIronY},
                   withAlpha(theme::core, 0.55f * clampf(introPop(it, 0.1f), 0.f, 1.f)), -1);
 
     // Row guides: a faint rule per stage and its number down the left edge of
@@ -444,14 +454,17 @@ void MapScreen::draw(App& app, sf::RenderWindow& w) {
         const auto t = static_cast<MapNodeType>(legendHover);
         drawTooltip(w, app.font(), mouse_, s, mapNodeName(t), mapNodeDesc(t), nodeColor(t));
     } else if (!pactHover && app.ironCoreAlive() && std::fabs(mouse_.y - kIronY) < 8.f &&
-               mouse_.x > s.x * 0.5f + kIronX - 4.f && mouse_.x < s.x * 0.5f + kIronX + 80.f) {
+               mouse_.x > ironX - 4.f && mouse_.x < ironX + 80.f) {
         drawTooltip(w, app.font(), mouse_, s, "Iron core",
                     "no repairs yet this act. Beat the boss without resting, buying a repair or skipping a pick "
                     "to repair, and the run banks +" + std::to_string(cfg::meta::ironCoreCores) +
                         " cores. The heal before each fight doesn't count.", theme::core);
-    } else if (!pactHover && std::fabs(mouse_.y - 84.f) < 12.f && std::fabs(mouse_.x - s.x * 0.5f) < 170.f) {
-        drawTooltip(w, app.font(), mouse_, s, "Gold and core",
-                    "gold buys things in shops; the core must survive - rests and shops repair it");
+    } else if (!pactHover && std::fabs(mouse_.y - 84.f) < 12.f && std::fabs(mouse_.x - s.x * 0.5f) < 220.f) {
+        drawTooltip(w, app.font(), mouse_, s, "Gold, core and luck",
+                    "gold buys things in shops; the core must survive - rests and shops repair it. Luck (" +
+                        std::to_string(app.luck()) + "): each point makes every chance " +
+                        std::to_string(static_cast<int>(cfg::luck::chancePerPoint * 100.f + 0.5f)) +
+                        "% likelier and cards a little rarer. From Lucky clover, Lucky star, Loaded Dice.");
     }
 }
 

@@ -111,6 +111,7 @@ public:
     void choosePact(int idx);          // Pact screen: take card idx
     void refusePacts();                // Pact screen: turn them all down for gold
     bool hasPact(PactId id) const { return data_.run.hasPact(id); }
+    int luck() const;   // the run's luck, in points (Lucky clover, Lucky star, Loaded Dice)
     bool canGrab() const;              // "Hunters" / "Clockwork" take the balls out of your hands
     float flingPower() const;          // throw speed multiplier (Strong arm, Hot Hands, Pinball)
     void usePactAbility();             // "Nova" (SPACE / right-click in a fight)
@@ -226,6 +227,10 @@ private:
     std::string savePath_;  // set in the ctor: <exe dir>/saves/save.txt
 
     std::vector<std::unique_ptr<Screen>> stack_;
+    TabPeek peek_;   // TAB over every run screen that doesn't run its own (shop, cards, pickers...)
+    bool onOptions() const;                  // the Options (sound) screen is on top
+    sf::FloatRect optionsButton() const;     // the corner [O] OPTIONS button, UI units
+    void drawOptionsButton(sf::RenderWindow& w) const;
     std::array<UpgradeKind, kChoiceCount> choices_{};
     int lastRunWave_ = 0;
     int lastRunCores_ = 0;

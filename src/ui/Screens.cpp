@@ -132,7 +132,7 @@ void MenuScreen::rebuild(App& app) {
     menu_.setItems({{"Play", true},
                     {"Stats", true},
                     {"How to Play", true},
-                    {"Sound", true},
+                    {"Options", true},
                     {resetArm_ > 0.f ? "Reset progress - click again to confirm" : "Reset progress",
                      true},
                     {"Quit", true}});
@@ -901,6 +901,8 @@ void drawLoadoutOverlay(App& app, sf::RenderWindow& w, bool paused, bool latched
     const RunState& r = app.data().run;
     drawDim(w, s, 0.7f);
     drawCentered(w, app.font(), "Your balls", theme::fsHeading, {s.x * 0.5f, s.y * 0.26f}, theme::textHi);
+    drawLabel(w, app.font(), "luck " + std::to_string(app.luck()), 11, {s.x * 0.5f, s.y * 0.26f - 32.f},
+              app.luck() > 0 ? theme::puSurge : theme::textDim);
 
     // How to get out: only worth saying when it isn't "let go of TAB".
     std::string note = paused ? "paused" : "";
@@ -1126,7 +1128,7 @@ void PauseScreen::rebuild(App& app) {
     menu_.setItems({{"Resume", true},
                     {"Stats", true},
                     {"How to Play", true},
-                    {lastSound_ ? "Sound" : "Sound (muted)", true},
+                    {lastSound_ ? "Options" : "Options (muted)", true},
                     {"Abandon run", true},
                     {"Quit", true}});
     menu_.layout({s.x * 0.5f, s.y * 0.34f});

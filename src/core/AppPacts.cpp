@@ -48,7 +48,7 @@ void App::foldPacts(WorldParams& p) const {
                 p.pact.enemySpeedMul *= P::coreEnemySpeed;
                 break;
             case PactId::Fortress: p.pact.fortress = true; break;
-            case PactId::LoadedDice: p.luck *= P::diceLuck; break;
+            case PactId::LoadedDice: break;   // its luck is counted in App::luck
             case PactId::Alchemy:
                 p.pact.alchemy = true;
                 p.damageMult *= P::alchemyDamage;

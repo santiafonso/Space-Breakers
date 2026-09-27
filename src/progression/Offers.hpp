@@ -80,7 +80,7 @@ enum class UpgradeKind {
     Primed,            // +damage vs enemies under any element effect (needs any element node)
     Catalyst,          // reactions hit twice as hard and wider (needs 2 element nodes)
     ChainReaction,     // a reaction may echo onto another afflicted enemy (needs 2 element nodes)
-    LuckyClover,       // every chance x1.6
+    LuckyClover,       // +6 luck
     GlassCannon,       // all damage x1.6, core max HP -30%
     MagneticCore,      // balls leave the core aimed at the nearest enemy
     PrismCore,         // balls with no element leave a random one on every hit (reactions everywhere)
@@ -366,7 +366,7 @@ inline UpgradeInfo upgradeInfo(UpgradeKind k) {
         case UpgradeKind::Primed:        return {"Primed", "+damage to enemies already burning, poisoned or frozen"};
         case UpgradeKind::Catalyst:      return {"Catalyst", "element reactions hit twice as hard and reach further"};
         case UpgradeKind::ChainReaction: return {"Chain reaction", "35% chance a reaction sets off again on another afflicted enemy - it can cascade"};
-        case UpgradeKind::LuckyClover:   return {"Lucky clover", "every chance (crits, echoes, zaps, bombs, ghosts...) x1.6"};
+        case UpgradeKind::LuckyClover:   return {"Lucky clover", "+6 luck: every chance (crits, echoes, zaps, bombs, ghosts...) is higher and cards roll rarer"};
         case UpgradeKind::GlassCannon:   return {"Glass cannon", "all damage x1.6, but the core loses 30% of its max health"};
         case UpgradeKind::MagneticCore:  return {"Magnetic core", "every ball bouncing off the core flies at the nearest enemy"};
         case UpgradeKind::PrismCore:     return {"Prism core", "balls with no element leave a random element on every hit - reactions everywhere"};
@@ -750,7 +750,7 @@ inline const MetaUnlockDef& metaUnlockDef(int u) {
                          3u,  1, MetaBranch::Arsenal, MetaCurrency::Prisms, 34, -3.00f,  2.20f},
         /* Prism     */ {"Prism",     "the Prism core legendary relic can appear: reactions everywhere",
                          4u,  1, MetaBranch::Arsenal, MetaCurrency::Prisms, 35, -2.50f,  4.00f},
-        /* Lucky star*/ {"Lucky star","better odds of rarer picks on every roll",
+        /* Lucky star*/ {"Lucky star","+2 luck per level: higher chances and rarer cards",
                          12u, 3, MetaBranch::Eco,     MetaCurrency::Cores,  20, -3.00f, -1.10f},
         /* Haggler   */ {"Haggler",   "shop prices drop 10% per level",
                          10u, 3, MetaBranch::Eco,     MetaCurrency::Cores,  24, -1.10f, -3.00f},
@@ -767,7 +767,7 @@ inline const MetaUnlockDef& metaUnlockDef(int u) {
                          2u,  1, MetaBranch::Pacts,   MetaCurrency::Prisms, 41,  0.50f,  4.00f},
         /* Legion    */ {"Legion",    "the Legion pact can be offered: two more balls at once, clacks throw sparks",
                          2u,  1, MetaBranch::Pacts,   MetaCurrency::Prisms, 41,  1.50f,  4.00f},
-        /* Dice      */ {"Loaded dice","the Loaded Dice pact can be offered: luck x2, fight gold is double or nothing",
+        /* Dice      */ {"Loaded dice","the Loaded Dice pact can be offered: +12 luck, fight gold is double or nothing",
                          3u,  1, MetaBranch::Pacts,   MetaCurrency::Prisms, 43,  0.90f,  5.00f},
         /* Alchemy   */ {"Alchemy",   "the Alchemy pact can be offered: random extra elements, a ball reacts with itself",
                          3u,  1, MetaBranch::Pacts,   MetaCurrency::Prisms, 44,  2.00f,  5.00f},

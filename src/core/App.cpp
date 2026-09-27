@@ -12,6 +12,7 @@
 #include "core/Theme.hpp"
 #include "platform/Paths.hpp"
 #include "platform/Save.hpp"
+#include "render/Draw.hpp"
 #include "ui/PactScreen.hpp"
 #include "ui/Screens.hpp"
 #include "ui/SoundScreen.hpp"
@@ -107,7 +108,7 @@ WorldParams App::params() const {
     p.catalyst = m.catalyst;
     p.chainReaction = m.chainReaction;
     p.magneticCore = m.magneticCore;
-    p.luck = m.luckyClover ? cfg::synergy::luckyCloverMul : 1.f;
+    p.luck = 1.f + cfg::luck::chancePerPoint * static_cast<float>(luck());
     p.prismCore = m.prismCore;
     p.timeDilation = m.timeDilation;
     p.overcharge = m.overcharge;
@@ -512,6 +513,13 @@ UpgradeCtx App::buildUpgradeCtx() const {
     return c;
 }
 
+int App::luck() const {
+    int l = cfg::luck::luckyStarPerLevel * data_.meta.unlock[MetaLuckyStar];
+    if (data_.run.mods.luckyClover) l += cfg::luck::cloverPoints;
+    if (hasPact(PactId::LoadedDice)) l += cfg::luck::dicePoints;
+    return l;
+}
+
 UpgradeKind App::rollPick(RollSource src, const std::vector<UpgradeKind>& exclude,
                           bool (*filter)(UpgradeKind)) {
     const UpgradeCtx c = buildUpgradeCtx();
@@ -522,14 +530,11 @@ UpgradeKind App::rollPick(RollSource src, const std::vector<UpgradeKind>& exclud
     for (int t = 0; t < kTierCount; ++t) w[t] = static_cast<float>(base[t]);
     const int* u = data_.meta.unlock;
     w[static_cast<int>(Tier::Epic)] *= 1.f + cfg::meta::armoryEpicPerLevel * static_cast<float>(u[MetaArmory]);
-    // Luck (the Lucky clover relic, the Lucky star node) nudges every tier's
-    // odds one step up.
-    const float shift = (data_.run.mods.luckyClover ? cfg::tier::luckShift : 0.f) +
-                        cfg::meta::luckyStarShift * static_cast<float>(u[MetaLuckyStar]) +
-                        (hasPact(PactId::LoadedDice) ? cfg::pact::diceTierShift : 0.f);   // "Loaded Dice"
+    // Luck nudges every tier's odds one step up.
+    const float shift = std::min(cfg::luck::tierShiftPerPoint * static_cast<float>(luck()), cfg::luck::tierShiftCap);
     if (shift > 0.f)
         for (int t = kTierCount - 2; t >= 0; --t) {
-            const float moved = w[t] * std::min(shift, 0.9f);
+            const float moved = w[t] * shift;
             w[t] -= moved;
             w[t + 1] += moved;
         }
@@ -1188,6 +1193,27 @@ void App::openPause() {
 }
 void App::openStats() { push(ScreenId::Stats); }
 void App::openSound() { push(ScreenId::Sound); }
+
+bool App::onOptions() const {
+    return !stack_.empty() && dynamic_cast<const SoundScreen*>(stack_.back().get()) != nullptr;
+}
+
+sf::FloatRect App::optionsButton() const {
+    return {size().x - theme::margin - 96.f, size().y - theme::margin - 17.f, 96.f, 17.f};
+}
+
+// A quiet [o] key cap + "options" in the bottom-right corner of every screen.
+void App::drawOptionsButton(sf::RenderWindow& w) const {
+    const sf::FloatRect r = optionsButton();
+    const bool hot = r.contains(window_.uiMousePosition());
+    const sf::FloatRect key{r.left, r.top, 22.f, r.height};
+    const sf::Color c = hot ? theme::textLo : theme::textDim;
+    draw::box(w, key, 0.f, withAlpha(c, 0.18f), withAlpha(c, hot ? 0.12f : 0.05f), withAlpha(c, 0.8f), 1.f);
+    drawLabel(w, font_, "o", 10, {key.left + key.width * 0.5f + 1.f, key.top + key.height * 0.5f},
+              hot ? theme::textHi : theme::textLo);
+    drawLabel(w, font_, "options", 10, {key.left + key.width + 8.f, key.top + key.height * 0.5f},
+              hot ? theme::textLo : theme::textDim, -1);
+}
 void App::openHowTo() { push(ScreenId::HowTo); }
 
 void App::quit() {
@@ -1249,6 +1275,22 @@ void App::handleEvent(const sf::Event& e) {
         return;
     }
     if (!stack_.empty()) {
+        // Options from anywhere: the O key or the corner button (not mid-throw).
+        const bool pressO = e.type == sf::Event::KeyPressed && e.key.code == sf::Keyboard::O &&
+                            !sf::Mouse::isButtonPressed(sf::Mouse::Left);
+        const bool clickO = e.type == sf::Event::MouseButtonPressed && e.mouseButton.button == sf::Mouse::Left &&
+                            optionsButton().contains(window_.uiMousePosition());
+        if (!onOptions() && (pressO || clickO)) {
+            if (clickO) audio_.uiClick();
+            peek_.close();
+            openSound();
+            return;
+        }
+        // TAB anywhere in a live run: screens without their own peek get the App's.
+        if (data_.run.active && !stack_.back()->ownsTab() && !onOptions()) {
+            if (peek_.handle(e)) return;
+            if (peek_.open) return;   // looking: the screen underneath waits
+        }
         // The play screen wants the pointer in world units (grab / throw); every
         // other screen lays its widgets out in fixed UI units, so it must get the
         // UI-mapped pointer - the world view may be zoomed out on the boss arena.
@@ -1463,10 +1505,16 @@ void App::update(float frameDt) {
     }
 
     uisound::beginFrame();
+    if (!data_.run.active || stack_.empty() || stack_.back()->ownsTab() || onOptions()) peek_.close();
+    peek_.update(frameDt);
     if (!stack_.empty()) {
-        stack_.back()->update(*this, frameDt, mouse);
+        // Under the TAB peek the screen gets no pointer (no hover, no tooltips).
+        stack_.back()->update(*this, frameDt, peek_.open ? sf::Vector2f{-1e6f, -1e6f} : mouse);
         stack_.back()->advanceIntro(frameDt);
     }
+    static const int optionsTag = 0;   // the corner button's hover tick
+    uisound::hover(&optionsTag,
+                   !onOptions() && optionsButton().contains(window_.uiMousePosition()) ? 0 : -1);
 
     if (simulating() && !stack_.back()->frozen()) {
         // A fresh wave eases in: feed the fixed-step accumulator slowly at first
@@ -1587,6 +1635,8 @@ void App::render() {
         }
     }
     for (std::size_t i = start; i < stack_.size(); ++i) stack_[i]->draw(*this, w);
+    if (peek_.open) drawLoadoutOverlay(*this, w, false, peek_.latched());
+    if (!onOptions() && !peek_.open) drawOptionsButton(w);
 
     effects_.drawOverlay(w);
     if (fade_ > 0.01f) drawDim(w, size(), fade_ * 0.5f);

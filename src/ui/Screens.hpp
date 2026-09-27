@@ -67,18 +67,6 @@ private:
     float glow_[MetaUnlockCount] = {};    // 0 = idle, 1 = lit; only the active node rises
 };
 
-// The TAB loadout peek, shared by the fight and the map. Hold TAB to look and
-// let go to close; a quick tap leaves it open until TAB (or Esc) again.
-struct TabPeek {
-    bool open = false;
-    bool down = false;     // TAB is physically held
-    float held = 0.f;      // seconds since this press
-    bool handle(const sf::Event& e);   // true if it consumed the event
-    void update(float dt) { if (down) held += dt; }
-    void close() { open = down = false; held = 0.f; }
-    bool latched() const { return open && !down; }
-};
-
 // The peek itself: every ball's loadout, the relics and the pacts, dimming
 // whatever is underneath. `paused` adds the fight's "paused" note.
 void drawLoadoutOverlay(App& app, sf::RenderWindow& w, bool paused, bool latched);
@@ -95,6 +83,7 @@ public:
     void draw(App& app, sf::RenderWindow& w) override;
     bool simulates() const override { return true; }
     bool frozen() const override { return peek_.open; }
+    bool ownsTab() const override { return true; }
 
 private:
     void grab(App& app, sf::Vector2f mouse);
@@ -163,6 +152,7 @@ public:
     void handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) override;
     void update(App& app, float dt, sf::Vector2f mouse) override;
     void draw(App& app, sf::RenderWindow& w) override;
+    bool ownsTab() const override { return true; }
 
 private:
     sf::Vector2f nodePos(App& app, int node) const;

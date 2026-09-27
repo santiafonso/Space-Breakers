@@ -58,7 +58,8 @@ sf::FloatRect switchRect(sf::Vector2f s, int i) {
     return {cx + kChipX, sliderY(i) - kChipH * 0.5f, kChipW * 2.f + kChipGap, kChipH};
 }
 
-sf::FloatRect backRect(sf::Vector2f s) { return {s.x * 0.5f - 80.f, 716.f, 160.f, 30.f}; }
+sf::FloatRect backRect(sf::Vector2f s) { return {s.x * 0.5f + 10.f, 716.f, 160.f, 30.f}; }
+sf::FloatRect fullRect(sf::Vector2f s) { return {s.x * 0.5f - 170.f, 716.f, 160.f, 30.f}; }
 
 }  // namespace
 
@@ -69,6 +70,7 @@ int SoundScreen::itemAt(App& app, sf::Vector2f m) const {
     for (int i = 0; i < 3; ++i)
         if (switchRect(s, i).contains(m)) return kMute + i;
     if (backRect(s).contains(m)) return kBack;
+    if (fullRect(s).contains(m)) return kFull;
     for (int c = 0; c < SoundCatCount; ++c) {
         if (sliderHit(s, 100 + c).contains(m)) return 100 + c;
         for (int st = 0; st < SoundStyleCount; ++st)
@@ -107,6 +109,7 @@ void SoundScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) 
     const int id = itemAt(app, mouse);
     if (id < 0) return;
     if (id == kBack) { close(app); return; }
+    if (id == kFull) { app.toggleFullscreen(); return; }
     if (id == kMute) {
         app.toggleSound();
         return;
@@ -140,7 +143,7 @@ void SoundScreen::update(App& app, float, sf::Vector2f mouse) {
     }
     hover_ = drag_ >= 0 ? drag_ : itemAt(app, mouse);
     // Sliders and chips preview their own sound, so only the plain buttons click.
-    uisound::hover(this, hover_, (hover_ >= kMute && hover_ <= kMute + 2) || hover_ == kBack);
+    uisound::hover(this, hover_, (hover_ >= kMute && hover_ <= kMute + 2) || hover_ == kBack || hover_ == kFull);
 }
 
 void SoundScreen::draw(App& app, sf::RenderWindow& w) {
@@ -153,7 +156,7 @@ void SoundScreen::draw(App& app, sf::RenderWindow& w) {
 
     drawDim(w, s, 0.8f * a);
     draw::panel(w, {cx - 410.f, 40.f, 820.f, 724.f}, theme::arenaEdge, a);
-    drawCenteredPop(w, f, "Sound", theme::fsTitle, {cx, kTitleY - 12.f}, theme::textHi, introPop(intro(), 0.03f, 0.28f));
+    drawCenteredPop(w, f, "Options", theme::fsTitle, {cx, kTitleY - 12.f}, theme::textHi, introPop(intro(), 0.03f, 0.28f));
 
     auto slider = [&](int id, int value, bool live) {
         const float y = sliderY(id);
@@ -224,6 +227,12 @@ void SoundScreen::draw(App& app, sf::RenderWindow& w) {
     if (!hint.empty())
         drawCentered(w, f, hint, theme::fsSmall, {cx, kRowY + kRowStep * SoundCatCount + 10.f},
                      withAlpha(theme::textLo, a));
+
+    const sf::FloatRect fr = fullRect(s);
+    const bool full = app.data().meta.fullscreen;
+    draw::panel(w, fr, full ? theme::accent : theme::arenaEdge, a, hover_ == kFull ? 1.f : 0.f);
+    drawLabel(w, f, full ? "Fullscreen: on" : "Fullscreen: off", 12, {fr.left + fr.width * 0.5f, fr.top + fr.height * 0.5f},
+              withAlpha(lerpColor(theme::textLo, theme::textHi, hover_ == kFull ? 1.f : 0.5f), a));
 
     const sf::FloatRect br = backRect(s);
     draw::panel(w, br, theme::accent, a, hover_ == kBack ? 1.f : 0.f);

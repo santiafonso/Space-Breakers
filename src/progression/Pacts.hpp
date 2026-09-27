@@ -26,7 +26,7 @@ enum class PactId {
     Legion,       // Swarm:     +2 balls, clacks spark; less damage
     LivingCore,   // Core:      the core zaps and overcharges balls; faster enemies
     Fortress,     // Core:      a huge core that explodes on contact; no healing
-    LoadedDice,   // Gambler:   luck x2, luckier cards; fight gold is double or nothing
+    LoadedDice,   // Gambler:   +12 luck; fight gold is double or nothing
     Alchemy,      // Alchemist: random extra elements, self-reactions; weaker hits
     Bloodlust,    // Berserker: the combo never cools; core hits wipe it
 };
@@ -112,7 +112,7 @@ inline const PactDef& pactDef(PactId id) {
          "the core no longer heals before fights, and rests repair only half",
          "Aegis, Regen, Mender, Slow field", -1},
         {"Loaded Dice", PactArchetype::Gambler,
-         "every chance x2 (crits, echoes, zaps, bombs, ghosts) and every card rolls a tier luckier",
+         "+12 luck: every chance (crits, echoes, zaps, bombs, ghosts) almost doubles and cards roll much rarer",
          "each fight's gold is a coin flip: double or nothing",
          "Keen eye, Echo, Tesla, Bomber, Split shot, Lucky clover", MetaPactDice},
         {"Alchemy", PactArchetype::Alchemist,

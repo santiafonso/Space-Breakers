@@ -47,7 +47,7 @@ struct RunMods {
     bool primed = false;      // +damage vs enemies under an element effect
     bool catalyst = false;       // reactions harder + wider
     bool chainReaction = false;  // reactions can cascade
-    bool luckyClover = false;    // every chance x1.6
+    bool luckyClover = false;    // +6 luck
     bool glassCannon = false;    // all damage x1.6, core -30% max HP
     bool magneticCore = false;   // core bounces aim at the nearest enemy
     bool prismCore = false;      // elementless balls leave a random element

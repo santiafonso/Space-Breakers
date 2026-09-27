@@ -1088,6 +1088,27 @@ Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
   items / modificadores / reliquias para que sean más fuertes y más visibles
   en juego. Se ve más adelante.
 
+- **Suerte, rarezas más escasas, Opciones y TAB en todos lados. [IMPLEMENTADO 2026-09-26]**
+  Pedido (usuario): que lo raro cueste más conseguirlo, una estadística de
+  suerte, abrir las opciones en cualquier momento y TAB en cualquier momento
+  de la partida.
+  - **Rarezas:** pesos de tier normales 45/30/16/7/2 → **53/30/12/4/1**, de
+    élite 18/32/28/15/7 → **26/35/24/11/4** (el tesoro del boss no cambia).
+  - **Suerte** (`App::luck()`, puntos, `cfg::luck`): cada punto hace cada
+    probabilidad x(1 + 0.08) y corre 3.5% del peso de cada tier uno arriba
+    (tope 60%). Fuentes: Lucky clover **+6** (antes x1.6 y 50% de corrimiento),
+    Lucky star **+2 por nivel**, Loaded Dice **+12** (antes x2). Se ve en la
+    línea de oro / núcleo (mapa y tienda, con tooltip) y arriba del TAB. La
+    clase Bufón debería sumar más fuentes.
+  - **Opciones:** la pantalla Sound pasó a llamarse **Options** (menú y pausa)
+    y suma **Fullscreen**. Se abre desde **cualquier pantalla** con la tecla
+    **O** o el botón [O] OPTIONS abajo a la derecha (en pelea la pausa).
+  - **TAB en toda la run:** la pelea y el mapa tienen su propio peek
+    (`Screen::ownsTab`); en cualquier otra pantalla de una run viva (tienda,
+    cartas, selector, pactos...) el App abre el mismo overlay encima y la
+    pantalla de abajo no recibe input mientras está abierto. `TabPeek` vive
+    ahora en `ui/Screen.hpp`.
+
 - **Pendiente (usuario, 2026-09-26): más música.** El usuario va a sumar
   más pistas (menú, boss, etc.); ahí se retoma el sonido (qué pista suena en
   cada pantalla, transiciones, y el resto de ajustes de la pantalla Sound).

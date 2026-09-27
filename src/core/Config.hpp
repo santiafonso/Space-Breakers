@@ -124,10 +124,21 @@ inline constexpr bool  guardianAimsBounces = true;
 inline constexpr float guardianAimJitter = 0.06f;  // rad of wobble so it isn't robotic
 }  // namespace role
 
+// Luck: one run stat, in points (shown on the map, in the shop and in TAB).
+// Every proc chance is x (1 + chancePerPoint * luck), and every card roll moves
+// tierShiftPerPoint * luck of each tier's weight up one tier.
+namespace luck {
+inline constexpr float chancePerPoint = 0.08f;
+inline constexpr float tierShiftPerPoint = 0.035f;
+inline constexpr float tierShiftCap = 0.6f;
+inline constexpr int cloverPoints = 6;        // "Lucky clover" relic (chances x1.48)
+inline constexpr int luckyStarPerLevel = 2;   // "Lucky star" web node, per level
+inline constexpr int dicePoints = 12;         // "Loaded Dice" pact (chances x1.96)
+}  // namespace luck
+
 // Synergies (Fase I): procs, element reactions, role masteries and the big
-// relics. Every chance goes through the run's luck (Lucky clover).
+// relics. Every chance goes through the run's luck.
 namespace synergy {
-inline constexpr float luckyCloverMul = 1.6f;
 inline constexpr float chanceCap = 0.9f;
 // procs (level 1, + perLevel for each item level past it)
 inline constexpr float echoChance = 0.25f, echoPerLevel = 0.10f;     // "Echo": the hit strikes again
@@ -177,11 +188,11 @@ inline constexpr float supportSpread = 100.f;      // marks spread this far
 
 // Tiers: how rare a pick is. Each card rolls a tier first (by these weights),
 // then an eligible pick of that tier (falling back to lower tiers if none).
+// Rare and up were made scarcer (2026-09-26, usuario): the good stuff is earned.
 namespace tier {
-inline constexpr int weightsNormal[5] = {45, 30, 16, 7, 2};   // upgrade nodes, shops
-inline constexpr int weightsElite[5]  = {18, 32, 28, 15, 7};  // elite fights
+inline constexpr int weightsNormal[5] = {53, 30, 12, 4, 1};   // upgrade nodes, shops (was 45/30/16/7/2)
+inline constexpr int weightsElite[5]  = {26, 35, 24, 11, 4};  // elite fights (was 18/32/28/15/7)
 inline constexpr int weightsBoss[5]   = {0, 0, 0, 65, 35};    // the treasure after a boss
-inline constexpr float luckShift = 0.5f;   // Lucky clover moves this share of each tier's weight up one tier
 }  // namespace tier
 
 // Game-changing items (Fase J) and behaviour items (Fase M). Level-1 values,
@@ -472,7 +483,6 @@ inline constexpr float bountyPerKillPerLevel = 0.10f;  // "Fortune" node: cores 
 inline constexpr float salvagePerKillPerLevel = 0.06f; // "Salvage" node: extra cores per enemy kill, per level
 inline constexpr float interestPerLevel = 4.f;         // "Interest" node: cores for a no-damage wave, per level
 inline constexpr float armoryEpicPerLevel = 0.5f;      // "Armory": Epic odds x (1 + this * level)
-inline constexpr float luckyStarShift = 0.12f;         // "Lucky star": share of each tier nudged up one, per level
 inline constexpr float hagglerPerLevel = 0.10f;        // "Haggler": shop prices -this per level
 inline constexpr float eliteSpoilsPerLevel = 0.5f;     // "Elite spoils": elite gold x (1 + this * level)
 inline constexpr float merchantSalePerLevel = 0.15f;   // "Merchant": the shop sale is this much deeper per level
@@ -536,9 +546,6 @@ inline constexpr float fortressHp = 1.75f;
 inline constexpr float fortressBlastRadius = 160.f;
 inline constexpr float fortressBlastHpFrac = 0.3f;   // x a plain enemy's HP this wave
 inline constexpr float fortressRestHeal = 0.5f;
-// Loaded Dice
-inline constexpr float diceLuck = 2.0f;
-inline constexpr float diceTierShift = 0.5f;
 // Alchemy
 inline constexpr float alchemyChance = 0.5f;
 inline constexpr float alchemyDamage = 0.75f;
