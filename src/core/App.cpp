@@ -1441,7 +1441,7 @@ void App::update(float frameDt) {
         stack_.back()->advanceIntro(frameDt);
     }
 
-    if (simulating()) {
+    if (simulating() && !stack_.back()->frozen()) {
         // A fresh wave eases in: feed the fixed-step accumulator slowly at first
         // and ramp to real time, so balls flow out of the previous wave.
         float simDt = frameDt;
@@ -1710,6 +1710,11 @@ int App::runSnapshots(const std::string& dir) {
 
     openMap();
     snapFrame(d + "14_map_pacts.png");
+    tab.type = sf::Event::KeyPressed;   // the TAB loadout peek, on the map
+    stack_.back()->handleEvent(*this, tab, {0.f, 0.f});
+    snapFrame(d + "14_map_tab.png");
+    tab.type = sf::Event::KeyReleased;
+    stack_.back()->handleEvent(*this, tab, {0.f, 0.f});
     back();
 
     data_.run = RunState{};   // back in the game menu, a well-grown web

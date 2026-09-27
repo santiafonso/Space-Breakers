@@ -599,7 +599,7 @@ void LoadoutScreen::draw(App& app, sf::RenderWindow& w) {
 void PlayScreen::onEnter(App&) {
     dragging_ = false;
     aimCommitted_ = false;
-    showPicks_ = false;
+    peek_.close();
     clock_ = 0.f;
     samples_.clear();
     sceneIn_ = 0.f;        // run just started: fade the arena up from black
@@ -632,6 +632,15 @@ void PlayScreen::grab(App& app, sf::Vector2f mouse) {
 void PlayScreen::commitAim(App& app) {
     aimCommitted_ = true;
     if (app.data().meta.slingshot) app.setAiming(true);
+}
+
+void PlayScreen::dropHeld(App& app) {
+    if (!dragging_) return;
+    app.world().cancelHeld();
+    if (app.data().meta.slingshot) app.setAiming(false);
+    dragging_ = false;
+    aimCommitted_ = false;
+    samples_.clear();
 }
 
 void PlayScreen::release(App& app) {
@@ -682,17 +691,19 @@ void PlayScreen::release(App& app) {
 }
 
 void PlayScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
-    if (isKey(e, sf::Keyboard::Escape)) { app.openPause(); return; }
+    // TAB peek: the fight stands still under it, so a held ball is set down
+    // (not thrown) and nothing else acts until it closes.
+    if (peek_.handle(e)) {
+        if (peek_.open) dropHeld(app);
+        return;
+    }
     if (isKey(e, sf::Keyboard::M)) { app.toggleSound(); return; }
+    if (peek_.open) return;
+    if (isKey(e, sf::Keyboard::Escape)) { app.openPause(); return; }
     if (isKey(e, sf::Keyboard::Q)) { app.useReserve(); return; }   // "Stockpile" reserve power-up
     if (isKey(e, sf::Keyboard::Space) ||                               // "Nova" pact
         (e.type == sf::Event::MouseButtonPressed && e.mouseButton.button == sf::Mouse::Right)) {
         app.usePactAbility();
-        return;
-    }
-    if (isKey(e, sf::Keyboard::Tab)) { showPicks_ = true; return; }
-    if (e.type == sf::Event::KeyReleased && e.key.code == sf::Keyboard::Tab) {
-        showPicks_ = false;
         return;
     }
     if (app.devMode() && e.type == sf::Event::KeyPressed) {
@@ -714,7 +725,6 @@ void PlayScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
             dragging_ = false;
         }
         release(app);
-        showPicks_ = false;
         return;
     }
     if (isLeftClick(e)) { grab(app, mouse); return; }
@@ -723,9 +733,11 @@ void PlayScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
 }
 
 void PlayScreen::update(App& app, float dt, sf::Vector2f mouse) {
-    clock_ += dt;
     worldMouse_ = mouse;
     sceneIn_ += dt;
+    peek_.update(dt);
+    if (peek_.open) return;   // paused: the stage banner and drag sampling wait too
+    clock_ += dt;
     bannerT_ += dt;
     // A new stage's fight began: key it on act + map row (several rows can
     // share a difficulty wave).
@@ -816,19 +828,11 @@ void PlayScreen::draw(App& app, sf::RenderWindow& w) {
         dx += 14.f;
     }
 
-    {   // a [TAB] key cap hint
-        const sf::FloatRect key{theme::margin, s.y - theme::margin - 66.f, 34.f, 17.f};
-        draw::box(w, key, 0.f, withAlpha(theme::textDim, 0.18f), withAlpha(theme::textDim, 0.05f),
-                  withAlpha(theme::textDim, 0.8f), 1.f);
-        drawLabel(w, app.font(), "tab", 10, {key.left + key.width * 0.5f + 1.f, key.top + key.height * 0.5f},
-                  theme::textLo);
-        drawLabel(w, app.font(), "loadout", 10, {key.left + key.width + 8.f, key.top + key.height * 0.5f},
-                  theme::textDim, -1);
-    }
-    drawPactHud(app, w, app.uiMouse(), !showPicks_ && !dragging_);
+    drawTabHint(app, w, {theme::margin, s.y - theme::margin - 66.f});
+    drawPactHud(app, w, app.uiMouse(), !peek_.open && !dragging_);
 
-    if (showPicks_) {
-        drawPicks(app, w);
+    if (peek_.open) {
+        drawLoadoutOverlay(app, w, true, peek_.latched());
     } else if (!dragging_) {
         // Hover help for the HUD and the ball tally (pointer in UI units).
         const sf::Vector2f um = app.uiMouse();
@@ -843,11 +847,11 @@ void PlayScreen::draw(App& app, sf::RenderWindow& w) {
             drawTooltip(w, app.font(), um, s, enemyName(hovered->kind), enemyDesc(hovered->kind), theme::enemy);
         } else if (sf::FloatRect(theme::margin - 4.f, s.y - theme::margin - 64.f, 180.f, 64.f).contains(um)) {
             drawTooltip(w, app.font(), um, s, "Your balls",
-                        "tap one to throw it at the nearest enemy, or hold to aim. Hold TAB to see each ball's role, items and modifiers.");
+                        "tap one to throw it at the nearest enemy, or hold to aim. TAB shows each ball's role, items and modifiers (the fight pauses).");
         }
     }
 
-    drawWaveBanner(app, w);
+    if (!peek_.open) drawWaveBanner(app, w);
 
     // Run start: the whole scene fades up from black (holds dark, then clears).
     const float x = clampf(sceneIn_ / 0.55f, 0.f, 1.f);
@@ -886,11 +890,51 @@ void PlayScreen::drawWaveBanner(App& app, sf::RenderWindow& w) const {
                    withAlpha(theme::accent, 0.8f * a));
 }
 
-void PlayScreen::drawPicks(App& app, sf::RenderWindow& w) const {
+// ================================================================ TAB peek
+
+namespace {
+constexpr float kTabTapTime = 0.25f;   // a press shorter than this keeps the peek open
+}
+
+bool TabPeek::handle(const sf::Event& e) {
+    if (e.type == sf::Event::LostFocus) { close(); return false; }
+    if (isKey(e, sf::Keyboard::Tab)) {
+        if (latched()) { close(); return true; }   // tapped open earlier: this press closes it
+        open = down = true;
+        held = 0.f;
+        return true;
+    }
+    if (e.type == sf::Event::KeyReleased && e.key.code == sf::Keyboard::Tab) {
+        if (!down) return true;
+        down = false;
+        if (held >= kTabTapTime) close();   // held to look: letting go closes it
+        return true;
+    }
+    if (open && isKey(e, sf::Keyboard::Escape)) { close(); return true; }
+    return false;
+}
+
+void drawTabHint(App& app, sf::RenderWindow& w, sf::Vector2f topLeft) {
+    const sf::FloatRect key{topLeft.x, topLeft.y, 34.f, 17.f};
+    draw::box(w, key, 0.f, withAlpha(theme::textDim, 0.18f), withAlpha(theme::textDim, 0.05f),
+              withAlpha(theme::textDim, 0.8f), 1.f);
+    drawLabel(w, app.font(), "tab", 10, {key.left + key.width * 0.5f + 1.f, key.top + key.height * 0.5f},
+              theme::textLo);
+    drawLabel(w, app.font(), "loadout", 10, {key.left + key.width + 8.f, key.top + key.height * 0.5f},
+              theme::textDim, -1);
+}
+
+void drawLoadoutOverlay(App& app, sf::RenderWindow& w, bool paused, bool latched) {
     const sf::Vector2f s = app.size();
     const RunState& r = app.data().run;
     drawDim(w, s, 0.7f);
     drawCentered(w, app.font(), "Your balls", theme::fsHeading, {s.x * 0.5f, s.y * 0.26f}, theme::textHi);
+
+    // How to get out: only worth saying when it isn't "let go of TAB".
+    std::string note = paused ? "paused" : "";
+    if (latched) note += std::string(note.empty() ? "" : "   -   ") + "tab to close";
+    if (!note.empty())
+        drawCentered(w, app.font(), note, theme::fsSmall, {s.x * 0.5f, s.y * 0.26f + 34.f}, theme::textDim);
 
     const int n = static_cast<int>(r.balls.size());
     for (int i = 0; i < n; ++i)

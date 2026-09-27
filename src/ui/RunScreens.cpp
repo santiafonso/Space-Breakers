@@ -284,6 +284,7 @@ int MapScreen::nodeAt(App& app, sf::Vector2f mouse, bool openOnly) const {
 }
 
 void MapScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
+    if (peek_.handle(e) || peek_.open) return;   // TAB loadout peek: the map waits under it
     if (isKey(e, sf::Keyboard::Escape)) { app.openPause(); return; }
     if (e.type == sf::Event::KeyPressed && e.key.code >= sf::Keyboard::Num1 &&
         e.key.code <= sf::Keyboard::Num4) {
@@ -303,8 +304,9 @@ void MapScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
 void MapScreen::update(App& app, float dt, sf::Vector2f mouse) {
     clock_ += dt;
     mouse_ = mouse;
-    hover_ = nodeAt(app, mouse);
-    info_ = nodeAt(app, mouse, false);
+    peek_.update(dt);
+    hover_ = peek_.open ? -1 : nodeAt(app, mouse);
+    info_ = peek_.open ? -1 : nodeAt(app, mouse, false);
 }
 
 void MapScreen::draw(App& app, sf::RenderWindow& w) {
@@ -407,14 +409,21 @@ void MapScreen::draw(App& app, sf::RenderWindow& w) {
     sf::Text keys = makeText(app.font(), "click a lit node (or 1-4)", theme::fsSmall, theme::textDim);
     keys.setPosition(theme::margin + 8.f, ly + 6.f);
     w.draw(keys);
+    drawTabHint(app, w, {theme::margin + 8.f, ly + 32.f});
 
     // The run's pacts, under the legend (hover a chip for its rule).
     bool pactHover = false;
     if (!r.pacts.empty()) {
         sf::Text ph = makeText(app.font(), "Pacts", theme::fsSmall, theme::textLo);
-        ph.setPosition(theme::margin + 12.f, ly + 44.f);
+        ph.setPosition(theme::margin + 12.f, ly + 66.f);
         w.draw(ph);
-        pactHover = drawPactStrip(app, w, {theme::margin + 10.f, ly + 64.f}, false, mouse_, info_ < 0);
+        pactHover = drawPactStrip(app, w, {theme::margin + 10.f, ly + 86.f}, false, mouse_,
+                                  info_ < 0 && !peek_.open);
+    }
+
+    if (peek_.open) {   // the loadout peek covers the map; its own hover help only
+        drawLoadoutOverlay(app, w, false, peek_.latched());
+        return;
     }
 
     if (info_ >= 0) {
