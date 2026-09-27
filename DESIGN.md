@@ -1066,14 +1066,14 @@ Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
     **Shooter**, **Asesino**, **Summoner**, **Bufón**, cada una con una mecánica
     propia. Se desbloquean en la web (al principio solo hay Striker, después
     Support, después Guardian, después las nuevas).
-    - Mago: su gracia es llevar **más habilidades**: 2 slots de habilidad por
-      ser mago, 3 con 4 items de mago (a confirmar: se entendió "2" como slots
-      de habilidad).
+    - Mago: su gracia es llevar **más habilidades**. Slots de habilidad según
+      su nivel: 1 (cualquier pelota) → 2 (mago, 2 items) → 3 (4 items de mago).
     - Asesino: al matar un enemigo se **teletransporta** al enemigo más cercano.
     - Bufón: juega con **probabilidades**.
     - Shooter: **dispara balas**; más adelante las balas pueden rebotar entre
       enemigos.
-    - Summoner: a definir.
+    - Summoner: **invoca cosas**. Sus items invocan: pelotitas que duran un
+      tiempo, torretas, un dragoncito, cosas varias.
   - **Doble rol:** 2 items de una clase + 2 de otra = la pelota tiene **los dos
     roles** (ej. Striker + Bufón). **4 items de la misma clase** = versión
     mejorada con más cosas de su rol: **Mega Striker**, **Ancient Mage**,
