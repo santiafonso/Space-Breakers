@@ -39,11 +39,10 @@ bool saveGame(const std::string& path, const GameData& d) {
     f << "snd.master " << m.sound.master << '\n';
     f << "snd.music " << m.sound.music << '\n';
     f << "snd.sfx " << m.sound.sfx << '\n';
+    f << "snd.on " << (m.sound.musicOn ? 1 : 0) << ' ' << (m.sound.sfxOn ? 1 : 0) << '\n';
     for (int i = 0; i < SoundCatCount; ++i)   // category index, volume, style
         f << "snd.cat " << i << ' ' << m.sound.vol[i] << ' ' << m.sound.style[i] << '\n';
     f << "fullscreen " << (m.fullscreen ? 1 : 0) << '\n';
-    f << "aim.slingshot " << (m.slingshot ? 1 : 0) << '\n';
-    f << "aim.auto " << (m.autoFling ? 1 : 0) << '\n';
     f << "stat.enemiesKilled " << m.stats.enemiesKilled << '\n';
     f << "stat.coresEarned " << m.stats.coresEarned << '\n';
     f << "stat.bestWave " << m.stats.bestWave << '\n';
@@ -89,6 +88,12 @@ bool loadGame(const std::string& path, GameData& d) {
         else if (key == "snd.master") ls >> m.sound.master;
         else if (key == "snd.music") ls >> m.sound.music;
         else if (key == "snd.sfx") ls >> m.sound.sfx;
+        else if (key == "snd.on") {   // music / effects switches; missing = both on
+            int mu = 1, fx = 1;
+            ls >> mu >> fx;
+            m.sound.musicOn = mu != 0;
+            m.sound.sfxOn = fx != 0;
+        }
         else if (key == "snd.cat") {
             int i = -1, vol = 100, style = 0;
             if (ls >> i >> vol >> style && i >= 0 && i < SoundCatCount) {
@@ -97,8 +102,6 @@ bool loadGame(const std::string& path, GameData& d) {
             }
         }
         else if (key == "fullscreen") { int v = 0; ls >> v; m.fullscreen = v != 0; }
-        else if (key == "aim.slingshot") { int v = 1; ls >> v; m.slingshot = v != 0; }
-        else if (key == "aim.auto") { int v = 0; ls >> v; m.autoFling = v != 0; }
         else if (key == "stat.enemiesKilled") ls >> m.stats.enemiesKilled;
         else if (key == "stat.coresEarned") ls >> m.stats.coresEarned;
         else if (key == "stat.bestWave") ls >> m.stats.bestWave;

@@ -32,6 +32,8 @@ struct SoundSettings {
     int master = 100;   // 0..100
     int music = 100;
     int sfx = 100;
+    bool musicOn = true;   // the music / effects on-off switches, apart from their volume
+    bool sfxOn = true;
     std::array<int, SoundCatCount> vol = [] {
         std::array<int, SoundCatCount> v{};
         v.fill(100);

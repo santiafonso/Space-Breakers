@@ -12,7 +12,7 @@ struct PactRules {
     float flingHold = 1.f;       // Hot Hands: fling-speed decay x this (< 1 keeps a throw fast longer)
     // Spectator
     bool hunters = false;        // Hunters: every ball homes on its own prey until it dies
-    float autoFlingEvery = 0.f;  // Clockwork: > 0 = auto-throw a ball this often (s), whatever the option says
+    float autoFlingEvery = 0.f;  // Clockwork: > 0 = auto-throw a ball this often (s)
     float autoFlingSpeed = 0.f;  // ...at this x its cruise
     bool pinball = false;        // Pinball: wall bounces speed up, feed the combo and spark
     // Swarm

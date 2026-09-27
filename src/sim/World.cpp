@@ -533,14 +533,13 @@ std::optional<sf::Vector2f> World::nearestTarget(sf::Vector2f from) const {
     return best;
 }
 
-// Auto-throw option: now and then, launch the ball that's closest to plain
+// "Clockwork" pact: now and then, launch the ball that's closest to plain
 // cruising (the one doing least) at the enemy nearest the core.
 void World::updateAutoFling(float dt, const WorldParams& p, FrameEvents& ev) {
-    const bool clockwork = p.pact.autoFlingEvery > 0.f;   // "Clockwork" pact: always on, faster
-    if ((!p.autoFling && !clockwork) || !waveRunning_) return;
+    if (p.pact.autoFlingEvery <= 0.f || !waveRunning_) return;
     autoFlingTimer_ -= dt;
     if (autoFlingTimer_ > 0.f) return;
-    autoFlingTimer_ = clockwork ? p.pact.autoFlingEvery : cfg::combat::autoFlingInterval;
+    autoFlingTimer_ = p.pact.autoFlingEvery;
 
     const Enemy* target = nullptr;
     float best = 1e18f;
@@ -561,10 +560,9 @@ void World::updateAutoFling(float dt, const WorldParams& p, FrameEvents& ev) {
         const float ratio = length(b.vel) / std::max(1.f, ballCruise(b, p));
         if (ratio < slowest) { slowest = ratio; pick = &b; }
     }
-    if (!pick || (!clockwork && slowest > 1.3f)) return;   // everyone is already flying hot
+    if (!pick) return;
     const sf::Vector2f d = normalized(aim - pick->pos, {1.f, 0.f});
-    const float mul = clockwork ? p.pact.autoFlingSpeed : cfg::combat::autoFlingSpeedMul;
-    pick->vel = d * std::min(ballCruise(*pick, p) * mul, ballMaxSpeed(*pick, p));
+    pick->vel = d * std::min(ballCruise(*pick, p) * p.pact.autoFlingSpeed, ballMaxSpeed(*pick, p));
     ev.autoFlung = true;
 }
 

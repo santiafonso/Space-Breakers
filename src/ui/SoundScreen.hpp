@@ -7,7 +7,7 @@
 namespace sb {
 
 // Sound settings (main menu "Sound", pause "Sound"): master / music / effects
-// volume, mute, and for each category of sound a volume and a synthesised
+// volume, each with an on-off switch, and for each category of sound a volume and a synthesised
 // style (Soft / Bright / Retro / Off). Picking a style or letting go of a
 // slider previews the sound. Saved on the way out.
 class SoundScreen : public Screen {
@@ -18,7 +18,8 @@ public:
     bool opaque() const override { return false; }
 
 private:
-    // Hit ids: 0..2 the global sliders, kMute, 100 + c a category slider,
+    // Hit ids: 0..2 the global sliders, kMute + 0..2 their on-off switches
+    // (all sound / music / effects), 100 + c a category slider,
     // 200 + c * 4 + s a style chip, kBack.
     static constexpr int kMute = 10;
     static constexpr int kBack = 20;

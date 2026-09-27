@@ -233,7 +233,8 @@ void Audio::setEnabled(bool e) {
 void Audio::applySettings(const SoundSettings& s) {
     settings_ = s;
     for (int& st : settings_.style) st = std::clamp(st, 0, SoundStyleCount - 1);
-    const float music = kMusicVolume * clampf(s.master / 100.f, 0.f, 1.f) * clampf(s.music / 100.f, 0.f, 1.f);
+    const float music = s.musicOn ? kMusicVolume * clampf(s.master / 100.f, 0.f, 1.f) * clampf(s.music / 100.f, 0.f, 1.f)
+                                  : 0.f;
     if (menuMusicOk_) menuMusic_.setVolume(music);
     if (gameMusicOk_) gameMusic_.setVolume(music);
     applyAmbience();
@@ -284,7 +285,7 @@ void Audio::applyAmbience() {
 float Audio::catGain(int cat) const {
     if (!enabled_ || cat < 0 || cat >= SoundCatCount) return 0.f;
     const int st = settings_.style[static_cast<std::size_t>(cat)];
-    if (st < 0 || st >= kStyles) return 0.f;   // Off
+    if (st < 0 || st >= kStyles || !settings_.sfxOn) return 0.f;   // Off
     return clampf(settings_.master / 100.f, 0.f, 1.f) * clampf(settings_.sfx / 100.f, 0.f, 1.f) *
            clampf(settings_.vol[static_cast<std::size_t>(cat)] / 100.f, 0.f, 1.f);
 }

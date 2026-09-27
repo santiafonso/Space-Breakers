@@ -310,7 +310,7 @@ struct FrameEvents {
     PowerUp pickupKind = PowerUp::Points2x;
     bool coreHit = false;
     bool shieldBlock = false;             // a hit bounced off a Shielded enemy's shield
-    bool autoFlung = false;               // the auto-throw option launched a ball
+    bool autoFlung = false;               // the "Clockwork" pact launched a ball
     int midasGold = 0;                    // extra gold from kills by Midas balls
     bool phoenix = false;                 // the Phoenix relic just saved the core
     bool bossHit = false;                 // a ball landed on the miniboss this step
@@ -338,7 +338,6 @@ struct WorldParams {
     bool overcharge = false;      // Overcharge (relic): higher combo cap
     float elemMult[kElementCount] = {1.f, 1.f, 1.f, 1.f, 1.f, 1.f, 1.f};  // per-element potency (web levels)
     int  emberLevel = 0;          // Ember web node: fire hits apply a burn DoT
-    bool autoFling = false;       // option: the game throws a ball at the threat now and then
 
     // Meta web (Fase A).
     int  aegisHits = 0;           // Aegis: core ignores this many hits at the start of each wave

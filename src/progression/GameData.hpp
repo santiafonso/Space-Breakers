@@ -33,8 +33,6 @@ struct MetaState {
     bool soundOn = true;
     SoundSettings sound;      // volumes + a style per sound category (the Sound screen)
     bool fullscreen = false;
-    bool slingshot = true;    // aim: pull back and release (false = the old flick throw)
-    bool autoFling = false;   // auto-throw: the game flings a ball at the threat every so often
     Stats stats;
 };
 

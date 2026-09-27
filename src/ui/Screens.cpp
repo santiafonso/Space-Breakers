@@ -605,19 +605,9 @@ void PlayScreen::onEnter(App&) {
     aimCommitted_ = false;
     peek_.close();
     clock_ = 0.f;
-    samples_.clear();
     sceneIn_ = 0.f;        // run just started: fade the arena up from black
     bannerWave_ = 0;       // let the first update fire the "Stage 1" banner
     bannerT_ = 999.f;
-}
-
-sf::Vector2f PlayScreen::pointerVelocity() const {
-    if (samples_.size() < 2) return {0.f, 0.f};
-    const auto& first = samples_.front();
-    const auto& last = samples_.back();
-    const float span = last.first - first.first;
-    if (span < 1e-3f) return {0.f, 0.f};
-    return (last.second - first.second) / span;
 }
 
 void PlayScreen::grab(App& app, sf::Vector2f mouse) {
@@ -625,41 +615,40 @@ void PlayScreen::grab(App& app, sf::Vector2f mouse) {
     if (app.world().grabAt(mouse, cfg::app::catchRadius)) {
         app.audio().grab();
         dragging_ = true;
-        aimCommitted_ = false;   // a tap until held / dragged (see update)
-        pressT_ = clock_;
+        aimCommitted_ = false;   // a click until the pointer moves (see update)
         pressPos_ = mouse;
-        samples_.clear();
-        samples_.push_back({clock_, mouse});
         if (const Ball* b = app.world().heldBall()) anchor_ = b->pos;
     }
 }
 
 void PlayScreen::commitAim(App& app) {
     aimCommitted_ = true;
-    if (app.data().meta.slingshot) app.setAiming(true);
+    app.setAiming(true);
 }
 
 void PlayScreen::dropHeld(App& app) {
     if (!dragging_) return;
     app.world().cancelHeld();
-    if (app.data().meta.slingshot) app.setAiming(false);
+    app.setAiming(false);
     dragging_ = false;
     aimCommitted_ = false;
-    samples_.clear();
 }
 
+// Two ways to throw, no options: click a ball (let go without moving) and it
+// flies at the nearest enemy; press and pull to aim it with the slingshot.
 void PlayScreen::release(App& app) {
     if (!dragging_) return;
     const float power = app.flingPower();   // Strong arm, Hot Hands / Pinball pacts
-    if (!aimCommitted_ && length(worldMouse_ - pressPos_) > cfg::app::quickThrowSlop * app.world().arenaScale())
+    const float k = app.world().arenaScale();
+    if (!aimCommitted_ && length(worldMouse_ - pressPos_) > cfg::app::quickThrowSlop * k)
         commitAim(app);   // a fast pull that ended between frames still aims
+    dragging_ = false;
     if (!aimCommitted_) {
-        // Quick throw: a tap sends the ball at the enemy nearest to it, through
-        // the same release as a hand-aimed throw. Nothing to hit: let it carry on.
+        // A click: the ball goes at the enemy nearest to it, through the same
+        // release as a hand-aimed throw. Nothing to hit: let it carry on.
         const Ball* b = app.world().heldBall();
         const std::optional<sf::Vector2f> target = b ? app.world().nearestTarget(b->pos) : std::nullopt;
         if (b && target && length(*target - b->pos) > 1e-3f) {
-            const float k = app.world().arenaScale();
             const float speed = lerpf(cfg::app::slingMinSpeed, cfg::app::slingMaxSpeed, cfg::app::quickThrowPower);
             const sf::Vector2f v = normalized(*target - b->pos, {1.f, 0.f}) * speed * k * power;
             app.world().releaseHeld(v);
@@ -667,33 +656,23 @@ void PlayScreen::release(App& app) {
         } else {
             app.world().cancelHeld();
         }
-        dragging_ = false;
-        samples_.clear();
         return;
     }
-    sf::Vector2f v = pointerVelocity() * cfg::app::throwVelScale * power;
-    if (app.data().meta.slingshot) {
-        app.setAiming(false);
-        // Pull back, let go: the ball flies away from the pointer, harder the
-        // further you pulled. A tiny pull cancels and the ball carries on.
-        // Pull and speed are in arena units, so they scale with the wide arena.
-        const float k = app.world().arenaScale();
-        const sf::Vector2f pull = anchor_ - worldMouse_;
-        const float len = length(pull);
-        if (len < cfg::app::slingDeadzone * k) {
-            app.world().cancelHeld();
-            app.audio().letGo();
-            dragging_ = false;
-            samples_.clear();
-            return;
-        }
-        const float pw = clampf(len / (cfg::app::slingMaxPull * k), 0.f, 1.f);
-        v = pull / len * lerpf(cfg::app::slingMinSpeed, cfg::app::slingMaxSpeed, pw) * k * power;
+    app.setAiming(false);
+    // Pull back, let go: the ball flies away from the pointer, harder the
+    // further you pulled. A tiny pull cancels and the ball carries on.
+    // Pull and speed are in arena units, so they scale with the wide arena.
+    const sf::Vector2f pull = anchor_ - worldMouse_;
+    const float len = length(pull);
+    if (len < cfg::app::slingDeadzone * k) {
+        app.world().cancelHeld();
+        app.audio().letGo();
+        return;
     }
+    const float pw = clampf(len / (cfg::app::slingMaxPull * k), 0.f, 1.f);
+    const sf::Vector2f v = pull / len * lerpf(cfg::app::slingMinSpeed, cfg::app::slingMaxSpeed, pw) * k * power;
     app.world().releaseHeld(v);
     if (app.world().grabbedKind() == Grabbed::None) app.audio().thrown(clampf(length(v) / 900.f, 0.f, 1.f));
-    dragging_ = false;
-    samples_.clear();
 }
 
 void PlayScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
@@ -724,13 +703,8 @@ void PlayScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
             default: break;
         }
     }
-    if (e.type == sf::Event::LostFocus) {
-        if (dragging_ && (app.data().meta.slingshot || !aimCommitted_)) {   // don't fire a throw on alt-tab
-            app.world().cancelHeld();
-            app.setAiming(false);
-            dragging_ = false;
-        }
-        release(app);
+    if (e.type == sf::Event::LostFocus) {   // don't fire a throw on alt-tab
+        dropHeld(app);
         return;
     }
     if (isLeftClick(e)) { grab(app, mouse); return; }
@@ -752,19 +726,11 @@ void PlayScreen::update(App& app, float dt, sf::Vector2f mouse) {
         bannerWave_ = key;
         bannerT_ = 0.f;
     }
-    // Held past the tap window or dragged off the ball: aim by hand from here.
+    // The pointer moved off the ball while pressed: aim with the slingshot.
     if (dragging_ && !aimCommitted_ && sf::Mouse::isButtonPressed(sf::Mouse::Left) &&
-        (clock_ - pressT_ >= cfg::app::quickThrowHold ||
-         length(mouse - pressPos_) > cfg::app::quickThrowSlop * app.world().arenaScale()))
+        length(mouse - pressPos_) > cfg::app::quickThrowSlop * app.world().arenaScale())
         commitAim(app);
     if (dragging_ && !sf::Mouse::isButtonPressed(sf::Mouse::Left)) release(app);
-    if (dragging_ && app.world().hasHeld()) {
-        samples_.push_back({clock_, mouse});
-        while (samples_.size() > 2 &&
-               clock_ - samples_.front().first > cfg::app::pointerSampleWindow)
-            samples_.pop_front();
-        if (!app.data().meta.slingshot) app.world().moveHeld(mouse, dt);   // flick: carry the ball
-    }
 }
 
 // Slingshot aim: a band from the ball to the pointer and a dotted line along
@@ -808,7 +774,7 @@ void PlayScreen::draw(App& app, sf::RenderWindow& w) {
     renderer_.draw(w, app.world());
     drawPactWorld(app, w);   // Hunters tethers, Living Core overcharge
     app.effects().drawRings(w);
-    if (dragging_ && aimCommitted_ && app.data().meta.slingshot) drawAim(app, w);
+    if (dragging_ && aimCommitted_) drawAim(app, w);
     app.useUiView();
 
     app.hud().draw(w);
@@ -853,7 +819,7 @@ void PlayScreen::draw(App& app, sf::RenderWindow& w) {
             drawTooltip(w, app.font(), um, s, enemyName(hovered->kind), enemyDesc(hovered->kind), theme::enemy);
         } else if (sf::FloatRect(theme::margin - 4.f, s.y - theme::margin - 64.f, 180.f, 64.f).contains(um)) {
             drawTooltip(w, app.font(), um, s, "Your balls",
-                        "tap one to throw it at the nearest enemy, or hold to aim. TAB shows each ball's role, items and modifiers (the fight pauses).");
+                        "click one to throw it at the nearest enemy, or press and pull back to aim. TAB shows each ball's role, items and modifiers (the fight pauses).");
         }
     }
 
@@ -1157,13 +1123,10 @@ void PauseScreen::rebuild(App& app) {
     const sf::Vector2f s = app.size();
     lastSound_ = app.data().meta.soundOn;
     menu_.init(app.font(), theme::fsItem, s.y * 0.062f);
-    const MetaState& m = app.data().meta;
     menu_.setItems({{"Resume", true},
                     {"Stats", true},
                     {"How to Play", true},
                     {lastSound_ ? "Sound" : "Sound (muted)", true},
-                    {m.slingshot ? "Aim: Slingshot" : "Aim: Flick", true},
-                    {m.autoFling ? "Auto-throw: On" : "Auto-throw: Off", true},
                     {"Abandon run", true},
                     {"Quit", true}});
     menu_.layout({s.x * 0.5f, s.y * 0.34f});
@@ -1179,10 +1142,8 @@ void PauseScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) 
         case 1: app.openStats(); break;
         case 2: app.openHowTo(); break;
         case 3: app.openSound(); break;
-        case 4: app.toggleSlingshot(); rebuild(app); break;
-        case 5: app.toggleAutoFling(); rebuild(app); break;
-        case 6: app.abandonRun(); break;
-        case 7: app.quit(); break;
+        case 4: app.abandonRun(); break;
+        case 5: app.quit(); break;
         default: break;
     }
 }
@@ -1200,21 +1161,6 @@ void PauseScreen::draw(App& app, sf::RenderWindow& w) {
     drawCenteredPop(w, app.font(), "Paused", theme::fsTitle, {s.x * 0.5f, s.y * 0.2f}, theme::textHi,
                     introPop(it, 0.03f, 0.28f));
     menu_.draw(w, it);
-
-    switch (menu_.clickIndex(mouse_)) {   // what the two aim options do
-        case 4:
-            drawTooltip(w, app.font(), mouse_, s, "Aim",
-                        "Tap a ball to throw it at the nearest enemy. Hold to aim - Slingshot: pull back, release "
-                        "(time slows while you aim). "
-                        "Flick: throw it with a mouse swipe.");
-            break;
-        case 5:
-            drawTooltip(w, app.font(), mouse_, s, "Auto-throw",
-                        "every second or so the game flings a ball at the enemy closest to the core. "
-                        "Weaker than a good throw of your own.");
-            break;
-        default: break;
-    }
 }
 
 // ================================================================ Stats
@@ -1245,7 +1191,7 @@ void HowToScreen::draw(App& app, sf::RenderWindow& w) {
 
     const std::array<const char*, 7> lines = {{
         "Enemies march on the core at the centre. Keep it alive.",
-        "Tap a ball to throw it at the nearest enemy; hold and pull back to aim it.",
+        "Click a ball to throw it at the nearest enemy; press and pull back to aim it.",
         "Items carry a tag: 2 of one tag give a ball that role (Striker / Guardian /",
         "Support), 4 its mastery. Two balls' elements on one enemy set off a reaction.",
         "Between fights, pick your path on the map: fights pay gold, elites add a pick,",

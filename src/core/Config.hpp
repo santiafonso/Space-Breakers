@@ -93,11 +93,6 @@ inline constexpr float executeThreshold = 0.30f, executeThresholdPerLevel = 0.06
 inline constexpr float executeMult = 2.6f, executeMultPerLevel = 0.3f;              // ...take x this
 inline constexpr float overkillFrac = 0.5f, overkillFracPerLevel = 0.25f;  // "Overkill": this share of a kill's leftover...
 inline constexpr float overkillRange = 150.f;     // ...splashes onto the nearest enemies within this (1, 2 at Lv3, 3 at Lv5)
-// Auto-throw option: every autoFlingInterval the game flings one ball at the
-// enemy nearest the core, at autoFlingSpeedMul x its cruise - a helper, weaker
-// than a good hand throw.
-inline constexpr float autoFlingInterval = 1.4f;
-inline constexpr float autoFlingSpeedMul = 2.0f;
 }  // namespace combat
 
 // Ball roles. Every ball is one of three; the role shapes how it wants to be
@@ -590,23 +585,20 @@ inline constexpr float autosaveInterval = 20.f;
 // this long, so the scene you ended on flows into the next one instead of snapping.
 inline constexpr float waveIntroTime = 0.85f;
 inline constexpr float waveIntroSlow = 0.35f;
-inline constexpr float throwVelScale = 1.15f;   // flick throw: pointer velocity -> ball velocity
 // Slingshot aim: grab a ball, pull back, release. The pull length sets the
 // power; time slows while you aim (for up to aimSlowMax real seconds).
 inline constexpr float slingMaxPull = 220.f;    // px of pull for full power
 inline constexpr float slingDeadzone = 14.f;    // a shorter pull cancels (the ball carries on)
 inline constexpr float slingMinSpeed = 330.f;
 inline constexpr float slingMaxSpeed = 1500.f;
-// Quick throw: a tap on a ball (let go before quickThrowHold s, pointer moved
-// less than quickThrowSlop px) flings it at the nearest enemy at this fraction
-// of the slingshot range (~1090 px/s, a firm pull - full power stays a reward
-// for aiming by hand). Holding longer or dragging further aims as usual.
-inline constexpr float quickThrowHold = 0.18f;
+// Quick throw: a click on a ball (let go with the pointer moved less than
+// quickThrowSlop px, however long it was held) flings it at the nearest enemy
+// at this fraction of the slingshot range (~1090 px/s, a firm pull - full power
+// stays a reward for aiming by hand). Pulling further aims with the slingshot.
 inline constexpr float quickThrowSlop = 12.f;
 inline constexpr float quickThrowPower = 0.65f;
 inline constexpr float aimTimeScale = 0.3f;
 inline constexpr float aimSlowMax = 2.5f;
-inline constexpr float pointerSampleWindow = 0.09f;
 inline constexpr float catchRadius = 130.f;   // grab a ball from near it, not only dead-on
 inline constexpr float grabSettle = 16.f;     // how fast the grab offset eases out (per s)
 inline constexpr float fadeRate = 14.f;

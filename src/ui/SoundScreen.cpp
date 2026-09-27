@@ -52,9 +52,10 @@ sf::FloatRect chipRect(sf::Vector2f s, int cat, int style) {
             kChipW, kChipH};
 }
 
-sf::FloatRect muteRect(sf::Vector2f s) {
+// The switch beside each global slider: 0 = all sound, 1 = music, 2 = effects.
+sf::FloatRect switchRect(sf::Vector2f s, int i) {
     const float cx = s.x * 0.5f;
-    return {cx + kChipX, kGlobalY - kChipH * 0.5f, kChipW * 2.f + kChipGap, kChipH};
+    return {cx + kChipX, sliderY(i) - kChipH * 0.5f, kChipW * 2.f + kChipGap, kChipH};
 }
 
 sf::FloatRect backRect(sf::Vector2f s) { return {s.x * 0.5f - 80.f, 716.f, 160.f, 30.f}; }
@@ -65,7 +66,8 @@ int SoundScreen::itemAt(App& app, sf::Vector2f m) const {
     const sf::Vector2f s = app.size();
     for (int i = 0; i < 3; ++i)
         if (sliderHit(s, i).contains(m)) return i;
-    if (muteRect(s).contains(m)) return kMute;
+    for (int i = 0; i < 3; ++i)
+        if (switchRect(s, i).contains(m)) return kMute + i;
     if (backRect(s).contains(m)) return kBack;
     for (int c = 0; c < SoundCatCount; ++c) {
         if (sliderHit(s, 100 + c).contains(m)) return 100 + c;
@@ -109,6 +111,14 @@ void SoundScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) 
         app.toggleSound();
         return;
     }
+    if (id == kMute + 1 || id == kMute + 2) {   // music / effects on-off
+        SoundSettings& snd = app.data().meta.sound;
+        bool& on = id == kMute + 1 ? snd.musicOn : snd.sfxOn;
+        on = !on;
+        app.audio().applySettings(snd);
+        if (on && id == kMute + 2) app.audio().preview(SndCards);
+        return;
+    }
     if (id < 200) {
         drag_ = id;
         setSlider(app, id, mouse.x);
@@ -130,7 +140,7 @@ void SoundScreen::update(App& app, float, sf::Vector2f mouse) {
     }
     hover_ = drag_ >= 0 ? drag_ : itemAt(app, mouse);
     // Sliders and chips preview their own sound, so only the plain buttons click.
-    uisound::hover(this, hover_, hover_ == kMute || hover_ == kBack);
+    uisound::hover(this, hover_, (hover_ >= kMute && hover_ <= kMute + 2) || hover_ == kBack);
 }
 
 void SoundScreen::draw(App& app, sf::RenderWindow& w) {
@@ -167,14 +177,14 @@ void SoundScreen::draw(App& app, sf::RenderWindow& w) {
         const float y = sliderY(i);
         drawLabel(w, f, kGlobalNames[i], 12, {cx + kNameX, y},
                   withAlpha(hover_ == i ? theme::textHi : theme::textLo, a), -1);
-        slider(i, globalValue(snd, i), !muted);
-    }
-    {
-        const sf::FloatRect r = muteRect(s);
-        const sf::Color edge = muted ? theme::coreLow : theme::accent;
-        draw::panel(w, r, edge, a, hover_ == kMute ? 0.6f : 0.25f);
-        drawLabel(w, f, muted ? "Muted" : "Sound on", 11, {r.left + r.width * 0.5f, r.top + r.height * 0.5f},
-                  withAlpha(muted ? theme::coreLow : theme::textHi, a));
+        const bool on = i == 0 ? !muted : (i == 1 ? snd.musicOn : snd.sfxOn);
+        slider(i, globalValue(snd, i), !muted && on);
+        const sf::FloatRect r = switchRect(s, i);
+        const char* text = i == 0 ? (on ? "Sound on" : "Muted")
+                                  : (i == 1 ? (on ? "Music on" : "Music off") : (on ? "Effects on" : "Effects off"));
+        draw::panel(w, r, on ? theme::accent : theme::coreLow, a, hover_ == kMute + i ? 0.6f : 0.25f);
+        drawLabel(w, f, text, 11, {r.left + r.width * 0.5f, r.top + r.height * 0.5f},
+                  withAlpha(on ? theme::textHi : theme::coreLow, a));
     }
 
     // ---- per category: name, volume, style
@@ -193,7 +203,7 @@ void SoundScreen::draw(App& app, sf::RenderWindow& w) {
         if (ra <= 0.001f) continue;
         const float y = sliderY(100 + c);
         const int style = snd.style[static_cast<std::size_t>(c)];
-        const bool live = !muted && style != StyleOff;
+        const bool live = !muted && snd.sfxOn && style != StyleOff;
         drawLabel(w, f, soundCatName(c), 12, {cx + kNameX, y},
                   withAlpha(rowHover == c ? theme::textHi : (live ? theme::textLo : theme::textDim), ra), -1);
         slider(100 + c, snd.vol[static_cast<std::size_t>(c)], live);

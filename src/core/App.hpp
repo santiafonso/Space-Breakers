@@ -151,8 +151,6 @@ public:
 
     void buyMetaUnlock(int unlock);
     void toggleSound();
-    void toggleSlingshot();
-    void toggleAutoFling();
     void setAiming(bool on);   // slingshot aim in progress: time slows for a moment
     void toggleFullscreen();
     void save();

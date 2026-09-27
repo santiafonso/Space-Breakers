@@ -115,7 +115,6 @@ WorldParams App::params() const {
 
     // Meta web (Fase A).
     p.emberLevel = u[MetaEmber];
-    p.autoFling = data_.meta.autoFling;
     p.aegisHits = u[MetaAegis];
     p.coreRegenPerSec = cfg::core::regenPerLevel * static_cast<float>(u[MetaRegen]);
     p.stockpile = u[MetaStockpile] > 0;
@@ -1217,16 +1216,6 @@ void App::buyMetaUnlock(int u) {
 void App::toggleSound() {
     data_.meta.soundOn = !data_.meta.soundOn;
     audio_.setEnabled(data_.meta.soundOn);
-    save();
-}
-
-void App::toggleSlingshot() {
-    data_.meta.slingshot = !data_.meta.slingshot;
-    save();
-}
-
-void App::toggleAutoFling() {
-    data_.meta.autoFling = !data_.meta.autoFling;
     save();
 }
 

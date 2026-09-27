@@ -99,9 +99,8 @@ public:
 private:
     void grab(App& app, sf::Vector2f mouse);
     void release(App& app);
-    void commitAim(App& app);   // the press became a hold / drag: aim by hand
+    void commitAim(App& app);   // the pointer moved while pressed: aim with the slingshot
     void dropHeld(App& app);   // let go of a held ball without throwing it
-    sf::Vector2f pointerVelocity() const;
 
     void drawWaveBanner(App& app, sf::RenderWindow& w) const;
 
@@ -110,12 +109,10 @@ private:
     TabPeek peek_;             // TAB: the balls' loadouts + relics + pacts
     sf::Vector2f worldMouse_;  // pointer in arena units (enemy hover help)
     sf::Vector2f anchor_;      // slingshot: where the held ball sits
-    bool aimCommitted_ = false; // held past the quick-throw tap: aiming by hand
-    float pressT_ = 0.f;        // clock_ when the ball was grabbed
+    bool aimCommitted_ = false; // the pointer moved off the ball: aiming by hand
     sf::Vector2f pressPos_;     // pointer (arena units) when the ball was grabbed
     void drawAim(App& app, sf::RenderWindow& w) const;
     float clock_ = 0.f;
-    std::deque<std::pair<float, sf::Vector2f>> samples_;
 
     float sceneIn_ = 999.f;    // counts up from 0 on run start - fade the scene up from black
     int bannerWave_ = 0;       // act * 100 + map row the "Stage N" banner is showing

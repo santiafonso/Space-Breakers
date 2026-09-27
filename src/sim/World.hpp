@@ -197,7 +197,7 @@ private:
     int heldIndex_ = -1;
     sf::Vector2f heldGrabOffset_{0.f, 0.f};  // ball pos - cursor at grab, eased to zero
     sf::Vector2f heldPrevVel_{0.f, 0.f};     // velocity before the grab (cancelHeld restores it)
-    float autoFlingTimer_ = cfg::combat::autoFlingInterval;
+    float autoFlingTimer_ = 1.f;   // "Clockwork": time to its next throw
 
     int comboStreak_ = 0;
     int comboCapTier_ = cfg::combo::baseCapTier;

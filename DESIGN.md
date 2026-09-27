@@ -1005,13 +1005,17 @@ Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
 - **Tiro rápido. [IMPLEMENTADO 2026-09-26]**
   - Motivo (usuario): apuntar cada tiro cansa; casi siempre la pelota va al
     enemigo más cercano y el rebote fino es situacional.
-  - **Tocar** una pelota (soltar antes de `quickThrowHold` 0.18 s y sin mover
-    más de `quickThrowSlop` 12 px) la tira al **enemigo vivo más cercano a la
-    pelota** (o al boss), a `quickThrowPower` 0.65 del rango de la gomera
-    (~1090 px/s, un estirón firme; la fuerza máxima queda para el tiro
-    apuntado). Sin enemigos, la pelota sigue como venía.
-  - **Mantener** o arrastrar pasa a la gomera (o al flick) como siempre; la
-    cámara lenta y la banda aparecen recién ahí.
+  - **Dos formas de tirar, sin opciones** (pedido del usuario, corrección del
+    mismo día): **click** en una pelota (soltar sin mover el puntero más de
+    `quickThrowSlop` 12 px, no importa cuánto la mantengas) la tira al
+    **enemigo vivo más cercano a la pelota** (o al boss), a `quickThrowPower`
+    0.65 del rango de la gomera (~1090 px/s; la fuerza máxima queda para el
+    tiro apuntado). Sin enemigos, la pelota sigue como venía. **Apretar y
+    estirar** apunta con la gomera; la cámara lenta y la banda aparecen recién
+    al mover.
+  - Se sacaron el modo **flick** y la opción **Auto-throw** de la pausa (y
+    `aim.slingshot` / `aim.auto` del save; un save viejo los ignora). El
+    auto-tiro queda solo para el pacto Clockwork.
   - Usa el mismo `World::releaseHeld` que el tiro a mano: Striker, Comet,
     Strong arm, Hot Hands / Pinball y el sonido aplican igual. Hunters y
     Clockwork siguen sin dejar agarrar.
@@ -1068,7 +1072,8 @@ Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
     click si lo que está bajo el puntero es clicable). Abrir / cerrar va en
     `App::push` / `App::back` (se omite si un click acaba de sonar).
   - **Pantalla Sound** (`ui/SoundScreen`, desde "Sound" en el menú principal y
-    en la pausa; M sigue muteando): Master / Music / Effects + mute, y 14
+    en la pausa; M sigue muteando): Master / Music / Effects, cada uno con su
+    interruptor on/off (`snd.on`, música y efectos aparte del volumen), y 14
     categorías (Ball hits, Throw, Grab, Core hit, Kill, Pickup, Combo, Gold,
     Waves, Cards, Click, Hover, Screens, Ambience) con volumen y estilo
     **Soft / Bright / Retro / Off** (Soft = el sonido de antes; Bright = voz de
@@ -1082,6 +1087,10 @@ Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
   en cada oleada, cada una tiene que **sentirse mucho** al conseguirla: repasar
   items / modificadores / reliquias para que sean más fuertes y más visibles
   en juego. Se ve más adelante.
+
+- **Pendiente (usuario, 2026-09-26): más música.** El usuario va a sumar
+  más pistas (menú, boss, etc.); ahí se retoma el sonido (qué pista suena en
+  cada pantalla, transiciones, y el resto de ajustes de la pantalla Sound).
 
 - **Pendiente (idea del usuario, 2026-09-26): más clases, doble rol,
   habilidades y elemento como slot.** Todavía no se implementa.
