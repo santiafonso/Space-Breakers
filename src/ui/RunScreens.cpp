@@ -520,8 +520,9 @@ void MapScreen::draw(App& app, sf::RenderWindow& w) {
 // ================================================================ Shop
 
 namespace {
-constexpr float kOfferH = 186.f;
+constexpr float kOfferH = 236.f;
 constexpr float kOfferGap = 14.f;
+constexpr float kGroupGap = 30.f;    // extra room between the shelf's groups (items | abilities | relics ...)
 constexpr float kOfferTop = 0.27f;   // * size.y
 constexpr float kBtnW = 204.f, kBtnH = 36.f, kBtnGap = 12.f;
 }  // namespace
@@ -531,13 +532,91 @@ int ShopScreen::cardCount(App& app) const {
     return static_cast<int>(r.shopOffers.size()) + (r.shopMystery == 1 ? 1 : 0);
 }
 
+namespace {
+// The shelf is sorted into groups by what a pick is, rarest first inside a
+// group; the mystery box closes the row in a group of its own.
+int shelfGroup(UpgradeCat c) {
+    switch (c) {
+        case UpgradeCat::Item:     return 0;
+        case UpgradeCat::Ability:  return 1;
+        case UpgradeCat::Element:  return 2;
+        case UpgradeCat::Relic:    return 3;
+        case UpgradeCat::Modifier: return 4;
+        case UpgradeCat::NewBall:  return 5;
+    }
+    return 6;
+}
+constexpr int kMysteryGroup = 7;
+
+const char* shelfName(int g) {
+    switch (g) {
+        case 0: return "items";
+        case 1: return "abilities";
+        case 2: return "elements";
+        case 3: return "relics";
+        case 4: return "modifiers";
+        case 5: return "new ball";
+    }
+    return "";
+}
+sf::Color shelfColor(int g) {
+    switch (g) {
+        case 0: return catColor(UpgradeCat::Item);
+        case 1: return catColor(UpgradeCat::Ability);
+        case 2: return catColor(UpgradeCat::Element);
+        case 3: return catColor(UpgradeCat::Relic);
+        case 4: return catColor(UpgradeCat::Modifier);
+        case 5: return catColor(UpgradeCat::NewBall);
+    }
+    return tierColor(Tier::Epic);
+}
+
+// Card i of the shop (offers first, then the mystery box) -> its group, and
+// the cards in shelf order.
+struct Shelf {
+    std::vector<int> order;    // card indices left to right
+    std::vector<int> group;    // per card index
+};
+Shelf shelf(App& app, int cards) {
+    const RunState& r = app.data().run;
+    Shelf sh;
+    const int offers = static_cast<int>(r.shopOffers.size());
+    for (int i = 0; i < cards; ++i) {
+        sh.order.push_back(i);
+        sh.group.push_back(i < offers ? shelfGroup(upgradeCat(static_cast<UpgradeKind>(r.shopOffers[static_cast<std::size_t>(i)])))
+                                      : kMysteryGroup);
+    }
+    auto tier = [&](int i) {
+        return i < offers ? static_cast<int>(upgradeTier(static_cast<UpgradeKind>(r.shopOffers[static_cast<std::size_t>(i)]))) : 0;
+    };
+    std::stable_sort(sh.order.begin(), sh.order.end(), [&](int x, int y) {
+        const int gx = sh.group[static_cast<std::size_t>(x)], gy = sh.group[static_cast<std::size_t>(y)];
+        return gx != gy ? gx < gy : tier(x) > tier(y);
+    });
+    return sh;
+}
+}  // namespace
+
 sf::FloatRect ShopScreen::offerRect(App& app, int i) const {
     const sf::Vector2f s = app.size();
     const int n = std::max(1, cardCount(app));
-    const float wd = std::min(200.f, (s.x - 2.f * (theme::margin + 14.f) - static_cast<float>(n - 1) * kOfferGap) /
-                                         static_cast<float>(n));   // room for the Epic halo at the edges
-    const float total = static_cast<float>(n) * wd + static_cast<float>(n - 1) * kOfferGap;
-    const float x = s.x * 0.5f - total * 0.5f + static_cast<float>(i) * (wd + kOfferGap);
+    const Shelf sh = shelf(app, n);
+    int groups = 0;   // gaps between groups
+    for (int k = 1; k < n; ++k)
+        if (sh.group[static_cast<std::size_t>(sh.order[static_cast<std::size_t>(k)])] !=
+            sh.group[static_cast<std::size_t>(sh.order[static_cast<std::size_t>(k - 1)])]) ++groups;
+    const float gaps = static_cast<float>(n - 1) * kOfferGap + static_cast<float>(groups) * kGroupGap;
+    const float wd = std::min(236.f, (s.x - 2.f * (theme::margin + 14.f) - gaps) / static_cast<float>(n));
+    const float total = static_cast<float>(n) * wd + gaps;
+    float x = s.x * 0.5f - total * 0.5f;
+    for (int k = 0; k < n; ++k) {
+        const int card = sh.order[static_cast<std::size_t>(k)];
+        if (k > 0 && sh.group[static_cast<std::size_t>(card)] !=
+                         sh.group[static_cast<std::size_t>(sh.order[static_cast<std::size_t>(k - 1)])])
+            x += kGroupGap;
+        if (card == i) return {x, s.y * kOfferTop, wd, kOfferH};
+        x += wd + kOfferGap;
+    }
     return {x, s.y * kOfferTop, wd, kOfferH};
 }
 
@@ -595,6 +674,25 @@ void ShopScreen::draw(App& app, sf::RenderWindow& w) {
     drawPactStrip(app, w, {s.x * 0.5f, s.y * 0.09f + 60.f}, true, mouse_, hover_ < 0);
 
     const int offers = static_cast<int>(r.shopOffers.size());
+    {   // a coloured header over each group of the shelf
+        const int n = cardCount(app);
+        const Shelf sh = shelf(app, n);
+        const float ha = clampf(introPop(it, 0.06f, 0.3f), 0.f, 1.f);
+        for (int k = 0; k < n;) {
+            const int g = sh.group[static_cast<std::size_t>(sh.order[static_cast<std::size_t>(k)])];
+            int e = k;
+            while (e + 1 < n && sh.group[static_cast<std::size_t>(sh.order[static_cast<std::size_t>(e + 1)])] == g) ++e;
+            if (g != kMysteryGroup) {
+                const sf::FloatRect a0 = offerRect(app, sh.order[static_cast<std::size_t>(k)]);
+                const sf::FloatRect a1 = offerRect(app, sh.order[static_cast<std::size_t>(e)]);
+                const float hy = a0.top - 34.f;
+                drawLabel(w, f, shelfName(g), 13, {a0.left, hy}, withAlpha(shelfColor(g), ha), -1);
+                draw::line(w, {a0.left, hy + 12.f}, {a1.left + a1.width, hy + 12.f}, 1.f,
+                           withAlpha(shelfColor(g), 0.35f * ha));
+            }
+            k = e + 1;
+        }
+    }
     for (int i = 0; i < offers; ++i) {
         const auto k = static_cast<UpgradeKind>(r.shopOffers[static_cast<std::size_t>(i)]);
         const UpgradeInfo info = upgradeInfo(k);
@@ -609,23 +707,16 @@ void ShopScreen::draw(App& app, sf::RenderWindow& w) {
         const sf::FloatRect rc = offerRect(app, i);
         const float cx = rc.left + rc.width * 0.5f;
 
-        const Tier tier = upgradeTier(k);
-        drawTierFrame(w, rc, tier, h, a, it);
-        if (!sold) drawClassCardMark(w, app.font(), rc, k, r.balls, a);
-        drawLabel(w, app.font(), tierName(tier), 10, {cx, rc.top + 66.f}, withAlpha(tierColor(tier), a));
-
-        std::string head = upgradeCatName(cat);
-        if (itemTag(k) != ItemTag::None) head += std::string("  -  ") + itemTagName(itemTag(k));
-        drawLabel(w, app.font(), head, 10, {cx, rc.top + 18.f},
-                  withAlpha(itemTag(k) != ItemTag::None ? tagColor(itemTag(k)) : catColor(cat), a));
-        const int es = elementItemSlot(k);
-        drawCentered(w, f, info.title, theme::fsHeading, {cx, rc.top + 46.f},
-                     withAlpha(es >= 0 ? elementColor(static_cast<Element>(es + 1)) : theme::textHi, a));
-        float y = rc.top + 86.f;
-        for (const std::string& l : wrapText(f, info.desc, theme::fsSmall, rc.width - 22.f)) {
-            drawCentered(w, f, l, theme::fsSmall, {cx, y}, withAlpha(theme::textLo, a));
-            y += 17.f;
-        }
+        (void)info;
+        (void)cat;
+        PickCardStyle st;
+        st.hover = h;
+        st.alpha = a;
+        st.time = it;
+        st.bottomReserve = 34.f;
+        st.classMark = !sold;
+        st.showWhat = false;   // the group header says it
+        drawPickCard(w, f, rc, k, r.balls, st);
 
         // Price line: SOLD / FREE (a revealed mystery box) / sale price with the old one / price.
         std::string pl;
@@ -650,11 +741,11 @@ void ShopScreen::draw(App& app, sf::RenderWindow& w) {
         const sf::FloatRect rc = offerRect(app, i);
         const float cx = rc.left + rc.width * 0.5f;
         drawTierFrame(w, rc, Tier::Epic, h, cp, clock_);
-        drawCentered(w, f, "MYSTERY BOX", theme::fsSmall, {cx, rc.top + 16.f}, withAlpha(tierColor(Tier::Epic), cp));
+        drawLabel(w, f, "mystery box", 12, {rc.left + 16.f, rc.top + 21.f}, withAlpha(tierColor(Tier::Epic), cp), -1);
         const float bob = 3.f * std::sin(clock_ * 3.f);
-        drawCentered(w, f, "?", theme::fsTitle + 14u, {cx, rc.top + 66.f + bob}, withAlpha(theme::textHi, cp));
-        float y = rc.top + 106.f;
-        for (const std::string& l : wrapText(f, "a random pick at elite odds - often Rare or better", theme::fsSmall, rc.width - 22.f)) {
+        drawCentered(w, f, "?", theme::fsTitle + 14u, {cx, rc.top + 80.f + bob}, withAlpha(theme::textHi, cp));
+        float y = rc.top + 132.f;
+        for (const std::string& l : wrapText(f, "a random pick at elite odds - often Rare or better", theme::fsSmall, rc.width - 28.f)) {
             drawCentered(w, f, l, theme::fsSmall, {cx, y}, withAlpha(theme::textLo, cp));
             y += 17.f;
         }
@@ -683,8 +774,6 @@ void ShopScreen::draw(App& app, sf::RenderWindow& w) {
     drawButton(w, f, buttonRect(app, 3), "Reroll stock (R)  -  " + std::to_string(app.shopRerollPrice()) + "g",
                theme::puSurge, hover_ == 103 ? 1.f : 0.f, g >= app.shopRerollPrice());
     drawButton(w, f, buttonRect(app, 4), "Leave (Esc)", theme::accent, hover_ == 104 ? 1.f : 0.f, true);
-    drawCentered(w, f, "one pick is always on sale  -  the mystery box rolls at elite odds  -  hover anything for details",
-                 theme::fsSmall, {s.x * 0.5f, buttonRect(app, 0).top + kBtnH + 26.f}, theme::textDim);
 
     // Hover help.
     if (hover_ >= 0 && hover_ < offers) {

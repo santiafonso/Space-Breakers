@@ -442,7 +442,7 @@ inline constexpr int priceModifier = 22;
 inline constexpr int priceByTier[5] = {30, 45, 65, 95, 150};
 inline constexpr int priceRepair = 20;     // repairs repairFrac of the core's max HP
 inline constexpr float repairFrac = 0.30f;
-inline constexpr int shopOffers = 5;
+inline constexpr int shopOffers = 4;   // a small shelf: shops are a side stop, fights grow the build
 inline constexpr int maxItemLevel = 3;     // forge cap
 // Shop extras (Fase O): one offer is on sale, a mystery box, a paid reroll,
 // selling an item back, and the forge as a paid service.

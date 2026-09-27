@@ -33,7 +33,7 @@ bool isDismiss(const sf::Event& e) {
 
 
 constexpr float kCardW = 252.f;
-constexpr float kCardH = 176.f;
+constexpr float kCardH = 214.f;
 constexpr float kCardGap = 22.f;
 
 sf::Vector2f cardCenter(sf::Vector2f size, int i) {
@@ -1243,38 +1243,23 @@ void ChoiceScreen::draw(App& app, sf::RenderWindow& w) {
         const sf::Vector2f c = c0 + sf::Vector2f(0.f, (1.f - ca) * 46.f - 10.f * h);
 
         const UpgradeKind kind = app.choices()[i];
-        const Tier tier = upgradeTier(kind);
         const float sc = 0.55f + 0.45f * clampf(cp, 0.f, 1.05f);            // springs open
         const sf::FloatRect cardR{c.x - kCardW * 0.5f * sc, c.y - kCardH * 0.5f * sc, kCardW * sc, kCardH * sc};
-        drawTierFrame(w, cardR, tier, h, ca, it, ca);
-        drawClassCardMark(w, app.font(), cardR, kind, app.data().run.balls, ca);
-        // A ball that already has it would level it up: say so on the tier line.
-        std::string tierLine = tierName(tier);
+        PickCardStyle st;
+        st.hover = h;
+        st.alpha = ca;
+        st.time = it;
+        st.reveal = ca;
+        st.pop = cp;
+        st.bottomReserve = app.rerollsLeft() > 0 ? 30.f : 0.f;
+        // A ball that already has it would level it up: say so.
         for (const BallLoadout& L : app.data().run.balls)
             if (upgradeLevelsUp(kind, L) && L.levelOf(kind) < kMaxItemLevel) {
-                tierLine += "  -  Lv " + std::to_string(L.levelOf(kind)) + " -> " + std::to_string(L.levelOf(kind) + 1);
+                st.note = "Lv " + std::to_string(L.levelOf(kind)) + " -> " + std::to_string(L.levelOf(kind) + 1);
                 break;
             }
-        drawLabel(w, app.font(), tierLine, 10, {c.x, c.y - kCardH * 0.5f + 80.f}, withAlpha(tierColor(tier), ca));
-        const UpgradeCat cat = upgradeCat(kind);
-        std::string head = std::to_string(i + 1) + "   " + upgradeCatName(cat);
-        if (itemTag(kind) != ItemTag::None) head += std::string("  -  ") + itemTagName(itemTag(kind));
-        else if (cat == UpgradeCat::Element) head += "  -  type slot";
-        drawLabel(w, app.font(), head, 10, {c.x, c.y - kCardH * 0.5f + 18.f},
-                  withAlpha(itemTag(kind) != ItemTag::None ? tagColor(itemTag(kind)) : catColor(cat), ca));
-        const int es = elementItemSlot(kind);
-        drawCenteredPop(w, app.font(), info.title, theme::fsItem,
-                        {c.x, c.y - kCardH * 0.5f + 52.f},
-                        es >= 0 ? elementColor(static_cast<Element>(es + 1)) : theme::textHi, cp);
-
-        const std::vector<std::string> desc =
-            wrapText(app.font(), info.desc, theme::fsSmall, kCardW - 28.f);
-        const float lineH = 18.f;
-        float dy = c.y + 32.f - lineH * 0.5f * static_cast<float>(desc.size() - 1);   // under the tier line
-        for (const std::string& dl : desc) {
-            drawCenteredPop(w, app.font(), dl, theme::fsSmall, {c.x, dy}, theme::textLo, cp);
-            dy += lineH;
-        }
+        if (sc > 0.98f) drawPickCard(w, app.font(), cardR, kind, app.data().run.balls, st);
+        else drawTierFrame(w, cardR, upgradeTier(kind), h, ca, it, ca);   // still springing open: just the frame
 
         if (app.rerollsLeft() > 0) {   // "reroll this card" strip along the card's bottom edge
             const float wd = kCardW - 28.f, ht = 22.f;
@@ -1283,26 +1268,18 @@ void ChoiceScreen::draw(App& app, sf::RenderWindow& w) {
             draw::box(w, {c.x - wd * 0.5f, ry - ht * 0.5f, wd, ht}, theme::corner,
                       withAlpha(theme::textLo, (0.10f + 0.14f * rh) * ca), withAlpha(theme::textLo, (0.04f + 0.08f * rh) * ca),
                       withAlpha(theme::accent, (0.22f + 0.4f * rh) * ca), 1.f);
-            drawLabel(w, app.font(), "reroll", 10, {c.x, ry}, withAlpha(theme::textLo, ca));
+            drawLabel(w, app.font(), "reroll  " + std::to_string(app.rerollsLeft()), 12, {c.x, ry},
+                      withAlpha(theme::textLo, ca));
         }
     }
 
     const float hintPop = introPop(it, 0.10f + 0.07f * kChoiceCount);
-    std::string hint = "click a card or press 1-4";
-    if (app.rerollsLeft() > 0)
-        hint += "      rerolls left: " + std::to_string(app.rerollsLeft());
-
     if (coreHurt(app)) {
         const sf::FloatRect r = healRect(s);
         const float a = clampf(hintPop, 0.f, 1.f);
         draw::panel(w, r, theme::core, a, healHover_);
-        drawCenteredPop(w, app.font(), "Repair the core instead  -  skip this item", theme::fsSmall,
+        drawCenteredPop(w, app.font(), "Repair the core instead", theme::fsSmall,
                         {s.x * 0.5f, r.top + r.height * 0.5f - 1.f}, theme::textHi, hintPop);
-        drawCenteredPop(w, app.font(), hint, theme::fsSmall,
-                        {s.x * 0.5f, r.top + r.height + 22.f}, theme::textDim, hintPop);
-    } else {
-        drawCenteredPop(w, app.font(), hint, theme::fsSmall,
-                        {s.x * 0.5f, s.y * 0.52f + kCardH * 0.5f + 40.f}, theme::textDim, hintPop);
     }
 
     // Hover help: what the card's kind means, the reroll strip, the repair skip.

@@ -91,6 +91,22 @@ void drawTierFrame(sf::RenderWindow& w, sf::FloatRect r, Tier t, float hover, fl
 void drawClassCardMark(sf::RenderWindow& w, const sf::Font& font, sf::FloatRect r, UpgradeKind k,
                        const std::vector<BallLoadout>& balls, float alpha);
 
+// A whole pick card, with its three facts kept apart so they never blur:
+// WHAT it is (item / relic / ability...) = a plain label top-left; HOW RARE =
+// 1..5 pips (and the tier word when it fits) top-right plus the frame's edge;
+// WHICH CLASS = a solid badge in the class colour under the title, with the
+// class spine and wash. Then the description, above `bottomReserve`.
+struct PickCardStyle {
+    float hover = 0.f, alpha = 1.f, time = 0.f, reveal = 1.f;
+    float pop = 1.f;              // the title's spring (an introPop value)
+    float bottomReserve = 0.f;    // px kept free at the bottom (a price, a reroll strip)
+    std::string note;             // a short line under the badge, e.g. "Lv 1 -> 2"
+    bool classMark = true;        // the class spine / wash / "makes a" chip
+    bool showWhat = true;         // the kind label (off where a group header already says it)
+};
+void drawPickCard(sf::RenderWindow& w, const sf::Font& font, sf::FloatRect r, UpgradeKind k,
+                  const std::vector<BallLoadout>& balls, const PickCardStyle& st);
+
 // What part of a loadout panel centred at `c` the pointer is on: a slot
 // (0..kLoadoutSlots-1), kPanelPartBall = the ball / class name,
 // kPanelPartMods = the modifier line, -1 = nothing.

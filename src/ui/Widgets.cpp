@@ -250,20 +250,109 @@ sf::Color tierColor(Tier t) {
 
 void drawTierFrame(sf::RenderWindow& w, sf::FloatRect r, Tier t, float hover, float alpha, float time,
                    float reveal) {
+    // Rarity lives on the frame only - its edge, a thin top band and the
+    // brackets - so the card's fill is left to its class (drawClassCardMark).
     const sf::Color col = tierColor(t);
     const int rank = static_cast<int>(t);
     const float snap = (1.f - clampf(reveal, 0.f, 1.f)) * 16.f;   // brackets fly in from outside
     if (rank >= static_cast<int>(Tier::Epic)) {   // a slow breathing second frame round the rare ones
-        const float pulse = 0.5f + 0.5f * std::sin(time * (rank == 4 ? 3.2f : 2.4f));
-        draw::brackets(w, r, 16.f, 2.f, withAlpha(col, (0.35f + 0.4f * pulse) * alpha), 5.f + 3.f * pulse + snap);
+        const float pulse = 0.5f + 0.5f * std::sin(time * (rank == 4 ? 2.6f : 2.0f));
+        draw::brackets(w, r, 16.f, 2.f, withAlpha(col, (0.25f + 0.3f * pulse) * alpha), 5.f + 2.f * pulse + snap);
     }
-    // Glass lit from the top by the tier colour; brighter under the pointer.
-    const float lit = 0.10f + 0.035f * static_cast<float>(rank) + 0.12f * hover;
-    draw::box(w, r, theme::corner, withAlpha(lerpColor(theme::glassTop, col, lit), 0.97f * alpha),
-              withAlpha(lerpColor(theme::glassBottom, col, lit * 0.25f), 0.97f * alpha),
-              withAlpha(col, (0.30f + 0.4f * hover) * alpha), 1.f);
-    draw::box(w, {r.left, r.top, r.width, 3.f}, 0.f, withAlpha(col, 0.85f * alpha), withAlpha(col, 0.85f * alpha));
-    draw::brackets(w, r, theme::bracket + 3.f, 2.f, withAlpha(col, (0.7f + 0.3f * hover) * alpha), snap);
+    const float lit = 0.05f * hover;
+    draw::box(w, r, theme::corner, withAlpha(lerpColor(theme::glassTop, theme::textHi, lit), 0.97f * alpha),
+              withAlpha(theme::glassBottom, 0.97f * alpha),
+              withAlpha(lerpColor(theme::arenaEdge, col, 0.45f + 0.1f * static_cast<float>(rank)),
+                        (0.55f + 0.4f * hover) * alpha), 1.f);
+    draw::box(w, {r.left, r.top, r.width, 3.f}, 0.f, withAlpha(col, 0.8f * alpha), withAlpha(col, 0.8f * alpha));
+    draw::brackets(w, r, theme::bracket + 3.f, 2.f, withAlpha(col, (0.6f + 0.3f * hover) * alpha), snap);
+}
+
+void drawPickCard(sf::RenderWindow& w, const sf::Font& font, sf::FloatRect r, UpgradeKind k,
+                  const std::vector<BallLoadout>& balls, const PickCardStyle& st) {
+    const float a = st.alpha;
+    if (a <= 0.001f) return;
+    const Tier tier = upgradeTier(k);
+    const UpgradeCat cat = upgradeCat(k);
+    const ItemTag tag = itemTag(k);
+    const UpgradeInfo info = upgradeInfo(k);
+    drawTierFrame(w, r, tier, st.hover, a, st.time, st.reveal);
+    if (st.classMark) drawClassCardMark(w, font, r, k, balls, a);
+
+    const float pad = 16.f, top = r.top + 21.f;
+    // No class: a faint wash of the kind's colour instead, so a shelf of
+    // relics, abilities and modifiers doesn't read as one grey row.
+    if (tag == ItemTag::None) {
+        const sf::Color kc = catColor(cat);
+        draw::box(w, {r.left + 1.f, r.top + 3.f, r.width - 2.f, r.height * 0.5f}, 0.f, withAlpha(kc, 0.07f * a),
+                  withAlpha(kc, 0.f));
+    }
+    // What it is.
+    const std::string what = upgradeCatName(cat);
+    if (st.showWhat)
+        drawLabel(w, font, what, 12, {r.left + pad, top}, withAlpha(lerpColor(theme::textLo, catColor(cat), 0.6f), a), -1);
+    // How rare: pips, filled up to the tier, and the tier's name when it fits.
+    const sf::Color tc = tierColor(tier);
+    const int rank = static_cast<int>(tier);
+    constexpr float kPip = 10.f;
+    float x = r.left + r.width - pad - 4.f;
+    for (int p = 4; p >= 0; --p) {
+        const bool on = p <= rank;
+        const sf::Color pc = on ? tc : theme::arenaEdge;
+        draw::polygon(w, {x, top}, on ? 4.5f : 3.5f, 4, 0.f, withAlpha(pc, a), withAlpha(pc, a));
+        x -= kPip;
+    }
+    if (!st.showWhat) {
+        drawLabel(w, font, tierName(tier), 12, {r.left + pad, top}, withAlpha(tc, a), -1);
+    } else {
+        const float whatW = makeLabel(font, what, 12, theme::textLo).getLocalBounds().width;
+        const float wordW = makeLabel(font, tierName(tier), 12, tc).getLocalBounds().width;
+        if (whatW + wordW + 5.f * kPip + 2.f * pad + 12.f < r.width)
+            drawLabel(w, font, tierName(tier), 12, {x - 2.f, top}, withAlpha(tc, a), 1);
+    }
+
+    // The name.
+    const int es = elementItemSlot(k);
+    const unsigned ts = r.width > 230.f ? theme::fsItem : theme::fsHeading;
+    sf::Text title = makeText(font, info.title, ts,
+                              withAlpha(es >= 0 ? elementColor(static_cast<Element>(es + 1)) : theme::textHi, a));
+    centerOrigin(title);
+    const float sc = clampf(st.pop, 0.f, 1.1f);
+    title.setScale(sc, sc);
+    title.setPosition(std::round(r.left + r.width * 0.5f), std::round(r.top + 54.f));
+    w.draw(title);
+
+    // Which class: a solid badge.
+    float y = r.top + 86.f;
+    const float cx = r.left + r.width * 0.5f;
+    if (tag != ItemTag::None) {
+        const sf::Color cc = tagColor(tag);
+        const std::string name = itemTagName(tag);
+        const float bw = makeLabel(font, name, 12, cc).getLocalBounds().width + 22.f;
+        draw::box(w, {cx - bw * 0.5f, y - 11.f, bw, 22.f}, 0.f, withAlpha(cc, 0.9f * a), withAlpha(lerpColor(cc, theme::bg, 0.15f), 0.9f * a));
+        drawLabel(w, font, name, 12, {cx + 1.f, y}, withAlpha(theme::bgDeep, a));
+        y += 26.f;
+    } else if (cat == UpgradeCat::Element) {
+        drawLabel(w, font, "type slot", 12, {cx, y}, withAlpha(theme::textDim, a));
+        y += 22.f;
+    }
+    if (!st.note.empty()) {
+        drawLabel(w, font, st.note, 12, {cx, y}, withAlpha(theme::accent, a));
+        y += 22.f;
+    }
+
+    // What it does.
+    const float lineH = 18.f;
+    y += 4.f;
+    const float bottom = r.top + r.height - st.bottomReserve - 6.f;
+    for (const std::string& l : wrapText(font, info.desc, theme::fsSmall, r.width - 28.f)) {
+        if (y > bottom) break;
+        sf::Text t = makeText(font, l, theme::fsSmall, withAlpha(theme::textLo, a));
+        centerOrigin(t);
+        t.setPosition(std::round(cx), std::round(y));
+        w.draw(t);
+        y += lineH;
+    }
 }
 
 void drawClassCardMark(sf::RenderWindow& w, const sf::Font& font, sf::FloatRect r, UpgradeKind k,
@@ -271,10 +360,10 @@ void drawClassCardMark(sf::RenderWindow& w, const sf::Font& font, sf::FloatRect 
     const ItemTag t = itemTag(k);
     if (t == ItemTag::None || alpha <= 0.01f) return;
     const sf::Color col = tagColor(t);
-    draw::box(w, {r.left + 1.f, r.top + 3.f, r.width - 2.f, r.height * 0.45f}, 0.f, withAlpha(col, 0.10f * alpha),
+    draw::box(w, {r.left + 1.f, r.top + 3.f, r.width - 2.f, r.height * 0.5f}, 0.f, withAlpha(col, 0.12f * alpha),
               withAlpha(col, 0.f));
-    draw::box(w, {r.left, r.top + 3.f, 4.f, r.height - 3.f}, 0.f, withAlpha(col, 0.9f * alpha),
-              withAlpha(col, 0.55f * alpha));
+    draw::box(w, {r.left, r.top + 3.f, 4.f, r.height - 3.f}, 0.f, withAlpha(col, 0.85f * alpha),
+              withAlpha(col, 0.5f * alpha));
 
     // Would it make (2nd item of the tag) or ascend (4th) a ball? A copy it
     // already has only levels up, so that doesn't count.
