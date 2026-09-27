@@ -1424,17 +1424,6 @@ bool App::onOptions() const {
     return !stack_.empty() && dynamic_cast<const SoundScreen*>(stack_.back().get()) != nullptr;
 }
 
-sf::FloatRect App::optionsButton() const {
-    const sf::Vector2f k = keyCapSize(font_, "o");
-    return {size().x - theme::margin - k.x, size().y - theme::margin - k.y, k.x, k.y};
-}
-
-// A quiet [o] key cap in the bottom-right corner of every screen; "options"
-// only shows while it's hovered.
-void App::drawOptionsButton(sf::RenderWindow& w) const {
-    const sf::FloatRect r = optionsButton();
-    drawKeyCap(w, font_, r, "o", "options", r.contains(window_.uiMousePosition()), false);
-}
 void App::openHowTo() { push(ScreenId::HowTo); }
 
 void App::quit() {
@@ -1496,13 +1485,10 @@ void App::handleEvent(const sf::Event& e) {
         return;
     }
     if (!stack_.empty()) {
-        // Options from anywhere: the O key or the corner button (not mid-throw).
+        // Options from anywhere: the O key (not mid-throw).
         const bool pressO = e.type == sf::Event::KeyPressed && e.key.code == sf::Keyboard::O &&
                             !sf::Mouse::isButtonPressed(sf::Mouse::Left);
-        const bool clickO = e.type == sf::Event::MouseButtonPressed && e.mouseButton.button == sf::Mouse::Left &&
-                            !peek_.open && optionsButton().contains(window_.uiMousePosition());
-        if (!onOptions() && (pressO || clickO)) {
-            if (clickO) audio_.uiClick();
+        if (!onOptions() && pressO) {
             peek_.close();
             openSound();
             return;
@@ -1751,9 +1737,6 @@ void App::update(float frameDt) {
         stack_.back()->update(*this, frameDt, peek_.open ? sf::Vector2f{-1e6f, -1e6f} : mouse);
         stack_.back()->advanceIntro(frameDt);
     }
-    static const int optionsTag = 0;   // the corner button's hover tick
-    uisound::hover(&optionsTag,
-                   !onOptions() && optionsButton().contains(window_.uiMousePosition()) ? 0 : -1);
 
     if (simulating() && !stack_.back()->frozen()) {
         // A fresh wave eases in: feed the fixed-step accumulator slowly at first
@@ -1875,7 +1858,6 @@ void App::render() {
     }
     for (std::size_t i = start; i < stack_.size(); ++i) stack_[i]->draw(*this, w);
     if (peek_.open) drawLoadoutOverlay(*this, w, false, peek_);
-    if (!onOptions() && !peek_.open) drawOptionsButton(w);
 
     effects_.drawOverlay(w);
     if (fade_ > 0.01f) drawDim(w, size(), fade_ * 0.5f);

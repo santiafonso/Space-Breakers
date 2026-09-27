@@ -256,8 +256,6 @@ private:
     std::vector<std::unique_ptr<Screen>> stack_;
     TabPeek peek_;   // TAB over every run screen that doesn't run its own (shop, cards, pickers...)
     bool onOptions() const;                  // the Options (sound) screen is on top
-    sf::FloatRect optionsButton() const;     // the corner [O] OPTIONS button, UI units
-    void drawOptionsButton(sf::RenderWindow& w) const;
     std::array<UpgradeKind, kChoiceCount> choices_{};
     int lastRunWave_ = 0;
     int lastRunCores_ = 0;
