@@ -1475,12 +1475,12 @@ Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
     - Falta playtest: que no se llene la pantalla con 3 Summoners, y si el
       dragón L5 queda muy autopiloto.
 
-- **Pendiente (idea del usuario, 2026-09-26): más clases, doble rol,
-  habilidades y elemento como slot.** **[PARCIAL 2026-09-26: el marco está
-  hecho (Fase P): 8 clases, doble rol, ascendidas, slot de tipo, habilidades,
-  1 pelota inicial + Calling, desbloqueos en la web, TAB. Falta la fase 2:
-  items, mecánica y forma ascendida de Mage / Shooter / Assassin / Summoner /
-  Jester.]**
+- **Idea del usuario (2026-09-26): más clases, doble rol, habilidades y
+  elemento como slot.** **[IMPLEMENTADO 2026-09-27: marco en la Fase P y las
+  cinco clases nuevas en sus subsecciones (Mago, Shooter, Asesino, Summoner,
+  Bufón). Falta playtest de todo.]** Nota: los items de Shooter y Asesino solo
+  hacen algo con la clase activa (2+ items); los de Mago, Summoner y Bufón
+  andan sueltos en cualquier pelota.
   - **Clases nuevas** además de Striker / Support / Guardian: **Mago**,
     **Shooter**, **Asesino**, **Summoner**, **Bufón**, cada una con una mecánica
     propia. Se desbloquean en la web (al principio solo hay Striker, después
