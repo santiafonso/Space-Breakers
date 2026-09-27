@@ -28,8 +28,23 @@ bool foldShooter(UpgradeKind k, int /*level*/, BallMods& /*m*/) {
 }
 
 // ==================================================================== Assassin
-bool foldAssassin(UpgradeKind k, int /*level*/, BallMods& /*m*/) {
+bool foldAssassin(UpgradeKind k, int level, BallMods& m) {
+    namespace A = cfg::assassin;
+    const float l = static_cast<float>(level - 1);
+    AssassinMods& a = m.cls.assassin;
     switch (k) {
+        case UpgradeKind::Backstab: a.backstab = A::backstab + A::backstabPerLevel * l; return true;
+        case UpgradeKind::Cull: a.cull = A::cull + A::cullPerLevel * l; return true;
+        case UpgradeKind::KillingSpree:
+            a.spreePer = A::spree + A::spreePerLevel * l;
+            a.spreeMax = A::spreeMax + level - 1;
+            return true;
+        case UpgradeKind::ShadowTrail: a.trailFrac = A::trail + A::trailPerLevel * l; return true;
+        case UpgradeKind::SmokeBomb:
+            a.smokeFrac = A::smoke + A::smokePerLevel * l;
+            a.smokeRadius = A::smokeRadius + A::smokeRadiusPerLevel * l;
+            return true;
+        case UpgradeKind::Phantom: a.phantomLife = A::phantomLife + A::phantomLifePerLevel * l; return true;
         default: return false;
     }
 }
