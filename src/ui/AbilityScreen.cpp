@@ -101,8 +101,6 @@ void AbilityPickScreen::draw(App& app, sf::RenderWindow& w) {
         std::snprintf(cd, sizeof(cd), "every %.1f s", abilityCooldown(abilityOf(k), 1));
         drawLabel(w, f, cd, 9, {cx, r.top + r.height - 16.f}, withAlpha(lerpColor(col, theme::textDim, 0.4f), a));
     }
-    drawCenteredPop(w, f, "click an ability or press 1-" + std::to_string(picks.size()), theme::fsSmall,
-                    {s.x * 0.5f, s.y * 0.5f + kCardH * 0.5f + 34.f}, theme::textDim, introPop(it, 0.5f));
 }
 
 }  // namespace sb

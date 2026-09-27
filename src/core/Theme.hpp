@@ -11,6 +11,14 @@
 // low-contrast so the balls are always the brightest thing on screen.
 namespace sb::theme {
 
+// The palette runs a notch calmer than pure hues: colours are pulled toward
+// their own grey and dimmed a little, so nothing on screen shouts.
+inline sf::Color soften(sf::Color c, float sat = 0.8f, float val = 0.93f) {
+    const float avg = (c.r + c.g + c.b) / 3.f;
+    auto ch = [&](float v) { return static_cast<std::uint8_t>(clampf((avg + (v - avg) * sat) * val, 0.f, 255.f)); };
+    return sf::Color(ch(c.r), ch(c.g), ch(c.b), c.a);
+}
+
 // Backdrop / surfaces
 inline const sf::Color bg{11, 13, 20};
 inline const sf::Color bgDeep{5, 6, 11};        // where the vignette darkens to at the screen corners
@@ -29,18 +37,18 @@ inline constexpr float tracking = 2.2f; // letter spacing of the small uppercase
 inline const sf::Color textHi{236, 238, 245};
 inline const sf::Color textLo{136, 139, 156};
 inline const sf::Color textDim{80, 83, 98};
-inline const sf::Color accent{92, 200, 255};
+inline const sf::Color accent = soften({92, 200, 255});
 
 // Ball speed ramp (calm -> hot)
-inline const sf::Color ballSlow{84, 150, 235};
-inline const sf::Color ballMid{90, 214, 160};
-inline const sf::Color ballFast{240, 206, 96};
-inline const sf::Color ballUltra{240, 96, 104};
+inline const sf::Color ballSlow = soften({84, 150, 235});
+inline const sf::Color ballMid = soften({90, 214, 160});
+inline const sf::Color ballFast = soften({240, 206, 96});
+inline const sf::Color ballUltra = soften({240, 96, 104});
 
 // Combat
-inline const sf::Color core{120, 230, 200};
-inline const sf::Color coreLow{240, 110, 90};
-inline const sf::Color enemy{232, 120, 120};
+inline const sf::Color core = soften({120, 230, 200});
+inline const sf::Color coreLow = soften({240, 110, 90});
+inline const sf::Color enemy = soften({232, 120, 120});
 
 // Ball elements - MUTED on purpose (2026-09-27): a ball's identity is its
 // class (vivid colours below); the element is a secondary detail (a rim, the
@@ -55,25 +63,25 @@ inline const sf::Color elemElectric{152, 122, 204};
 
 // Vivid warm / green hues for things that aren't elements (pact archetypes,
 // a web branch, coins) - they used to borrow the old element colours.
-inline const sf::Color ember{255, 148, 66};
-inline const sf::Color venom{150, 214, 96};
+inline const sf::Color ember = soften({255, 148, 66});
+inline const sf::Color venom = soften({150, 214, 96});
 
 // Power-ups
-inline const sf::Color puPoints{245, 200, 90};
-inline const sf::Color puSlow{130, 200, 255};
-inline const sf::Color puSurge{198, 120, 255};
-inline const sf::Color puGolden{255, 214, 120};
-inline const sf::Color puOverdrive{255, 110, 150};
+inline const sf::Color puPoints = soften({245, 200, 90});
+inline const sf::Color puSlow = soften({130, 200, 255});
+inline const sf::Color puSurge = soften({198, 120, 255});
+inline const sf::Color puGolden = soften({255, 214, 120});
+inline const sf::Color puOverdrive = soften({255, 110, 150});
 
 // Ball classes (item tags, class names in the UI) - the vivid ones: a class
 // is a ball's identity, so its colour is the ball's body colour. Striker /
 // Guardian / Support reuse ballFast / core / puSurge.
-inline const sf::Color classMage{128, 146, 255};
-inline const sf::Color classShooter{255, 156, 100};
-inline const sf::Color classAssassin{232, 84, 112};
-inline const sf::Color classSummoner{150, 226, 120};
-inline const sf::Color classJester{255, 124, 214};
-inline const sf::Color ability{120, 216, 255};   // ability picks and slots
+inline const sf::Color classMage = soften({128, 146, 255});
+inline const sf::Color classShooter = soften({255, 156, 100});
+inline const sf::Color classAssassin = soften({232, 84, 112});
+inline const sf::Color classSummoner = soften({150, 226, 120});
+inline const sf::Color classJester = soften({255, 124, 214});
+inline const sf::Color ability = soften({120, 216, 255});   // ability picks and slots
 
 // Layout / type - room to breathe: few things on screen, none of them tiny
 inline constexpr float margin = 30.f;

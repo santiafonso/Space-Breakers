@@ -1672,6 +1672,41 @@ Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
     núcleos por la primera habilidad extra es poco, legibilidad de la web con
     todo comprado y con zoom mínimo.
 
+- **UI limpia + mapa con caminos (2026-09-27, rama `ui-polish`).** Regla de
+  la usuaria: pocas cosas en pantalla pero importantes, espaciado, tamaños que
+  se adaptan al contenido, texto explicativo solo al pasar el cursor.
+  - **Base:** etiquetas chicas suben dos pasos (mínimo 12 px, en
+    `makeLabel`), `theme::margin` 30, `fsSmall` 14. Atajos = tecla sola
+    (`drawKeyCap`: [TAB], [O]); lo que hacen aparece al hover.
+  - **HUD de combate:** arriba etapa + barra de **progreso de la etapa**
+    (enemigos limpiados; antes la barra era la vida del core y confundía — la
+    vida ya está en el anillo del core). Sin score (queda en Stats). Oro
+    arriba a la derecha. Abajo a la izquierda: [TAB] y una ficha por pelota
+    en su color de clase.
+  - **TAB y equipar** se agrandan según cuántas pelotas hay
+    (`panelRowZoom`, `Window::useUiZoom`: dibujan en un lienzo UI/zoom);
+    columna de reliquias/pactos solo si hay alguno.
+  - **Cartas (`drawPickCard`)**: tipo arriba a la izquierda, **rareza =
+    puntos 1–5 + borde/banda** arriba a la derecha, **clase = insignia sólida**
+    del color de la clase + lomo y tinte. El fondo ya no se tiñe por rareza.
+  - **Tienda:** agrupada por tipo (items · habilidades · elementos · reliquias
+    · modificadores · pelota · caja misteriosa) con encabezado de color, lo
+    más raro primero; 4 ofertas (antes 5).
+  - **Paleta** un punto más apagada: `theme::soften` sobre los colores vivos.
+  - **Mapa:** caminos que no se cruzan (`generateMap`: 2–4 caminos salen del
+    tronco, cada fila un camino se desvía un carril con `driftPct`, a veces se
+    bifurca con `splitPct`, se juntan al pisarse); filas de 2–4 nodos; la fila
+    previa al jefe solo conecta con carriles vecinos. Pantalla con **scroll**
+    (rueda, flechas/W S, Espacio vuelve a tu fila), nodos más grandes y
+    quietos, sin leyenda (tooltip al hover), cabecera fija con acto y estado.
+  - **Economía:** **cada combate termina en un pick** (el élite, con odds de
+    élite); la **primera habilidad llega al terminar el primer combate**
+    (`App::postFight`), ya no al empezar. Combates pagan menos oro
+    (`combatBase` 5, `perRow` 1); tiendas y nodos Upgrade menos frecuentes
+    (`wShop` 6, `wUpgrade` 4, `wCombat` 50).
+  - Falta playtest: balance con un pick por combate (probablemente más fuerte
+    que antes), si 4 ofertas y menos oro dejan la tienda demasiado floja.
+
 - **Fase 2 — Jefe tras la oleada 10.** Da upgrades de pelota (viento/agua/
   piedra). Extiende la run mas alla de 10 en "modo infinito" opcional.
 - **Fase 3 — Variedad.** Repulsor, bumper, rampa. Corredor, tanque, escindido.

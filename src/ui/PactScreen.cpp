@@ -175,8 +175,6 @@ void PactScreen::draw(App& app, sf::RenderWindow& w) {
         ch.setPosition(x, y);
         w.draw(ch);
         paragraph(w, f, d.cost, theme::fsBody, x, y + 20.f, tw, withAlpha(lerpColor(theme::coreLow, theme::textHi, 0.35f), a), 21.f);
-        drawCentered(w, f, "hover: what it pairs with", theme::fsSmall, {cx, r.top + r.height - 18.f},
-                     withAlpha(theme::textDim, a * (1.f - h)));
     }
 
     // Refuse: all of them, for a little gold.
@@ -188,8 +186,6 @@ void PactScreen::draw(App& app, sf::RenderWindow& w) {
                   withAlpha(theme::puGolden, (0.25f + 0.5f * refuseHover_) * a), 1.5f);
         drawCentered(w, f, "Refuse every pact   +" + std::to_string(cfg::pact::refuseGold) + " gold", theme::fsSmall,
                      {r.left + r.width * 0.5f, r.top + r.height * 0.5f - 1.f}, withAlpha(theme::textLo, a));
-        drawCentered(w, f, "click a pact or press 1-" + std::to_string(n), theme::fsSmall,
-                     {s.x * 0.5f, r.top + r.height + 20.f}, withAlpha(theme::textDim, a));
     }
 
     if (const int c = cardAt(app, mouse_); c >= 0) {

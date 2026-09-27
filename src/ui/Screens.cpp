@@ -434,8 +434,9 @@ void LoadoutScreen::draw(App& app, sf::RenderWindow& w) {
 
     drawCenteredPop(w, app.font(), "Skill web", theme::fsTitle, {s.x * 0.5f, s.y * 0.055f},
                     theme::textHi, introPop(it, 0.f, 0.32f));
-    drawCenteredPop(w, app.font(), "click a node to unlock   -   drag to move, wheel to zoom, 0 resets   -   arrows move, E unlocks",
-                    theme::fsSmall, {s.x * 0.5f, s.y * 0.10f}, theme::textDim, introPop(it, 0.06f));
+    if (std::fabs(app.uiMouse().x - s.x * 0.5f) < 140.f && app.uiMouse().y < s.y * 0.11f)   // controls: on the title's hover
+        drawCentered(w, app.font(), "click a node to unlock   -   drag to move, wheel to zoom, 0 resets   -   arrows move, E unlocks",
+                     theme::fsSmall, {s.x * 0.5f, s.y * 0.10f}, theme::textLo);
 
     {   // wallet, top-right: "CORES 480" and, once you have any, "PRISMS 6" under it
         const float ca = clampf(introPop(it, 0.05f), 0.f, 1.f);
@@ -626,8 +627,6 @@ void LoadoutScreen::draw(App& app, sf::RenderWindow& w) {
     }
 
     menu_.draw(w, it);
-    drawCenteredPop(w, app.font(), "Enter starts the run   -   Esc goes back", theme::fsSmall,
-                    {s.x - 150.f, s.y * 0.95f}, theme::textDim, introPop(it, 0.28f));
 }
 
 // ================================================================ Play
@@ -1358,8 +1357,6 @@ void StatsScreen::draw(App& app, sf::RenderWindow& w) {
     const sf::Vector2f s = app.size();
     const float it = intro();
     drawStatsPanel(w, app.font(), s, app.data().meta.stats, it);
-    drawCenteredPop(w, app.font(), "press ESC or click to go back", theme::fsSmall,
-                    {s.x * 0.5f, s.y * 0.86f}, theme::textDim, introPop(it, 0.5f));
 }
 
 // ================================================================ HowTo
@@ -1393,8 +1390,7 @@ void HowToScreen::draw(App& app, sf::RenderWindow& w) {
     drawCenteredPop(w, app.font(),
                     "ESC  pause      TAB  your balls      F  fullscreen      M  sound",
                     theme::fsSmall, {s.x * 0.5f, s.y * 0.72f}, theme::textLo, introPop(it, 0.36f));
-    drawCenteredPop(w, app.font(), "press ESC or click to go back", theme::fsSmall,
-                    {s.x * 0.5f, s.y * 0.82f}, theme::textDim, introPop(it, 0.42f));
+
 }
 
 // ================================================================ BossWin
