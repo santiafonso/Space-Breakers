@@ -336,7 +336,7 @@ void WorldRenderer::drawPickup(sf::RenderWindow& window, const Pickup& pu) const
 
 void WorldRenderer::drawBall(sf::RenderWindow& window, const Ball& b,
                              const std::optional<ActiveEffect>& effect) const {
-    sf::Color col = b.color;   // World bakes the element hue into b.color (see elementSpeedColor)
+    sf::Color col = b.color;   // World bakes the lead class's hue into b.color (see World::ballTint)
     // A "Split shot" ghost is see-through and fades out over its last second.
     const float alpha = b.ghost ? 0.45f * clampf(b.ghostLife, 0.f, 1.f) : 1.f;
     if (effect && effect->kind == PowerUp::Golden) col = lerpColor(col, theme::puGolden, 0.85f);
@@ -344,6 +344,8 @@ void WorldRenderer::drawBall(sf::RenderWindow& window, const Ball& b,
     if (r <= 0.5f) return;
 
     if (!b.held && b.trail.size() >= 2) {   // a clean tapering streak along its path
+        // the element tints the streak (muted) - the body stays the class's
+        const sf::Color tc = b.element == Element::Plain ? col : lerpColor(col, elementColor(b.element), 0.55f);
         const int n = static_cast<int>(b.trail.size());
         sf::VertexArray ribbon(sf::TriangleStrip);
         for (int k = 0; k <= n; ++k) {
@@ -353,7 +355,7 @@ void WorldRenderer::drawBall(sf::RenderWindow& window, const Ball& b,
             const sf::Vector2f dir = normalized(q - p, {1.f, 0.f});
             const sf::Vector2f nrm{-dir.y, dir.x};
             const float f = static_cast<float>(k) / static_cast<float>(n);   // 0 tail -> 1 head
-            const sf::Color c = withAlpha(col, 0.22f * f * f * alpha);
+            const sf::Color c = withAlpha(tc, 0.22f * f * f * alpha);
             ribbon.append({p + nrm * (r * 0.8f * f), c});
             ribbon.append({p - nrm * (r * 0.8f * f), c});
         }
@@ -366,17 +368,16 @@ void WorldRenderer::drawBall(sf::RenderWindow& window, const Ball& b,
     const float perpS = 1.f + 0.22f * b.squash;
     const sf::Vector2f sc{lerpf(perpS, along, ax), lerpf(perpS, along, ay)};
 
-    draw::glow(window, b.pos, r * 1.6f, col, 0.06f * alpha);
+    const BallLook look = ballLook(b);
+    const bool rich = (look.ascended & look.roles) != 0;
+    draw::glow(window, b.pos, r * (rich ? 2.f : 1.6f), col, (rich ? 0.11f : 0.06f) * alpha);
     draw::disc(window, b.pos, r, withAlpha(lighten(col, 0.2f), alpha), withAlpha(darken(col, 0.18f), alpha), sc);
 
-    // Class marks, kept minimal (render/ClassRender.cpp): one per class it
-    // has, layered; a Normal ball is plain.
-    draw::ring(window, b.pos, r, 1.5f, withAlpha(sf::Color::White, (b.held ? 0.85f : 0.25f) * alpha));
+    // Who it is (render/ClassRender.cpp): element rim, second-class arc, class
+    // marks, ascended halo. A Normal ball is plain.
     const float heading = std::atan2(b.vel.y, b.vel.x);
-    for (int i = 0; i < kClassCount; ++i)
-        if (b.hasRole(classAt(i))) drawClassMark(window, classAt(i), b.pos, r, heading, alpha);
-    if (b.ascended)   // ascended: a second, outer halo ring
-        draw::ring(window, b.pos, r + 7.f, 1.5f, withAlpha(lighten(col, 0.5f), 0.6f * alpha));
+    drawBallIdentity(window, look, b.pos, r, heading, alpha, b.held);
+    if (!b.ghost) drawClassPulse(window, look.lead, b.pulseAscend, b.pos, r, b.classPulse);
 
     // Ability charge: a hairline arc per ability slot just outside the rim,
     // filling as it recharges; it flashes when one fires.

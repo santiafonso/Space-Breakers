@@ -1540,6 +1540,55 @@ Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
   - **Pelota final:** 4 slots de items + 1 de habilidad + 1 de tipo. Los items
     pasivos globales (reliquias) aparecen a un costado en el TAB.
 
+- **Fase Q — la clase es la identidad, el elemento es secundario. [IMPLEMENTADO 2026-09-27]**
+  Pedido (usuario): "que resalte más si una pelota consigue una clase, y que
+  los colores de los elementos sean menos vistosos y tomen un rol más
+  secundario, entonces priorizás más conseguir una clase que un elemento".
+  - **Cuerpo de la pelota = su clase.** `b.color` sale de la clase principal
+    (la del primer item, `BallSpec/Ball::primary`, `Ball::leadRole()`) vía
+    `World::ballTint` → `theme::hueSpeedColor` (grisácea lenta, más saturada
+    rápida, como antes hacía el elemento). Sin clase = gris neutro
+    (`theme::speedColor`). **Ascendida** = más saturada y clara, glow más
+    grande, halo del color de la clase con 4 marcas que giran lento y su
+    marca a pleno. **Doble rol** = arco del color de la segunda clase por
+    dentro de la mitad de abajo del borde. Color por clase: `roleColor(BallRole)`
+    (sim/Entities; `tagColor` lo usa).
+  - **El elemento pasa a detalle:** un aro finito apagado justo afuera del
+    borde, tiñe la estela (mezcla 55%) y sigue en estados de enemigo,
+    reacciones y explosiones. Todo el dibujo de "quién es" está en
+    `drawBallIdentity` (render/ClassRender), igual en la arena y en TAB.
+    Puntitos del HUD y mira de Hunters usan `ballHue` (la clase).
+  - **Paleta de elementos (antes → ahora):** Fire 255,148,66 → 206,136,92 ·
+    Poison 150,214,96 → 142,180,108 · Water 92,152,255 → 104,138,204 · Ice
+    170,224,240 → 158,192,204 · Stone 176,156,132 → 154,142,126 · Electric
+    176,116,246 → 152,122,204. Los colores de clase quedan igual (los vivos).
+    Lo que no era elemento y usaba esos colores pasa a `theme::ember`
+    (255,148,66: pacto Thrower, rama Special de la web, borde de las monedas)
+    y `theme::venom` (150,214,96: pacto Alchemist).
+  - **Momento de clase nueva:** `App::syncWorldBalls` (por donde pasa todo
+    cambio de loadout: elegir/equipar, tienda, forja, vender, recluta, pactos,
+    Calling, starter, dev, y el drag de TAB si llama a sync) compara las
+    clases de cada pelota con las de la última sync (`knownClasses_`,
+    `announceClassGains`; la base se toma en `newRun`). Clase nueva o segunda
+    clase → franja "BALL 2 - NEW CLASS / FIRE BALL → STRIKER" (o "STRIKER →
+    STRIKER + SUPPORT") en el color de la clase, sobre cualquier pantalla
+    (`Effects::classBanner`, en cola si hay varias, máx. 4); ascender →
+    "BALL 1 - ASCENDED / MEGA STRIKER" con corchetes. Más un flash suave,
+    un acorde que sube (`Audio::classGain`, categoría Cards; ascendida más
+    largo con campana arriba) y un destello de anillos del color de la clase
+    en la pelota cuando corre la pelea (`Ball::classPulse`). Perder una clase
+    no dice nada. El cartel viejo "Striker ball" del Calling quedó reemplazado.
+  - **Cartas:** los items con clase llevan lomo del color de la clase a la
+    izquierda y un lavado tenue arriba; si tomarlo le da la clase a alguna
+    pelota (2º item del tag, con slot libre) o la asciende (4º), un chip abajo
+    dice "MAKES A STRIKER" / "ASCENDS: MEGA STRIKER" (`drawClassCardMark`,
+    elección y tienda). Las de elemento quedan calmas (título y cabecera en el
+    color apagado). No se tocó la frecuencia de ofertas de elementos.
+  - Modo foto suma `05b_class_gain` y `05c_ascend`.
+  - Falta: escuchar el acorde en los 3 estilos, ver en juego si el aro del
+    elemento se lee sobre Guardian (borde grueso) y si el destello molesta
+    cuando se ganan varias clases juntas (Legion).
+
 - **Fase 2 — Jefe tras la oleada 10.** Da upgrades de pelota (viento/agua/
   piedra). Extiende la run mas alla de 10 en "modo infinito" opcional.
 - **Fase 3 — Variedad.** Repulsor, bumper, rampa. Corredor, tanque, escindido.

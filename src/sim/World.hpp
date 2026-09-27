@@ -53,6 +53,9 @@ public:
     // Match the balls to the run loadout: refresh role / element / gear of the
     // existing ones in place (they keep flying) and spawn any new ones.
     void syncBalls(const std::vector<BallSpec>& specs, const WorldParams& p);
+    // Ball `idx` just gained a class (or its ascended form): it flares in its
+    // class colour the next time the fight runs (Ball::classPulse).
+    void pulseClass(int idx, bool ascended);
     void repairCore(float amount);
     void addCoreMaxHp(float delta);                  // raise the core's max HP mid-run
     void useReserve(const WorldParams& p);           // "Stockpile": fire the held reserve power-up
@@ -120,6 +123,9 @@ public:
     int enemiesLeft() const { return static_cast<int>(enemies_.size()) + toSpawn_; }
 
     float cruiseBase(const WorldParams& p) const;
+    // A ball's body colour at a speed: its lead class's hue (richer ascended),
+    // or the neutral speed grey without a class. The element isn't in it.
+    sf::Color ballTint(const Ball& b, float speed, const WorldParams& p) const;
     float cruiseSpeed(const WorldParams& p) const;
     int comboStreak() const { return comboStreak_; }
     int comboTier() const {

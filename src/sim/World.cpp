@@ -89,6 +89,7 @@ float World::fastestBall() const {
 void World::applySpec(Ball& b, const BallSpec& spec) {
     b.roles = spec.roles;
     b.ascended = spec.ascended;
+    b.primary = spec.primary;
     b.element = spec.element;
     b.mods = spec.mods;
     for (int i = 0; i < kMaxAbilitySlots; ++i) {
@@ -106,9 +107,7 @@ void World::spawnBall(const BallSpec& spec, const WorldParams& p) {
     const float a = rng_.range(0.f, 2.f * kPi);
     b.pos = core_.pos + sf::Vector2f{std::cos(a), std::sin(a)} * (core_.radius + b.radius + 20.f);
     b.vel = rng_.direction() * ballBaseCruise(b, p);  // straight line, random heading
-    b.color = b.element == Element::Plain
-                  ? theme::speedColor(length(b.vel), cruiseBase(p))
-                  : theme::elementSpeedColor(elementColor(b.element), length(b.vel), cruiseBase(p));
+    b.color = ballTint(b, length(b.vel), p);
     b.cooldown = rng_.range(0.f, 0.6f);
     b.owner = static_cast<int>(balls_.size());
     balls_.push_back(b);
@@ -129,7 +128,20 @@ void World::syncBalls(const std::vector<BallSpec>& specs, const WorldParams& p) 
         b.owner = static_cast<int>(i);
         applySpec(b, specs[i]);
         b.radius = ballRadius(b, p);
+        b.color = ballTint(b, length(b.vel), p);   // a new class shows at once, even paused
     }
+}
+
+void World::pulseClass(int idx, bool ascended) {
+    if (idx < 0 || idx >= static_cast<int>(balls_.size())) return;
+    balls_[static_cast<std::size_t>(idx)].classPulse = 1.f;
+    balls_[static_cast<std::size_t>(idx)].pulseAscend = ascended;
+}
+
+sf::Color World::ballTint(const Ball& b, float speed, const WorldParams& p) const {
+    const BallRole lead = b.leadRole();
+    if (lead == BallRole::Normal) return theme::speedColor(speed, cruiseBase(p));
+    return theme::hueSpeedColor(roleColor(lead), speed, cruiseBase(p), b.isAscended(lead));
 }
 
 void World::repairCore(float amount) {
@@ -686,9 +698,7 @@ void World::advanceSatellite(Ball& b, float dt, const WorldParams& p, FrameEvent
         ev.bossHit = true;
     }
     emitElement(b, dt, p, ev);
-    b.color = b.element == Element::Plain
-                  ? theme::speedColor(sp, cruiseBase(p))
-                  : theme::elementSpeedColor(elementColor(b.element), sp, cruiseBase(p));
+    b.color = ballTint(b, sp, p);
     b.squash *= std::exp(-cfg::ball::squashDecay * dt);
     updateTrail(b);
 }
@@ -746,6 +756,7 @@ void World::updateTwins(const WorldParams& p) {
         g.mods = parent->mods;      // keep up with new items
         g.roles = parent->roles;
         g.ascended = parent->ascended;
+        g.primary = parent->primary;
         g.element = parent->element;
         g.ghostLife = 1e9f;
     }
@@ -1165,6 +1176,7 @@ void World::spawnGhost(const Ball& parent) {
     if (static_cast<int>(ghosts_.size() + pendingGhosts_.size()) >= cfg::synergy::maxGhosts) return;
     Ball g = parent;
     g.ghost = true;
+    g.classPulse = 0.f;
     g.ghostLife = cfg::synergy::ghostLife;
     g.held = false;
     g.trail.clear();
@@ -1180,6 +1192,7 @@ void World::spawnMitosis(const Ball& parent, const WorldParams& p) {
     if (static_cast<int>(ghosts_.size() + pendingGhosts_.size()) >= cfg::synergy::maxGhosts) return;
     Ball g = parent;
     g.ghost = true;
+    g.classPulse = 0.f;
     g.twin = false;
     g.scale = cfg::changer::mitosisScale;
     g.ghostLife = parent.mods.mitosisLife;
@@ -1504,9 +1517,7 @@ void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
     b.ricochetT = std::max(0.f, b.ricochetT - dt);   // "Ricochet" window ticks down
     emitElement(b, dt, p, ev);
     regulateSpeed(b, dt, p);
-    b.color = b.element == Element::Plain
-                  ? theme::speedColor(length(b.vel), cruiseBase(p))
-                  : theme::elementSpeedColor(elementColor(b.element), length(b.vel), cruiseBase(p));
+    b.color = ballTint(b, length(b.vel), p);
     b.squash *= std::exp(-cfg::ball::squashDecay * dt);
     updateTrail(b);
 }
@@ -2008,6 +2019,7 @@ FrameEvents World::step(float dt, const WorldParams& p) {
 
     for (std::size_t i = 0; i < balls_.size(); ++i) {
         Ball& b = balls_[i];
+        b.classPulse = std::max(0.f, b.classPulse - dt / (b.pulseAscend ? 1.4f : 0.9f));   // class-gain flare
         if (grabbed_ == Grabbed::Ball && static_cast<int>(i) == heldIndex_) {
             b.squash *= std::exp(-cfg::ball::squashDecay * dt);
             continue;

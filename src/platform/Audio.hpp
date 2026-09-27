@@ -56,6 +56,9 @@ public:
     void cardsDealt();        // a set of cards / a shop opens
     void cardPick();
     void levelUp(int level);  // an item went up a level
+    // A ball gained a class: a rising major chord that swells. Ascended = the
+    // same chord an octave climb longer, with a high bell on top. (Cards category.)
+    void classGain(bool ascended);
     void travel();            // stepped onto a map node
     void uiHover();
     void uiClick();
@@ -69,7 +72,7 @@ private:
     enum Cue {
         CueThrow, CueGrab, CueLetGo, CueThud, CueKill, CuePickup, CueCombo, CuePurchase, CueGold,
         CueWaveStart, CueWaveClear, CueBoss, CueWarning, CueCards, CueCardPick, CueLevelUp,
-        CueTravel, CueHover, CueClick, CueOpen, CueClose, CueCount
+        CueTravel, CueHover, CueClick, CueOpen, CueClose, CueClassGain, CueAscend, CueCount
     };
     static constexpr int kStyles = 3;   // Soft / Bright / Retro (Off plays nothing)
 

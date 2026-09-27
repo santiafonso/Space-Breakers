@@ -210,20 +210,7 @@ std::string modifierLine(const BallLoadout& L) {
     return out;
 }
 
-sf::Color tagColor(ItemTag t) {
-    switch (t) {
-        case ItemTag::Striker:  return theme::ballFast;
-        case ItemTag::Guardian: return theme::core;
-        case ItemTag::Support:  return theme::puSurge;
-        case ItemTag::Mage:     return theme::classMage;
-        case ItemTag::Shooter:  return theme::classShooter;
-        case ItemTag::Assassin: return theme::classAssassin;
-        case ItemTag::Summoner: return theme::classSummoner;
-        case ItemTag::Jester:   return theme::classJester;
-        case ItemTag::None:     return theme::textLo;
-    }
-    return theme::textLo;
-}
+sf::Color tagColor(ItemTag t) { return roleColor(tagRole(t)); }   // ItemTag::None -> Normal: grey
 
 sf::Color tierColor(Tier t) {
     switch (t) {
@@ -254,10 +241,45 @@ void drawTierFrame(sf::RenderWindow& w, sf::FloatRect r, Tier t, float hover, fl
     draw::brackets(w, r, theme::bracket + 3.f, 2.f, withAlpha(col, (0.7f + 0.3f * hover) * alpha), snap);
 }
 
+void drawClassCardMark(sf::RenderWindow& w, const sf::Font& font, sf::FloatRect r, UpgradeKind k,
+                       const std::vector<BallLoadout>& balls, float alpha) {
+    const ItemTag t = itemTag(k);
+    if (t == ItemTag::None || alpha <= 0.01f) return;
+    const sf::Color col = tagColor(t);
+    draw::box(w, {r.left + 1.f, r.top + 3.f, r.width - 2.f, r.height * 0.45f}, 0.f, withAlpha(col, 0.10f * alpha),
+              withAlpha(col, 0.f));
+    draw::box(w, {r.left, r.top + 3.f, 4.f, r.height - 3.f}, 0.f, withAlpha(col, 0.9f * alpha),
+              withAlpha(col, 0.55f * alpha));
+
+    // Would it make (2nd item of the tag) or ascend (4th) a ball? A copy it
+    // already has only levels up, so that doesn't count.
+    int best = 0;   // 1 = makes the class, 2 = ascends
+    for (const BallLoadout& L : balls) {
+        if (!upgradeFitsBall(k, L) || upgradeLevelsUp(k, L)) continue;
+        bool free = false;
+        for (int i = 0; i < kBallSlots; ++i) free = free || L.gear[i] < 0;
+        if (!free) continue;
+        const int n = L.tagCount(t);
+        if (n == 3) best = 2;
+        else if (n == 1) best = std::max(best, 1);
+    }
+    if (best == 0) return;
+    const BallRole role = tagRole(t);
+    const std::string text = best == 2 ? std::string("ascends: ") + ascendedName(role)
+                                       : std::string("makes a ") + roleName(role);
+    const sf::Text probe = makeLabel(font, text, 10, col);
+    const float cw = probe.getLocalBounds().width + 22.f;
+    const sf::FloatRect chip{r.left + r.width * 0.5f - cw * 0.5f, r.top + r.height - 6.f, cw, 19.f};
+    draw::box(w, chip, theme::corner, withAlpha(lerpColor(theme::bgDeep, col, 0.25f), 0.97f * alpha),
+              withAlpha(theme::bgDeep, 0.97f * alpha), withAlpha(col, 0.85f * alpha), 1.f);
+    drawLabel(w, font, text, 10, {chip.left + chip.width * 0.5f, chip.top + chip.height * 0.5f},
+              withAlpha(lerpColor(col, sf::Color::White, 0.15f), alpha));
+}
+
 sf::Color catColor(UpgradeCat c) {
     switch (c) {
         case UpgradeCat::NewBall:  return theme::core;
-        case UpgradeCat::Element:  return theme::elemFire;
+        case UpgradeCat::Element:  return theme::elemFire;   // muted: an element is the lesser pick
         case UpgradeCat::Ability:  return theme::ability;
         case UpgradeCat::Item:     return theme::accent;
         case UpgradeCat::Modifier: return theme::ballMid;
@@ -266,8 +288,8 @@ sf::Color catColor(UpgradeCat c) {
     return theme::accent;
 }
 
-// One ball of the loadout: its look (element colour + class marks, same as in
-// the arena), its classes, 4 item slots, its type slot, its ability slot(s)
+// One ball of the loadout: its look (class-coloured body, element rim, class
+// marks - same as in the arena), its classes, 4 item slots, its type slot, its ability slot(s)
 // and its stacked modifiers.
 void drawLoadoutPanel(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f c,
                       const BallLoadout& L, float alpha, float hover, int hoverSlot, bool dim, int placing) {
@@ -277,7 +299,8 @@ void drawLoadoutPanel(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f c,
     draw::panel(w, pr, dim ? theme::textDim : theme::accent, alpha, hover);
     const float top = c.y - kPanelH * 0.5f;
 
-    // The ball, as in the arena: glow, shaded body, class marks, highlight.
+    // The ball, as in the arena: its lead class's colour (grey without one),
+    // the element as a muted rim, class marks, ascended halo, highlight.
     const Element el = L.element();
     const sf::Color ec = el == Element::Plain ? theme::textLo : elementColor(el);
     ItemTag roles[2];
@@ -285,12 +308,18 @@ void drawLoadoutPanel(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f c,
     const ItemTag asc = L.ascended();
     const float r = L.hasRole(ItemTag::Guardian) ? 16.f : 13.f;
     const sf::Vector2f bp{c.x, top + 28.f};
-    draw::glow(w, bp, r * 1.6f, ec, 0.06f * a);
-    draw::disc(w, bp, r, withAlpha(lerpColor(ec, sf::Color::White, 0.2f), a),
-               withAlpha(lerpColor(ec, theme::bg, 0.2f), a));
-    draw::ring(w, bp, r, 1.5f, withAlpha(sf::Color::White, 0.22f * a));
-    for (int i = 0; i < nRoles; ++i) drawClassMark(w, tagRole(roles[i]), bp, r, 0.f, a);
-    if (asc != ItemTag::None) draw::ring(w, bp, r + 6.f, 1.5f, withAlpha(lerpColor(tagColor(asc), sf::Color::White, 0.3f), 0.8f * a));
+    BallLook look;
+    look.roles = L.roleMask();
+    look.ascended = roleBit(tagRole(asc));
+    look.lead = nRoles > 0 ? tagRole(roles[0]) : BallRole::Normal;
+    look.second = nRoles > 1 ? tagRole(roles[1]) : BallRole::Normal;
+    look.element = el;
+    const sf::Color bc = nRoles > 0 ? theme::hueSpeedColor(tagColor(roles[0]), 1.f, 1.f, roles[0] == asc)
+                                    : theme::speedColor(1.f, 1.f);
+    draw::glow(w, bp, r * (asc != ItemTag::None ? 2.f : 1.6f), bc, (asc != ItemTag::None ? 0.11f : 0.06f) * a);
+    draw::disc(w, bp, r, withAlpha(lerpColor(bc, sf::Color::White, 0.2f), a),
+               withAlpha(lerpColor(bc, theme::bg, 0.18f), a));
+    drawBallIdentity(w, look, bp, r, 0.f, a);
     draw::disc(w, bp + sf::Vector2f{-0.34f, -0.38f} * r, r * 0.26f, withAlpha(sf::Color::White, 0.22f * a),
                withAlpha(sf::Color::White, 0.f), {1.f, 0.8f}, 16);
 

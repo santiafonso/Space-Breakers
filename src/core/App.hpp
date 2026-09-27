@@ -212,7 +212,14 @@ private:
     void rollShopOffers();                                           // fresh stock (keeps prepaid reveals)
     BallSpec ballSpec(const BallLoadout& b) const;
     std::vector<BallSpec> ballSpecs() const;
-    void syncWorldBalls();
+    void syncWorldBalls();   // after ANY loadout change: refreshes the balls and announces class gains
+    // Class-gain feedback (one central place): compare every ball's classes
+    // with what they were at the last sync; a new class, a second class or
+    // the ascended form gets a banner, a sound and a flare on the ball.
+    struct KnownClasses { RoleMask roles = 0; ItemTag ascended = ItemTag::None; };
+    std::vector<KnownClasses> knownClasses_;
+    void rememberClasses();   // take the current loadout as the baseline (run start)
+    void announceClassGains();
     void bankRun(bool won);   // pay out cores/prisms/stats for the run; no navigation
     void finishToMenu();      // clear the run and go back to the game menu
 

@@ -59,13 +59,13 @@ std::string pactTip(const PactDef& d) {
 
 sf::Color pactColor(PactArchetype a) {
     switch (a) {
-        case PactArchetype::Thrower:   return theme::elemFire;
+        case PactArchetype::Thrower:   return theme::ember;
         case PactArchetype::Spectator: return theme::accent;
         case PactArchetype::FewMighty: return theme::puSurge;
         case PactArchetype::Swarm:     return theme::ballMid;
         case PactArchetype::Core:      return theme::core;
         case PactArchetype::Gambler:   return theme::puGolden;
-        case PactArchetype::Alchemist: return theme::elemPoison;
+        case PactArchetype::Alchemist: return theme::venom;
         case PactArchetype::Berserker: return theme::coreLow;
     }
     return theme::textHi;
@@ -266,7 +266,7 @@ void drawPactWorld(App& app, sf::RenderWindow& w) {
     const auto& has = world.huntHas();
     for (std::size_t i = 0; i < balls.size() && i < prey.size() && i < has.size(); ++i) {
         if (!has[i]) continue;
-        const sf::Color c = balls[i].element == Element::Plain ? theme::textLo : elementColor(balls[i].element);
+        const sf::Color c = ballHue(balls[i]);
         seg(w, balls[i].pos, prey[i], 1.5f * k, withAlpha(c, 0.16f));
         draw::ring(w, prey[i], 30.f * k, 1.5f * k, withAlpha(c, 0.45f));
     }

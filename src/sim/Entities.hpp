@@ -57,6 +57,9 @@ const char* roleName(BallRole r);       // "Striker"
 const char* roleDesc(BallRole r);       // what the class does
 const char* ascendedName(BallRole r);   // "Mega Striker"
 const char* ascendedDesc(BallRole r);   // what 4 items of the tag add
+// A class's colour - the vivid one: it's the ball's body colour, its name in
+// the UI, its items' tag. Normal = a neutral grey.
+sf::Color roleColor(BallRole r);
 
 // ---------------------------------------------------------------- abilities
 
@@ -151,6 +154,7 @@ struct BallMods {
 // Everything the World needs to build / refresh one ball.
 struct BallSpec {
     RoleMask roles = 0;        // classes it has (2 items of a tag each)
+    BallRole primary = BallRole::Normal;   // its first class (slot order): the body colour
     RoleMask ascended = 0;     // classes it has in ascended form (4 items of a tag)
     Element element = Element::Plain;
     BallMods mods;
@@ -166,6 +170,9 @@ struct Ball {
     bool held = false;
     RoleMask roles = 0;      // its classes (see BallRole)
     RoleMask ascended = 0;   // ...and which of them are ascended
+    BallRole primary = BallRole::Normal;   // its first class (see leadRole)
+    float classPulse = 0.f;  // 1 -> 0: it just gained a class, a flare in its class colour
+    bool pulseAscend = false;   // ...and that gain was the ascended form (a bigger flare)
     Element element = Element::Plain;
     BallMods mods;          // this ball's items + modifiers
     float cooldown = 0.f;   // water drip / stone drop / electric zap timer
@@ -202,7 +209,25 @@ struct Ball {
 
     bool hasRole(BallRole r) const { return (roles & roleBit(r)) != 0; }
     bool isAscended(BallRole r) const { return (ascended & roleBit(r)) != 0; }
+    // Its identity class (body colour): `primary` while it still has it, else
+    // the first it has, else Normal. secondRole() = the other one (dual role).
+    BallRole leadRole() const {
+        if (hasRole(primary)) return primary;
+        for (int i = 0; i < kClassCount; ++i)
+            if (hasRole(classAt(i))) return classAt(i);
+        return BallRole::Normal;
+    }
+    BallRole secondRole() const {
+        const BallRole lead = leadRole();
+        for (int i = 0; i < kClassCount; ++i)
+            if (classAt(i) != lead && hasRole(classAt(i))) return classAt(i);
+        return BallRole::Normal;
+    }
 };
+
+// A ball's identity colour, speed aside: its lead class's colour, or a neutral
+// grey for a classless ball (HUD dots, tethers, sights).
+sf::Color ballHue(const Ball& b);
 
 // Grunt = the plain walker. The rest each want a different answer (cfg::enemy).
 enum class EnemyKind { Grunt, Runner, Tank, Splitter, Shard, Shielded };

@@ -42,13 +42,21 @@ inline const sf::Color core{120, 230, 200};
 inline const sf::Color coreLow{240, 110, 90};
 inline const sf::Color enemy{232, 120, 120};
 
-// Ball elements
-inline const sf::Color elemFire{255, 148, 66};
-inline const sf::Color elemPoison{150, 214, 96};
-inline const sf::Color elemWater{92, 152, 255};
-inline const sf::Color elemIce{170, 224, 240};
-inline const sf::Color elemStone{176, 156, 132};
-inline const sf::Color elemElectric{176, 116, 246};
+// Ball elements - MUTED on purpose (2026-09-27): a ball's identity is its
+// class (vivid colours below); the element is a secondary detail (a rim, the
+// trail, status tints, reactions), so its hues are desaturated and a touch
+// darker. Old vivid values in DESIGN.md (Fase Q).
+inline const sf::Color elemFire{206, 136, 92};
+inline const sf::Color elemPoison{142, 180, 108};
+inline const sf::Color elemWater{104, 138, 204};
+inline const sf::Color elemIce{158, 192, 204};
+inline const sf::Color elemStone{154, 142, 126};
+inline const sf::Color elemElectric{152, 122, 204};
+
+// Vivid warm / green hues for things that aren't elements (pact archetypes,
+// a web branch, coins) - they used to borrow the old element colours.
+inline const sf::Color ember{255, 148, 66};
+inline const sf::Color venom{150, 214, 96};
 
 // Power-ups
 inline const sf::Color puPoints{245, 200, 90};
@@ -57,8 +65,9 @@ inline const sf::Color puSurge{198, 120, 255};
 inline const sf::Color puGolden{255, 214, 120};
 inline const sf::Color puOverdrive{255, 110, 150};
 
-// Ball classes (item tags, class names in the UI). Striker / Guardian /
-// Support reuse ballFast / core / puSurge.
+// Ball classes (item tags, class names in the UI) - the vivid ones: a class
+// is a ball's identity, so its colour is the ball's body colour. Striker /
+// Guardian / Support reuse ballFast / core / puSurge.
 inline const sf::Color classMage{128, 146, 255};
 inline const sf::Color classShooter{255, 156, 100};
 inline const sf::Color classAssassin{232, 84, 112};
@@ -76,8 +85,8 @@ inline constexpr unsigned fsHud = 24;
 inline constexpr unsigned fsSmall = 13;
 
 // Colour of a plain ball for a given speed relative to its (un-buffed) cruise
-// speed: a neutral grey that just brightens as it speeds up, so elemental balls
-// (which keep their hue) always stand out from the plain ones.
+// speed: a neutral grey that just brightens as it speeds up, so class balls
+// (which keep their class hue) always stand out from the classless ones.
 inline sf::Color speedColor(float speed, float cruise) {
     const float ratio = cruise > 1.f ? speed / cruise : 1.f;
     const sf::Color slow{104, 110, 124};
@@ -99,16 +108,18 @@ inline sf::Color vivify(sf::Color c, float sat, float lift) {
     return sf::Color(ch(c.r), ch(c.g), ch(c.b), c.a);
 }
 
-// An elemental ball keeps its own hue at every speed: a duller, greyer version
+// A class ball keeps its class hue at every speed: a duller, greyer version
 // below cruise, and MORE of its colour - deeper, punchier - the faster it goes
-// (a fast green ball reads as vivid green, not washed-out white).
-inline sf::Color elementSpeedColor(sf::Color elem, float speed, float cruise) {
+// (a fast Striker reads as vivid gold, not washed-out white). `rich` = the
+// ascended form: always a step more saturated and brighter.
+inline sf::Color hueSpeedColor(sf::Color hue, float speed, float cruise, bool rich = false) {
+    if (rich) hue = vivify(hue, 0.25f, 14.f);
     const float ratio = cruise > 1.f ? speed / cruise : 1.f;
     if (ratio < 1.f)
-        return lerpColor(lerpColor(elem, sf::Color(90, 94, 105), 0.5f), elem,
+        return lerpColor(lerpColor(hue, sf::Color(90, 94, 105), rich ? 0.3f : 0.5f), hue,
                          clampf(ratio, 0.f, 1.f));
     const float t = clampf((ratio - 1.f) / 1.4f, 0.f, 1.f);
-    return vivify(elem, t * 0.9f, t * 22.f);
+    return vivify(hue, t * 0.9f, t * 22.f);
 }
 
 }  // namespace sb::theme

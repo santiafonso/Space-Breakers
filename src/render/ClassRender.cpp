@@ -5,7 +5,7 @@
 // heavy rim, Summoner = motes circling inside the rim, Assassin = a thin arc
 // trailing behind, Support = an inner ring, Mage = a small diamond, Jester =
 // two pips, Striker = a centre dot, Shooter = a short barrel toward its
-// heading. White at low alpha - the element colour stays the ball's colour.
+// heading. White at low alpha over the ball's class-coloured body.
 
 #include "render/ClassRender.hpp"
 
@@ -202,6 +202,61 @@ void worldJester(sf::RenderTarget& t, const World& world) {
 }
 
 }  // namespace
+
+// ---------------------------------------------------------------- identity
+
+BallLook ballLook(const Ball& b) {
+    BallLook l;
+    l.roles = b.roles;
+    l.ascended = b.ascended;
+    l.lead = b.leadRole();
+    l.second = b.secondRole();
+    l.element = b.element;
+    return l;
+}
+
+void drawBallIdentity(sf::RenderTarget& t, const BallLook& look, sf::Vector2f pos, float r, float heading,
+                      float alpha, bool held) {
+    // Rim: the element, muted, as a hairline just outside the edge; plain = faint white.
+    draw::ring(t, pos, r, 1.5f, withAlpha(sf::Color::White, (held ? 0.85f : 0.22f) * alpha));
+    if (look.element != Element::Plain)
+        draw::ring(t, pos, r + 1.6f, 1.6f, withAlpha(elementColor(look.element), 0.85f * alpha));
+    // A second class: its colour along the lower half of the rim, inside.
+    if (look.second != BallRole::Normal)
+        draw::ring(t, pos, r - 1.8f, 3.f, withAlpha(lerpColor(roleColor(look.second), sf::Color::White, 0.1f), 0.95f * alpha),
+                   0.25f, kPi - 0.25f, 32);
+    for (int i = 0; i < kClassCount; ++i) {
+        const BallRole c = classAt(i);
+        if ((look.roles & roleBit(c)) == 0) continue;
+        const bool up = (look.ascended & roleBit(c)) != 0;
+        drawClassMark(t, c, pos, r, heading, alpha * (up ? 1.f : 0.8f));
+    }
+    // Ascended: a class-coloured halo with four slowly turning ticks.
+    for (int i = 0; i < kClassCount; ++i) {
+        const BallRole c = classAt(i);
+        if ((look.ascended & look.roles & roleBit(c)) == 0) continue;
+        const sf::Color hc = lerpColor(roleColor(c), sf::Color::White, 0.25f);
+        const float hr = r + 7.f;
+        draw::ring(t, pos, hr, 1.5f, withAlpha(hc, 0.7f * alpha));
+        const float spin = classClock() * 0.6f;
+        for (int k = 0; k < 4; ++k) {
+            const float a = spin + kPi * 0.5f * static_cast<float>(k);
+            draw::ring(t, pos, hr, 3.f, withAlpha(hc, 0.9f * alpha), a - 0.12f, a + 0.12f, 8);
+        }
+        break;   // a ball ascends in one class at most
+    }
+}
+
+void drawClassPulse(sf::RenderTarget& t, BallRole lead, bool ascended, sf::Vector2f pos, float r, float k) {
+    if (k <= 0.f || lead == BallRole::Normal) return;
+    const sf::Color c = lerpColor(roleColor(lead), sf::Color::White, 0.2f);
+    const float e = 1.f - k;                          // 0 -> 1 as it plays
+    const float grow = 1.f - (1.f - e) * (1.f - e);   // ease-out
+    draw::glow(t, pos, r * (2.2f + (ascended ? 1.6f : 0.8f) * grow), c, 0.22f * k);
+    draw::ring(t, pos, r * (1.15f + (ascended ? 2.8f : 1.9f) * grow), 1.f + 2.5f * k, withAlpha(c, 0.85f * k));
+    if (ascended)
+        draw::ring(t, pos, r * (1.1f + 1.7f * grow), 1.f + 1.5f * k, withAlpha(c, 0.55f * k));
+}
 
 // ---------------------------------------------------------------- dispatch
 
