@@ -309,6 +309,10 @@ void MapScreen::update(App& app, float dt, sf::Vector2f mouse) {
     info_ = peek_.open ? -1 : nodeAt(app, mouse, false);
 }
 
+namespace {
+constexpr float kIronX = 130.f, kIronY = 84.f;   // the "iron core" marker, left edge off centre
+}
+
 void MapScreen::draw(App& app, sf::RenderWindow& w) {
     const sf::Vector2f s = app.size();
     const float it = intro();
@@ -321,11 +325,11 @@ void MapScreen::draw(App& app, sf::RenderWindow& w) {
     drawCenteredPop(w, app.font(), "Choose your path", theme::fsTitle, {s.x * 0.5f, 46.f}, theme::textHi,
                     introPop(it, 0.f, 0.3f));
     drawRunStatus(app, w, 84.f);
-    // "Iron core": a quiet marker while no repair has been made this act.
-    constexpr float kIronY = 106.f;
+    // "Iron core": a quiet marker while no repair has been made this act, on
+    // the status line (below it, the boss row's "you" brackets would cover it).
     if (app.ironCoreAlive())
-        drawLabel(w, app.font(), "iron core", 11, {s.x * 0.5f, kIronY},
-                  withAlpha(theme::core, 0.55f * clampf(introPop(it, 0.1f), 0.f, 1.f)));
+        drawLabel(w, app.font(), "iron core", 11, {s.x * 0.5f + kIronX, kIronY},
+                  withAlpha(theme::core, 0.55f * clampf(introPop(it, 0.1f), 0.f, 1.f)), -1);
 
     // Row guides: a faint rule per stage and its number down the left edge of
     // the map, the row you stand on picked out - the map reads like a scale.
@@ -437,7 +441,7 @@ void MapScreen::draw(App& app, sf::RenderWindow& w) {
         const auto t = static_cast<MapNodeType>(legendHover);
         drawTooltip(w, app.font(), mouse_, s, mapNodeName(t), mapNodeDesc(t), nodeColor(t));
     } else if (!pactHover && app.ironCoreAlive() && std::fabs(mouse_.y - kIronY) < 8.f &&
-               std::fabs(mouse_.x - s.x * 0.5f) < 50.f) {
+               mouse_.x > s.x * 0.5f + kIronX - 4.f && mouse_.x < s.x * 0.5f + kIronX + 80.f) {
         drawTooltip(w, app.font(), mouse_, s, "Iron core",
                     "no repairs yet this act. Beat the boss without resting, buying a repair or skipping a pick "
                     "to repair, and the run banks +" + std::to_string(cfg::meta::ironCoreCores) +
