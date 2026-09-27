@@ -1055,6 +1055,29 @@ Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
     **toque rápido** (< 0,25 s) lo deja abierto hasta otro TAB (o Esc), y ahí
     avisa "tab to close". Snapshot nuevo: `14_map_tab.png`.
 
+- **Sonido: más feedback + pantalla de Sonido. [IMPLEMENTADO 2026-09-26]**
+  - Sonidos nuevos (sintetizados, cortos y suaves, en/cerca de la pentatónica
+    de los rebotes): hover y click de UI, abrir / cerrar pantallas, agarrar
+    pelota y soltarla sin tirar, enemigo muerto, oro que entra, oleada empieza /
+    limpia, llegada del boss, aviso de núcleo bajo (<30%, cada 4 s), cartas
+    repartidas (Choice / Shop / Pact) y elegidas, viaje a un nodo del mapa,
+    item sube de nivel, y un **zumbido ambiente** muy bajo durante la pelea.
+    Los que pueden spamear (hover, kill, oro, grab) tienen rate-limit en `Audio`.
+  - Hover / click centralizados: `ui/UiSound` (`uisound::hover(owner, id)`
+    lo llaman `Menu` y el `update` de cada pantalla; `App::handleEvent` hace el
+    click si lo que está bajo el puntero es clicable). Abrir / cerrar va en
+    `App::push` / `App::back` (se omite si un click acaba de sonar).
+  - **Pantalla Sound** (`ui/SoundScreen`, desde "Sound" en el menú principal y
+    en la pausa; M sigue muteando): Master / Music / Effects + mute, y 14
+    categorías (Ball hits, Throw, Grab, Core hit, Kill, Pickup, Combo, Gold,
+    Waves, Cards, Click, Hover, Screens, Ambience) con volumen y estilo
+    **Soft / Bright / Retro / Off** (Soft = el sonido de antes; Bright = voz de
+    campana con parciales; Retro = onda cuadrada tipo chip). Click en un estilo
+    o soltar un slider = preview. "Reset progress" no borra la mezcla.
+  - Save **v14**: líneas `snd.master/music/sfx` + `snd.cat i vol estilo`; los
+    saves viejos cargan con los valores por defecto. Modo foto: `19_sound`.
+  - Falta: escucharlo de verdad y afinar volúmenes (hecho sin poder oír).
+
 - **Pendiente (idea del usuario, 2026-09-24):** como las mejoras ya no llegan
   en cada oleada, cada una tiene que **sentirse mucho** al conseguirla: repasar
   items / modificadores / reliquias para que sean más fuertes y más visibles

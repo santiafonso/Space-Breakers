@@ -14,6 +14,8 @@
 #include "platform/Save.hpp"
 #include "ui/PactScreen.hpp"
 #include "ui/Screens.hpp"
+#include "ui/SoundScreen.hpp"
+#include "ui/UiSound.hpp"
 #include "ui/Widgets.hpp"
 
 namespace sb {
@@ -77,6 +79,8 @@ App::App() : window_(kLogical()), world_(kLogical()) {
 
     loadGame(savePath_, data_);
     audio_.setEnabled(data_.meta.soundOn);
+    audio_.applySettings(data_.meta.sound);
+    uisound::attach(&audio_);
     audio_.setTrack(Audio::Track::Menu);
     window_.applyVideoMode(data_.meta.fullscreen);
 
@@ -331,6 +335,7 @@ std::unique_ptr<Screen> App::makeScreen(ScreenId id) {
         case ScreenId::Equip:   return std::make_unique<EquipScreen>();
         case ScreenId::Dev:     return std::make_unique<DevScreen>();
         case ScreenId::Pact:    return std::make_unique<PactScreen>();
+        case ScreenId::Sound:   return std::make_unique<SoundScreen>();
     }
     return std::make_unique<MenuScreen>();
 }
@@ -344,6 +349,11 @@ void App::replaceStack(ScreenId id) {
 }
 
 void App::push(ScreenId id) {
+    switch (id) {   // a soft cue as it opens: cards being dealt, or a plain panel
+        case ScreenId::Choice: case ScreenId::Shop: case ScreenId::Pact: audio_.cardsDealt(); break;
+        case ScreenId::Play: case ScreenId::Dev: break;
+        default: audio_.uiOpen(); break;
+    }
     stack_.push_back(makeScreen(id));
     fade_ = 1.f;
     stack_.back()->onEnter(*this);
@@ -351,7 +361,10 @@ void App::push(ScreenId id) {
 }
 
 void App::back() {
-    if (stack_.size() > 1) stack_.pop_back();
+    if (stack_.size() > 1) {
+        stack_.pop_back();
+        audio_.uiClose();
+    }
     fade_ = 1.f;
     if (!stack_.empty()) stack_.back()->beginIntro();   // replay the intro on the way back
 }
@@ -454,6 +467,8 @@ void App::startWaveAt(int wave, bool elite) {
     if (const int bastion = data_.meta.unlock[MetaBastion]; bastion > 0)   // "Bastion": max HP grows each wave
         world_.addCoreMaxHp(cfg::core::bastionPerWavePerLevel * static_cast<float>(bastion));
     const int w = data_.run.wave;
+    if (w == cfg::run::bossWave || w == cfg::run::finalWave) audio_.bossAppear();
+    else audio_.waveStart();
     if (w == cfg::run::bossWave)
         world_.startBossWave(params());              // wave 10: Charger miniboss
     else if (w == cfg::run::finalWave)
@@ -631,6 +646,7 @@ void App::applyUpgradeKind(UpgradeKind k, int ball, int slot) {
         } else if (upgradeLevelsUp(k, b)) {
             // A duplicate levels up the copy the ball already has.
             const int lvl = ++b.gearLvl[b.slotOf(k)];
+            audio_.levelUp(lvl);
             effects_.addLabel(std::string(upgradeInfo(k).title) + "  Lv " + std::to_string(lvl),
                               {size().x * 0.5f, size().y * 0.36f}, tierColor(upgradeTier(k)), 26, 1.3f);
         } else {
@@ -700,7 +716,7 @@ void App::useReserve() {
 }
 
 void App::finishChoice() {
-    audio_.purchase();
+    audio_.cardPick();
     effects_.flash(theme::accent, 0.4f);
     back();      // close the Choice
     afterChoice();
@@ -736,6 +752,7 @@ void App::travelTo(int node) {
     r.mapNode = node;
     r.mapRow = n.row;
     const int wave = mapRowWave(r.map.act, n.row);
+    audio_.travel();
     back();   // close the map: the Play screen is underneath
     const sf::Vector2f mid{size().x * 0.5f, size().y * 0.4f};
     switch (n.type) {
@@ -840,7 +857,7 @@ void App::confirmEquip(int ball, int slot) {
             if (!equipFitsSlot(ball, slot)) return;
             ++r.balls[static_cast<std::size_t>(ball)].gearLvl[slot];
             syncWorldBalls();
-            audio_.purchase();
+            audio_.levelUp(r.balls[static_cast<std::size_t>(ball)].gearLvl[slot]);
             effects_.flash(theme::accent, 0.4f);
             back();
             openMap();
@@ -853,7 +870,7 @@ void App::confirmEquip(int ball, int slot) {
             r.gold -= cfg::gold::forgeServicePrice;
             ++r.balls[static_cast<std::size_t>(ball)].gearLvl[slot];
             syncWorldBalls();
-            audio_.purchase();
+            audio_.levelUp(r.balls[static_cast<std::size_t>(ball)].gearLvl[slot]);
             effects_.flash(theme::accent, 0.4f);
             back();
             break;
@@ -1021,7 +1038,9 @@ void App::wipeSave() {
     std::error_code ec;
     std::filesystem::remove(savePath_, ec);   // start the next save from nothing
 
+    const SoundSettings sound = data_.meta.sound;   // a preference, not progress: keep the mix
     data_ = GameData{};                        // cores, prisms, unlocks, stats, run
+    data_.meta.sound = sound;
     audio_.setEnabled(data_.meta.soundOn);
     window_.applyVideoMode(data_.meta.fullscreen);
 
@@ -1169,6 +1188,7 @@ void App::openPause() {
     push(ScreenId::Pause);
 }
 void App::openStats() { push(ScreenId::Stats); }
+void App::openSound() { push(ScreenId::Sound); }
 void App::openHowTo() { push(ScreenId::HowTo); }
 
 void App::quit() {
@@ -1245,6 +1265,11 @@ void App::handleEvent(const sf::Event& e) {
         // UI-mapped pointer - the world view may be zoomed out on the boss arena.
         const sf::Vector2f mouse =
             simulating() ? window_.mousePosition() : window_.uiMousePosition();
+        // Menus / buttons: one shared click whenever a press lands on something
+        // clickable (widgets report it via uisound::hover).
+        if (!simulating() && e.type == sf::Event::MouseButtonPressed &&
+            e.mouseButton.button == sf::Mouse::Left && uisound::hot())
+            audio_.uiClick();
         stack_.back()->handleEvent(*this, e, mouse);
     }
 }
@@ -1276,6 +1301,7 @@ void App::flushMultiKill() {
 void App::processEvents(const FrameEvents& ev) {
     // Every kill drops gold that grows with the combo; the coin grows with it.
     const float comboGold = 1.f + cfg::gold::comboBonusPerTier * static_cast<float>(ev.comboTier);
+    audio_.kill(static_cast<int>(ev.kills.size()));
     for (const sf::Vector2f& k : ev.kills) {
         ++data_.meta.stats.enemiesKilled;
         effects_.addPop(k, cfg::wave::enemyRadius, theme::enemy);
@@ -1291,6 +1317,7 @@ void App::processEvents(const FrameEvents& ev) {
         const int whole = static_cast<int>(data_.run.goldFrac);
         data_.run.gold += whole;
         data_.run.goldFrac -= static_cast<float>(whole);
+        audio_.gold();
     }
     if (!ev.kills.empty()) {
         hitstop_ = std::max(hitstop_, cfg::app::hitstopKill);
@@ -1366,6 +1393,7 @@ void App::processEvents(const FrameEvents& ev) {
     }
     if (ev.waveCleared) {
         flushMultiKill();   // the last burst of the wave still counts
+        audio_.waveClear();
         if (const int interest = data_.meta.unlock[MetaInterest];   // "Interest": reward a clean wave
             interest > 0 && world_.coreCleanWave())
             data_.run.bountyCores += cfg::meta::interestPerLevel * static_cast<float>(interest);
@@ -1418,7 +1446,6 @@ void App::processEvents(const FrameEvents& ev) {
                               theme::core, 24, 1.5f);
             effects_.flash(theme::core, 0.3f);
         }
-        audio_.purchase();
         if (r.eliteWave) openChoice(RollSource::Elite);
         else openMap();
     }
@@ -1436,6 +1463,17 @@ void App::update(float frameDt) {
     // BossWin card included), the menu track everywhere else.
     audio_.setTrack(data_.run.active ? Audio::Track::Game : Audio::Track::Menu);
 
+    // A quiet hum under a live fight; a soft two-note warning while the core is low.
+    audio_.setAmbience(simulating() && data_.run.active);
+    if (simulating() && data_.run.active && world_.core().maxHp > 0.f &&
+        world_.core().hp > 0.f && world_.core().hp < world_.core().maxHp * 0.3f) {
+        lowCoreCd_ -= frameDt;
+        if (lowCoreCd_ <= 0.f) { audio_.coreWarning(); lowCoreCd_ = 4.f; }
+    } else {
+        lowCoreCd_ = 0.f;   // warn at once the next time it drops low
+    }
+
+    uisound::beginFrame();
     if (!stack_.empty()) {
         stack_.back()->update(*this, frameDt, mouse);
         stack_.back()->advanceIntro(frameDt);
@@ -1742,6 +1780,10 @@ int App::runSnapshots(const std::string& dir) {
     bossIronCores_ = cfg::meta::ironCoreCores;
     push(ScreenId::BossWin);
     snapFrame(d + "19_boss_bonus.png");
+
+    replaceStack(ScreenId::Menu);
+    openSound();
+    snapFrame(d + "20_sound.png");
     return 0;
 }
 

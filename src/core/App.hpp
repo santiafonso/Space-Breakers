@@ -17,7 +17,7 @@
 
 namespace sb {
 
-enum class ScreenId { Menu, Loadout, Play, Choice, Pause, Stats, HowTo, BossWin, Map, Shop, Equip, Dev, Pact };
+enum class ScreenId { Menu, Loadout, Play, Choice, Pause, Stats, HowTo, BossWin, Map, Shop, Equip, Dev, Pact, Sound };
 
 // Who opened the ball / slot picker, and so what confirming it does.
 // ShopForge / Sell are the shop's paid forge and its "sell an item" counter.
@@ -144,6 +144,7 @@ public:
     void devTogglePact(PactId id);   // grant it (or drop it, if the run has it)
     void openPause();
     void openStats();
+    void openSound();       // the Sound settings screen (main menu / pause)
     void openHowTo();
     void back();
     void quit();
@@ -260,6 +261,7 @@ private:
     float heat_ = 0.f;        // 0..1 backdrop warmth, follows the damage combo
     bool aiming_ = false;
     float aimT_ = 0.f;        // real seconds spent aiming (slow-mo runs out)
+    float lowCoreCd_ = 0.f;   // time to the next low-core warning cue
     float reactLabelCd_ = 0.f;   // spacing between reaction name labels
     int multiKillN_ = 0;      // kills in the current quick burst
     float multiKillT_ = 0.f;  // time left for the burst to keep chaining

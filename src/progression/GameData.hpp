@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "core/Config.hpp"
+#include "platform/SoundSettings.hpp"
 #include "progression/Offers.hpp"
 #include "progression/Pacts.hpp"
 #include "progression/RunMap.hpp"
@@ -30,6 +31,7 @@ struct MetaState {
     std::uint32_t prisms = 0;   // special currency from beating the miniboss
     int unlock[MetaUnlockCount] = {};
     bool soundOn = true;
+    SoundSettings sound;      // volumes + a style per sound category (the Sound screen)
     bool fullscreen = false;
     bool slingshot = true;    // aim: pull back and release (false = the old flick throw)
     bool autoFling = false;   // auto-throw: the game flings a ball at the threat every so often

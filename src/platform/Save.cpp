@@ -1,5 +1,6 @@
 #include "platform/Save.hpp"
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -10,7 +11,7 @@
 namespace sb {
 
 namespace {
-constexpr int kSaveVersion = 13;  // v13: appended Oath..Last stand (51 nodes); append-only since v9
+constexpr int kSaveVersion = 14;  // v14: snd.* sound mix; v13: appended Oath..Last stand (51 nodes); append-only since v9
 }  // namespace
 
 bool hasSavedGame(const std::string& path) {
@@ -35,6 +36,11 @@ bool saveGame(const std::string& path, const GameData& d) {
     for (int i = 0; i < MetaUnlockCount; ++i)
         f << "meta.unlock " << i << ' ' << m.unlock[i] << '\n';
     f << "sound " << (m.soundOn ? 1 : 0) << '\n';
+    f << "snd.master " << m.sound.master << '\n';
+    f << "snd.music " << m.sound.music << '\n';
+    f << "snd.sfx " << m.sound.sfx << '\n';
+    for (int i = 0; i < SoundCatCount; ++i)   // category index, volume, style
+        f << "snd.cat " << i << ' ' << m.sound.vol[i] << ' ' << m.sound.style[i] << '\n';
     f << "fullscreen " << (m.fullscreen ? 1 : 0) << '\n';
     f << "aim.slingshot " << (m.slingshot ? 1 : 0) << '\n';
     f << "aim.auto " << (m.autoFling ? 1 : 0) << '\n';
@@ -79,6 +85,17 @@ bool loadGame(const std::string& path, GameData& d) {
         else if (key == "meta.startBalls") ls >> m.unlock[MetaStartBalls];
         else if (key == "meta.coreHp") ls >> m.unlock[MetaCoreHp];
         else if (key == "sound") { int v = 1; ls >> v; m.soundOn = v != 0; }
+        // v14: the sound mix. Older saves keep the defaults.
+        else if (key == "snd.master") ls >> m.sound.master;
+        else if (key == "snd.music") ls >> m.sound.music;
+        else if (key == "snd.sfx") ls >> m.sound.sfx;
+        else if (key == "snd.cat") {
+            int i = -1, vol = 100, style = 0;
+            if (ls >> i >> vol >> style && i >= 0 && i < SoundCatCount) {
+                m.sound.vol[static_cast<std::size_t>(i)] = vol;
+                m.sound.style[static_cast<std::size_t>(i)] = style;
+            }
+        }
         else if (key == "fullscreen") { int v = 0; ls >> v; m.fullscreen = v != 0; }
         else if (key == "aim.slingshot") { int v = 1; ls >> v; m.slingshot = v != 0; }
         else if (key == "aim.auto") { int v = 0; ls >> v; m.autoFling = v != 0; }
@@ -97,6 +114,15 @@ bool loadGame(const std::string& path, GameData& d) {
     for (int i = 0; i < MetaUnlockCount; ++i) {
         if (m.unlock[i] < 0) m.unlock[i] = 0;
         if (m.unlock[i] > metaUnlockDef(i).maxLevel) m.unlock[i] = metaUnlockDef(i).maxLevel;
+    }
+    auto pct = [](int& v) { v = std::clamp(v, 0, 100); };
+    pct(m.sound.master);
+    pct(m.sound.music);
+    pct(m.sound.sfx);
+    for (int i = 0; i < SoundCatCount; ++i) {
+        pct(m.sound.vol[static_cast<std::size_t>(i)]);
+        int& st = m.sound.style[static_cast<std::size_t>(i)];
+        st = std::clamp(st, 0, SoundStyleCount - 1);
     }
     return sawAnything;
 }
