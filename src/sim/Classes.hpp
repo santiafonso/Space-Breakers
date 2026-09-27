@@ -45,10 +45,44 @@ struct MageState {};
 struct MageWorld {};
 
 // ==================================================================== Shooter
-// Fires bullets.
-struct ShooterMods {};
-struct ShooterState {};
-struct ShooterWorld {};
+// Fires bullets at nearby enemies (sim/WorldClasses.cpp).
+struct ShooterMods {
+    float rate = 1.f;         // "Rapid fire": volleys per second x this
+    int pellets = 1;          // "Scattershot": bullets per volley
+    float pelletFrac = 1.f;   // ...each one's damage x this
+    int hops = 0;             // "Rebound": enemy-to-enemy hops per bullet
+    float hopKeep = 1.f;      // ...damage kept per hop
+    float tracerChance = 0.f; // "Tracer": chance a bullet carries the ball's element
+    int pierce = 0;           // "Drill rounds": enemies a bullet passes through (and shields)
+    int burst = 0;            // "Hair trigger": bullets fired when the ball lands a hit
+    float burstFrac = 1.f;    // ...each one's damage x this
+    float dmgMul = 1.f;       // bullet damage from Tracer / Drill levels
+};
+struct ShooterState {
+    float fireT = 0.f;        // s to the next volley
+    float burstCd = 0.f;      // "Hair trigger" cooldown
+    int volleys = 0;          // Deadeye: every Nth one is a rail shot
+};
+struct ShooterBullet {
+    sf::Vector2f pos;
+    sf::Vector2f vel;
+    float dmg = 0.f;
+    float life = 0.f;
+    int elem = 0;             // Element (0 = plain); an int so this header stays sim-free
+    int owner = -1;           // the ball it came from (reactions need two owners)
+    int pierce = 0;           // enemies it can still pass through
+    int hops = 0;             // hops left
+    float hopKeep = 1.f;
+    int lastHit = -1;         // Enemy::id it last hit (no double hits while passing through)
+};
+struct ShooterRail {          // Deadeye's rail shot, kept only to be drawn
+    sf::Vector2f a, b;
+    float life = 0.f;
+};
+struct ShooterWorld {
+    std::vector<ShooterBullet> bullets;
+    std::vector<ShooterRail> rails;
+};
 
 // ==================================================================== Assassin
 // Teleports to the nearest enemy on a kill.

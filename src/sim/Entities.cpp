@@ -122,7 +122,7 @@ const char* roleDesc(BallRole r) {
         case BallRole::Guardian: return "big; bounces toward the closest threat, shoves and staggers it, smashes through shields";
         case BallRole::Support:  return "weak hits, but marks enemies so every ball hits them harder";
         case BallRole::Mage:     return "carries more abilities: 2 ability slots, 3 once ascended";
-        case BallRole::Shooter:  return "fires bullets at enemies as it flies";
+        case BallRole::Shooter:  return "fires small bullets at the nearest enemy as it flies - faster the faster it goes";
         case BallRole::Assassin: return "after a kill it teleports to the nearest enemy";
         case BallRole::Summoner: return "summons helpers: short-lived balls, turrets, a small dragon...";
         case BallRole::Jester:   return "plays on chance: wild odds, wild results";
@@ -152,7 +152,7 @@ const char* ascendedDesc(BallRole r) {
         case BallRole::Guardian: return "every core bounce sends out a pulse that shoves and staggers";
         case BallRole::Support:  return "its marks spread to the enemies around the one it hits";
         case BallRole::Mage:     return "a third ability slot";
-        case BallRole::Shooter:  return "more bullets, harder";
+        case BallRole::Shooter:  return "every 4th volley is also a rail shot through the whole line; bullets hop once more";
         case BallRole::Assassin: return "teleports chain from kill to kill";
         case BallRole::Summoner: return "more summons, and stronger";
         case BallRole::Jester:   return "the odds bend even further";

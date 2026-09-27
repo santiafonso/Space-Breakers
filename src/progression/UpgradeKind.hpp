@@ -72,6 +72,12 @@ enum class UpgradeKind {
     // ---- Mage items (phase 2: add them here, describe them in ClassItems.hpp) ----
 
     // ---- Shooter items ----
+    RapidFire,         // fires far more often                             [Shooter]
+    Scattershot,       // each volley is a fan of pellets                  [Shooter]
+    Rebound,           // bullets hop from enemy to enemy                  [Shooter]
+    Tracer,            // bullets carry the ball's element                 [Shooter]
+    DrillRounds,       // bullets punch through enemies and shields        [Shooter]
+    HairTrigger,       // a hit fires a burst at the enemies around it     [Shooter]
 
     // ---- Assassin items ----
 

@@ -50,7 +50,23 @@ void markShooter(sf::RenderTarget& t, sf::Vector2f p, float r, float heading, fl
     const sf::Vector2f d{std::cos(heading), std::sin(heading)};
     draw::line(t, p + d * (r * 0.4f), p + d * (r * 0.92f), 2.f, white(0.7f * a));
 }
-void worldShooter(sf::RenderTarget&, const World&) {}
+// Bullets: a tiny dot with a short fading streak behind it, white (or the
+// element's colour when it carries one) at low alpha - never brighter than a
+// ball. Deadeye's rail: one thin line that fades fast.
+void worldShooter(sf::RenderTarget& t, const World& world) {
+    const ShooterWorld& sw = world.classWorld().shooter;
+    for (const ShooterRail& r : sw.rails) {
+        const float f = clampf(r.life / cfg::shooter::deadeyeRailLife, 0.f, 1.f);
+        draw::line(t, r.a, r.b, 1.f + 1.5f * f, white(0.45f * f));
+    }
+    const float k = world.arenaScale();
+    for (const ShooterBullet& u : sw.bullets) {
+        const sf::Color c = u.elem != 0 ? lerpColor(elementColor(static_cast<Element>(u.elem)), sf::Color::White, 0.3f) : sf::Color::White;
+        const float fade = clampf(u.life / 0.15f, 0.f, 1.f);
+        draw::line(t, u.pos - u.vel * 0.03f, u.pos, 2.f * k, withAlpha(c, 0.3f * fade));
+        draw::disc(t, u.pos, 2.6f * k, withAlpha(c, 0.85f * fade), withAlpha(c, 0.4f * fade), {1.f, 1.f}, 10);
+    }
+}
 
 // ==================================================================== Assassin
 void markAssassin(sf::RenderTarget& t, sf::Vector2f p, float r, float heading, float a) {
