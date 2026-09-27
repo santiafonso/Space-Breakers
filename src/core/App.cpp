@@ -673,13 +673,22 @@ void App::applyUpgradeKind(UpgradeKind k, int ball, int slot) {
 
 // "Repair core" button on the Item screen: heal to full, but forfeit the pick.
 void App::repairCoreSkipItem() {
-    world_.repairCore(hasPact(PactId::Fortress) ? world_.core().maxHp * cfg::pact::fortressRestHeal : 1e9f);
+    playerRepair(hasPact(PactId::Fortress) ? world_.core().maxHp * cfg::pact::fortressRestHeal : 1e9f);
     if (const int prospector = data_.meta.unlock[MetaProspector]; prospector > 0)
         data_.run.rerollsLeft += prospector;   // "Prospector": skipping refunds reroll charges
     audio_.purchase();
     effects_.flash(theme::core, 0.4f);
     back();
     afterChoice();
+}
+
+// A repair the player chose (rest, shop, the Choice repair-skip). If it
+// actually restores HP it ends this act's "Iron core" streak; the automatic
+// heals (before each fight, Regen, Mender, Bastion, Phoenix / Last stand) don't.
+void App::playerRepair(float amount) {
+    const float before = world_.core().hp;
+    world_.repairCore(amount);
+    if (world_.core().hp > before + 0.01f) data_.run.repairedThisAct = true;
 }
 
 // "Stockpile" web node: fire the reserved power-up (Q during play).
@@ -737,7 +746,7 @@ void App::travelTo(int node) {
             break;
         case MapNodeType::Rest:
             r.wave = wave;
-            world_.repairCore(hasPact(PactId::Fortress) ? world_.core().maxHp * cfg::pact::fortressRestHeal : 1e9f);
+            playerRepair(hasPact(PactId::Fortress) ? world_.core().maxHp * cfg::pact::fortressRestHeal : 1e9f);
             audio_.purchase();
             effects_.flash(theme::core, 0.5f);
             effects_.addLabel(hasPact(PactId::Fortress) ? "Core half repaired" : "Core repaired", mid, theme::core, 26, 1.2f);
@@ -921,7 +930,7 @@ void App::buyRepair() {
     const Core& c = world_.core();
     if (data_.run.gold < cfg::gold::priceRepair || c.hp >= c.maxHp - 0.5f) return;
     data_.run.gold -= cfg::gold::priceRepair;
-    world_.repairCore(static_cast<float>(repairAmount()));
+    playerRepair(static_cast<float>(repairAmount()));
     audio_.purchase();
     effects_.flash(theme::core, 0.35f);
 }
@@ -988,6 +997,7 @@ void App::continuePastBoss() {
     r.mapNode = -1;
     r.mapRow = 0;
     r.phoenixUsedAct = false;
+    r.repairedThisAct = false;   // "Iron core": a fresh streak for the new act
     world_.setPhoenix((r.mods.phoenix ? 1 : 0) + r.lastStandLeft);   // "Phoenix" recharges for the new act
     // A pact first (Fase O), then the boss treasure (an Epic / Legendary pick), then the map.
     if (!openPactChoice(PactSource::Boss)) openChoice(RollSource::Boss);
@@ -1360,6 +1370,16 @@ void App::processEvents(const FrameEvents& ev) {
             interest > 0 && world_.coreCleanWave())
             data_.run.bountyCores += cfg::meta::interestPerLevel * static_cast<float>(interest);
         const int w = data_.run.wave;
+        const bool flawless = world_.coreCleanWave();   // nothing reached the core this fight
+        if (w == cfg::run::bossWave || w >= cfg::run::finalWave) {
+            // Boss down: a flawless act-1 boss pays gold for act 2, and an act
+            // with no deliberate repair banks "Iron core" cores (before bankRun).
+            RunState& r = data_.run;
+            bossFlawlessGold_ = flawless && w == cfg::run::bossWave ? cfg::gold::flawlessBoss : 0;
+            bossIronCores_ = r.repairedThisAct ? 0 : cfg::meta::ironCoreCores;
+            r.gold += bossFlawlessGold_;
+            r.bountyCores += static_cast<float>(bossIronCores_);
+        }
         if (w == cfg::run::bossWave) {
             // Miniboss down. First win ever: bank it now, card offers only "Back".
             // Otherwise leave the run live so "Continue" can carry it to wave 11.
@@ -1373,7 +1393,8 @@ void App::processEvents(const FrameEvents& ev) {
             return;
         }
         // A cleared fight pays gold (an Elite double, plus a pick), and a
-        // clean one - nothing reached the core - pays a bonus on top.
+        // flawless one - nothing reached the core - pays a bonus on top
+        // (outside "Loaded Dice"'s gamble).
         RunState& r = data_.run;
         const int row = w - (r.map.act - 1) * cfg::run::bossWave;
         int pay = cfg::gold::combatBase + cfg::gold::perRow * row;
@@ -1389,11 +1410,13 @@ void App::processEvents(const FrameEvents& ev) {
         r.gold += pay;
         effects_.addLabel("+" + std::to_string(pay) + " gold", {size().x * 0.5f, size().y * 0.4f},
                           theme::puGolden, 26, 1.2f);
-        if (world_.coreCleanWave()) {
-            const int clean = cfg::gold::cleanBase + cfg::gold::cleanPerRow * row;
-            r.gold += clean;
-            effects_.addLabel("clean wave  +" + std::to_string(clean), {size().x * 0.5f, size().y * 0.4f + 34.f},
-                              theme::core, 20, 1.3f);
+        if (flawless) {
+            int bonus = cfg::gold::flawlessBase + cfg::gold::flawlessPerRow * row;
+            if (r.eliteWave) bonus *= cfg::gold::flawlessEliteMul;
+            r.gold += bonus;
+            effects_.addLabel("FLAWLESS  +" + std::to_string(bonus) + " gold", {size().x * 0.5f, size().y * 0.4f + 36.f},
+                              theme::core, 24, 1.5f);
+            effects_.flash(theme::core, 0.3f);
         }
         audio_.purchase();
         if (r.eliteWave) openChoice(RollSource::Elite);
@@ -1706,6 +1729,14 @@ int App::runSnapshots(const std::string& dir) {
     applyUpgrade(0);
     confirmEquip(0, -1);
     snapFrame(d + "18_intro_map.png");
+
+    // Clean-play bonuses on the BossWin card (flawless boss + "Iron core").
+    data_.run.wave = cfg::run::bossWave;
+    continueUnlocked_ = true;
+    bossFlawlessGold_ = cfg::gold::flawlessBoss;
+    bossIronCores_ = cfg::meta::ironCoreCores;
+    push(ScreenId::BossWin);
+    snapFrame(d + "19_boss_bonus.png");
     return 0;
 }
 

@@ -1089,7 +1089,9 @@ void ChoiceScreen::draw(App& app, sf::RenderWindow& w) {
         const UpgradeCat cat = upgradeCat(app.choices()[c]);
         drawTooltip(w, app.font(), mouse_, s, upgradeCatName(cat), upgradeCatDesc(cat), catColor(cat));
     } else if (coreHurt(app) && healRect(s).contains(mouse_)) {
-        drawTooltip(w, app.font(), mouse_, s, "Skip the pick", "repair the core to full instead of taking a card",
+        drawTooltip(w, app.font(), mouse_, s, "Skip the pick",
+                    std::string("repair the core to full instead of taking a card") +
+                        (app.ironCoreAlive() ? "  Ends this act's Iron core." : ""),
                     theme::core);
     }
 }
@@ -1266,6 +1268,17 @@ void BossWinScreen::draw(App& app, sf::RenderWindow& w) {
         drawCenteredPop(w, app.font(), "run complete", theme::fsBody, {s.x * 0.5f, s.y * 0.28f + 78.f},
                         theme::textDim, introPop(it, 0.24f));
     }
+
+    // Clean-play bonuses this boss earned: one quiet line under the result.
+    std::string bonus;
+    if (goingOn && app.bossFlawlessGold() > 0) bonus = "FLAWLESS  +" + std::to_string(app.bossFlawlessGold()) + " gold";
+    if (app.bossIronCores() > 0) {
+        if (!bonus.empty()) bonus += "      ";
+        bonus += "IRON CORE  +" + std::to_string(app.bossIronCores()) + " cores";
+    }
+    if (!bonus.empty())
+        drawCenteredPop(w, app.font(), bonus, theme::fsBody, {s.x * 0.5f, s.y * 0.28f + (goingOn ? 92.f : 112.f)},
+                        theme::core, introPop(it, 0.3f));
 
     menu_.draw(w, it);
 }

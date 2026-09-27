@@ -55,6 +55,9 @@ public:
     int lastRunCores() const { return lastRunCores_; }
     int lastRunPrisms() const { return lastRunPrisms_; }
     bool lastRunWon() const { return lastRunWon_; }
+    int bossFlawlessGold() const { return bossFlawlessGold_; }   // BossWin card: flawless boss bonus (0 = none)
+    int bossIronCores() const { return bossIronCores_; }         // BossWin card: "Iron core" cores (0 = none)
+    bool ironCoreAlive() const { return data_.run.active && !data_.run.repairedThisAct; }
     const std::array<UpgradeKind, kChoiceCount>& choices() const { return choices_; }
 
     void openLoadout();     // Menu -> the game menu
@@ -96,6 +99,7 @@ public:
     int forgeCap() const;               // max forge level ("Duet" raises it)
     void rerollChoice(int idx);   // Choice: swap card `idx` for another item (costs a Foresight charge)
     void repairCoreSkipItem();    // Choice: heal the core to full instead of taking an item
+    void playerRepair(float amount);   // a deliberate repair: heals and ends this act's "Iron core"
     void useReserve();            // Play: fire the "Stockpile" reserve power-up (key Q)
     void leaveBossWin();    // BossWin card "Back to menu" -> game menu (banks the run)
     void continuePastBoss();  // BossWin card "Continue" -> resume at wave 11
@@ -228,6 +232,8 @@ private:
     int lastRunCores_ = 0;
     int lastRunPrisms_ = 0;
     bool lastRunWon_ = false;
+    int bossFlawlessGold_ = 0;       // set when a boss falls, for the BossWin card
+    int bossIronCores_ = 0;
     bool continueUnlocked_ = false;  // snapshot at newRun: has a run ever been won before?
     bool runBanked_ = false;         // this run's cores/prisms have been paid out
     int devGrantNext_ = 0;

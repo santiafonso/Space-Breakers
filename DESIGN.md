@@ -1016,6 +1016,33 @@ Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
     Strong arm, Hot Hands / Pinball y el sonido aplican igual. Hunters y
     Clockwork siguen sin dejar agarrar.
 
+- **Premio por jugar limpio: Flawless + Iron core. [IMPLEMENTADO 2026-09-26]**
+  Pedido (usuario): más recompensa si terminás la oleada sin golpes en el
+  núcleo o pasás un mapa sin reparar el núcleo.
+  - **Flawless** (reemplaza la "oleada limpia" de la Fase E): pelea sin que
+    nada toque el núcleo (un golpe que absorbe Aegis también cuenta como
+    golpe) → `flawlessBase + flawlessPerRow * fila` = 7..23 de oro (~75% de lo
+    que paga la pelea), x2 en élite. Va aparte del doble-o-nada de Loaded
+    Dice. Cartel "FLAWLESS +N gold" debajo del oro de la pelea. Boss del
+    acto 1 flawless → +`flawlessBoss` (30) de oro para el acto 2; el boss final
+    no paga oro (la run termina).
+  - **Iron core**: ganarle al boss de un acto sin **ninguna reparación
+    elegida** en ese acto → +`cfg::meta::ironCoreCores` (15) núcleos, que se
+    suman a `bountyCores` (se cobran aunque después pierdas la run). Rompe la
+    racha: nodo de descanso, reparar en la tienda y "reparar en vez de tomar
+    el item" — solo si de verdad curan algo (descansar con el núcleo lleno no
+    cuenta). No la rompen las curas automáticas: la de antes de cada pelea,
+    Regen, Mender, Bastion, Phoenix / Last stand. Fortress la hace más difícil
+    (sin cura gratis), es parte de su costo. `RunState::repairedThisAct`, se
+    reinicia al empezar el acto 2. La run no se guarda a mitad → **sin cambio
+    de save** (sigue v13).
+  - UI: "iron core" chiquito bajo oro/núcleo en el mapa mientras la racha
+    sigue (tooltip explica), los tooltips de descanso / reparar / saltear
+    avisan que la terminan, y la carta de BossWin muestra "FLAWLESS +30 gold
+    · IRON CORE +15 cores". Modo foto: `19_boss_bonus`.
+  - Números: 15 núcleos ≈ 7 oleadas de núcleos o un 30% de una run ganada;
+    falta playtest.
+
 - **Pendiente (idea del usuario, 2026-09-24):** como las mejoras ya no llegan
   en cada oleada, cada una tiene que **sentirse mucho** al conseguirla: repasar
   items / modificadores / reliquias para que sean más fuertes y más visibles

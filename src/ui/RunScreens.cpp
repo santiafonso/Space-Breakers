@@ -319,6 +319,11 @@ void MapScreen::draw(App& app, sf::RenderWindow& w) {
     drawCenteredPop(w, app.font(), "Choose your path", theme::fsTitle, {s.x * 0.5f, 46.f}, theme::textHi,
                     introPop(it, 0.f, 0.3f));
     drawRunStatus(app, w, 84.f);
+    // "Iron core": a quiet marker while no repair has been made this act.
+    constexpr float kIronY = 106.f;
+    if (app.ironCoreAlive())
+        drawLabel(w, app.font(), "iron core", 11, {s.x * 0.5f, kIronY},
+                  withAlpha(theme::core, 0.55f * clampf(introPop(it, 0.1f), 0.f, 1.f)));
 
     // Row guides: a faint rule per stage and its number down the left edge of
     // the map, the row you stand on picked out - the map reads like a scale.
@@ -415,12 +420,19 @@ void MapScreen::draw(App& app, sf::RenderWindow& w) {
     if (info_ >= 0) {
         const MapNode& n = nodes[static_cast<std::size_t>(info_)];
         std::string d = mapNodeDesc(n.type);
+        if (n.type == MapNodeType::Rest && app.ironCoreAlive()) d += " (ends this act's Iron core)";
         if (!app.mapNodeOpen(info_) && info_ != r.mapNode)
             d += n.row <= r.mapRow ? "  (behind you)" : "  (not reachable from here yet)";
         drawTooltip(w, app.font(), mouse_, s, mapNodeName(n.type), d, nodeColor(n.type));
     } else if (legendHover >= 0) {
         const auto t = static_cast<MapNodeType>(legendHover);
         drawTooltip(w, app.font(), mouse_, s, mapNodeName(t), mapNodeDesc(t), nodeColor(t));
+    } else if (!pactHover && app.ironCoreAlive() && std::fabs(mouse_.y - kIronY) < 8.f &&
+               std::fabs(mouse_.x - s.x * 0.5f) < 50.f) {
+        drawTooltip(w, app.font(), mouse_, s, "Iron core",
+                    "no repairs yet this act. Beat the boss without resting, buying a repair or skipping a pick "
+                    "to repair, and the run banks +" + std::to_string(cfg::meta::ironCoreCores) +
+                        " cores. The heal before each fight doesn't count.", theme::core);
     } else if (!pactHover && std::fabs(mouse_.y - 84.f) < 12.f && std::fabs(mouse_.x - s.x * 0.5f) < 170.f) {
         drawTooltip(w, app.font(), mouse_, s, "Gold and core",
                     "gold buys things in shops; the core must survive - rests and shops repair it");
@@ -610,7 +622,8 @@ void ShopScreen::draw(App& app, sf::RenderWindow& w) {
     } else if (hover_ == 100) {
         drawTooltip(w, f, mouse_, s, "Repair",
                     "restores " + std::to_string(app.repairAmount()) +
-                        " core HP. The core also heals a little before every fight.", theme::core);
+                        " core HP. The core also heals a little before every fight." +
+                        (app.ironCoreAlive() ? "  Ends this act's Iron core." : ""), theme::core);
     } else if (hover_ == 101) {
         drawTooltip(w, f, mouse_, s, "Forge",
                     "level up one item a ball carries, like a Forge node: its bonus or chance grows by half and the "
