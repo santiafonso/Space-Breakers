@@ -267,8 +267,176 @@ template <> struct ClassHooks<BallRole::Summoner> : NoClassHooks {
 };
 
 // ==================================================================== Jester
-// Plays on chance.
+// Plays on chance. Base: every hit rolls an outcome - normal, a double, a
+// spark to the nearest other enemy, or a random element that reacts with
+// anything (bands x the run's luck). Its items (coin, wild card, chaos bounce,
+// jackpot) work on any ball, even without the class (ClassMods::loose).
+// Grand Jester: every Jester roll is taken twice and the best kept; doubles
+// triple.
 template <> struct ClassHooks<BallRole::Jester> : NoClassHooks {
+    enum Outcome { Normal, RandomElement, Spark, Double };   // worst -> best
+    enum Trick { Crit, Echo, Zap, Bomb, Hole };              // "Wild card": borrowed procs
+
+    // One Jester chance: through the run's luck; a Grand Jester rolls twice
+    // and "Reroll" may give a miss one more try.
+    static bool roll(World& w, const Ball& b, float base, const WorldParams& p) {
+        if (w.chance(base, p)) return true;
+        if (b.isAscended(BallRole::Jester) && w.chance(base, p)) return true;
+        const float re = b.mods.cls.jester.reroll;
+        return re > 0.f && w.rng_.range(0.f, 1.f) < re && w.chance(base, p);
+    }
+
+    static Outcome rollOutcome(World& w, const WorldParams& p) {
+        namespace J = cfg::jester;
+        float d = J::rollDouble * p.luck, s = J::rollSpark * p.luck, el = J::rollElement * p.luck;
+        if (const float sum = d + s + el; sum > J::bandCap) {
+            const float k = J::bandCap / sum;
+            d *= k; s *= k; el *= k;
+        }
+        const float r = w.rng_.range(0.f, 1.f);
+        return r < d ? Double : r < d + s ? Spark : r < d + s + el ? RandomElement : Normal;
+    }
+
+    static Outcome outcome(World& w, const Ball& b, const WorldParams& p) {
+        Outcome o = rollOutcome(w, p);
+        if (b.isAscended(BallRole::Jester)) o = std::max(o, rollOutcome(w, p));
+        const float re = b.mods.cls.jester.reroll;
+        if (o == Normal && re > 0.f && w.rng_.range(0.f, 1.f) < re) o = rollOutcome(w, p);
+        return o;
+    }
+
+    // A small jolt to the nearest other live enemy not hit this instant, with a bolt.
+    static void spark(World& w, const Enemy& from, float dmg, float range) {
+        Enemy* t = nullptr;
+        float best = range * range;
+        for (Enemy& o : w.enemies_) {
+            if (&o == &from || o.hp <= 0.f || o.hitFlash > 0.95f) continue;   // skip ones just hit
+            const float d2 = dot(o.pos - from.pos, o.pos - from.pos);
+            if (d2 < best) { best = d2; t = &o; }
+        }
+        if (!t) return;
+        w.damageEnemy(*t, dmg);
+        if (static_cast<int>(w.bolts_.size()) < cfg::element::maxBolts)
+            w.bolts_.push_back(Bolt{from.pos, t->pos, cfg::element::boltLife, cfg::element::boltLife});
+    }
+
+    static void pop(World& w, sf::Vector2f at) {   // the outcome pip, spaced out
+        JesterWorld& jw = w.classWorld_.jester;
+        if (jw.popCd > 0.f || static_cast<int>(jw.pops.size()) >= cfg::jester::maxPops) return;
+        jw.pops.push_back({at, cfg::jester::popLife});
+        jw.popCd = cfg::jester::popSpacing;
+    }
+
+    // "Wild card": one proc borrowed at random from the items of any ball on
+    // the field (its own numbers); with none around, a zap, a bomb or an echo.
+    static void wildCard(World& w, Ball& b, Enemy& e, float dmg, bool kill, const WorldParams& p, FrameEvents& ev) {
+        namespace S = cfg::synergy;
+        namespace C = cfg::changer;
+        struct Pick { Trick t; const BallMods* m; };
+        Pick picks[24];
+        int n = 0;
+        auto add = [&](Trick t, const BallMods* m) { if (n < 24) picks[n++] = {t, m}; };
+        for (const Ball& o : w.balls_) {
+            const BallMods& m = o.mods;
+            if (m.critChance > 0.f) add(Crit, &m);
+            if (m.echoChance > 0.f) add(Echo, &m);
+            if (m.teslaChance > 0.f) add(Zap, &m);
+            if (m.bomberChance > 0.f) add(Bomb, &m);
+            if (m.blackHoleChance > 0.f) add(Hole, &m);
+        }
+        if (n == 0) { add(Zap, nullptr); add(Bomb, nullptr); add(Echo, nullptr); }
+        Pick pk = picks[w.rng_.irange(0, n - 1)];
+        if (kill && (pk.t == Crit || pk.t == Echo)) pk = {Zap, nullptr};   // nothing left to hit twice
+        switch (pk.t) {
+            case Crit:
+                w.damageEnemy(e, dmg * ((pk.m ? pk.m->critMult : cfg::combat::critMult) - 1.f));
+                break;
+            case Echo:
+                w.damageEnemy(e, dmg);
+                break;
+            case Zap: {
+                const int targets = pk.m ? pk.m->teslaTargets : S::teslaTargets;
+                for (int i = 0; i < targets; ++i) spark(w, e, dmg * S::teslaFrac, S::teslaRange);
+                break;
+            }
+            case Bomb: {
+                const float r = pk.m ? pk.m->bombRadius : S::bombRadius;
+                w.areaDamage(e.pos, r, dmg * S::bombFrac, &e);
+                ev.bursts.push_back({e.pos, r, theme::elemFire, nullptr});
+                break;
+            }
+            case Hole:
+                if (static_cast<int>(w.blackHoles_.size()) < C::maxBlackHoles) {
+                    BlackHole h;
+                    h.pos = e.pos;
+                    h.pull = pk.m->blackHolePull;
+                    h.dmg = dmg * pk.m->blackHoleFrac;
+                    h.elem = w.hitElement(b, p);
+                    h.owner = b.owner;
+                    w.blackHoles_.push_back(h);
+                }
+                break;
+        }
+    }
+
+    static void onHit(World& w, Ball& b, Enemy& e, float dmg, bool kill, const WorldParams& p, FrameEvents& ev) {
+        namespace J = cfg::jester;
+        const JesterMods& j = b.mods.cls.jester;
+        if (b.hasRole(BallRole::Jester)) {   // the role's own roll
+            switch (outcome(w, b, p)) {
+                case Double: {
+                    const float extra = dmg * ((b.isAscended(BallRole::Jester) ? J::grandDoubleMul : 2.f) - 1.f);
+                    if (kill || e.hp <= 0.f) spark(w, e, extra, J::sparkRange);   // it's down: the rest jumps on
+                    else w.damageEnemy(e, extra);
+                    pop(w, e.pos);
+                    break;
+                }
+                case Spark: spark(w, e, dmg * J::sparkFrac, J::sparkRange); break;
+                case RandomElement:   // no owner: it reacts with anything, the ball's own element too
+                    if (!kill && e.hp > 0.f)
+                        w.applyElement(e, static_cast<Element>(w.rng_.irange(1, kElementCount - 1)), -1, dmg, p, ev);
+                    break;
+                case Normal: break;
+            }
+        }
+        if (j.wildChance > 0.f && roll(w, b, j.wildChance, p)) wildCard(w, b, e, dmg * j.wildPower, kill, p, ev);
+        b.cls.jester.chaosArmed = false;   // "Chaos bounce": spent
+        // "Coin flip": flip the next hit's coin now (damageMul reads it).
+        b.cls.jester.coinMul = j.coinHeads <= 0.f ? 1.f
+                             : roll(w, b, J::coinHeadsChance, p) ? j.coinHeads : J::coinTails;
+    }
+
+    static void onKill(World& w, Ball& b, Enemy& e, float dmg, const WorldParams& p, FrameEvents& ev) {
+        const JesterMods& j = b.mods.cls.jester;
+        if (j.jackpotChance <= 0.f || !roll(w, b, j.jackpotChance, p)) return;
+        w.areaDamage(e.pos, cfg::jester::jackpotRadius, dmg * j.jackpotBlast, &e);   // "Jackpot"
+        ev.midasGold += j.jackpotGold;
+        ev.bursts.push_back({e.pos, cfg::jester::jackpotRadius, theme::puGolden, "JACKPOT"});
+    }
+
+    // "Chaos bounce": off the wall at a random angle, next hit armed.
+    static void onWallBounce(World& w, Ball& b, sf::Vector2f normal, const WorldParams&, FrameEvents&) {
+        if (b.mods.cls.jester.chaosHit <= 0.f) return;
+        const float sp = length(b.vel);
+        const float ang = std::atan2(normal.y, normal.x) +
+                          w.rng_.range(-cfg::jester::chaosSpread, cfg::jester::chaosSpread);
+        b.vel = sf::Vector2f{std::cos(ang), std::sin(ang)} * sp;
+        b.cls.jester.chaosArmed = true;
+    }
+
+    static float damageMul(const World&, const Ball& b, const WorldParams&) {
+        float m = b.cls.jester.coinMul;   // 1 without a coin
+        if (b.cls.jester.chaosArmed && b.mods.cls.jester.chaosHit > 0.f) m *= b.mods.cls.jester.chaosHit;
+        return m;
+    }
+
+    static void worldTick(World& w, float dt, const WorldParams&, FrameEvents&) {
+        JesterWorld& jw = w.classWorld_.jester;
+        jw.popCd = std::max(0.f, jw.popCd - dt);
+        for (JesterWorld::Pop& q : jw.pops) q.t -= dt;
+        jw.pops.erase(std::remove_if(jw.pops.begin(), jw.pops.end(), [](const JesterWorld::Pop& q) { return q.t <= 0.f; }),
+                      jw.pops.end());
+    }
 };
 
 // ---------------------------------------------------------------- dispatch
@@ -291,31 +459,35 @@ void eachClass(RoleMask m, Fn&& fn) {
 
 constexpr RoleMask kAllClasses = ~0u;
 
+// The ball's classes, plus any class whose single items work on their own
+// (ClassMods::loose).
+RoleMask hookMask(const Ball& b) { return b.roles | b.mods.cls.loose; }
+
 }  // namespace
 
 void World::classTick(Ball& b, float dt, const WorldParams& p, FrameEvents& ev) {
-    eachClass(b.roles, [&](auto h) { decltype(h)::tick(*this, b, dt, p, ev); });
+    eachClass(hookMask(b), [&](auto h) { decltype(h)::tick(*this, b, dt, p, ev); });
 }
 
 void World::classOnHit(Ball& b, Enemy& e, float dmg, bool kill, const WorldParams& p, FrameEvents& ev) {
-    eachClass(b.roles, [&](auto h) { decltype(h)::onHit(*this, b, e, dmg, kill, p, ev); });
+    eachClass(hookMask(b), [&](auto h) { decltype(h)::onHit(*this, b, e, dmg, kill, p, ev); });
 }
 
 void World::classOnKill(Ball& b, Enemy& e, float dmg, const WorldParams& p, FrameEvents& ev) {
-    eachClass(b.roles, [&](auto h) { decltype(h)::onKill(*this, b, e, dmg, p, ev); });
+    eachClass(hookMask(b), [&](auto h) { decltype(h)::onKill(*this, b, e, dmg, p, ev); });
 }
 
 void World::classOnWallBounce(Ball& b, sf::Vector2f normal, const WorldParams& p, FrameEvents& ev) {
-    eachClass(b.roles, [&](auto h) { decltype(h)::onWallBounce(*this, b, normal, p, ev); });
+    eachClass(hookMask(b), [&](auto h) { decltype(h)::onWallBounce(*this, b, normal, p, ev); });
 }
 
 void World::classOnCoreBounce(Ball& b, sf::Vector2f normal, const WorldParams& p, FrameEvents& ev) {
-    eachClass(b.roles, [&](auto h) { decltype(h)::onCoreBounce(*this, b, normal, p, ev); });
+    eachClass(hookMask(b), [&](auto h) { decltype(h)::onCoreBounce(*this, b, normal, p, ev); });
 }
 
 float World::classDamageMul(const Ball& b, const WorldParams& p) const {
     float m = 1.f;
-    eachClass(b.roles, [&](auto h) { m *= decltype(h)::damageMul(*this, b, p); });
+    eachClass(hookMask(b), [&](auto h) { m *= decltype(h)::damageMul(*this, b, p); });
     return m;
 }
 

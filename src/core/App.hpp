@@ -111,7 +111,7 @@ public:
     void choosePact(int idx);          // Pact screen: take card idx
     void refusePacts();                // Pact screen: turn them all down for gold
     bool hasPact(PactId id) const { return data_.run.hasPact(id); }
-    int luck() const;   // the run's luck, in points (Lucky clover, Lucky star, Loaded Dice)
+    int luck() const;   // the run's luck, in points (Lucky clover, Lucky star, Loaded Dice, Lucky charm)
     bool canGrab() const;              // "Hunters" / "Clockwork" take the balls out of your hands
     float flingPower() const;          // throw speed multiplier (Strong arm, Hot Hands, Pinball)
     void usePactAbility();             // "Nova" (SPACE / right-click in a fight)

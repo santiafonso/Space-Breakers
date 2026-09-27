@@ -482,7 +482,7 @@ void MapScreen::draw(App& app, sf::RenderWindow& w) {
                     "gold buys things in shops; the core must survive - rests and shops repair it. Luck (" +
                         std::to_string(app.luck()) + "): each point makes every chance " +
                         std::to_string(static_cast<int>(cfg::luck::chancePerPoint * 100.f + 0.5f)) +
-                        "% likelier and cards a little rarer. From Lucky clover, Lucky star, Loaded Dice.");
+                        "% likelier and cards a little rarer. From Lucky clover, Lucky star, Loaded Dice, Lucky charm (Jester).");
     }
 }
 

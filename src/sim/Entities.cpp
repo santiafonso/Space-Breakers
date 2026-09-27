@@ -125,7 +125,7 @@ const char* roleDesc(BallRole r) {
         case BallRole::Shooter:  return "fires small bullets at the nearest enemy as it flies - faster the faster it goes";
         case BallRole::Assassin: return "after a kill it teleports to the nearest enemy";
         case BallRole::Summoner: return "summons helpers: short-lived balls, turrets, a small dragon...";
-        case BallRole::Jester:   return "plays on chance: wild odds, wild results";
+        case BallRole::Jester:   return "plays on chance: each hit may land twice, spark to another enemy or leave a random element (luck helps)";
     }
     return "";
 }
@@ -155,7 +155,7 @@ const char* ascendedDesc(BallRole r) {
         case BallRole::Shooter:  return "every 4th volley is also a rail shot through the whole line; bullets hop once more";
         case BallRole::Assassin: return "teleports chain from kill to kill";
         case BallRole::Summoner: return "more summons, and stronger";
-        case BallRole::Jester:   return "the odds bend even further";
+        case BallRole::Jester:   return "every Jester roll is taken twice and the best kept; its doubles triple";
     }
     return "";
 }
