@@ -124,7 +124,7 @@ const char* roleDesc(BallRole r) {
         case BallRole::Mage:     return "carries more abilities: 2 ability slots, 3 once ascended";
         case BallRole::Shooter:  return "fires bullets at enemies as it flies";
         case BallRole::Assassin: return "after a kill it teleports to the nearest enemy";
-        case BallRole::Summoner: return "summons helpers: short-lived balls, turrets, a small dragon...";
+        case BallRole::Summoner: return "calls a small spriteling ball every few seconds; all its summons hit harder and last longer";
         case BallRole::Jester:   return "plays on chance: wild odds, wild results";
     }
     return "";
@@ -154,7 +154,7 @@ const char* ascendedDesc(BallRole r) {
         case BallRole::Mage:     return "a third ability slot";
         case BallRole::Shooter:  return "more bullets, harder";
         case BallRole::Assassin: return "teleports chain from kill to kill";
-        case BallRole::Summoner: return "more summons, and stronger";
+        case BallRole::Summoner: return "spritelings twice as often, carrying its items; summons stronger and leave their full element";
         case BallRole::Jester:   return "the odds bend even further";
     }
     return "";
