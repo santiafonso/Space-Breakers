@@ -990,6 +990,18 @@ Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
     Hot Hands, Duet y Bloodlust.
   - Merge con la Fase N: el tope de forja es `kMaxItemLevel` (5) para todos, así que Duet perdió su "forja hasta Lv5" (`App::forgeCap` quedó fijo).
 
+- **Parada antes del boss. [IMPLEMENTADO 2026-09-26]** (pedido del usuario:
+  "antes de un boss te haga elegir siempre entre tienda, rest, upgrade o
+  recruit")
+  - La última fila del mapa (fila 14) es fija: **Tienda · Descanso · Mejora ·
+    Recluta**, uno por carril y siempre en ese orden (`kPreBossRow` en
+    `progression/RunMap.hpp`). Nunca hay pelea ni élite ahí.
+  - Todo nodo de la fila 13 enlaza a los cuatro, así que las cuatro opciones
+    están siempre al alcance; los cuatro van al boss. Reemplaza la vieja fila
+    9 de descanso/tienda/forja al azar. Probado con 5000 mapas (entradas,
+    salidas, 4 nodos sin pelea, acceso a los 4 tipos).
+  - El mapa no se guarda en el save: no cambia la versión.
+
 - **Pendiente (idea del usuario, 2026-09-24):** como las mejoras ya no llegan
   en cada oleada, cada una tiene que **sentirse mucho** al conseguirla: repasar
   items / modificadores / reliquias para que sean más fuertes y más visibles

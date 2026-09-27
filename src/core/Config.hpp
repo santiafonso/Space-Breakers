@@ -335,7 +335,8 @@ namespace map {
 inline constexpr int rows = 14;         // choosable rows per act; the boss is row rows+1
 inline constexpr int lanes = 4;         // max nodes per row
 inline constexpr int minPerRow = 2;
-// Node weights for rows 2..8 (row 1 is always a fight; row 9 is rest/shop/forge).
+// Node weights for rows 2..rows-1 (row 1 is always a fight; the last row is
+// shop / rest / upgrade / recruit, see kPreBossRow in progression/RunMap.hpp).
 inline constexpr int wCombat = 44;
 inline constexpr int wElite = 16;
 inline constexpr int wShop = 13;
