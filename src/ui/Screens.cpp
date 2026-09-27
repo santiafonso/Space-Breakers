@@ -598,6 +598,7 @@ void LoadoutScreen::draw(App& app, sf::RenderWindow& w) {
 
 void PlayScreen::onEnter(App&) {
     dragging_ = false;
+    aimCommitted_ = false;
     showPicks_ = false;
     clock_ = 0.f;
     samples_.clear();
@@ -619,18 +620,43 @@ void PlayScreen::grab(App& app, sf::Vector2f mouse) {
     if (!app.canGrab()) return;   // "Hunters" / "Clockwork" pacts: hands off
     if (app.world().grabAt(mouse, cfg::app::catchRadius)) {
         dragging_ = true;
+        aimCommitted_ = false;   // a tap until held / dragged (see update)
+        pressT_ = clock_;
+        pressPos_ = mouse;
         samples_.clear();
         samples_.push_back({clock_, mouse});
-        if (app.data().meta.slingshot) {
-            if (const Ball* b = app.world().heldBall()) anchor_ = b->pos;
-            app.setAiming(true);
-        }
+        if (const Ball* b = app.world().heldBall()) anchor_ = b->pos;
     }
+}
+
+void PlayScreen::commitAim(App& app) {
+    aimCommitted_ = true;
+    if (app.data().meta.slingshot) app.setAiming(true);
 }
 
 void PlayScreen::release(App& app) {
     if (!dragging_) return;
     const float power = app.flingPower();   // Strong arm, Hot Hands / Pinball pacts
+    if (!aimCommitted_ && length(worldMouse_ - pressPos_) > cfg::app::quickThrowSlop * app.world().arenaScale())
+        commitAim(app);   // a fast pull that ended between frames still aims
+    if (!aimCommitted_) {
+        // Quick throw: a tap sends the ball at the enemy nearest to it, through
+        // the same release as a hand-aimed throw. Nothing to hit: let it carry on.
+        const Ball* b = app.world().heldBall();
+        const std::optional<sf::Vector2f> target = b ? app.world().nearestTarget(b->pos) : std::nullopt;
+        if (b && target && length(*target - b->pos) > 1e-3f) {
+            const float k = app.world().arenaScale();
+            const float speed = lerpf(cfg::app::slingMinSpeed, cfg::app::slingMaxSpeed, cfg::app::quickThrowPower);
+            const sf::Vector2f v = normalized(*target - b->pos, {1.f, 0.f}) * speed * k * power;
+            app.world().releaseHeld(v);
+            app.audio().thrown(clampf(length(v) / 900.f, 0.f, 1.f));
+        } else {
+            app.world().cancelHeld();
+        }
+        dragging_ = false;
+        samples_.clear();
+        return;
+    }
     sf::Vector2f v = pointerVelocity() * cfg::app::throwVelScale * power;
     if (app.data().meta.slingshot) {
         app.setAiming(false);
@@ -682,7 +708,7 @@ void PlayScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
         }
     }
     if (e.type == sf::Event::LostFocus) {
-        if (dragging_ && app.data().meta.slingshot) {   // don't fire a throw on alt-tab
+        if (dragging_ && (app.data().meta.slingshot || !aimCommitted_)) {   // don't fire a throw on alt-tab
             app.world().cancelHeld();
             app.setAiming(false);
             dragging_ = false;
@@ -708,6 +734,11 @@ void PlayScreen::update(App& app, float dt, sf::Vector2f mouse) {
         bannerWave_ = key;
         bannerT_ = 0.f;
     }
+    // Held past the tap window or dragged off the ball: aim by hand from here.
+    if (dragging_ && !aimCommitted_ && sf::Mouse::isButtonPressed(sf::Mouse::Left) &&
+        (clock_ - pressT_ >= cfg::app::quickThrowHold ||
+         length(mouse - pressPos_) > cfg::app::quickThrowSlop * app.world().arenaScale()))
+        commitAim(app);
     if (dragging_ && !sf::Mouse::isButtonPressed(sf::Mouse::Left)) release(app);
     if (dragging_ && app.world().hasHeld()) {
         samples_.push_back({clock_, mouse});
@@ -759,7 +790,7 @@ void PlayScreen::draw(App& app, sf::RenderWindow& w) {
     renderer_.draw(w, app.world());
     drawPactWorld(app, w);   // Hunters tethers, Living Core overcharge
     app.effects().drawRings(w);
-    if (dragging_ && app.data().meta.slingshot) drawAim(app, w);
+    if (dragging_ && aimCommitted_ && app.data().meta.slingshot) drawAim(app, w);
     app.useUiView();
 
     app.hud().draw(w);
@@ -812,7 +843,7 @@ void PlayScreen::draw(App& app, sf::RenderWindow& w) {
             drawTooltip(w, app.font(), um, s, enemyName(hovered->kind), enemyDesc(hovered->kind), theme::enemy);
         } else if (sf::FloatRect(theme::margin - 4.f, s.y - theme::margin - 64.f, 180.f, 64.f).contains(um)) {
             drawTooltip(w, app.font(), um, s, "Your balls",
-                        "grab one and fling it into enemies. Hold TAB to see each ball's role, items and modifiers.");
+                        "tap one to throw it at the nearest enemy, or hold to aim. Hold TAB to see each ball's role, items and modifiers.");
         }
     }
 
@@ -1116,8 +1147,9 @@ void PauseScreen::draw(App& app, sf::RenderWindow& w) {
     switch (menu_.clickIndex(mouse_)) {   // what the two aim options do
         case 4:
             drawTooltip(w, app.font(), mouse_, s, "Aim",
-                        "Slingshot: click a ball, pull back, release (time slows while you aim). "
-                        "Flick: grab it and throw it with a mouse swipe.");
+                        "Tap a ball to throw it at the nearest enemy. Hold to aim - Slingshot: pull back, release "
+                        "(time slows while you aim). "
+                        "Flick: throw it with a mouse swipe.");
             break;
         case 5:
             drawTooltip(w, app.font(), mouse_, s, "Auto-throw",
@@ -1156,7 +1188,7 @@ void HowToScreen::draw(App& app, sf::RenderWindow& w) {
 
     const std::array<const char*, 7> lines = {{
         "Enemies march on the core at the centre. Keep it alive.",
-        "Click a ball, pull back and let go to fling it - time slows while you aim.",
+        "Tap a ball to throw it at the nearest enemy; hold and pull back to aim it.",
         "Items carry a tag: 2 of one tag give a ball that role (Striker / Guardian /",
         "Support), 4 its mastery. Two balls' elements on one enemy set off a reaction.",
         "Between fights, pick your path on the map: fights pay gold, elites add a pick,",

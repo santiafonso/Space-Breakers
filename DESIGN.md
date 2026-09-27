@@ -990,6 +990,20 @@ Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
     Hot Hands, Duet y Bloodlust.
   - Merge con la Fase N: el tope de forja es `kMaxItemLevel` (5) para todos, así que Duet perdió su "forja hasta Lv5" (`App::forgeCap` quedó fijo).
 
+- **Tiro rápido. [IMPLEMENTADO 2026-09-26]**
+  - Motivo (usuario): apuntar cada tiro cansa; casi siempre la pelota va al
+    enemigo más cercano y el rebote fino es situacional.
+  - **Tocar** una pelota (soltar antes de `quickThrowHold` 0.18 s y sin mover
+    más de `quickThrowSlop` 12 px) la tira al **enemigo vivo más cercano a la
+    pelota** (o al boss), a `quickThrowPower` 0.65 del rango de la gomera
+    (~1090 px/s, un estirón firme; la fuerza máxima queda para el tiro
+    apuntado). Sin enemigos, la pelota sigue como venía.
+  - **Mantener** o arrastrar pasa a la gomera (o al flick) como siempre; la
+    cámara lenta y la banda aparecen recién ahí.
+  - Usa el mismo `World::releaseHeld` que el tiro a mano: Striker, Comet,
+    Strong arm, Hot Hands / Pinball y el sonido aplican igual. Hunters y
+    Clockwork siguen sin dejar agarrar.
+
 - **Pendiente (idea del usuario, 2026-09-24):** como las mejoras ya no llegan
   en cada oleada, cada una tiene que **sentirse mucho** al conseguirla: repasar
   items / modificadores / reliquias para que sean más fuertes y más visibles

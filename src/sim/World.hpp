@@ -56,6 +56,8 @@ public:
     void moveHeld(sf::Vector2f target, float dt);
     void releaseHeld(sf::Vector2f throwVel);
     void cancelHeld();                 // let go without a throw: the ball resumes its old velocity
+    // Quick throw: the live enemy (or the boss) nearest to a point, if any.
+    std::optional<sf::Vector2f> nearestTarget(sf::Vector2f from) const;
     const Ball* heldBall() const {
         return grabbed_ == Grabbed::Ball ? &balls_[static_cast<std::size_t>(heldIndex_)] : nullptr;
     }

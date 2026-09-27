@@ -79,6 +79,7 @@ public:
 private:
     void grab(App& app, sf::Vector2f mouse);
     void release(App& app);
+    void commitAim(App& app);   // the press became a hold / drag: aim by hand
     sf::Vector2f pointerVelocity() const;
     void drawPicks(App& app, sf::RenderWindow& w) const;
 
@@ -89,6 +90,9 @@ private:
     bool showPicks_ = false;   // Tab held: show the balls' loadouts + relics
     sf::Vector2f worldMouse_;  // pointer in arena units (enemy hover help)
     sf::Vector2f anchor_;      // slingshot: where the held ball sits
+    bool aimCommitted_ = false; // held past the quick-throw tap: aiming by hand
+    float pressT_ = 0.f;        // clock_ when the ball was grabbed
+    sf::Vector2f pressPos_;     // pointer (arena units) when the ball was grabbed
     void drawAim(App& app, sf::RenderWindow& w) const;
     float clock_ = 0.f;
     std::deque<std::pair<float, sf::Vector2f>> samples_;
