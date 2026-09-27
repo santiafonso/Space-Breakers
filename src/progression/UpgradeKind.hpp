@@ -21,8 +21,8 @@ enum class UpgradeKind {
     ElemIce,
     ElemStone,
     ElemElectric,
-    // abilities: timed actives in the ball's ability slot(s) (order = Ability 1..7;
-    // keep AbilityMeteor last - upgradeCat reads the range)
+    // abilities: timed actives in the ball's ability slot(s) (order = Ability 1..8;
+    // keep AbilityMissile last - upgradeCat reads the range)
     AbilityDash,       // bursts straight at the nearest enemy
     AbilityNova,       // a shockwave around the ball
     AbilitySplit,      // two short-lived ghost copies
@@ -30,6 +30,7 @@ enum class UpgradeKind {
     AbilityOverclock,  // a few seconds faster and harder-hitting
     AbilityArc,        // a bolt leaps through a chain of enemies (added with the Mage)
     AbilityMeteor,     // a meteor on the thickest pack of enemies (added with the Mage)
+    AbilityMissile,    // homing magic missiles: the Mage's signature ability
     // modifiers (no slot, stack)
     HeavyImpact,       // +contact damage
     BigBall,           // +radius, +knockback
@@ -74,7 +75,7 @@ enum class UpgradeKind {
 
     // ---- Mage items (phase 2: add them here, describe them in ClassItems.hpp) ----
     Focus,             // its abilities recharge faster                    [Mage]
-    ArcaneMissile,     // arcane missiles on a timer and on every cast     [Mage]
+    ArcaneMissile,     // "Barrage": more magic missiles; every cast looses one [Mage]
     Attunement,        // its abilities hit harder and reach further       [Mage]
     Twincast,          // chance a cast fires again a moment later         [Mage]
     ManaSpring,        // a cast charges its other abilities               [Mage]

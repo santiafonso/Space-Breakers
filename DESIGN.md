@@ -291,6 +291,7 @@ al siguiente, `maxLevel 3`: nivel 1 desbloquea el item "add X ball", 2-3 suben
 tiene ninguno hasta comprarlos; `powerUpMask()` gatea los 5).
 Fase A añade (append, indices 21-31): Aegis · Regen · Bastion · Salvage ·
 Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
+(2026-09-27: la web se reorganizó en **rutas por clase**, save v16, 86 nodos — ver "Web por rutas de clase" en §8.)
 
 ---
 
@@ -1508,6 +1509,88 @@ Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
     habilidades.
   - **Pelota final:** 4 slots de items + 1 de habilidad + 1 de tipo. Los items
     pasivos globales (reliquias) aparecen a un costado en el TAB.
+
+- **Web por rutas de clase + primera habilidad + Magic missile. [IMPLEMENTADO 2026-09-27]**
+  Pedido (usuario): "hacé que la web sea más interesante, siento que las clases
+  están todas muy pegadas. Si elegís mejorar daño vas por la ruta del Striker,
+  si mejorás el dinero vas por el Bufón, si desbloqueás nuevas habilidades vas
+  por el Mago, y así." Y después: "cuando empieces solo elegís la primera
+  habilidad de la pelota, no elegís la clase, y el mago tiene como habilidad
+  principal Magic Missile, que es un proyectil pero sigue a enemigos".
+  - **Rutas.** La web ya no tiene ramas Base / Combat / Eco / Special /
+    Pickups / Arsenal / Classes: cada clase tiene **su ruta**, que sale del
+    centro en su propia cuña y la clase queda **cerca de la punta**; pasada la
+    clase hay dos nodos: **"<Clase> lore"** (los items de esa clase salen +50%
+    más seguido por nivel, 2 niveles, 10 núcleos; pesa dentro del tier en
+    `App::rollPick`) y un **perk propio** de la clase. Pacts sigue siendo su
+    rama. Cada ruta se tiñe con el color de su clase (`tagColor`; Pacts en un
+    hueso pálido), la leyenda lista las rutas en el orden del reloj con
+    comprados/total y al pasar el cursor resalta la ruta. El nodo de clase se
+    dibuja más grande, con aro y su nombre siempre visible. La web es una
+    elipse (`kStretchX` 1.4, anillo r a (r + 0.6) separaciones) para usar el
+    ancho; el zoom inicial encaja toda la web; los nombres de la frontera se
+    corren hacia afuera del centro para no pisarse. Posición = ángulo + anillo
+    (`MetaUnlockDef::ang/ring`).
+  - **Mapa de rutas** (sentido horario desde arriba; `nuevo` = índice 58+,
+    costo en núcleos salvo "pr" = prismas; → = padre):
+    | Ruta | Camino principal | Ramas | Pasada la clase |
+    |---|---|---|---|
+    | Striker (arriba, daño / tiro) | Heft → **Sling** (nuevo, 8, 3 niv: tiro +8%) → **Momentum** (nuevo, 12, 2 niv: pelotas Striker +10% daño) → **Striker lore** | — | (Striker siempre abierto: la ruta termina en su lore) |
+    | Shooter (arriba-der., velocidad / proyectiles) | **Velocity** (nuevo, 8, 2 niv: crucero +5%) → Kinetics → **Shooter** (18) | Overload (pr) | Shooter lore · **Caliber** (nuevo, 12, 2 niv: balas +15%) |
+    | Jester (derecha, oro / economía / suerte) | Fortune → Foresight → Lucky star → **Jester** (18) | Salvage → Windfall → Interest → Prospector; Treasury → Haggler → Merchant → Armory (pr) | Jester lore · **Fool's luck** (nuevo, 12, 2 niv: +2 suerte por nivel y +2 más por cada pelota Bufón) |
+    | Assassin (abajo-der., críticos / kills) | **Keen instinct** (nuevo, 8, 3 niv: +4% crítico x2 a toda pelota) → Elite spoils → **Assassin** (18) | — | Assassin lore · **Deathmark** (nuevo, 12, 2 niv: Asesinos rematan bajo +5% de vida) |
+    | Pacts (abajo) | Oath → Covenant; Hunters → Loaded dice; Legion → Alchemy | | |
+    | Summoner (abajo, copias / pelotas extra) | **Brood** (nuevo, 8, 2 niv: copias fantasma +25% de vida) → **Muster** (nuevo, 12: una pelota nueva llega con un item Common) → **Summoner** (18) | Twins (Gemini, pr); Starter kit → Quartermaster | Summoner lore · **Bond** (nuevo, 12, 2 niv: invocaciones +15% daño y duración) |
+    | Support (abajo-izq., power-ups / marcas) | Uplink → Capacitor → Charged → **Support** (12) | Ledger → Stockpile → Magnet → Afterglow; Damper (pr) → Facet (pr) → Singularity (pr) | Support lore · **Rally** (nuevo, 12, 2 niv: marcados +10% de daño recibido; `WorldParams::markMul`) |
+    | Mage (izquierda, habilidades + elementos) | **Magic missile** (nuevo, 6) → **Channel** (nuevo, 8, 3 niv: toda habilidad recarga +6%) → **Mage** (18) | habilidades: **Arc** (8) → **Bulwark pulse** (8) → **Split** (12) → **Overclock** (12) → **Meteor** (16); elementos (pr): Ignition → Venom → Tide → Frost → Quarry → Static (el nodo eléctrico, antes "Arc"), Ember, Prism | Mage lore · **Archive** (nuevo, 12, 2 niv: pelotas Mago recargan +15%) |
+    | Guardian (arriba-izq., núcleo / defensa) | Bulwark → Mass → **Guardian** (12) | Mend → Regen → Bastion → Last stand; Aegis → Satellite (pr) | Guardian lore · **Stonewall** (nuevo, 12, 2 niv: Guardianes curan +0.5 por rebote en el núcleo) |
+    Costo de una clase para un jugador nuevo (sin contar Calling, 8): Guardian 34, Support 38,
+    Shooter 32, Assassin 38, Summoner 38, Mage 32, Jester 46 núcleos (antes:
+    34 / 52 / 76). Números en `cfg::meta` (`lorePerLevel`, `slingPerLevel`...).
+  - **Habilidades en la web.** Dash y Nova están abiertas desde el principio;
+    Magic missile, Arc, Bulwark, Split, Overclock y Meteor se desbloquean en la
+    ruta del Mago (`abilityUnlockNode`, se bloquean en `buildUpgradeCtx`): una
+    habilidad bloqueada nunca sale (cartas, tienda, selección inicial).
+  - **La run arranca eligiendo la primera habilidad, no la clase.** La pelota
+    inicial arranca sin clase y sin items; en la intro (`advanceRunIntro`:
+    Covenant → **primera habilidad** → Quartermaster → mapa) elegís su primera
+    habilidad entre 3 cartas de las desbloqueadas (`AbilityPickScreen`,
+    `ui/AbilityScreen.cpp`; con 1 sola se da directo). **Calling** (raíz, mismo
+    índice) pasó a ser "abre la web + una 4ª carta". Se fueron el selector de
+    clase (`ClassPickScreen`), `grantStartClass` y `cfg::classes::startItems`.
+    Panel de dev: "Ability pick (start)".
+  - **Magic missile** (habilidad nueva, Uncommon, `Ability::MagicMissile`,
+    `cfg::ability::missile*`): cada 3.2 s suelta un misil que sale abierto
+    hacia un costado, **curva y persigue** al enemigo más cercano (gira 7 rad/s,
+    acelera de 260 a 560 px/s, vive 2.6 s; si su blanco muere busca otro a
+    ≤420 px; al boss le pega x0.5). x0.9 del golpe (+0.15/nivel), con el
+    elemento de la pelota; 2 misiles en Lv3, 3 en Lv5; -10% de cooldown por
+    nivel como todas. Vuelan en `MageWorld::missiles` (el `worldTick` del
+    Mago). Visual: punto chico tenue + estela curva corta, del color del
+    elemento (azul Mago si es lisa). **Es la firma del Mago:** una pelota que
+    llega a la clase Mago recibe Magic missile sola en un slot de habilidad
+    libre si no la tiene (`App::grantMageMissiles`, en cada `syncWorldBalls`;
+    cartel "+ Magic missile").
+  - **Arcane missile → Barrage** (mismo `UpgradeKind::ArcaneMissile`, id
+    `Barrage` para SB_UPGRADES): para no tener dos misiles casi iguales, ahora
+    potencia los misiles: Magic missile suelta +1 misil (+1 más en Lv3 y Lv5),
+    todos los misiles pegan +10%/nivel, y cada **otra** habilidad que castea
+    suelta un misil (x0.6 del golpe, +0.12/nivel). Ya no dispara por tiempo.
+  - **Save v16:** solo se agregan nodos al final (58 → 86); ningún índice
+    cambió, los nodos viejos solo cambiaron de ruta / padre / lugar (puede
+    quedar un nodo comprado con su padre nuevo sin comprar: se ve y anda
+    igual). No se sacó nada, así que no hay reembolso. Ojo: en un save viejo
+    Split / Bulwark / Overclock / Arc / Meteor quedan bloqueadas hasta comprar
+    su nodo.
+  - **Sim headless** (1 pelota, oleadas 1-6, sin tocar, 3 semillas; kills):
+    sin habilidad 0-2 · Dash 14-17 · Magic missile L1 6-17 · L1 + Barrage
+    19-25 · L5 46-48. Sin NaN, ≤5 misiles vivos.
+  - Modo foto: `02_web` (web temprana: Guardian, Magic missile, Sling...),
+    `15_web_grown` (varias rutas), `03_ability_pick` y `17_start_ability`
+    (reemplazan a los de clase); la pelota 3 del `04_play` lleva Magic missile.
+  - Falta playtest: si Magic missile L1 queda corta al lado de Dash, si 6
+    núcleos por la primera habilidad extra es poco, legibilidad de la web con
+    todo comprado y con zoom mínimo.
 
 - **Fase 2 — Jefe tras la oleada 10.** Da upgrades de pelota (viento/agua/
   piedra). Extiende la run mas alla de 10 en "modo infinito" opcional.

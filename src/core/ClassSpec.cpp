@@ -19,10 +19,10 @@ bool foldMage(UpgradeKind k, int level, BallMods& m) {
     MageMods& g = m.cls.mage;
     switch (k) {
         case UpgradeKind::Focus: g.focus = M::focus + M::focusPerLevel * n; return true;
-        case UpgradeKind::ArcaneMissile:
-            g.missileFrac = M::missileFrac + M::missileFracPerLevel * n;
-            g.missileEvery = M::missileEvery + M::missileEveryPerLevel * n;
-            g.missileTargets = level >= 5 ? 3 : level >= 3 ? 2 : 1;
+        case UpgradeKind::ArcaneMissile:   // "Barrage"
+            g.barrage = 1 + (level >= 3 ? 1 : 0) + (level >= 5 ? 1 : 0);
+            g.barrageFrac = M::barrageFrac + M::barrageFracPerLevel * n;
+            g.missileMul = 1.f + M::barrageMissilePerLevel * n;
             return true;
         case UpgradeKind::Attunement: g.power = M::power + M::powerPerLevel * n; return true;
         case UpgradeKind::Twincast: g.twincast = M::twincast + M::twincastPerLevel * n; return true;

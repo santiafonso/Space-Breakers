@@ -43,13 +43,20 @@ void markSupport(sf::RenderTarget& t, sf::Vector2f p, float r, float, float a) {
 void markMage(sf::RenderTarget& t, sf::Vector2f p, float r, float, float a) {
     draw::polygonOutline(t, p, r * 0.3f, 4, 0.f, 1.5f, white(0.7f * a));
 }
-// Arcane missiles: a thin fading streak, dimmer than any ball. A Mage ball
-// that just cast: its diamond swells out and fades (the cast flash).
+// Magic missiles: a small dim dot with a short curved trail, tinted by its
+// element (Mage blue when plain) - dimmer than any ball. A Mage ball that just
+// cast: its diamond swells out and fades (the cast flash).
 void worldMage(sf::RenderTarget& t, const World& world) {
-    const sf::Color tint = lerpColor(theme::classMage, sf::Color::White, 0.3f);
-    for (const MageWorld::Streak& k : world.classWorld().mage.streaks) {
-        const float f = clampf(k.life / cfg::mage::missileLife, 0.f, 1.f);
-        draw::line(t, k.a + (k.b - k.a) * (1.f - f) * 0.6f, k.b, 1.5f, withAlpha(tint, 0.55f * f));
+    const float k = world.arenaScale();
+    for (const MageWorld::Missile& m : world.classWorld().mage.missiles) {
+        const sf::Color base = m.elem != 0 ? elementColor(static_cast<Element>(m.elem)) : theme::classMage;
+        const sf::Color c = lerpColor(base, sf::Color::White, 0.35f);
+        const float fade = clampf(m.life / 0.2f, 0.f, 1.f);
+        for (int i = 0; i + 1 < m.trailN; ++i) {
+            const float f = 1.f - static_cast<float>(i) / 6.f;
+            draw::line(t, m.trail[i], m.trail[i + 1], (1.8f * f + 0.4f) * k, withAlpha(c, 0.28f * f * fade));
+        }
+        draw::disc(t, m.pos, 2.8f * k, withAlpha(c, 0.8f * fade), withAlpha(c, 0.35f * fade), {1.f, 1.f}, 10);
     }
     for (const Ball& b : world.balls()) {
         if (!b.hasRole(BallRole::Mage) || b.abilityFlash <= 0.f) continue;

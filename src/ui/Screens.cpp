@@ -51,59 +51,66 @@ std::string currencyLine(const MetaState& m) {
 }
 
 // ---- skill-web layout (the Loadout screen) -------------------------------
-// Polar layout: a node's (gx,gy) is a direction plus a ring index
-// (ring = max(|gx|,|gy|)), so every node sits exactly on a background ring.
-// Kept small on purpose - the web will gain many more nodes later.
-// The web is drawn small on purpose: it will grow to many more nodes and levels,
-// so every element (ring gap, node radius, label offsets, hit radius) is kept
-// tight to fit the graph into the middle of the screen.
+// Polar layout: a node sits at (ang, ring) - a direction (degrees clockwise
+// from up) and a distance in rings. Each class route owns a wedge around the
+// centre (Offers.hpp); the web is stretched sideways (kStretchX) into an
+// ellipse so the long side routes use the screen's width.
 constexpr float kRingGap = 56.f;      // pixels between concentric rings
+constexpr float kStretchX = 1.4f;     // horizontal stretch of the whole web
+constexpr float kInnerPad = 0.6f;     // ring r sits at (r + this) gaps: room for the 9 routes around the centre
 constexpr float kNodeR = 11.f;        // branch node radius
+constexpr float kClassR = 14.f;       // a class node: bigger, with an outer ring
 constexpr float kRootR = 16.f;        // centre node radius
 constexpr float kWebCenterY = 0.53f;  // * size.y
 constexpr int   kBackRings = 7;       // faint rings drawn behind the web
-constexpr float kZoomMin = 0.55f, kZoomMax = 1.9f;
-constexpr MetaBranch kLegend[] = {MetaBranch::Base,    MetaBranch::Combat,  MetaBranch::Classes, MetaBranch::Eco,
-                                  MetaBranch::Pickups, MetaBranch::Special, MetaBranch::Arsenal, MetaBranch::Pacts};
-constexpr int kLegendCount = 8;
-constexpr float kLegendRow = 22.f;
+constexpr float kZoomMin = 0.45f, kZoomMax = 1.9f;
+// The legend lists the routes clockwise from the top, like the web.
+constexpr MetaBranch kLegend[] = {MetaBranch::Striker,  MetaBranch::Shooter, MetaBranch::Jester,
+                                  MetaBranch::Assassin, MetaBranch::Pacts,   MetaBranch::Summoner,
+                                  MetaBranch::Support,  MetaBranch::Mage,    MetaBranch::Guardian};
+constexpr int kLegendCount = 9;
+constexpr float kLegendRow = 21.f;
 
 const sf::Color kPrismColor = theme::puSurge;   // violet - distinct from the core-blue accent
 
+// A route takes its class's colour; Pacts stay a pale bone (a bargain, no class).
 sf::Color branchColor(MetaBranch b) {
     switch (b) {
-        case MetaBranch::Base:    return theme::core;
-        case MetaBranch::Combat:  return theme::puOverdrive;
-        case MetaBranch::Eco:     return theme::accent;
-        case MetaBranch::Special: return theme::elemFire;
-        case MetaBranch::Pickups: return theme::puPoints;
-        case MetaBranch::Arsenal: return theme::puSurge;
-        case MetaBranch::Pacts:   return sf::Color(226, 70, 84);   // crimson: a pact is a bargain
-        case MetaBranch::Classes: return sf::Color(186, 226, 104);  // lime: new kinds of ball
-        case MetaBranch::Root:    return theme::textHi;
+        case MetaBranch::Root:  return theme::textHi;
+        case MetaBranch::Pacts: return sf::Color(206, 192, 170);
+        default:                return tagColor(metaBranchTag(b));
     }
-    return theme::textHi;
 }
 
 // Ring index of a node (0 centre, 1, 2, ...) - drives the intro stagger.
-float nodeRing(int i) {
-    const MetaUnlockDef& d = metaUnlockDef(i);
-    return std::max(std::fabs(d.gx), std::fabs(d.gy));
-}
+float nodeRing(int i) { return metaUnlockDef(i).ring; }
+
+// The node that unlocks a class (drawn bigger, its name always shown).
+bool isClassNode(int i) { return i >= MetaClassSupport && i <= MetaClassJester; }
 
 const char* branchLabel(MetaBranch b) {
     switch (b) {
-        case MetaBranch::Base:    return "Base";
-        case MetaBranch::Combat:  return "Ball combat";
-        case MetaBranch::Eco:     return "Economy";
-        case MetaBranch::Special: return "Special balls";
-        case MetaBranch::Pickups: return "Power-ups";
-        case MetaBranch::Arsenal: return "Arsenal";
-        case MetaBranch::Pacts:   return "Pacts";
-        case MetaBranch::Classes: return "Classes";
-        case MetaBranch::Root:    return "Core";
+        case MetaBranch::Root:  return "Core";
+        case MetaBranch::Pacts: return "Pacts";
+        default:                return itemTagName(metaBranchTag(b));
     }
-    return "";
+}
+
+// A frontier node's name, pushed outward from the web's centre so neighbours
+// on the same ring don't stack their labels.
+void drawOutward(sf::RenderWindow& w, const sf::Font& font, const std::string& str, sf::Vector2f p,
+                 sf::Vector2f fromCentre, float r, sf::Color c) {
+    sf::Text t = makeText(font, str, theme::fsSmall, c);
+    const sf::FloatRect b = t.getLocalBounds();
+    const sf::Vector2f d = normalized(fromCentre, {0.f, 1.f});
+    const sf::Vector2f half{b.width * 0.5f + 3.f, b.height * 0.5f + 3.f};
+    // distance from the node centre to the label centre along d, so the box clears the node
+    const float reach = r + 3.f + std::min(std::fabs(d.x) > 1e-3f ? half.x / std::fabs(d.x) : 1e9f,
+                                           std::fabs(d.y) > 1e-3f ? half.y / std::fabs(d.y) : 1e9f);
+    const sf::Vector2f at = p + d * reach;
+    t.setOrigin(b.left + b.width * 0.5f, b.top + b.height * 0.5f);
+    t.setPosition(std::round(at.x), std::round(at.y));
+    w.draw(t);
 }
 
 void drawLink(sf::RenderWindow& w, sf::Vector2f a, sf::Vector2f b, float thick, sf::Color c) {
@@ -219,12 +226,18 @@ void LoadoutScreen::onEnter(App& app) {
     keyNav_ = false;
     lastMouse_ = {-1.f, -1.f};
     for (int i = 0; i < MetaUnlockCount; ++i) glow_[i] = 0.f;
-    // Start zoomed to fit the whole web between the title and the bottom edge.
-    float outer = 1.f;
-    for (int i = 0; i < MetaUnlockCount; ++i) outer = std::max(outer, nodeRing(i));
+    // Start zoomed to fit the whole web between the title and the bottom edge
+    // (and clear of the side panels).
     const sf::Vector2f s = app.size();
-    const float room = std::min(s.y * kWebCenterY - 118.f, s.y * (1.f - kWebCenterY) - 34.f);
-    zoom_ = clampf(room / (outer * kRingGap), kZoomMin, 1.f);
+    const float up = s.y * kWebCenterY - 112.f, down = s.y * (1.f - kWebCenterY) - 30.f, side = s.x * 0.5f - 60.f;
+    float fit = 1.f;
+    for (int i = 0; i < MetaUnlockCount; ++i) {
+        const sf::Vector2f o = nodeOffset(i) * kRingGap;   // at zoom 1
+        if (o.y < -1.f) fit = std::min(fit, up / -o.y);
+        if (o.y > 1.f) fit = std::min(fit, down / o.y);
+        if (std::fabs(o.x) > 1.f) fit = std::min(fit, side / std::fabs(o.x));
+    }
+    zoom_ = clampf(fit, kZoomMin, 1.f);
     pan_ = {0.f, 0.f};
     panning_ = false;
     legendHover_ = -1;
@@ -235,12 +248,16 @@ sf::Vector2f LoadoutScreen::webCentre(App& app) const {
     return sf::Vector2f{s.x * 0.5f, s.y * kWebCenterY} + pan_;
 }
 
-sf::Vector2f LoadoutScreen::nodePos(App& app, int i) const {
+// A node's offset from the centre in rings (stretched sideways).
+sf::Vector2f LoadoutScreen::nodeOffset(int i) {
     const MetaUnlockDef& d = metaUnlockDef(i);
-    const sf::Vector2f centre = webCentre(app);
-    const float ring = std::max(std::fabs(d.gx), std::fabs(d.gy));
-    if (ring < 0.01f) return centre;
-    return centre + normalized({d.gx, d.gy}) * (ring * kRingGap * zoom_);
+    const float a = d.ang * kPi / 180.f;
+    const float r = d.ring > 0.01f ? d.ring + kInnerPad : 0.f;
+    return {std::sin(a) * r * kStretchX, -std::cos(a) * r};
+}
+
+sf::Vector2f LoadoutScreen::nodePos(App& app, int i) const {
+    return webCentre(app) + nodeOffset(i) * (kRingGap * zoom_);
 }
 
 // Zoom by `factor`, keeping the web point under the pointer where it is.
@@ -255,14 +272,14 @@ int LoadoutScreen::legendAt(App& app, sf::Vector2f mouse) const {
     const sf::Vector2f s = app.size();
     const float top = s.y - theme::margin - static_cast<float>(kLegendCount) * kLegendRow;
     for (int i = 0; i < kLegendCount; ++i)
-        if (sf::FloatRect(theme::margin, top + static_cast<float>(i) * kLegendRow - 2.f, 150.f, kLegendRow).contains(mouse))
+        if (sf::FloatRect(theme::margin, top + static_cast<float>(i) * kLegendRow - 2.f, 170.f, kLegendRow).contains(mouse))
             return static_cast<int>(kLegend[i]);
     return -1;
 }
 
 int LoadoutScreen::nodeAt(App& app, sf::Vector2f mouse) const {
     for (int i = 0; i < MetaUnlockCount; ++i) {
-        const float r = ((i == 0 ? kRootR : kNodeR) + 9.f) * clampf(zoom_, 0.8f, 1.3f);   // generous but < half the ring gap
+        const float r = ((i == 0 ? kRootR : isClassNode(i) ? kClassR : kNodeR) + 7.f) * clampf(zoom_, 0.8f, 1.3f);   // generous but < half the ring gap
         const sf::Vector2f d = mouse - nodePos(app, i);
         if (d.x * d.x + d.y * d.y <= r * r) return i;
     }
@@ -377,7 +394,10 @@ void LoadoutScreen::drawInfoCard(App& app, sf::RenderWindow& w, int node) const 
     name.setPosition(o.x + 14.f, o.y + 8.f);
     w.draw(name);
 
-    drawLabel(w, app.font(), branchLabel(d.branch), 10, {o.x + cw - 14.f, o.y + 21.f}, col, 1);
+    drawLabel(w, app.font(), d.branch == MetaBranch::Root || d.branch == MetaBranch::Pacts
+                                 ? std::string(branchLabel(d.branch))
+                                 : std::string(branchLabel(d.branch)) + " route",
+              10, {o.x + cw - 14.f, o.y + 46.f}, col, 1);   // on the level line: long names need the width
 
     char lv[48];
     std::snprintf(lv, sizeof(lv), "Level %d / %d", lvl, d.maxLevel);
@@ -447,13 +467,14 @@ void LoadoutScreen::draw(App& app, sf::RenderWindow& w) {
     const sf::Vector2f centre = nodePos(app, 0);
     const float ringsA = clampf(introPop(it, 0.10f, 0.4f), 0.f, 1.f);
     for (int ring = 1; ring <= kBackRings; ++ring) {
-        const float rad = static_cast<float>(ring) * kRingGap * zoom_;
+        const float rad = (static_cast<float>(ring) + kInnerPad) * kRingGap * zoom_;
         sf::CircleShape halo(rad);
         halo.setOrigin(rad, rad);
         halo.setPosition(centre);
+        halo.setScale(kStretchX, 1.f);
         halo.setPointCount(96);
         halo.setFillColor(sf::Color::Transparent);
-        halo.setOutlineThickness(1.f);
+        halo.setOutlineThickness(1.f / kStretchX);
         halo.setOutlineColor(withAlpha(theme::arenaEdge,
                                        std::max(0.04f, 0.26f - 0.03f * static_cast<float>(ring - 1)) * ringsA));
         w.draw(halo);
@@ -488,7 +509,8 @@ void LoadoutScreen::draw(App& app, sf::RenderWindow& w) {
         const bool afford = avail && !maxed && (isPrism ? m.prisms >= cost : m.cores >= cost);
         const sf::Color col = branchColor(d.branch);
         const sf::Vector2f p = nodePos(app, i);
-        const float baseR = (i == 0 ? kRootR : kNodeR);
+        const bool classNode = isClassNode(i);
+        const float baseR = (i == 0 ? kRootR : classNode ? kClassR : kNodeR);
         const float g = glow_[i];                 // 0 = idle, 1 = lit
         const float pop = introPop(it, 0.12f + 0.06f * nodeRing(i), 0.34f);
         if (pop <= 0.001f) continue;
@@ -522,6 +544,8 @@ void LoadoutScreen::draw(App& app, sf::RenderWindow& w) {
             body.setOutlineColor(withAlpha(theme::arenaEdge, (0.34f + 0.4f * g) * na));
         }
         w.draw(body);
+        if (classNode)   // a class: an outer ring in its colour, brighter once unlocked
+            draw::ring(w, p, r + 4.f, 1.5f, withAlpha(owned || avail ? col : theme::arenaEdge, (owned ? 0.8f : 0.45f) * na));
 
         // a small pip marks an owned node while it is idle
         if (owned && g < 0.6f)
@@ -530,9 +554,13 @@ void LoadoutScreen::draw(App& app, sf::RenderWindow& w) {
         // Idle labels: the purchase frontier (open, not bought yet) shows its
         // name, so you can read your options without hovering every node;
         // owned multi-level nodes show their level pips.
-        if (g < 0.03f && avail && !owned && i != 0 && inFocus)
-            drawCentered(w, app.font(), d.name, theme::fsSmall, {p.x, p.y + baseR + 11.f},
-                         withAlpha(afford ? theme::textLo : theme::textDim, 0.9f * na));
+        if (g < 0.03f && avail && !owned && i != 0 && inFocus && !classNode)
+            drawOutward(w, app.font(), d.name, p, p - centre, baseR,
+                        withAlpha(afford ? theme::textLo : theme::textDim, 0.9f * na));
+        // a class node always names its class (the goal at the end of the route)
+        if (g < 0.03f && classNode)
+            drawLabel(w, app.font(), d.name, 10, {p.x, p.y + baseR + 14.f},
+                      withAlpha(owned ? col : avail ? lerpColor(col, theme::textLo, 0.4f) : theme::textDim, na), 0);
         if (g < 0.03f && owned && d.maxLevel > 1) {
             const float span = static_cast<float>(d.maxLevel - 1) * 6.f;
             for (int k = 0; k < d.maxLevel; ++k)
@@ -577,10 +605,12 @@ void LoadoutScreen::draw(App& app, sf::RenderWindow& w) {
 
     if (hoverNode_ >= 0 || selUsed_) drawInfoCard(app, w, selNode_);
 
-    // Branch legend, bottom-left. Hovering a row lights that branch alone.
+    // Route legend, bottom-left: one row per class route (and the Pacts).
+    // Hovering a row lights that route alone.
     {
         const float la = clampf(introPop(it, 0.2f), 0.f, 1.f);
         float ly = s.y - theme::margin - static_cast<float>(kLegendCount) * kLegendRow;
+        drawLabel(w, app.font(), "routes", 10, {theme::margin + 2.f, ly - 12.f}, withAlpha(theme::textDim, la), -1);
         for (MetaBranch b : kLegend) {
             const bool hot = legendHover_ == static_cast<int>(b);
             int owned = 0, total = 0;

@@ -170,6 +170,7 @@ const char* abilityName(Ability a) {
         case Ability::Overclock: return "Overclock";
         case Ability::Arc:       return "Arc";
         case Ability::Meteor:    return "Meteor";
+        case Ability::MagicMissile: return "Magic missile";
     }
     return "";
 }
@@ -186,6 +187,7 @@ float abilityCooldown(Ability a, int level) {
         case Ability::Overclock: base = A::overclockCooldown; break;
         case Ability::Arc:       base = A::arcCooldown; break;
         case Ability::Meteor:    base = A::meteorCooldown; break;
+        case Ability::MagicMissile: base = A::missileCooldown; break;
     }
     return base * std::pow(A::cooldownPerLevel, static_cast<float>(std::max(0, level - 1)));
 }

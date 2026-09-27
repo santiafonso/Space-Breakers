@@ -835,7 +835,7 @@ void World::updateTethers(float dt, const WorldParams& p, FrameEvents& ev) {
                 if (e.hp <= 0.f) continue;
                 const float t = clampf(dot(e.pos - a, seg) / len2, 0.f, 1.f);
                 if (length(e.pos - (a + seg * t)) > w + e.radius) continue;
-                damageEnemy(e, tick * (e.mark > 0.f ? cfg::role::markDamageMul : 1.f));
+                damageEnemy(e, tick * (e.mark > 0.f ? p.markMul : 1.f));
                 e.hitFlash = std::max(0.f, e.hitFlash - 0.6f);   // a beam doesn't flash like a hit
                 applyElement(e, el, b.owner, tick, p, ev);
             }
@@ -923,7 +923,7 @@ bool World::strike(Ball& b, Enemy& e, sf::Vector2f normal, const WorldParams& p,
     const bool afflicted = e.poison > 0.f || e.frozen > 0.f || e.burn > 0.f;
     if (p.primed && afflicted) dmg *= cfg::combat::primedMult;             // "Primed"
     if (m.shatterMult > 0.f && e.frozen > 0.f) dmg *= m.shatterMult;       // "Shatter"
-    if (e.mark > 0.f) dmg *= cfg::role::markDamageMul;                     // marked by a Support
+    if (e.mark > 0.f) dmg *= p.markMul;                     // marked by a Support
     if (e.brittle > 0.f) dmg *= S::brittleMul;                             // Superconductor
     if (m.critChance > 0.f && chance(m.critChance, p)) dmg *= m.critMult;  // "Keen eye"
     if (m.executeThreshold > 0.f && e.hp < e.maxHp * m.executeThreshold)   // "Executioner"
@@ -1165,7 +1165,7 @@ void World::spawnGhost(const Ball& parent) {
     if (static_cast<int>(ghosts_.size() + pendingGhosts_.size()) >= cfg::synergy::maxGhosts) return;
     Ball g = parent;
     g.ghost = true;
-    g.ghostLife = cfg::synergy::ghostLife;
+    g.ghostLife = cfg::synergy::ghostLife * parent.mods.copyLife;   // web "Brood"
     g.held = false;
     g.trail.clear();
     g.waterTrail.clear();
@@ -1276,7 +1276,7 @@ void World::emitElement(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
             }
             const float zap = cfg::element::boltDamage * p.damageMult * b.mods.damageMult *
                               elemPotency(b, p);
-            damageEnemy(*target, zap * (target->mark > 0.f ? cfg::role::markDamageMul : 1.f));
+            damageEnemy(*target, zap * (target->mark > 0.f ? p.markMul : 1.f));
             target->hitFlash = 1.f;
             applyElement(*target, b.element, b.owner, ballDamage(b, p), p, ev);   // zaps can set off reactions too
             if (static_cast<int>(bolts_.size()) < cfg::element::maxBolts)

@@ -62,51 +62,86 @@ template <> struct ClassHooks<BallRole::Support> : NoClassHooks {
 // More ability slots: see abilitySlotCount (progression/Offers.hpp). Base: its
 // hits feed its abilities (each one takes cfg::mage::hitRefund off every
 // cooldown). Ancient Mage: every cast lets out an arcane nova (mageOnCast).
+// Its signature is the Magic missile ability (a Mage ball is handed one:
+// App::grantMageMissile); the missiles fly here, in worldTick.
 // Its items act through casts and cooldowns, so they work on ANY ball that
 // holds them (Mage class or not): World::mageCastRate / mageOnCast / mageTick
 // below, called from sim/WorldAbilities.cpp.
 template <> struct ClassHooks<BallRole::Mage> : NoClassHooks {
+    using Missile = MageWorld::Missile;
+
     static void onHit(World&, Ball& b, Enemy&, float, bool, const WorldParams&, FrameEvents&) {
         if (b.ghost) return;   // copies never cast
         for (float& cd : b.abilityCd) cd = std::max(0.f, cd - cfg::mage::hitRefund);
     }
-    static void worldTick(World& w, float dt, const WorldParams&, FrameEvents&) {
-        auto& s = w.classWorld_.mage.streaks;
-        for (auto& k : s) k.life -= dt;
-        s.erase(std::remove_if(s.begin(), s.end(), [](const MageWorld::Streak& k) { return k.life <= 0.f; }), s.end());
-    }
-    static void waveStart(World& w, const WorldParams&) {
-        w.classWorld_.mage.streaks.clear();
-        for (Ball& b : w.balls_) {
-            b.cls.mage.echoSlot = -1;
-            b.cls.mage.missileT = b.mods.cls.mage.missileEvery * 0.5f;
-        }
+
+    static Enemy* findEnemy(World& w, int id) {
+        for (Enemy& e : w.enemies_)
+            if (e.id == id && e.hp > 0.f) return &e;
+        return nullptr;
     }
 
-    // "Arcane missile": up to missileTargets of the nearest enemies. False if none in reach.
-    static bool missileVolley(World& w, Ball& b, const WorldParams& p, FrameEvents& ev) {
-        const MageMods& g = b.mods.cls.mage;
-        const float range = cfg::mage::missileRange * w.arenaScale();
-        std::vector<Enemy*> near;
-        for (Enemy& e : w.enemies_)
-            if (e.hp > 0.f && !e.orbiter && length(e.pos - b.pos) < range) near.push_back(&e);
-        if (near.empty()) return false;
-        const std::size_t n = std::min(near.size(), static_cast<std::size_t>(std::max(1, g.missileTargets)));
-        std::partial_sort(near.begin(), near.begin() + static_cast<std::ptrdiff_t>(n), near.end(),
-                          [&b](const Enemy* x, const Enemy* y) {
-                              return dot(x->pos - b.pos, x->pos - b.pos) < dot(y->pos - b.pos, y->pos - b.pos);
-                          });
-        const float dmg = w.ballDamage(b, p) * g.missileFrac * g.power;
-        const Element el = w.hitElement(b, p);
-        auto& streaks = w.classWorld_.mage.streaks;
-        for (std::size_t i = 0; i < n; ++i) {
-            Enemy& e = *near[i];
-            w.damageEnemy(e, dmg);
-            w.applyElement(e, el, b.owner, dmg, p, ev);
-            if (static_cast<int>(streaks.size()) < cfg::mage::maxStreaks)
-                streaks.push_back({b.pos, e.pos, cfg::mage::missileLife});
+    // Magic missiles: steer toward their target (a new one when it dies),
+    // speed up, hit the first enemy they touch.
+    static void worldTick(World& w, float dt, const WorldParams& p, FrameEvents& ev) {
+        namespace A = cfg::ability;
+        auto& ms = w.classWorld_.mage.missiles;
+        if (ms.empty()) return;
+        const float as = w.arenaScale();
+        const float mr = A::missileRadius * as;
+        for (Missile& m : ms) {
+            m.life -= dt;
+            if (m.life <= 0.f) continue;
+            Enemy* t = findEnemy(w, m.target);
+            if (!t) {   // lost its target: the nearest one to the missile
+                const Enemy* n = w.nearestEnemy(m.pos, A::missileRetarget * as);
+                m.target = n ? n->id : -1;
+                t = findEnemy(w, m.target);
+            }
+            sf::Vector2f aim = m.pos + m.vel;
+            if (t) aim = t->pos;
+            else if (w.boss_.alive && w.boss_.intro <= 0.f) aim = w.boss_.pos;
+            // turn toward the aim point at a capped rate, then speed up
+            const float sp = std::min(length(m.vel) + A::missileAccel * as * dt, A::missileTopSpeed * as);
+            const float cur = std::atan2(m.vel.y, m.vel.x);
+            const sf::Vector2f to = aim - m.pos;
+            float d = std::atan2(to.y, to.x) - cur;
+            while (d > kPi) d -= 2.f * kPi;
+            while (d < -kPi) d += 2.f * kPi;
+            const float step = A::missileTurn * dt;
+            const float ang = cur + std::clamp(d, -step, step);
+            m.vel = sf::Vector2f{std::cos(ang), std::sin(ang)} * sp;
+            m.pos += m.vel * dt;
+            m.trailT -= dt;
+            if (m.trailT <= 0.f) {   // a short curve behind it
+                m.trailT = 0.02f;
+                for (int i = std::min(m.trailN, 5); i > 0; --i) m.trail[i] = m.trail[i - 1];
+                m.trail[0] = m.pos;
+                m.trailN = std::min(m.trailN + 1, 6);
+            }
+            Enemy* hit = nullptr;
+            for (Enemy& e : w.enemies_) {
+                if (e.hp <= 0.f) continue;
+                const sf::Vector2f q = m.pos - e.pos;
+                const float rr = e.radius + mr;
+                if (dot(q, q) < rr * rr) { hit = &e; break; }
+            }
+            if (hit) {
+                w.damageEnemy(*hit, m.dmg * (hit->mark > 0.f ? p.markMul : 1.f));
+                if (m.elem != 0) w.applyElement(*hit, static_cast<Element>(m.elem), m.owner, m.dmg, p, ev);
+                m.life = 0.f;
+            } else if (w.boss_.alive && w.boss_.intro <= 0.f && length(m.pos - w.boss_.pos) < w.boss_.radius + mr) {
+                w.boss_.hp -= m.dmg * A::missileBossFrac;
+                w.boss_.hitFlash = std::max(w.boss_.hitFlash, 0.4f);
+                m.life = 0.f;
+            }
         }
-        return true;
+        ms.erase(std::remove_if(ms.begin(), ms.end(), [](const Missile& m) { return m.life <= 0.f; }), ms.end());
+    }
+
+    static void waveStart(World& w, const WorldParams&) {
+        w.classWorld_.mage.missiles.clear();
+        for (Ball& b : w.balls_) b.cls.mage.echoSlot = -1;
     }
 
     // Ancient Mage: an arcane nova around the ball on every cast.
@@ -129,12 +164,50 @@ template <> struct ClassHooks<BallRole::Mage> : NoClassHooks {
     }
 };
 
-float World::mageCastRate(const Ball& b) const { return 1.f + b.mods.cls.mage.focus; }   // "Focus"
+float World::mageCastRate(const Ball& b) const { return 1.f + b.mods.cls.mage.focus; }   // "Focus", Channel, Archive
+
+// `count` missiles at the nearest enemies (spread over them, nearest first),
+// each for `frac` x the ball's hit. False when nothing is in range.
+bool World::mageMissiles(Ball& b, int count, float frac, const WorldParams& p) {
+    namespace A = cfg::ability;
+    const float as = arenaScale();
+    const float range = A::missileRange * as;
+    std::vector<const Enemy*> near;
+    for (const Enemy& e : enemies_)
+        if (e.hp > 0.f && !e.orbiter && length(e.pos - b.pos) < range) near.push_back(&e);
+    const bool boss = boss_.alive && boss_.intro <= 0.f && length(boss_.pos - b.pos) < range * 1.5f;
+    if (near.empty() && !boss) return false;
+    std::sort(near.begin(), near.end(), [&b](const Enemy* x, const Enemy* y) {
+        return dot(x->pos - b.pos, x->pos - b.pos) < dot(y->pos - b.pos, y->pos - b.pos);
+    });
+    auto& ms = classWorld_.mage.missiles;
+    const float dmg = ballDamage(b, p) * frac * b.mods.cls.mage.power * b.mods.cls.mage.missileMul;
+    const Element el = hitElement(b, p);
+    const sf::Vector2f head = normalized(b.vel, {0.f, -1.f});
+    for (int i = 0; i < count && static_cast<int>(ms.size()) < A::maxMissiles; ++i) {
+        MageWorld::Missile m;
+        m.pos = b.pos;
+        // fan out sideways from its heading, then curve in
+        const float side = (i % 2 == 0 ? 1.f : -1.f) * (0.9f + 0.35f * static_cast<float>(i / 2));
+        const float c = std::cos(side), sn = std::sin(side);
+        m.vel = sf::Vector2f{head.x * c - head.y * sn, head.x * sn + head.y * c} * (A::missileSpeed * as);
+        m.dmg = dmg;
+        m.life = A::missileLife;
+        m.elem = static_cast<int>(el);
+        m.owner = b.owner;
+        m.target = near.empty() ? -1 : near[static_cast<std::size_t>(i) % near.size()]->id;
+        m.trail[0] = m.pos;
+        m.trailN = 1;
+        ms.push_back(m);
+    }
+    return true;
+}
 
 void World::mageOnCast(Ball& b, int slot, bool echo, const WorldParams& p, FrameEvents& ev) {
     using H = ClassHooks<BallRole::Mage>;
     const MageMods& g = b.mods.cls.mage;
-    if (g.missileFrac > 0.f) H::missileVolley(*this, b, p, ev);   // "Arcane missile": one per cast
+    // "Barrage": any other ability looses a magic missile too
+    if (g.barrage > 0 && b.abilities[slot].id != Ability::MagicMissile) mageMissiles(b, 1, g.barrageFrac, p);
     if (b.isAscended(BallRole::Mage)) H::arcaneNova(*this, b, p, ev);
     if (echo) return;   // an echo doesn't echo again or spring the others
     if (g.twincast > 0.f && b.cls.mage.echoSlot < 0 && chance(g.twincast, p)) {   // "Twincast"
@@ -148,13 +221,7 @@ void World::mageOnCast(Ball& b, int slot, bool echo, const WorldParams& p, Frame
 }
 
 void World::mageTick(Ball& b, float dt, const WorldParams& p, FrameEvents& ev) {
-    using H = ClassHooks<BallRole::Mage>;
-    const MageMods& g = b.mods.cls.mage;
     MageState& s = b.cls.mage;
-    if (g.missileFrac > 0.f) {   // "Arcane missile": the timed volley
-        s.missileT -= dt;
-        if (s.missileT <= 0.f) s.missileT = H::missileVolley(*this, b, p, ev) ? g.missileEvery : 0.2f;
-    }
     if (s.echoSlot >= 0) {   // "Twincast": the echo fires
         s.echoT -= dt;
         if (s.echoT <= 0.f) {
@@ -236,7 +303,7 @@ template <> struct ClassHooks<BallRole::Shooter> : NoClassHooks {
             if (e.hp <= 0.f) continue;
             const float along = clampf(dot(e.pos - b.pos, dir), 0.f, t);
             if (length(e.pos - (b.pos + dir * along)) > hw + e.radius) continue;
-            w.damageEnemy(e, dmg * (e.mark > 0.f ? cfg::role::markDamageMul : 1.f));
+            w.damageEnemy(e, dmg * (e.mark > 0.f ? p.markMul : 1.f));
             w.applyElement(e, el, b.owner, dmg, p, ev);
         }
         auto& rails = w.classWorld_.shooter.rails;
@@ -335,7 +402,7 @@ template <> struct ClassHooks<BallRole::Shooter> : NoClassHooks {
                 continue;
             }
             const float flash = e.hitFlash;
-            w.damageEnemy(e, u.dmg * (e.mark > 0.f ? cfg::role::markDamageMul : 1.f));
+            w.damageEnemy(e, u.dmg * (e.mark > 0.f ? p.markMul : 1.f));
             e.hitFlash = std::max(flash, 0.55f);   // a bullet is a tick, not a big hit
             if (u.elem != 0) w.applyElement(e, static_cast<Element>(u.elem), u.owner, u.dmg, p, ev);
             u.lastHit = e.id;
@@ -430,7 +497,7 @@ template <> struct ClassHooks<BallRole::Assassin> : NoClassHooks {
         Ball g = b;
         g.ghost = true;
         g.twin = false;
-        g.ghostLife = life;
+        g.ghostLife = life * b.mods.copyLife;   // web "Brood"
         g.age = 0.f;
         g.held = false;
         g.trail.clear();
@@ -568,9 +635,10 @@ template <> struct ClassHooks<BallRole::Assassin> : NoClassHooks {
 template <> struct ClassHooks<BallRole::Summoner> : NoClassHooks {
     static float power(const Ball& b) {
         namespace S = cfg::summoner;
-        return b.isAscended(BallRole::Summoner) ? S::ascendedPower
-               : b.hasRole(BallRole::Summoner)  ? S::rolePower
-                                                : 1.f;
+        const float cls = b.isAscended(BallRole::Summoner) ? S::ascendedPower
+                        : b.hasRole(BallRole::Summoner)  ? S::rolePower
+                                                         : 1.f;
+        return cls * b.mods.cls.summoner.bond;   // web "Bond"
     }
 
     // One summon hit on an enemy: damage + its element.

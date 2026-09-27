@@ -33,7 +33,7 @@ namespace sb {
 inline constexpr int kChoiceCount = 4;
 inline constexpr int kBallSlots = 4;          // item slots per ball
 inline constexpr int kElementItemCount = 6;
-inline constexpr int kAbilityItemCount = 7;   // AbilityDash..AbilityMeteor
+inline constexpr int kAbilityItemCount = 8;   // AbilityDash..AbilityMissile
 inline constexpr int kModifierCount = 3;      // HeavyImpact..Swift
 // Items level up: picking one a ball already has (or forging it) raises its
 // level instead of taking another slot. Each item scales its own way per level
@@ -54,7 +54,7 @@ inline UpgradeCat upgradeCat(UpgradeKind k) {
     const int i = static_cast<int>(k);
     if (i <= static_cast<int>(UpgradeKind::AddBall)) return UpgradeCat::NewBall;
     if (i <= static_cast<int>(UpgradeKind::ElemElectric)) return UpgradeCat::Element;
-    if (i <= static_cast<int>(UpgradeKind::AbilityMeteor)) return UpgradeCat::Ability;
+    if (i <= static_cast<int>(UpgradeKind::AbilityMissile)) return UpgradeCat::Ability;
     if (i <= static_cast<int>(UpgradeKind::Swift)) return UpgradeCat::Modifier;
     if (i >= static_cast<int>(UpgradeKind::CoreSpring)) return UpgradeCat::Relic;
     return UpgradeCat::Item;
@@ -94,6 +94,7 @@ inline Tier upgradeTier(UpgradeKind k) {
         case UpgradeKind::ElemFire: case UpgradeKind::ElemPoison: case UpgradeKind::ElemWater:
         case UpgradeKind::ElemIce: case UpgradeKind::ElemStone: case UpgradeKind::ElemElectric:
         case UpgradeKind::AbilityDash: case UpgradeKind::AbilityBulwark: case UpgradeKind::AbilityArc:
+        case UpgradeKind::AbilityMissile:
         case UpgradeKind::Rampart: case UpgradeKind::Mender: case UpgradeKind::Bedrock:
         case UpgradeKind::Conductor: case UpgradeKind::Shatter: case UpgradeKind::Bumper:
         case UpgradeKind::CoreSlowField: case UpgradeKind::Contagion: case UpgradeKind::Primed:
@@ -206,6 +207,7 @@ inline const char* upgradeKindId(UpgradeKind k) {
         case UpgradeKind::AbilityOverclock: return "AbilityOverclock";
         case UpgradeKind::AbilityArc:     return "AbilityArc";
         case UpgradeKind::AbilityMeteor:  return "AbilityMeteor";
+        case UpgradeKind::AbilityMissile: return "AbilityMissile";
         case UpgradeKind::Ricochet:       return "Ricochet";
         case UpgradeKind::Cleave:         return "Cleave";
         case UpgradeKind::Crit:           return "Crit";
@@ -278,6 +280,7 @@ inline UpgradeInfo upgradeInfo(UpgradeKind k) {
         case UpgradeKind::AbilityOverclock: return {"Overclock", "every few seconds the ball runs hot: faster and 50% harder-hitting for 3 s"};
         case UpgradeKind::AbilityArc:    return {"Arc", "every few seconds a bolt leaps from the ball through up to 4 enemies, with its element"};
         case UpgradeKind::AbilityMeteor: return {"Meteor", "every few seconds a meteor falls on the thickest pack of enemies and crushes it, with the ball's element"};
+        case UpgradeKind::AbilityMissile: return {"Magic missile", "every few seconds the ball looses a magic missile that curves after the nearest enemy and follows it, with its element"};
         case UpgradeKind::Ricochet:      return {"Ricochet", "every wall bounce speeds it up and arms a harder hit for a moment"};
         case UpgradeKind::Cleave:        return {"Cleave", "punches straight through an enemy it kills"};
         case UpgradeKind::Crit:          return {"Keen eye", "12% chance a hit deals double damage"};
@@ -348,6 +351,7 @@ inline const char* upgradeLevelDesc(UpgradeKind k) {
         case UpgradeKind::AbilityOverclock: return "runs hot longer and harder, a shorter cooldown";
         case UpgradeKind::AbilityArc:    return "leaps to one more enemy, harder, a shorter cooldown";
         case UpgradeKind::AbilityMeteor: return "a wider, heavier impact, a shorter cooldown";
+        case UpgradeKind::AbilityMissile: return "harder missiles, a shorter cooldown; a 2nd missile at level 3, a 3rd at level 5";
         case UpgradeKind::Ricochet:      return "a bigger speed kick and a harder armed hit";
         case UpgradeKind::Cleave:        return "also cuts through - and finishes - enemies it leaves under 8% more health";
         case UpgradeKind::Crit:          return "+7% chance, and crits hit harder";
@@ -638,22 +642,33 @@ inline bool classHasItems(ItemTag t) {
 
 // ---- permanent meta unlocks: the skill web in the game menu ----------------
 //
-// The menu draws these as a radial graph: a central node ("Calling": choose
-// your starting ball's class) with branches that fan out - Base (left), Combat
-// (bottom) with the Classes chain under it, Economy (top), Power-ups
-// (upper-right) and Special balls (a chain fanning to the lower right). A node can only be bought once the node that gates it (`parent`) has
-// at least one level. Most cost cores; the prism nodes cost prisms (the win
-// currency).
+// The menu draws these as a radial graph. The centre node ("Calling") opens
+// the web; around it, one ROUTE per class radiates outward, and each class
+// sits near the END of its own themed route (2026-09-27, "routes by class"):
+//   Striker  (top)         damage / throw power
+//   Shooter  (upper right) ball speed, speed power-ups
+//   Jester   (right)       gold, cores, rerolls, luck
+//   Assassin (lower right) crits, elite kills, execute
+//   Pacts    (bottom)      its own branch, no class
+//   Summoner (bottom)      copies, recruits, the starter kit, Gemini
+//   Support  (lower left)  power-ups, marks
+//   Mage     (left)        abilities (unlocked here) and elements
+//   Guardian (upper left)  the core: health, heals, shields
+// Past each class node: "<Class> lore" (its items show up more often) and one
+// class-flavoured perk. A node can only be bought once the node that gates it
+// (`parent`) has at least one level. Most cost cores; the prism nodes cost
+// prisms (the win currency).
 //
-// v9 inserted the five extra Special-ball nodes, shifting every index after
-// Ignition, so pre-v9 saves reset their unlock levels on load. v11 appends the
-// Fase-A nodes (Aegis..Ember) at the end, so indices stay put and older saves
-// just load with the new nodes unbought. v15 turned the root "Squad" (+1
-// starting ball, 2 levels) into "Calling" (1 level; the extra level is
-// refunded on load) and appended the class unlocks.
+// SAVE: node indices are append-only - never reorder, never renumber; the
+// layout (branch, parent, position) is free to change. v9 inserted the five
+// extra Special-ball nodes (pre-v9 saves reset their unlock levels); v11
+// appended the Fase-A nodes; v15 turned the root "Squad" (+1 starting ball) into
+// "Calling" and appended the class unlocks; v16 moved every node onto the class
+// routes, turned "Calling" into the start-ability pick's 4th card and appended
+// the route perks and ability unlocks (58+).
 
 enum MetaUnlock {
-    MetaCalling,      // Calling   - choose the starting ball's class       (root; was "Squad", +1 ball)
+    MetaCalling,      // Calling   - a 4th card in the run's first-ability pick   (root; was Squad, then the class pick)
     MetaCoreHp,       // Bulwark   - +core HP at the start
     MetaMend,         // Mend      - core heals more between waves
     MetaFireItem,     // Ignition  - unlocks the fire item, +fire potency
@@ -687,7 +702,7 @@ enum MetaUnlock {
     MetaCharged,      // Charged    - power-ups start with part of their duration
     MetaEmber,        // Ember      - fire ball hits apply a burn (fire has no DoT alone)
     // ---- v12 append (indices 32+, never reorder) ----
-    MetaArmory,       // Armory       - epic picks turn up more often          (Arsenal hub)
+    MetaArmory,       // Armory       - epic picks turn up more often
     MetaSatellite,    // Satellite    - the Satellite legendary can appear
     MetaGravity,      // Singularity  - the Gravity well legendary can appear
     MetaGemini,       // Twins        - the Gemini legendary can appear
@@ -707,18 +722,53 @@ enum MetaUnlock {
     MetaTreasury,     // Treasury      - start each run with gold
     MetaQuartermaster,// Quartermaster - choose the Starter kit item from 4 cards
     MetaLastStand,    // Last stand    - once per run the core comes back from 0
-    // ---- v15 append (indices 51+, never reorder): the Classes chain ----
-    MetaClassSupport, // Support   - Support items can appear                  (Classes, under Mass)
+    // ---- v15 append (indices 51+, never reorder): the class unlocks ----
+    MetaClassSupport, // Support   - Support items can appear
     MetaClassGuardian,// Guardian  - Guardian items can appear
     MetaClassMage,    // Mage      - Mage items can appear
     MetaClassShooter, // Shooter   - Shooter items can appear
     MetaClassAssassin,// Assassin  - Assassin items can appear
     MetaClassSummoner,// Summoner  - Summoner items can appear
     MetaClassJester,  // Jester    - Jester items can appear
+    // ---- v16 append (indices 58+, never reorder): route perks + ability unlocks ----
+    MetaSling,        // Sling          - throws fly faster                               (Striker)
+    MetaMomentum,     // Momentum       - Striker balls hit harder
+    MetaLoreStriker,  // Striker lore   - Striker items show up more often
+    MetaVelocity,     // Velocity       - every ball cruises faster                       (Shooter)
+    MetaLoreShooter,  // Shooter lore
+    MetaCaliber,      // Caliber        - Shooter bullets hit harder
+    MetaLoreJester,   // Jester lore                                                      (Jester)
+    MetaFoolsLuck,    // Fool's luck    - luck, more with Jester balls
+    MetaKeenInstinct, // Keen instinct  - every ball crits more often                     (Assassin)
+    MetaLoreAssassin, // Assassin lore
+    MetaDeathmark,    // Deathmark      - Assassin balls finish off low enemies
+    MetaBrood,        // Brood          - ghost copies last longer                        (Summoner)
+    MetaMuster,       // Muster         - a new ball joins with a Common item
+    MetaLoreSummoner, // Summoner lore
+    MetaBond,         // Bond           - summons hit harder and last longer
+    MetaLoreSupport,  // Support lore                                                     (Support)
+    MetaRally,        // Rally          - marked enemies take more from every hit
+    MetaAbilityMissile,  // Magic missile  - the Magic missile ability can be offered    (Mage)
+    MetaChannel,         // Channel        - every ability recharges faster
+    MetaAbilityArc,      // Arc (ability)  - the Arc ability can be offered
+    MetaAbilityBulwark,  // Bulwark (ab.)  - the Bulwark ability can be offered
+    MetaAbilitySplit,    // Split          - the Split ability can be offered
+    MetaAbilityOverclock,// Overclock      - the Overclock ability can be offered
+    MetaAbilityMeteor,   // Meteor         - the Meteor ability can be offered
+    MetaLoreMage,     // Mage lore
+    MetaArchive,      // Archive        - Mage balls recharge faster still
+    MetaLoreGuardian, // Guardian lore                                                    (Guardian)
+    MetaStonewall,    // Stonewall      - Guardian balls patch the core on core bounces
     MetaUnlockCount
 };
 
-enum class MetaBranch { Root, Base, Combat, Eco, Special, Pickups, Arsenal, Pacts, Classes };
+// A route = a class (same order as ItemTag: Striker = 1 ... Jester = 8), plus
+// the root and the Pacts branch. Not saved.
+enum class MetaBranch { Root, Striker, Guardian, Support, Mage, Shooter, Assassin, Summoner, Jester, Pacts };
+inline constexpr int kMetaBranchCount = 10;
+inline ItemTag metaBranchTag(MetaBranch b) {   // the class a route leads to (None: root / Pacts)
+    return b == MetaBranch::Root || b == MetaBranch::Pacts ? ItemTag::None : static_cast<ItemTag>(static_cast<int>(b));
+}
 enum class MetaCurrency { Cores, Prisms };
 
 struct MetaUnlockDef {
@@ -729,136 +779,224 @@ struct MetaUnlockDef {
     MetaBranch branch;
     MetaCurrency currency;
     int parent;     // node that gates this one; -1 for the root
-    float gx, gy;   // layout offset from the centre, in grid cells (+x right, +y down)
+    float ang;      // layout: direction from the centre, degrees clockwise from straight up
+    float ring;     // ...and distance, in rings (0 = the centre)
 };
 
 inline const MetaUnlockDef& metaUnlockDef(int u) {
+    using B = MetaBranch;
+    constexpr MetaCurrency C = MetaCurrency::Cores, P = MetaCurrency::Prisms;
     static const MetaUnlockDef defs[MetaUnlockCount] = {
-        /* Calling   */ {"Calling",   "start each run by choosing your ball's class: it starts with 2 items of it (only unlocked classes)",
-                         8u,  1, MetaBranch::Root,    MetaCurrency::Cores,  -1,  0.00f,  0.00f},
+        /* Calling   */ {"Calling",   "opens the web. Every run starts by picking your ball's first ability: with Calling you choose from 4 cards instead of 3",
+                         8u,  1, B::Root,     C, -1,   0.f, 0.f},
         /* Bulwark   */ {"Bulwark",   "start with +20 core health",
-                         10u, 3, MetaBranch::Base,    MetaCurrency::Cores,   0, -1.00f,  0.00f},
+                         10u, 3, B::Guardian, C,  0, 330.f, 1.f},
         /* Mend      */ {"Mend",      "the core heals +3 more between waves",
-                         12u, 3, MetaBranch::Base,    MetaCurrency::Cores,   1, -2.00f,  0.00f},
-        // Special-ball chain: it fans down-right. Each node's dominant axis is an
-        // integer so it lands exactly on a background ring (ring = max(|gx|,|gy|)).
-        /* Ignition  */ {"Ignition",  "the fire item can appear; higher levels hit harder",
-                         2u,  3, MetaBranch::Special, MetaCurrency::Prisms,  0,  1.00f,  0.00f},
-        /* Venom     */ {"Venom",     "the poison item can appear; higher levels stack faster",
-                         2u,  3, MetaBranch::Special, MetaCurrency::Prisms,  3,  2.00f,  0.80f},
-        /* Tide      */ {"Tide",      "the water item can appear; higher levels leave a wider wake",
-                         3u,  3, MetaBranch::Special, MetaCurrency::Prisms,  4,  3.00f,  1.70f},
-        /* Frost     */ {"Frost",     "the ice item can appear; higher levels freeze for longer",
-                         3u,  3, MetaBranch::Special, MetaCurrency::Prisms,  5,  4.00f,  2.60f},
-        /* Quarry    */ {"Quarry",    "the stone item can appear; higher levels grind harder",
-                         4u,  3, MetaBranch::Special, MetaCurrency::Prisms,  6,  4.00f,  4.00f},
-        /* Arc       */ {"Arc",       "the electric item can appear; higher levels zap harder",
-                         4u,  3, MetaBranch::Special, MetaCurrency::Prisms,  7,  5.00f,  4.60f},
+                         12u, 3, B::Guardian, C,  1, 316.f, 2.f},
+        /* Ignition  */ {"Ignition",  "the fire element can appear; higher levels hit harder",
+                         2u,  3, B::Mage,     P, MetaAbilityMissile, 294.f, 2.f},
+        /* Venom     */ {"Venom",     "the poison element can appear; higher levels stack faster",
+                         2u,  3, B::Mage,     P,  3, 294.f, 3.f},
+        /* Tide      */ {"Tide",      "the water element can appear; higher levels leave a wider wake",
+                         3u,  3, B::Mage,     P,  4, 294.f, 4.f},
+        /* Frost     */ {"Frost",     "the ice element can appear; higher levels freeze for longer",
+                         3u,  3, B::Mage,     P,  5, 294.f, 5.f},
+        /* Quarry    */ {"Quarry",    "the stone element can appear; higher levels grind harder",
+                         4u,  3, B::Mage,     P,  6, 294.f, 6.f},
+        /* Arc       */ {"Static",    "the electric element can appear; higher levels zap harder",
+                         4u,  3, B::Mage,     P,  7, 294.f, 7.f},
         /* Fortune   */ {"Fortune",   "earn cores for every enemy you kill",
-                         6u,  3, MetaBranch::Eco,     MetaCurrency::Cores,   0,  0.00f, -1.00f},
+                         6u,  3, B::Jester,   C,  0,  72.f, 1.f},
         /* Windfall  */ {"Windfall",  "20% chance a cleared run pays a 2nd prism",
-                         14u, 1, MetaBranch::Eco,     MetaCurrency::Cores,   9,  0.00f, -2.00f},
+                         14u, 1, B::Jester,   C, MetaSalvage, 56.f, 3.f},
         /* Heft      */ {"Heft",      "every ball gets +8% contact damage",
-                         10u, 2, MetaBranch::Combat,  MetaCurrency::Cores,   0,  0.00f,  1.00f},
+                         10u, 2, B::Striker,  C,  0,   0.f, 1.f},
         /* Mass      */ {"Mass",      "every ball is 10% larger",
-                         12u, 2, MetaBranch::Combat,  MetaCurrency::Cores,  11,  0.00f,  2.00f},
+                         12u, 2, B::Guardian, C,  1, 330.f, 2.f},
         /* Uplink    */ {"Uplink",    "power-ups appear more often",
-                         8u,  3, MetaBranch::Pickups, MetaCurrency::Cores,   0,  1.00f, -1.00f},
+                         8u,  3, B::Support,  C,  0, 222.f, 1.f},
         /* Capacitor */ {"Capacitor", "power-ups last longer",
-                         8u,  3, MetaBranch::Pickups, MetaCurrency::Cores,  13,  2.00f, -2.00f},
+                         8u,  3, B::Support,  C, 13, 222.f, 2.f},
         /* Damper    */ {"Damper",    "unlocks the Slow Motion power-up",
-                         2u,  1, MetaBranch::Pickups, MetaCurrency::Prisms, 13,  2.00f, -1.00f},
+                         2u,  1, B::Support,  P, 13, 237.f, 2.f},
         /* Facet     */ {"Facet",     "unlocks the Golden Bounce power-up",
-                         2u,  1, MetaBranch::Pickups, MetaCurrency::Prisms, 14,  3.00f, -3.00f},
+                         2u,  1, B::Support,  P, 15, 238.f, 3.f},
         /* Overload  */ {"Overload",  "unlocks the Overdrive power-up",
-                         3u,  1, MetaBranch::Pickups, MetaCurrency::Prisms, 14,  3.00f, -2.00f},
+                         3u,  1, B::Shooter,  P, 19,  45.f, 2.1f},
         /* Ledger    */ {"Ledger",    "the DOUBLE POINTS power-up can appear",
-                         6u,  1, MetaBranch::Pickups, MetaCurrency::Cores,  13,  1.00f, -2.00f},
+                         6u,  1, B::Support,  C, 13, 207.f, 2.f},
         /* Kinetics  */ {"Kinetics",  "the SPEED SURGE power-up can appear",
-                         6u,  1, MetaBranch::Pickups, MetaCurrency::Cores,  18,  1.00f, -3.00f},
+                         6u,  1, B::Shooter,  C, MetaVelocity, 27.f, 2.f},
         /* Foresight */ {"Foresight", "start each run with reroll charges to swap an offered item",
-                         10u, 3, MetaBranch::Eco,     MetaCurrency::Cores,   0, -1.00f, -1.00f},
-        // ---- v11 Fase-A nodes. Appended so indices 0..20 stay put. ----
+                         10u, 3, B::Jester,   C,  9,  72.f, 2.f},
         /* Aegis     */ {"Aegis",     "the core shrugs off the first hit of each wave (+1 hit per level)",
-                         12u, 2, MetaBranch::Base,    MetaCurrency::Cores,   1, -1.00f,  1.00f},
+                         12u, 2, B::Guardian, C,  1, 344.f, 2.f},
         /* Regen     */ {"Regen",     "the core slowly regenerates during a wave, not only between them",
-                         12u, 3, MetaBranch::Base,    MetaCurrency::Cores,   2, -2.00f,  1.00f},
+                         12u, 3, B::Guardian, C,  2, 316.f, 3.f},
         /* Bastion   */ {"Bastion",   "the core's max health grows a little with every wave cleared",
-                         14u, 2, MetaBranch::Base,    MetaCurrency::Cores,   2, -3.00f,  0.00f},
+                         14u, 2, B::Guardian, C, 22, 316.f, 4.f},
         /* Salvage   */ {"Salvage",   "enemies drop cores more often",
-                         10u, 3, MetaBranch::Eco,     MetaCurrency::Cores,   9, -1.00f, -2.00f},
+                         10u, 3, B::Jester,   C,  9,  56.f, 2.f},
         /* Interest  */ {"Interest",  "clearing a wave with no core damage pays a core bonus",
-                         12u, 3, MetaBranch::Eco,     MetaCurrency::Cores,  10,  0.00f, -3.00f},
+                         12u, 3, B::Jester,   C, 10,  56.f, 4.f},
         /* Prospector*/ {"Prospector","skipping a pick to repair the core refunds a reroll charge",
-                         12u, 2, MetaBranch::Eco,     MetaCurrency::Cores,  20, -2.00f, -2.00f},
+                         12u, 2, B::Jester,   C, 25,  56.f, 5.f},
         /* Stockpile */ {"Stockpile", "keep one random power-up in reserve; press Q to use it",
-                         6u,  1, MetaBranch::Pickups, MetaCurrency::Cores,  13,  2.00f,  0.00f},
+                         6u,  1, B::Support,  C, 18, 206.f, 3.f},
         /* Magnet    */ {"Magnet",    "power-up orbs drift toward your nearest ball",
-                         10u, 1, MetaBranch::Pickups, MetaCurrency::Cores,  14,  4.00f, -1.00f},
+                         10u, 1, B::Support,  C, 27, 206.f, 4.f},
         /* Afterglow */ {"Afterglow", "when a power-up ends its effect fades out instead of cutting",
-                         10u, 2, MetaBranch::Pickups, MetaCurrency::Cores,  14,  3.00f, -1.00f},
+                         10u, 2, B::Support,  C, 28, 207.f, 5.f},
         /* Charged   */ {"Charged",   "power-ups arrive with part of their duration already charged",
-                         10u, 2, MetaBranch::Pickups, MetaCurrency::Cores,  14,  4.00f, -2.00f},
+                         10u, 2, B::Support,  C, 14, 222.f, 3.f},
         /* Ember     */ {"Ember",     "fire ball hits set enemies alight for a burn; scales with Ignition",
-                         2u,  3, MetaBranch::Special, MetaCurrency::Prisms,  3,  1.00f,  1.00f},
-        // ---- v12: the Arsenal (down-left) and a few Economy nodes (up-left). ----
-        /* Armory    */ {"Armory",    "Epic picks turn up more often (+50% odds per level). Opens the Arsenal.",
-                         2u,  2, MetaBranch::Arsenal, MetaCurrency::Prisms, 11, -1.00f,  2.00f},
+                         2u,  3, B::Mage,     P,  3, 303.f, 3.f},
+        /* Armory    */ {"Armory",    "Epic picks turn up more often (+50% odds per level)",
+                         2u,  2, B::Jester,   P, 47,  88.f, 5.f},
         /* Satellite */ {"Satellite", "the Satellite legendary can appear: a ball that orbits the core",
-                         2u,  1, MetaBranch::Arsenal, MetaCurrency::Prisms, 32, -1.10f,  3.10f},
+                         2u,  1, B::Guardian, P, 21, 345.f, 3.f},
         /* Singularity*/{"Singularity","the Gravity well legendary can appear: a ball that drags enemies in",
-                         3u,  1, MetaBranch::Arsenal, MetaCurrency::Prisms, 32, -2.00f,  3.00f},
+                         3u,  1, B::Support,  P, 16, 238.f, 4.f},
         /* Twins     */ {"Twins",     "the Gemini legendary can appear: a permanent ghost twin",
-                         3u,  1, MetaBranch::Arsenal, MetaCurrency::Prisms, 34, -3.00f,  2.20f},
+                         3u,  1, B::Summoner, P, MetaBrood, 192.f, 2.3f},
         /* Prism     */ {"Prism",     "the Prism core legendary relic can appear: reactions everywhere",
-                         4u,  1, MetaBranch::Arsenal, MetaCurrency::Prisms, 35, -2.50f,  4.00f},
+                         4u,  1, B::Mage,     P,  5, 303.f, 4.6f},
         /* Lucky star*/ {"Lucky star","+2 luck per level: higher chances and rarer cards",
-                         12u, 3, MetaBranch::Eco,     MetaCurrency::Cores,  20, -3.00f, -1.10f},
+                         12u, 3, B::Jester,   C, 20,  72.f, 3.f},
         /* Haggler   */ {"Haggler",   "shop prices drop 10% per level",
-                         10u, 3, MetaBranch::Eco,     MetaCurrency::Cores,  24, -1.10f, -3.00f},
+                         10u, 3, B::Jester,   C, 48,  88.f, 3.f},
         /* StarterKit*/ {"Starter kit","start every run with a free item on your first ball (Uncommon, then Rare)",
-                         14u, 2, MetaBranch::Eco,     MetaCurrency::Cores,  40, -4.00f, -2.30f},
+                         14u, 2, B::Summoner, C, MetaBrood, 164.f, 2.3f},
         /* EliteSpoils*/{"Elite spoils","elite fights pay +50% gold per level",
-                         12u, 2, MetaBranch::Eco,     MetaCurrency::Cores,  26, -3.00f, -3.00f},
-        // ---- v13: the Pacts branch (down-right, off Heft) and a few shop / start nodes. ----
+                         12u, 2, B::Assassin, C, MetaKeenInstinct, 115.f, 2.f},
         /* Oath      */ {"Oath",      "after the act-1 boss, choose from 4 pacts instead of 3. Opens the Pacts.",
-                         14u, 1, MetaBranch::Pacts,   MetaCurrency::Cores,  11,  1.00f,  2.00f},
+                         14u, 1, B::Pacts,    C,  0, 145.f, 1.f},
         /* Covenant  */ {"Covenant",  "start every run by choosing a pact (1 of 3) - with the boss's, a run can hold two",
-                         3u,  1, MetaBranch::Pacts,   MetaCurrency::Prisms, 41,  2.50f,  3.00f},
+                         3u,  1, B::Pacts,    P, 41, 145.f, 2.f},
         /* Hunters   */ {"Hunters",   "the Hunters pact can be offered: every ball chases its own prey, hands off",
-                         2u,  1, MetaBranch::Pacts,   MetaCurrency::Prisms, 41,  2.00f,  4.00f},
+                         2u,  1, B::Pacts,    P, 41, 136.f, 2.6f},
         /* Legion    */ {"Legion",    "the Legion pact can be offered: two more balls at once, clacks throw sparks",
-                         2u,  1, MetaBranch::Pacts,   MetaCurrency::Prisms, 41,  3.00f,  4.00f},
+                         2u,  1, B::Pacts,    P, 41, 154.f, 2.6f},
         /* Dice      */ {"Loaded dice","the Loaded Dice pact can be offered: +12 luck, fight gold is double or nothing",
-                         3u,  1, MetaBranch::Pacts,   MetaCurrency::Prisms, 43,  2.50f,  5.00f},
+                         3u,  1, B::Pacts,    P, 43, 138.f, 3.6f},
         /* Alchemy   */ {"Alchemy",   "the Alchemy pact can be offered: random extra elements, a ball reacts with itself",
-                         3u,  1, MetaBranch::Pacts,   MetaCurrency::Prisms, 44,  3.60f,  5.00f},
+                         3u,  1, B::Pacts,    P, 44, 152.f, 3.6f},
         /* Merchant  */ {"Merchant",  "shops stock one more pick and their sale gets 15% deeper per level",
-                         12u, 2, MetaBranch::Eco,     MetaCurrency::Cores,  38, -1.80f, -4.00f},
+                         12u, 2, B::Jester,   C, 38,  88.f, 4.f},
         /* Treasury  */ {"Treasury",  "start every run with +20 gold per level",
-                         10u, 3, MetaBranch::Eco,     MetaCurrency::Cores,  38, -0.60f, -4.00f},
+                         10u, 3, B::Jester,   C,  9,  88.f, 2.f},
         /* Quartermaster*/{"Quartermaster","choose your Starter kit item from 4 cards instead of getting a random one",
-                         16u, 1, MetaBranch::Eco,     MetaCurrency::Cores,  39, -5.00f, -2.60f},
+                         16u, 1, B::Summoner, C, 39, 163.f, 3.3f},
         /* Last stand*/ {"Last stand","once per run, when the core breaks it comes back at half health",
-                         20u, 1, MetaBranch::Base,    MetaCurrency::Cores,  23, -4.00f,  0.80f},
-        // ---- v15: the Classes chain, straight down from Mass. Striker is open
-        // from the start; each node lets that class's items appear.
+                         20u, 1, B::Guardian, C, 23, 316.f, 5.f},
+        // ---- the classes: each near the end of its route ----
         /* Support   */ {"Support",   "unlocks the Support class: its items can appear (weak hits that mark enemies for every ball)",
-                         12u, 1, MetaBranch::Classes, MetaCurrency::Cores,  12,  0.00f,  3.00f},
+                         12u, 1, B::Support,  C, 30, 222.f, 4.f},
         /* Guardian  */ {"Guardian",  "unlocks the Guardian class: its items can appear (big, shoves and staggers, guards the core)",
-                         18u, 1, MetaBranch::Classes, MetaCurrency::Cores,  51,  0.00f,  4.00f},
-        /* Mage      */ {"Mage",      "unlocks the Mage class: its items can appear (more ability slots)",
-                         24u, 1, MetaBranch::Classes, MetaCurrency::Cores,  52, -1.40f,  4.80f},
+                         12u, 1, B::Guardian, C, 12, 330.f, 3.f},
+        /* Mage      */ {"Mage",      "unlocks the Mage class: its items can appear (more ability slots; a Mage ball gets Magic missile)",
+                         18u, 1, B::Mage,     C, MetaChannel, 280.f, 3.f},
         /* Shooter   */ {"Shooter",   "unlocks the Shooter class: its items can appear (fires bullets)",
-                         24u, 1, MetaBranch::Classes, MetaCurrency::Cores,  52, -0.80f,  5.45f},
+                         18u, 1, B::Shooter,  C, 19,  27.f, 3.f},
         /* Assassin  */ {"Assassin",  "unlocks the Assassin class: its items can appear (teleports to the next enemy on a kill)",
-                         24u, 1, MetaBranch::Classes, MetaCurrency::Cores,  52,  0.00f,  5.75f},
+                         18u, 1, B::Assassin, C, 40, 115.f, 3.f},
         /* Summoner  */ {"Summoner",  "unlocks the Summoner class: its items can appear (summons helpers)",
-                         24u, 1, MetaBranch::Classes, MetaCurrency::Cores,  52,  0.80f,  5.45f},
+                         18u, 1, B::Summoner, C, MetaMuster, 178.f, 3.f},
         /* Jester    */ {"Jester",    "unlocks the Jester class: its items can appear (plays on chance)",
-                         24u, 1, MetaBranch::Classes, MetaCurrency::Cores,  52,  1.40f,  4.80f},
+                         18u, 1, B::Jester,   C, 37,  72.f, 4.f},
+        // ---- v16: route perks and ability unlocks ----
+        /* Sling     */ {"Sling",     "every throw flies 8% faster per level",
+                         8u,  3, B::Striker,  C, 11,   0.f, 2.f},
+        /* Momentum  */ {"Momentum",  "balls with the Striker class hit 10% harder per level",
+                         12u, 2, B::Striker,  C, 58,   0.f, 3.f},
+        /* StrikerLore*/{"Striker lore","Striker items show up 50% more often per level",
+                         10u, 2, B::Striker,  C, 59,   0.f, 4.f},
+        /* Velocity  */ {"Velocity",  "every ball cruises 5% faster per level",
+                         8u,  2, B::Shooter,  C,  0,  27.f, 1.f},
+        /* ShooterLore*/{"Shooter lore","Shooter items show up 50% more often per level",
+                         10u, 2, B::Shooter,  C, 54,  21.f, 4.f},
+        /* Caliber   */ {"Caliber",   "Shooter bullets hit 15% harder per level",
+                         12u, 2, B::Shooter,  C, 54,  33.f, 4.f},
+        /* JesterLore*/ {"Jester lore","Jester items show up 50% more often per level",
+                         10u, 2, B::Jester,   C, 57,  67.f, 5.f},
+        /* FoolsLuck */ {"Fool's luck","+2 luck per level, and +2 more per level for every ball with the Jester class",
+                         12u, 2, B::Jester,   C, 57,  77.f, 5.f},
+        /* Keen      */ {"Keen instinct","every ball has a 4% chance per level to land a critical hit (x2)",
+                         8u,  3, B::Assassin, C,  0, 115.f, 1.f},
+        /* AssassinLore*/{"Assassin lore","Assassin items show up 50% more often per level",
+                         10u, 2, B::Assassin, C, 55, 109.f, 4.f},
+        /* Deathmark */ {"Deathmark", "Assassin balls finish off any enemy a hit leaves under 5% health per level",
+                         12u, 2, B::Assassin, C, 55, 121.f, 4.f},
+        /* Brood     */ {"Brood",     "ghost copies (Split shot, Mitosis, Split, Phantom) last 25% longer per level",
+                         8u,  2, B::Summoner, C,  0, 178.f, 1.f},
+        /* Muster    */ {"Muster",    "every new ball joins with a random Common item",
+                         12u, 1, B::Summoner, C, 69, 178.f, 2.f},
+        /* SummonerLore*/{"Summoner lore","Summoner items show up 50% more often per level",
+                         10u, 2, B::Summoner, C, 56, 172.f, 4.f},
+        /* Bond      */ {"Bond",      "every summon hits 15% harder and lasts 15% longer per level",
+                         12u, 2, B::Summoner, C, 56, 184.f, 4.f},
+        /* SupportLore*/{"Support lore","Support items show up 50% more often per level",
+                         10u, 2, B::Support,  C, 51, 217.f, 5.f},
+        /* Rally     */ {"Rally",     "marked enemies take +10% more from every hit per level",
+                         12u, 2, B::Support,  C, 51, 227.f, 5.f},
+        /* Missile   */ {"Magic missile","the Magic missile ability can be offered: homing missiles that follow enemies",
+                         6u,  1, B::Mage,     C,  0, 280.f, 1.f},
+        /* Channel   */ {"Channel",   "every ability recharges 6% faster per level",
+                         8u,  3, B::Mage,     C, 75, 280.f, 2.f},
+        /* AbArc     */ {"Arc",       "the Arc ability can be offered: a bolt that leaps through enemies",
+                         8u,  1, B::Mage,     C, 75, 266.f, 2.f},
+        /* AbBulwark */ {"Bulwark pulse","the Bulwark ability can be offered: the core shoves back when enemies close in",
+                         8u,  1, B::Mage,     C, 77, 265.f, 3.f},
+        /* AbSplit   */ {"Split",     "the Split ability can be offered: two ghost copies fan out for a moment",
+                         12u, 1, B::Mage,     C, 78, 265.f, 4.f},
+        /* AbOverclock*/{"Overclock", "the Overclock ability can be offered: a few seconds faster and harder-hitting",
+                         12u, 1, B::Mage,     C, 79, 265.f, 5.f},
+        /* AbMeteor  */ {"Meteor",    "the Meteor ability can be offered: crushes the thickest pack of enemies",
+                         16u, 1, B::Mage,     C, 80, 266.f, 6.f},
+        /* MageLore  */ {"Mage lore", "Mage items show up 50% more often per level",
+                         10u, 2, B::Mage,     C, 53, 275.f, 4.f},
+        /* Archive   */ {"Archive",   "balls with the Mage class recharge their abilities 15% faster per level",
+                         12u, 2, B::Mage,     C, 53, 285.f, 4.f},
+        /* GuardianLore*/{"Guardian lore","Guardian items show up 50% more often per level",
+                         10u, 2, B::Guardian, C, 52, 324.f, 4.f},
+        /* Stonewall */ {"Stonewall", "balls with the Guardian class patch the core up by 0.5 per level on every core bounce",
+                         12u, 2, B::Guardian, C, 52, 336.f, 4.f},
     };
     return defs[u];
+}
+
+// "<Class> lore": that class's items show up more often. -1 for none.
+inline int classLoreNode(ItemTag t) {
+    switch (t) {
+        case ItemTag::Striker:  return MetaLoreStriker;
+        case ItemTag::Guardian: return MetaLoreGuardian;
+        case ItemTag::Support:  return MetaLoreSupport;
+        case ItemTag::Mage:     return MetaLoreMage;
+        case ItemTag::Shooter:  return MetaLoreShooter;
+        case ItemTag::Assassin: return MetaLoreAssassin;
+        case ItemTag::Summoner: return MetaLoreSummoner;
+        case ItemTag::Jester:   return MetaLoreJester;
+        default:                return -1;
+    }
+}
+
+// The web node that lets an ability be offered; -1 = open from the start
+// (Dash and Nova).
+inline int abilityUnlockNode(UpgradeKind k) {
+    switch (k) {
+        case UpgradeKind::AbilityMissile:   return MetaAbilityMissile;
+        case UpgradeKind::AbilityArc:       return MetaAbilityArc;
+        case UpgradeKind::AbilityBulwark:   return MetaAbilityBulwark;
+        case UpgradeKind::AbilitySplit:     return MetaAbilitySplit;
+        case UpgradeKind::AbilityOverclock: return MetaAbilityOverclock;
+        case UpgradeKind::AbilityMeteor:    return MetaAbilityMeteor;
+        default:                            return -1;
+    }
+}
+
+inline bool abilityUnlocked(UpgradeKind k, const int* levels) {
+    const int n = abilityUnlockNode(k);
+    return n < 0 || levels[n] > 0;
 }
 
 inline bool metaUnlockMaxed(int u, int level) { return level >= metaUnlockDef(u).maxLevel; }

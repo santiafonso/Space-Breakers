@@ -67,6 +67,7 @@ float App::flingPower() const {
     float k = data_.run.mods.strongArm ? cfg::combat::flingPowerBoost : 1.f;
     if (hasPact(PactId::HotHands)) k *= cfg::pact::hotFling;
     if (hasPact(PactId::Pinball)) k *= cfg::pact::pinFling;
+    k *= 1.f + cfg::meta::slingPerLevel * static_cast<float>(data_.meta.unlock[MetaSling]);   // web "Sling"
     return k;
 }
 
@@ -287,7 +288,7 @@ void App::advanceRunIntro() {
     }
     if (introStep_ == 1) {
         introStep_ = 2;
-        if (u[MetaCalling] > 0 && openClassChoice()) return;   // "Calling": the starting ball's class
+        if (openAbilityChoice()) return;   // the first ball's first ability ("Calling": a 4th card)
     }
     if (introStep_ == 2) {
         introStep_ = 3;
@@ -297,84 +298,56 @@ void App::advanceRunIntro() {
     openMap();
 }
 
-// ---------------------------------------------------------------- "Calling": the starting class
+// ---------------------------------------------------------------- the first ability
 
-// Items that could start a ball of class t: unlocked, fitting, not on it yet.
-std::vector<UpgradeKind> App::startClassPool(ItemTag t) const {
-    std::vector<UpgradeKind> pool;
-    if (data_.run.balls.empty()) return pool;
-    const BallLoadout& L = data_.run.balls[0];
+// Every run starts classless; the first ball picks its first ability from
+// cards of the abilities the web has unlocked (Dash and Nova are always open;
+// the Mage route unlocks the rest). 3 cards, 4 with "Calling". One ability:
+// it's simply granted (no screen). None: nothing to do.
+bool App::openAbilityChoice() {
+    abilityChoices_.clear();
+    if (data_.run.balls.empty()) return false;
     const UpgradeCtx c = buildUpgradeCtx();
+    std::vector<UpgradeKind> pool;
     for (int i = 0; i < kUpgradeKindCount; ++i) {
         const auto k = static_cast<UpgradeKind>(i);
-        if (upgradeCat(k) == UpgradeCat::Item && itemTag(k) == t && upgradeEligible(k, c) &&
-            upgradeFitsBall(k, L) && !L.has(k))
-            pool.push_back(k);
+        if (upgradeCat(k) == UpgradeCat::Ability && upgradeEligible(k, c)) pool.push_back(k);
     }
-    return pool;
-}
-
-// Offer every unlocked class with enough items to start with. One class: it's
-// simply granted (no screen). None: nothing to do.
-bool App::openClassChoice() {
-    classChoices_.clear();
-    for (int i = 0; i < kClassCount; ++i) {
-        const ItemTag t = classTag(i);
-        if (static_cast<int>(startClassPool(t).size()) >= cfg::classes::startItems) classChoices_.push_back(t);
-    }
-    if (classChoices_.empty()) return false;
-    if (classChoices_.size() == 1) {
-        grantStartClass(classChoices_[0]);
+    for (int i = static_cast<int>(pool.size()) - 1; i > 0; --i)
+        std::swap(pool[static_cast<std::size_t>(i)], pool[static_cast<std::size_t>(rng_.irange(0, i))]);
+    const int want = cfg::meta::abilityPickCards + (data_.meta.unlock[MetaCalling] > 0 ? 1 : 0);   // "Calling"
+    if (static_cast<int>(pool.size()) > want) pool.resize(static_cast<std::size_t>(want));
+    if (pool.empty()) return false;
+    std::sort(pool.begin(), pool.end());   // stable card order: the enum's
+    abilityChoices_ = pool;
+    if (pool.size() == 1) {
+        chooseAbilityCard(0);
         return false;
     }
-    push(ScreenId::ClassPick);
+    push(ScreenId::AbilityPick);
     return true;
 }
 
-void App::chooseClass(int idx) {
-    if (idx < 0 || idx >= static_cast<int>(classChoices_.size())) return;
+void App::chooseAbility(int idx) {
+    if (idx < 0 || idx >= static_cast<int>(abilityChoices_.size())) return;
     audio_.cardPick();
-    back();   // close the class pick
-    grantStartClass(classChoices_[static_cast<std::size_t>(idx)]);
+    back();   // close the pick
+    chooseAbilityCard(idx);
     if (introStep_ >= 0) advanceRunIntro();   // (the dev panel can open it mid-run too)
     save();
 }
 
-// The first ball takes cfg::classes::startItems items of the class - the
-// lowest tiers it has - so the class is live from the first fight.
-void App::grantStartClass(ItemTag t) {
+// The first ball takes card idx in its first ability slot.
+void App::chooseAbilityCard(int idx) {
     RunState& r = data_.run;
-    if (r.balls.empty()) return;
+    if (r.balls.empty() || idx < 0 || idx >= static_cast<int>(abilityChoices_.size())) return;
+    const UpgradeKind k = abilityChoices_[static_cast<std::size_t>(idx)];
     BallLoadout& L = r.balls[0];
-    for (int n = 0; n < cfg::classes::startItems; ++n) {
-        std::vector<UpgradeKind> pool = startClassPool(t);
-        int slot = -1;
-        for (int i = 0; i < kBallSlots && slot < 0; ++i)
-            if (L.gear[i] < 0) slot = i;
-        if (pool.empty() || slot < 0) break;
-        Tier low = Tier::Legendary;
-        for (UpgradeKind k : pool) low = std::min(low, upgradeTier(k));
-        pool.erase(std::remove_if(pool.begin(), pool.end(), [low](UpgradeKind k) { return upgradeTier(k) != low; }),
-                   pool.end());
-        L.setSlot(slot, static_cast<int>(pool[static_cast<std::size_t>(rng_.irange(0, static_cast<int>(pool.size()) - 1))]), 1);
-    }
-    // Mage: its items all work through abilities, so it starts with one (an
-    // Uncommon one: Dash, Bulwark or Arc).
-    if (t == ItemTag::Mage && L.ability[0] < 0) {
-        std::vector<UpgradeKind> spells;
-        const UpgradeCtx c = buildUpgradeCtx();
-        for (int i = 0; i < kUpgradeKindCount; ++i) {
-            const auto k = static_cast<UpgradeKind>(i);
-            if (upgradeCat(k) == UpgradeCat::Ability && upgradeTier(k) == Tier::Uncommon && upgradeEligible(k, c))
-                spells.push_back(k);
-        }
-        if (!spells.empty())
-            L.setSlot(kSlotAbility, static_cast<int>(spells[static_cast<std::size_t>(rng_.irange(0, static_cast<int>(spells.size()) - 1))]), 1);
-    }
+    if (L.has(k)) L.levelUp(L.slotOf(k));
+    else L.setSlot(kSlotAbility, static_cast<int>(k), 1);
     syncWorldBalls();
-    const sf::Color col = tagColor(t);
-    effects_.flash(col, 0.5f);
-    effects_.addLabel(std::string(itemTagName(t)) + " ball", {size().x * 0.5f, size().y * 0.3f}, col, 30, 1.4f);
+    effects_.flash(theme::ability, 0.4f);
+    effects_.addLabel(upgradeInfo(k).title, {size().x * 0.5f, size().y * 0.3f}, theme::ability, 30, 1.4f);
 }
 
 // "Quartermaster": the Starter kit's free item, picked from 4 cards of its tier.

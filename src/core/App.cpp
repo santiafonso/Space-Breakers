@@ -127,6 +127,9 @@ WorldParams App::params() const {
     p.powerUpMask = powerUpMask();
     p.pickupSpawnMult = std::max(0.15f, 1.f - 0.25f * static_cast<float>(u[MetaUplink]));
     p.pickupDurMult = 0.5f + 0.35f * static_cast<float>(u[MetaCapacitor]);
+    // Class routes (2026-09-27).
+    p.cruiseMult *= 1.f + cfg::meta::velocityPerLevel * static_cast<float>(u[MetaVelocity]);   // "Velocity"
+    p.markMul = cfg::role::markDamageMul + cfg::meta::rallyPerLevel * static_cast<float>(u[MetaRally]);   // "Rally"
 
     // Per-element potency: web level 1 unlocks the element, levels past that
     // raise elemMult. Index 1..6 = Fire..Electric (see enum Element).
@@ -290,6 +293,22 @@ BallSpec App::ballSpec(const BallLoadout& L) const {
                 break;
         }
     }
+
+    // The web's class routes (2026-09-27): perks for every ball, then for balls
+    // that have the route's class.
+    namespace W = cfg::meta;
+    const int* u = data_.meta.unlock;
+    auto lv = [u](int node) { return static_cast<float>(u[node]); };
+    m.critChance += W::keenPerLevel * lv(MetaKeenInstinct);                    // "Keen instinct"
+    m.copyLife = 1.f + W::broodPerLevel * lv(MetaBrood);                       // "Brood"
+    m.mitosisLife *= m.copyLife;
+    m.cls.mage.focus += W::channelPerLevel * lv(MetaChannel);                  // "Channel"
+    m.cls.summoner.bond = 1.f + W::bondPerLevel * lv(MetaBond);                // "Bond"
+    if (L.hasRole(ItemTag::Striker)) m.damageMult *= 1.f + W::momentumPerLevel * lv(MetaMomentum);   // "Momentum"
+    if (L.hasRole(ItemTag::Shooter)) m.cls.shooter.dmgMul *= 1.f + W::caliberPerLevel * lv(MetaCaliber);   // "Caliber"
+    if (L.hasRole(ItemTag::Assassin)) m.cls.assassin.cull += W::deathmarkPerLevel * lv(MetaDeathmark);    // "Deathmark"
+    if (L.hasRole(ItemTag::Mage)) m.cls.mage.focus += W::archivePerLevel * lv(MetaArchive);             // "Archive"
+    if (L.hasRole(ItemTag::Guardian)) m.menderHeal += W::stonewallPerLevel * lv(MetaStonewall);         // "Stonewall"
     return s;
 }
 
@@ -299,7 +318,27 @@ std::vector<BallSpec> App::ballSpecs() const {
     return v;
 }
 
-void App::syncWorldBalls() { world_.syncBalls(ballSpecs(), params()); }
+void App::syncWorldBalls() {
+    grantMageMissiles();
+    world_.syncBalls(ballSpecs(), params());
+}
+
+// A ball that becomes a Mage is handed its signature ability, Magic missile,
+// in a free open ability slot (the class opens the 2nd one) - once it has it,
+// it's an ordinary ability (it levels, it can be swapped).
+void App::grantMageMissiles() {
+    const int mm = static_cast<int>(UpgradeKind::AbilityMissile);
+    for (BallLoadout& L : data_.run.balls) {
+        if (!L.hasRole(ItemTag::Mage) || L.has(UpgradeKind::AbilityMissile)) continue;
+        for (int i = 0; i < abilitySlotCount(L); ++i) {
+            if (L.ability[i] >= 0) continue;
+            L.setSlot(kSlotAbility + i, mm, 1);
+            if (data_.run.active)
+                effects_.addLabel("+ Magic missile", {size().x * 0.5f, size().y * 0.36f}, theme::classMage, 22, 1.2f);
+            break;
+        }
+    }
+}
 
 int App::startBallCount() const { return cfg::run::startBalls; }   // one ball: more come from picks and pacts
 
@@ -340,7 +379,7 @@ std::unique_ptr<Screen> App::makeScreen(ScreenId id) {
         case ScreenId::Dev:     return std::make_unique<DevScreen>();
         case ScreenId::Pact:    return std::make_unique<PactScreen>();
         case ScreenId::Sound:   return std::make_unique<SoundScreen>();
-        case ScreenId::ClassPick: return std::make_unique<ClassPickScreen>();
+        case ScreenId::AbilityPick: return std::make_unique<AbilityPickScreen>();
     }
     return std::make_unique<MenuScreen>();
 }
@@ -355,7 +394,7 @@ void App::replaceStack(ScreenId id) {
 
 void App::push(ScreenId id) {
     switch (id) {   // a soft cue as it opens: cards being dealt, or a plain panel
-        case ScreenId::Choice: case ScreenId::Shop: case ScreenId::Pact: case ScreenId::ClassPick:
+        case ScreenId::Choice: case ScreenId::Shop: case ScreenId::Pact: case ScreenId::AbilityPick:
             audio_.cardsDealt();
             break;
         case ScreenId::Play: case ScreenId::Dev: break;
@@ -391,8 +430,8 @@ void App::newRun() {
     r.wave = 0;
     r.coreMaxHp = startCoreHp();
     r.coreHp = r.coreMaxHp;
-    // Every ball starts Normal; classes come from its items ("Calling" picks
-    // the first one in the run intro).
+    // Every ball starts Normal (classless); classes come from its items. The
+    // run intro picks the first ball's first ability.
     auto startLoadout = [](int n) { return std::vector<BallLoadout>(static_cast<std::size_t>(n)); };
     r.balls = startLoadout(startBallCount());
     ++data_.meta.stats.runs;
@@ -513,6 +552,7 @@ UpgradeCtx App::buildUpgradeCtx() const {
     for (int i = 0; i < kUpgradeKindCount; ++i) {
         const auto k = static_cast<UpgradeKind>(i);
         if (upgradeCat(k) == UpgradeCat::Item && !classUnlocked(itemTag(k), u)) c.lock(k);
+        if (upgradeCat(k) == UpgradeCat::Ability && !abilityUnlocked(k, u)) c.lock(k);   // the Mage route
     }
     return c;
 }
@@ -526,6 +566,12 @@ int App::luck() const {
         for (int i = 0; i < kBallSlots; ++i)
             if (b.gear[i] == static_cast<int>(UpgradeKind::LuckyCharm))
                 l += cfg::jester::charmPoints(std::clamp(b.gearLvl[i], 1, kMaxItemLevel));
+    // web "Fool's luck": some luck always, more for every Jester ball
+    if (const int fool = data_.meta.unlock[MetaFoolsLuck]; fool > 0) {
+        l += cfg::meta::foolsLuckPerLevel * fool;
+        for (const BallLoadout& b : data_.run.balls)
+            if (b.hasRole(ItemTag::Jester)) l += cfg::meta::foolsLuckPerLevel * fool;
+    }
     return l;
 }
 
@@ -569,8 +615,22 @@ UpgradeKind App::rollPick(RollSource src, const std::vector<UpgradeKind>& exclud
         for (int t : {tier - d, tier + d}) {
             if (t < 0 || t >= kTierCount || byTier[t].empty()) continue;
             if (src == RollSource::Boss && t < static_cast<int>(Tier::Rare) && d < kTierCount - 1) continue;
+            // "<Class> lore" (web): that class's items weigh more within the tier.
             const auto& v = byTier[t];
-            return v[static_cast<std::size_t>(rng_.irange(0, static_cast<int>(v.size()) - 1))];
+            float sum = 0.f;
+            std::vector<float> wk(v.size(), 1.f);
+            for (std::size_t j = 0; j < v.size(); ++j) {
+                if (upgradeCat(v[j]) == UpgradeCat::Item)
+                    if (const int lore = classLoreNode(itemTag(v[j])); lore >= 0)
+                        wk[j] += cfg::meta::lorePerLevel * static_cast<float>(u[lore]);
+                sum += wk[j];
+            }
+            float pick = rng_.range(0.f, sum);
+            for (std::size_t j = 0; j < v.size(); ++j) {
+                if (pick < wk[j]) return v[j];
+                pick -= wk[j];
+            }
+            return v.back();
         }
     }
     return UpgradeKind::HeavyImpact;   // always eligible: a modifier fits any ball
@@ -692,6 +752,10 @@ void App::applyUpgradeKind(UpgradeKind k, int ball, int slot) {
         case UpgradeKind::AddBall:
             if (static_cast<int>(r.balls.size()) >= cfg::ball::maxBalls) return;
             r.balls.push_back(BallLoadout{});
+            if (data_.meta.unlock[MetaMuster] > 0) {   // web "Muster": it joins with a Common item
+                const int item = randomItemFor(r.balls.back(), Tier::Common);
+                if (item >= 0) r.balls.back().setSlot(0, item, 1);
+            }
             syncWorldBalls();
             break;
         case UpgradeKind::CoreSpring:    m.spring = true; break;
@@ -1192,9 +1256,9 @@ void App::devOpen(DevOpen what) {
             if (!openPactChoice(what == DevOpen::PactBoss ? PactSource::Boss : PactSource::Start))
                 effects_.addLabel("no pact left to offer", {size().x * 0.5f, size().y * 0.5f}, theme::coreLow, 22, 1.2f);
             break;
-        case DevOpen::ClassPick:    // "Calling" on the first ball, as at the run start
-            if (!openClassChoice())
-                effects_.addLabel("no class to pick (or only one: granted)", {size().x * 0.5f, size().y * 0.5f},
+        case DevOpen::AbilityPick:  // the first-ability pick, on the first ball, as at the run start
+            if (!openAbilityChoice())
+                effects_.addLabel("no ability to pick (or only one: granted)", {size().x * 0.5f, size().y * 0.5f},
                                   theme::textLo, 22, 1.2f);
             break;
         case DevOpen::JumpToBoss:   // stand right before the boss row and open the map
@@ -1697,16 +1761,16 @@ int App::runSnapshots(const std::string& dir) {
 
     data_.meta.cores = 480;
     data_.meta.prisms = 6;
-    for (int u : {MetaCalling, MetaCoreHp, MetaFireItem, MetaVenom, MetaTide, MetaBounty, MetaHeft, MetaMass,
-                  MetaUplink, MetaClassSupport, MetaClassGuardian})
+    for (int u : {MetaCalling, MetaCoreHp, MetaMass, MetaClassGuardian, MetaHeft, MetaSling, MetaAbilityMissile,
+                  MetaAbilityArc, MetaUplink, MetaCapacitor, MetaBounty, MetaVelocity})
         data_.meta.unlock[u] = 1;
     openLoadout();
     snapFrame(d + "02_web.png");
 
-    // The run intro: "Calling" - pick the starting ball's class.
+    // The run intro: pick the first ball's first ability.
     newRun();
-    snapFrame(d + "03_class_pick.png");
-    chooseClass(0);
+    snapFrame(d + "03_ability_pick.png");
+    chooseAbility(0);
     snapFrame(d + "03_map.png");
 
     // A dressed-up squad so the arena and the panels have something to show:
@@ -1730,7 +1794,7 @@ int App::runSnapshots(const std::string& dir) {
     r.balls[1].mods[0] = 2;
     put(r.balls[2], kSlotType, UpgradeKind::ElemElectric, 1);
     put(r.balls[2], 0, UpgradeKind::Storm, 1);
-    put(r.balls[2], kSlotAbility, UpgradeKind::AbilityNova, 1);
+    put(r.balls[2], kSlotAbility, UpgradeKind::AbilityMissile, 3);   // magic missiles in flight
     r.mods.catalyst = true;
     r.mods.luckyClover = true;
     r.mods.spring = true;
@@ -1840,7 +1904,9 @@ int App::runSnapshots(const std::string& dir) {
     back();
 
     data_.run = RunState{};   // back in the game menu, a well-grown web
-    for (int u : {MetaMass, MetaArmory, MetaHaggler, MetaMerchant, MetaStarterKit, MetaBastion, MetaEmber})
+    for (int u : {MetaChannel, MetaClassMage, MetaLoreMage, MetaAbilityBulwark, MetaFireItem, MetaVenom, MetaReroll,
+                  MetaLuckyStar, MetaClassJester, MetaTreasury, MetaHaggler, MetaCharged, MetaClassSupport, MetaRally,
+                  MetaKinetics, MetaClassShooter, MetaBrood, MetaMend, MetaAegis, MetaMomentum, MetaKeenInstinct})
         data_.meta.unlock[u] = 1;
     replaceStack(ScreenId::Menu);
     openLoadout();
@@ -1852,8 +1918,8 @@ int App::runSnapshots(const std::string& dir) {
     newRun();
     snapFrame(d + "16_start_pact.png");
     choosePact(0);
-    snapFrame(d + "17_start_class.png");   // "Calling" comes between the pact and the starter item
-    chooseClass(1);
+    snapFrame(d + "17_start_ability.png");   // the first-ability pick comes between the pact and the starter item
+    chooseAbility(1);
     if (introStep_ >= 0) {   // the Quartermaster pick is up (it needs 4 items to choose from)
         snapFrame(d + "17_starter_pick.png");
         applyUpgrade(0);

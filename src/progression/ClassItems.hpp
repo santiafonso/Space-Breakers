@@ -24,16 +24,15 @@ inline const ItemDef* findItemDef(const std::vector<ItemDef>& defs, UpgradeKind 
 inline const ItemDef* mageItemDef(UpgradeKind k) {
     static const std::vector<ItemDef> defs = {
         // Every Mage item works through the ball's abilities (casts and
-        // cooldowns), so it helps any ball that carries one; Arcane missile
-        // also fires on its own timer.
+        // cooldowns), so it helps any ball that carries one.
         {UpgradeKind::Focus, "Focus", "Focus",
          "its abilities recharge 15% faster",
          "+7% faster", Tier::Common, ItemTag::Mage},
-        {UpgradeKind::ArcaneMissile, "ArcaneMissile", "Arcane missile",
-         "every 4.5 s, and on every ability cast, an arcane missile strikes the nearest enemy (60% of its hit, with its element)",
-         "harder and more often; a 2nd target at level 3, a 3rd at level 5", Tier::Common, ItemTag::Mage},
+        {UpgradeKind::ArcaneMissile, "Barrage", "Barrage",
+         "Magic missile looses +1 missile, and every other ability it casts looses a magic missile too (60% of its hit)",
+         "missiles +10% harder, the free one +12%; +1 more missile at levels 3 and 5", Tier::Common, ItemTag::Mage},
         {UpgradeKind::Attunement, "Attunement", "Attunement",
-         "its abilities (and arcane missiles) hit 30% harder and reach further",
+         "its abilities (and magic missiles) hit 30% harder and reach further",
          "+10% harder", Tier::Uncommon, ItemTag::Mage},
         {UpgradeKind::Twincast, "Twincast", "Twincast",
          "30% chance an ability fires a second time a moment later",
