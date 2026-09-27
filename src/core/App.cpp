@@ -1691,9 +1691,9 @@ void App::processEvents(const FrameEvents& ev) {
     }
 }
 
-// After a cleared fight: the build grows. The run's first fight hands the
-// first ball its first ability; then every fight offers a pick (an Elite's at
-// elite odds) before the map.
+// After a cleared fight: the run's first fight hands the first ball its first
+// ability; an Elite then offers its pick; otherwise back to the map (build
+// picks come from the map's Upgrade / Recruit / Forge / Shop stops).
 void App::postFight() {
     RunState& r = data_.run;
     const bool firstFight = r.map.act == 1 && r.mapRow <= 1;
@@ -1704,7 +1704,12 @@ void App::postFight() {
         abilityAfterFight_ = true;
         return;
     }
-    openChoice(r.eliteWave ? RollSource::Elite : RollSource::Normal);
+    afterFightPick();
+}
+
+void App::afterFightPick() {
+    if (data_.run.eliteWave) openChoice(RollSource::Elite);
+    else openMap();
 }
 
 void App::update(float frameDt) {

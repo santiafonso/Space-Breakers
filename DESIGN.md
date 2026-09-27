@@ -1699,13 +1699,16 @@ Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
     previa al jefe solo conecta con carriles vecinos. Pantalla con **scroll**
     (rueda, flechas/W S, Espacio vuelve a tu fila), nodos más grandes y
     quietos, sin leyenda (tooltip al hover), cabecera fija con acto y estado.
-  - **Economía:** **cada combate termina en un pick** (el élite, con odds de
-    élite); la **primera habilidad llega al terminar el primer combate**
-    (`App::postFight`), ya no al empezar. Combates pagan menos oro
-    (`combatBase` 5, `perRow` 1); tiendas y nodos Upgrade menos frecuentes
-    (`wShop` 6, `wUpgrade` 4, `wCombat` 50).
-  - Falta playtest: balance con un pick por combate (probablemente más fuerte
-    que antes), si 4 ofertas y menos oro dejan la tienda demasiado floja.
+    Botón [O] de la esquina eliminado (la tecla O abre opciones).
+  - **Economía:** la **primera habilidad llega al terminar el primer combate**
+    (`App::postFight`), ya no al empezar. Se probó un pick tras cada combate y
+    **se descartó** (no convenció): los combates normales dan oro
+    (`combatBase` 7, `perRow` 2), el élite su pick. El build crece en las
+    paradas del mapa: menos tiendas (`wShop` 6), más Upgrade (`wUpgrade` 10,
+    `wCombat` 46).
+  - Mapa: además de rueda/flechas, se **arrastra** con el mouse (clic fuera de
+    un nodo).
+  - Falta playtest: si 4 ofertas dejan la tienda demasiado floja.
 
 - **Fase 2 — Jefe tras la oleada 10.** Da upgrades de pelota (viento/agua/
   piedra). Extiende la run mas alla de 10 en "modo infinito" opcional.

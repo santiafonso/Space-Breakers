@@ -192,6 +192,8 @@ private:
     float scroll_ = 0.f;      // how far the map is scrolled up (px): 0 = row 1 at the bottom
     float scrollTarget_ = 0.f;
     bool scrollInit_ = false;
+    bool dragging_ = false;   // the map held with the mouse: it follows the pointer
+    float dragY0_ = 0.f, dragScroll0_ = 0.f;
     int info_ = -1;           // any node under the pointer (for the tooltip)
     float clock_ = 0.f;
     sf::Vector2f mouse_;

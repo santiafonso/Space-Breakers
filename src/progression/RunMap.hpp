@@ -50,8 +50,8 @@ inline const char* mapNodeName(MapNodeType t) {
 
 inline const char* mapNodeDesc(MapNodeType t) {
     switch (t) {
-        case MapNodeType::Combat:  return "a wave of enemies - pays a little gold and a pick of 1 of 4";
-        case MapNodeType::Elite:   return "a much harder wave - more gold and a rarer pick";
+        case MapNodeType::Combat:  return "a wave of enemies - pays gold";
+        case MapNodeType::Elite:   return "a much harder wave - more gold and a pick of 1 of 4";
         case MapNodeType::Shop:    return "spend gold on balls, items, modifiers, relics or repairs";
         case MapNodeType::Forge:   return "level up one item a ball already carries";
         case MapNodeType::Rest:    return "no fight: the core is repaired to full";

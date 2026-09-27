@@ -331,9 +331,9 @@ void App::chooseAbility(int idx) {
     back();   // close the pick
     chooseAbilityCard(idx);
     if (introStep_ >= 0) advanceRunIntro();   // (the dev panel can open it mid-run too)
-    else if (abilityAfterFight_) {             // the first fight's ability: then its usual pick
+    else if (abilityAfterFight_) {             // the first fight's ability: then on as usual
         abilityAfterFight_ = false;
-        openChoice(data_.run.eliteWave ? RollSource::Elite : RollSource::Normal);
+        afterFightPick();
     }
     save();
 }

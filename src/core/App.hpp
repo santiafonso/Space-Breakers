@@ -201,6 +201,7 @@ private:
     bool openStarterChoice();
     std::vector<UpgradeKind> starterPool(Tier want);          // Starter kit candidates, nearest tier first
     void postFight();
+    void afterFightPick();   // an Elite's pick, else the map
     bool openAbilityChoice();                                 // the run's first ability (false = nothing to pick)
     void grantMageMissiles();                                 // a Mage ball gets Magic missile in a free slot
     // Pacts.

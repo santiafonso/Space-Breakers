@@ -404,14 +404,14 @@ inline constexpr int splitPct = 22;     // % chance per row that a path forks in
 inline constexpr int driftPct = 34;     // % chance a path drifts a lane over each row (else it goes straight)
 // Node weights for rows 2..rows-1 (row 1 is always a fight; the last row is
 // shop / rest / upgrade / recruit, see kPreBossRow in progression/RunMap.hpp).
-// Every fight now ends in a pick, so fights are where the build grows; shops
-// are rare stops and free Upgrade nodes rarer still.
-inline constexpr int wCombat = 50;
+// Between fights the map mostly offers build stops (Upgrade / Recruit /
+// Forge); shops are rare.
+inline constexpr int wCombat = 46;
 inline constexpr int wElite = 16;
 inline constexpr int wShop = 6;
 inline constexpr int wForge = 9;
 inline constexpr int wRest = 9;
-inline constexpr int wUpgrade = 4;
+inline constexpr int wUpgrade = 10;
 inline constexpr int wRecruit = 8;      // a new ball or a role
 // Elite waves: tougher and more of them.
 inline constexpr float eliteHpMul = 1.6f;
@@ -419,9 +419,9 @@ inline constexpr float eliteCountMul = 1.3f;
 }  // namespace map
 
 namespace gold {
-inline constexpr int combatBase = 5;      // a cleared fight pays this + perRow * row (and a pick)
+inline constexpr int combatBase = 7;      // a cleared fight pays this + perRow * row
 inline constexpr int elitePerRowMul = 2;  // an elite pays 2x a fight (and a pick)
-inline constexpr int perRow = 1;
+inline constexpr int perRow = 2;
 inline constexpr int bossPay = 40;
 // Playing well pays: every kill drops gold that grows with the damage combo,
 // kills in a quick burst pay a multi-kill bonus, a flawless fight (nothing

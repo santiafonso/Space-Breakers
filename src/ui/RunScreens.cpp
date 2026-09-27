@@ -378,9 +378,26 @@ void MapScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
         if (k < static_cast<int>(open.size())) app.travelTo(open[static_cast<std::size_t>(k)]);
         return;
     }
+    // Drag the map up / down; a press on a lit node travels instead.
+    if (dragging_ && e.type == sf::Event::MouseMoved) {
+        scrollTarget_ = scroll_ = clampf(dragScroll0_ + (mouse.y - dragY0_), 0.f, scrollMax(app));
+        return;
+    }
+    if (e.type == sf::Event::MouseButtonReleased && e.mouseButton.button == sf::Mouse::Left) {
+        dragging_ = false;
+        return;
+    }
     if (!isLeftClick(e)) return;
     const int n = nodeAt(app, mouse);
-    if (n >= 0) app.travelTo(n);
+    if (n >= 0) {
+        app.travelTo(n);
+        return;
+    }
+    if (mouse.y > kMapTop) {
+        dragging_ = true;
+        dragY0_ = mouse.y;
+        dragScroll0_ = scroll_;
+    }
 }
 
 void MapScreen::update(App& app, float dt, sf::Vector2f mouse) {
