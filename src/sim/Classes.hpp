@@ -43,26 +43,33 @@ struct SupportWorld {};
 // items act through the ball's abilities (World::mageCastRate / mageOnCast /
 // mageTick, called from sim/WorldAbilities.cpp), so they work on any ball.
 struct MageMods {
-    float focus = 0.f;          // Focus: abilities recharge this much faster (0.15 = 15%)
-    float missileFrac = 0.f;    // Arcane missile: damage x the ball's hit (0 = off)...
-    float missileEvery = 0.f;   // ...a timed volley this often (plus one per cast)...
-    int missileTargets = 0;     // ...at this many enemies
+    float focus = 0.f;          // Focus (+ the web's Channel / Archive): abilities recharge this much faster (0.15 = 15%)
+    int barrage = 0;            // "Barrage": + magic missiles per Magic missile volley (0 = off)...
+    float barrageFrac = 0.f;    // ...and every OTHER cast looses one missile at this x the ball's hit
+    float missileMul = 1.f;     // ...all its magic missiles hit this much harder
     float power = 1.f;          // Attunement: ability damage x this
     float twincast = 0.f;       // Twincast: chance a cast fires again
     float manaSpring = 0.f;     // Mana spring: a cast charges its other abilities this share
 };
 struct MageState {
-    float missileT = 0.f;       // Arcane missile: time to the next timed volley
     int echoSlot = -1;          // Twincast: the ability slot about to fire again...
     float echoT = 0.f;          // ...in this long
 };
 struct MageWorld {
-    // Arcane missile visuals: short fading streaks (render/ClassRender.cpp).
-    struct Streak {
-        sf::Vector2f a, b;
+    // Magic missiles in flight (the ability and Barrage). They home in on
+    // `target` (an Enemy::id), picking the nearest enemy when it dies.
+    struct Missile {
+        sf::Vector2f pos, vel;
+        float dmg = 0.f;
         float life = 0.f;
+        int elem = 0;           // Element (0 = plain)
+        int owner = -1;         // the ball it came from (reactions need two owners)
+        int target = -1;        // Enemy::id it follows
+        sf::Vector2f trail[6];  // recent positions, newest first (drawn as a short curve)
+        int trailN = 0;
+        float trailT = 0.f;
     };
-    std::vector<Streak> streaks;
+    std::vector<Missile> missiles;
 };
 
 // ==================================================================== Shooter
@@ -157,6 +164,7 @@ struct SummonerMods {
     float dragonInterval = 0.f;   // Dragonling: seconds between breaths (0 = off)
     float dragonFrac = 0.f;
     float dragonCone = 0.f;
+    float bond = 1.f;          // web "Bond": every summon hits harder and lasts longer by this
 };
 inline constexpr int kMaxWardens = 4;
 struct SummonerState {

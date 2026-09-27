@@ -43,7 +43,7 @@ void World::updateAbilities(Ball& b, float dt, const WorldParams& p, FrameEvents
             b.abilityCd[i] = 0.f;   // charged: fires the moment it has a target
         }
     }
-    mageTick(b, dt, p, ev);   // Mage: arcane missiles, Twincast echoes
+    mageTick(b, dt, p, ev);   // Mage: Twincast echoes
 }
 
 bool World::fireAbility(Ball& b, const AbilitySpec& a, const WorldParams& p, FrameEvents& ev) {
@@ -96,7 +96,7 @@ bool World::fireAbility(Ball& b, const AbilitySpec& a, const WorldParams& p, Fra
                 Ball g = b;
                 g.ghost = true;
                 g.twin = false;
-                g.ghostLife = (A::splitLife + A::splitLifePerLevel * n) * reach;
+                g.ghostLife = (A::splitLife + A::splitLifePerLevel * n) * reach * b.mods.copyLife;   // web "Brood"
                 g.age = 0.f;
                 g.held = false;
                 g.trail.clear();
@@ -186,6 +186,11 @@ bool World::fireAbility(Ball& b, const AbilitySpec& a, const WorldParams& p, Fra
             }
             ev.bursts.push_back({c, R, b.color, nullptr});
             return true;
+        }
+
+        case Ability::MagicMissile: {   // the Mage's signature: homing missiles (WorldClasses.cpp)
+            const int count = 1 + (a.level >= 3 ? 1 : 0) + (a.level >= 5 ? 1 : 0) + b.mods.cls.mage.barrage;
+            return mageMissiles(b, count, A::missileFrac + A::missileFracPerLevel * n, p);
         }
     }
     return false;

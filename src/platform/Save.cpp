@@ -11,7 +11,7 @@
 namespace sb {
 
 namespace {
-constexpr int kSaveVersion = 15;  // v15: root Squad -> Calling (refund), class nodes appended (58 nodes); v14: snd.* sound mix; v13: appended Oath..Last stand (51 nodes); append-only since v9
+constexpr int kSaveVersion = 16;  // v16: the web became class routes (layout only), Calling = 4th first-ability card, route perks + ability unlocks appended (86 nodes); v15: root Squad -> Calling (refund), class nodes appended (58 nodes); v14: snd.* sound mix; v13: appended Oath..Last stand (51 nodes); append-only since v9
 }  // namespace
 
 bool hasSavedGame(const std::string& path) {

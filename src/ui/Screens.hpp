@@ -30,10 +30,10 @@ private:
 
 // The game menu: a radial skill web. Spend cores (and prisms on a few key
 // nodes) to unlock permanent buffs, then start a run. The centre node is
-// "Calling" (pick your starting ball's class); branches fan out - Base left,
-// Ball combat down with the Classes chain below it, Economy up, Special balls
-// right - and each node stays locked until the node that gates it toward the
-// centre has a level.
+// "Calling"; around it one route per class radiates outward, each class near
+// the end of its own route (plus the Pacts) - and each node stays locked until
+// the node that gates it toward the centre has a level. Routes are tinted by
+// their class; hovering one in the legend lights it alone.
 class LoadoutScreen : public Screen {
 public:
     void onEnter(App& app) override;
@@ -43,6 +43,7 @@ public:
 
 private:
     void rebuild(App& app);
+    static sf::Vector2f nodeOffset(int i);        // from the centre, in rings (stretched)
     sf::Vector2f nodePos(App& app, int i) const;
     int nodeAt(App& app, sf::Vector2f mouse) const;     // 0..count-1, -1 none
     void moveSelection(App& app, int dx, int dy);       // arrow-key navigation
@@ -135,9 +136,9 @@ private:
     sf::Vector2f mouse_;
 };
 
-// "Calling" in the run intro: pick the starting ball's class (one card per
-// unlocked class with items). App::chooseClass gives it 2 items of it.
-class ClassPickScreen : public Screen {
+// The run intro: pick the first ball's first ability (cards drawn from the
+// abilities the web has unlocked; 4 with "Calling"). App::chooseAbility.
+class AbilityPickScreen : public Screen {
 public:
     void handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) override;
     void update(App& app, float dt, sf::Vector2f mouse) override;
@@ -147,7 +148,7 @@ public:
 private:
     sf::FloatRect cardRect(App& app, int i) const;
     int cardAt(App& app, sf::Vector2f mouse) const;
-    float hover_[kClassCount] = {};
+    float hover_[kAbilityItemCount] = {};
     float clock_ = 0.f;
     sf::Vector2f mouse_;
 };

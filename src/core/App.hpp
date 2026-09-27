@@ -17,7 +17,7 @@
 
 namespace sb {
 
-enum class ScreenId { Menu, Loadout, Play, Choice, Pause, Stats, HowTo, BossWin, Map, Shop, Equip, Dev, Pact, Sound, ClassPick };
+enum class ScreenId { Menu, Loadout, Play, Choice, Pause, Stats, HowTo, BossWin, Map, Shop, Equip, Dev, Pact, Sound, AbilityPick };
 
 // Who opened the ball / slot picker, and so what confirming it does.
 // ShopForge / Sell are the shop's paid forge and its "sell an item" counter.
@@ -127,8 +127,9 @@ public:
     float novaCooldown() const { return novaCd_; }
     std::string choiceTitle() const;   // Choice screen heading
     // ---- "Calling": the starting ball's class, picked in the run intro ----
-    const std::vector<ItemTag>& classChoices() const { return classChoices_; }
-    void chooseClass(int idx);         // ClassPick screen: take card idx
+    const std::vector<UpgradeKind>& abilityChoices() const { return abilityChoices_; }
+    void chooseAbility(int idx);       // AbilityPick screen: take card idx
+    void chooseAbilityCard(int idx);   // ...give ball 0 that ability (no screen change)
     void abandonRun();
     void wipeSave();        // Game menu "Reset progress" -> erase all saved data
 
@@ -152,7 +153,7 @@ public:
     float devTimeScale() const { return devTimeScale_; }
     int devBall() const { return std::min(devBall_, std::max(0, runBallCount() - 1)); }
     void devSetBall(int b) { devBall_ = b; }
-    enum class DevOpen { Shop, Forge, Upgrade, Elite, BossTreasure, Recruit, JumpToBoss, PactBoss, PactStart, ClassPick };
+    enum class DevOpen { Shop, Forge, Upgrade, Elite, BossTreasure, Recruit, JumpToBoss, PactBoss, PactStart, AbilityPick };
     void devOpen(DevOpen what);
     void devTogglePact(PactId id);   // grant it (or drop it, if the run has it)
     void openPause();
@@ -198,9 +199,8 @@ private:
     void advanceRunIntro();
     bool openStarterChoice();
     std::vector<UpgradeKind> starterPool(Tier want);          // Starter kit candidates, nearest tier first
-    bool openClassChoice();                                   // "Calling" (false = nothing to pick)
-    std::vector<UpgradeKind> startClassPool(ItemTag t) const; // items that could start a class-t ball
-    void grantStartClass(ItemTag t);                          // ball 0 takes items of class t
+    bool openAbilityChoice();                                 // the run's first ability (false = nothing to pick)
+    void grantMageMissiles();                                 // a Mage ball gets Magic missile in a free slot
     // Pacts.
     void foldPacts(WorldParams& p) const;  // the run's pacts into the sim params
     bool openPactChoice(PactSource src);   // false = nothing to offer (caller moves on)
@@ -274,7 +274,7 @@ private:
     RollSource rollSource_ = RollSource::Normal;   // what the current Choice was rolled from (rerolls keep it)
     std::string choiceTitle_;                      // custom Choice heading ("Starter kit ..."), empty = default
     std::vector<PactId> pactChoices_;
-    std::vector<ItemTag> classChoices_;   // "Calling": the classes on offer
+    std::vector<UpgradeKind> abilityChoices_;   // the first-ability pick's cards
     PactSource pactSrc_ = PactSource::Boss;
     int introStep_ = -1;      // >= 0 while the run intro (pact / starter pick) is still running
     float novaCd_ = 0.f;      // "Nova" pact cooldown (s)

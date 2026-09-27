@@ -229,6 +229,20 @@ inline constexpr float meteorCooldown = 9.0f;
 inline constexpr float meteorRadius = 95.f, meteorRadiusPerLevel = 10.f;
 inline constexpr float meteorFrac = 2.0f, meteorFracPerLevel = 0.3f;   // damage x the ball's hit
 inline constexpr float meteorStagger = 0.5f;
+// Magic missile (the Mage's signature): homing missiles that curve after the
+// nearest enemy and follow it (a new target if theirs dies).
+inline constexpr float missileCooldown = 3.2f;
+inline constexpr float missileRange = 560.f;      // only fires with an enemy this close
+inline constexpr float missileFrac = 0.9f, missileFracPerLevel = 0.15f;   // damage x the ball's hit
+inline constexpr float missileSpeed = 260.f;      // px/s at launch...
+inline constexpr float missileTopSpeed = 560.f;   // ...accelerating to this
+inline constexpr float missileAccel = 900.f;      // px/s^2
+inline constexpr float missileTurn = 7.f;         // rad/s toward its target
+inline constexpr float missileLife = 2.6f;        // s before it fizzles
+inline constexpr float missileRetarget = 420.f;   // a new target within this of the missile
+inline constexpr float missileRadius = 4.f;       // hit size (px, arena-scaled)
+inline constexpr float missileBossFrac = 0.5f;    // chips the boss for this much
+inline constexpr int maxMissiles = 40;
 }  // namespace ability
 
 // Tiers: how rare a pick is. Each card rolls a tier first (by these weights),
@@ -535,6 +549,22 @@ inline constexpr int treasuryGoldPerLevel = 20;        // "Treasury": starting g
 // "Iron core": beat an act's boss without a single deliberate repair that act
 // (rest, shop repair, the Choice repair-skip) and the run banks this many cores.
 inline constexpr int ironCoreCores = 15;
+// The class routes (2026-09-27): each route's perks, per level.
+inline constexpr float lorePerLevel = 0.5f;          // "<Class> lore": that class's items weigh x(1 + this * level) in a roll
+inline constexpr float slingPerLevel = 0.08f;        // "Sling": throw speed
+inline constexpr float momentumPerLevel = 0.10f;     // "Momentum": Striker-class damage
+inline constexpr float velocityPerLevel = 0.05f;     // "Velocity": every ball's cruise
+inline constexpr float caliberPerLevel = 0.15f;      // "Caliber": Shooter bullet damage
+inline constexpr int foolsLuckPerLevel = 2;          // "Fool's luck": luck, and again per Jester ball
+inline constexpr float keenPerLevel = 0.04f;         // "Keen instinct": crit chance on every ball
+inline constexpr float deathmarkPerLevel = 0.05f;    // "Deathmark": Assassin execute threshold
+inline constexpr float broodPerLevel = 0.25f;        // "Brood": ghost copy lifetime
+inline constexpr float bondPerLevel = 0.15f;         // "Bond": summon damage + lifetime
+inline constexpr float rallyPerLevel = 0.10f;        // "Rally": + damage vs marked enemies
+inline constexpr float channelPerLevel = 0.06f;      // "Channel": ability recharge speed, every ball
+inline constexpr float archivePerLevel = 0.15f;      // "Archive": ability recharge speed, Mage-class balls
+inline constexpr float stonewallPerLevel = 0.5f;     // "Stonewall": core HP per core bounce, Guardian-class balls
+inline constexpr int abilityPickCards = 3;           // the run's first-ability pick (+1 with "Calling")
 }  // namespace meta
 
 // Pacts (Fase O): run-defining rules picked after the act-1 boss (and at the

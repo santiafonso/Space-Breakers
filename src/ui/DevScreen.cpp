@@ -44,7 +44,7 @@ constexpr OpenDef kOpens[] = {
     {App::DevOpen::BossTreasure, "Boss treasure"}, {App::DevOpen::Recruit, "Recruit"},
     {App::DevOpen::JumpToBoss, "Jump to boss"},
     {App::DevOpen::PactBoss, "Pact choice (boss)"}, {App::DevOpen::PactStart, "Pact choice (start)"},
-    {App::DevOpen::ClassPick, "Class pick (start)"},
+    {App::DevOpen::AbilityPick, "Ability pick (start)"},
 };
 constexpr int kOpenCount = static_cast<int>(sizeof(kOpens) / sizeof(kOpens[0]));
 

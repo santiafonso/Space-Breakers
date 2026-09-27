@@ -66,8 +66,8 @@ sf::Color roleColor(BallRole r);
 // Timed actives in a ball's ability slot(s): each fires on its own when its
 // cooldown is up (and it has something to act on). They don't count toward a
 // class. Levelled by picking the same one again (cfg::ability).
-enum class Ability { None, Dash, Nova, Split, Bulwark, Overclock, Arc, Meteor };
-inline constexpr int kAbilityCount = 8;        // with None
+enum class Ability { None, Dash, Nova, Split, Bulwark, Overclock, Arc, Meteor, MagicMissile };
+inline constexpr int kAbilityCount = 9;        // with None
 inline constexpr int kMaxAbilitySlots = 3;     // 1 by default, the Mage raises it (abilitySlotCount)
 
 struct AbilitySpec {
@@ -90,6 +90,7 @@ struct BallMods {
     float maxSpeedMult = 1.f;  // Swift, Comet
     float knockMult = 1.f;     // Big ball, Bumper
     float elemMult = 1.f;      // element item level
+    float copyLife = 1.f;      // web "Brood": its ghost copies (Split shot, Split, Mitosis, Phantom) last x this
     // items
     float ricochetMult = 0.f;  // Ricochet: armed-hit damage x this...
     float wallBoost = 1.f;     // ...and speed x this per wall bounce
@@ -420,6 +421,7 @@ struct WorldParams {
     unsigned powerUpMask = 0xffffffffu;  // bit i set => PowerUp(i) can drop
     float pickupSpawnMult = 1.f;  // scales the gap between power-ups (< 1 = more often)
     float pickupDurMult = 1.f;    // scales how long a power-up lasts
+    float markMul = 1.35f;        // any hit vs a Support-marked enemy x this (cfg::role::markDamageMul + web "Rally")
 
     PactRules pact;               // the run's pacts (sim/PactRules.hpp); defaults = none
 };

@@ -6,11 +6,6 @@
 // the rest of the item numbers.
 namespace sb::cfg {
 
-// The class framework itself.
-namespace classes {
-inline constexpr int startItems = 2;   // "Calling": the starting ball's items of the chosen class
-}  // namespace classes
-
 // ==================================================================== Mage
 // More ability slots (abilitySlotCount, progression/Offers.hpp); its items all
 // work through the ball's abilities.
@@ -23,12 +18,11 @@ inline constexpr float novaFrac = 0.6f;        // damage x the ball's hit
 inline constexpr float novaKnock = 140.f;
 // Focus: abilities recharge this much faster.
 inline constexpr float focus = 0.15f, focusPerLevel = 0.07f;
-// Arcane missile: one volley on a timer and one on every cast.
-inline constexpr float missileEvery = 4.5f, missileEveryPerLevel = -0.4f;   // seconds between timed volleys
-inline constexpr float missileFrac = 0.6f, missileFracPerLevel = 0.12f;     // damage x the ball's hit
-inline constexpr float missileRange = 480.f;
-inline constexpr float missileLife = 0.22f;    // the streak's fade (visual)
-inline constexpr int maxStreaks = 48;
+// Barrage (was "Arcane missile", reworked when Magic missile became an
+// ability): +1 missile per Magic missile volley (+1 more at Lv3 and Lv5), and
+// every OTHER ability cast looses one magic missile.
+inline constexpr float barrageFrac = 0.6f, barrageFracPerLevel = 0.12f;   // that free missile: damage x the ball's hit
+inline constexpr float barrageMissilePerLevel = 0.1f;                      // every magic missile +this per level past 1
 // Attunement: ability (and missile) damage x this; reach grows half as much.
 inline constexpr float power = 1.3f, powerPerLevel = 0.1f;
 // Twincast: chance a cast fires again after echoDelay.

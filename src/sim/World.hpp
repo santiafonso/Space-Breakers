@@ -210,7 +210,8 @@ private:
     // Mage (defined in its section of sim/WorldClasses.cpp): its items act through casts.
     float mageCastRate(const Ball& b) const;   // cooldowns tick this much faster ("Focus")
     void mageOnCast(Ball& b, int slot, bool echo, const WorldParams& p, FrameEvents& ev);   // an ability just fired
-    void mageTick(Ball& b, float dt, const WorldParams& p, FrameEvents& ev);   // missiles, Twincast echoes
+    void mageTick(Ball& b, float dt, const WorldParams& p, FrameEvents& ev);   // Twincast echoes
+    bool mageMissiles(Ball& b, int count, float frac, const WorldParams& p);   // loose homing magic missiles (false: no target)
 
     // ---- hits, procs and reactions (Fase I) ----
     // One ball landing on one enemy: damage, statuses, procs, reactions.
