@@ -521,6 +521,18 @@ void World::cancelHeld() {
     heldIndex_ = -1;
 }
 
+std::optional<sf::Vector2f> World::nearestTarget(sf::Vector2f from) const {
+    std::optional<sf::Vector2f> best;
+    float bestD2 = 1e18f;
+    for (const Enemy& e : enemies_) {
+        if (e.hp <= 0.f) continue;   // dying: not worth a throw
+        const float d2 = dot(e.pos - from, e.pos - from);
+        if (d2 < bestD2) { bestD2 = d2; best = e.pos; }
+    }
+    if (boss_.alive && boss_.hp > 0.f && dot(boss_.pos - from, boss_.pos - from) < bestD2) best = boss_.pos;
+    return best;
+}
+
 // Auto-throw option: now and then, launch the ball that's closest to plain
 // cruising (the one doing least) at the enemy nearest the core.
 void World::updateAutoFling(float dt, const WorldParams& p, FrameEvents& ev) {
