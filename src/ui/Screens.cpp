@@ -75,7 +75,7 @@ sf::Color branchColor(MetaBranch b) {
         case MetaBranch::Base:    return theme::core;
         case MetaBranch::Combat:  return theme::puOverdrive;
         case MetaBranch::Eco:     return theme::accent;
-        case MetaBranch::Special: return theme::elemFire;
+        case MetaBranch::Special: return theme::ember;
         case MetaBranch::Pickups: return theme::puPoints;
         case MetaBranch::Arsenal: return theme::puSurge;
         case MetaBranch::Pacts:   return sf::Color(226, 70, 84);   // crimson: a pact is a bargain
@@ -797,7 +797,7 @@ void PlayScreen::draw(App& app, sf::RenderWindow& w) {
     float dx = theme::margin + 5.f;
     const float dy = s.y - theme::margin - 8.f;
     for (const Ball& b : balls) {
-        const sf::Color ec = b.element == Element::Plain ? theme::textLo : elementColor(b.element);
+        const sf::Color ec = ballHue(b);   // its class, not its element
         draw::disc(w, {dx, dy}, 4.5f, lerpColor(ec, sf::Color::White, 0.2f), ec, {1.f, 1.f}, 16);
         dx += 14.f;
     }
@@ -1085,8 +1085,9 @@ void ChoiceScreen::draw(App& app, sf::RenderWindow& w) {
         const UpgradeKind kind = app.choices()[i];
         const Tier tier = upgradeTier(kind);
         const float sc = 0.55f + 0.45f * clampf(cp, 0.f, 1.05f);            // springs open
-        drawTierFrame(w, {c.x - kCardW * 0.5f * sc, c.y - kCardH * 0.5f * sc, kCardW * sc, kCardH * sc},
-                      tier, h, ca, it, ca);
+        const sf::FloatRect cardR{c.x - kCardW * 0.5f * sc, c.y - kCardH * 0.5f * sc, kCardW * sc, kCardH * sc};
+        drawTierFrame(w, cardR, tier, h, ca, it, ca);
+        drawClassCardMark(w, app.font(), cardR, kind, app.data().run.balls, ca);
         // A ball that already has it would level it up: say so on the tier line.
         std::string tierLine = tierName(tier);
         for (const BallLoadout& L : app.data().run.balls)

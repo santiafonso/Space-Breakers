@@ -371,10 +371,7 @@ void App::grantStartClass(ItemTag t) {
         if (!spells.empty())
             L.setSlot(kSlotAbility, static_cast<int>(spells[static_cast<std::size_t>(rng_.irange(0, static_cast<int>(spells.size()) - 1))]), 1);
     }
-    syncWorldBalls();
-    const sf::Color col = tagColor(t);
-    effects_.flash(col, 0.5f);
-    effects_.addLabel(std::string(itemTagName(t)) + " ball", {size().x * 0.5f, size().y * 0.3f}, col, 30, 1.4f);
+    syncWorldBalls();   // announces the class (banner + chord + flare)
 }
 
 // "Quartermaster": the Starter kit's free item, picked from 4 cards of its tier.

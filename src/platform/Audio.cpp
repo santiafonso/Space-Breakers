@@ -169,6 +169,13 @@ static std::vector<Note> cueRecipe(int c) {
         case 18: return {{880, 700, 40, 0, 0.2, Triangle}};                                    // click
         case 19: return {{440, 660, 90, 0, 0.14, Sine, 0.2}};                                  // open
         case 20: return {{660, 440, 90, 0, 0.12, Sine, 0.1}};                                  // close
+        case 21: return {{261.63, 261.63, 420, 0, 0.18, Sine, 0.12}, {329.63, 329.63, 400, 70, 0.17, Sine, 0.12},
+                         {392, 392, 420, 140, 0.17, Sine, 0.12}, {523.25, 523.25, 560, 210, 0.18, Sine, 0.1},
+                         {1046.5, 1046.5, 380, 260, 0.06}};                                     // class gained
+        case 22: return {{196, 196, 700, 0, 0.16, Triangle, 0.2}, {261.63, 261.63, 620, 60, 0.17, Sine, 0.12},
+                         {329.63, 329.63, 600, 130, 0.17, Sine, 0.12}, {392, 392, 600, 200, 0.17, Sine, 0.12},
+                         {523.25, 523.25, 640, 270, 0.17, Sine, 0.1}, {659.25, 659.25, 660, 340, 0.15, Sine, 0.1},
+                         {1046.5, 1046.5, 800, 420, 0.13}, {1568, 1568, 600, 480, 0.06}};   // ascended
         default: return {};
     }
 }
@@ -179,7 +186,7 @@ bool Audio::init() {
     if (const char* off = std::getenv("SPACE_BREAKERS_NO_AUDIO"); off && *off && *off != '0')
         return false;
 
-    static_assert(CueClose == 20, "cueRecipe is indexed by Cue");
+    static_assert(CueAscend == 22, "cueRecipe is indexed by Cue");
     bool good = true;
     for (int st = 0; st < kStyles; ++st) {
         noteMain_[st].resize(kScaleN);
@@ -306,7 +313,7 @@ void Audio::cue(Cue c, float pitch, float volume01, float minGap) {
     static constexpr int kCat[CueCount] = {
         SndThrow, SndGrab, SndGrab, SndCoreHit, SndKill, SndPickup, SndCombo, SndGold, SndGold,
         SndWave, SndWave, SndWave, SndWave, SndCards, SndCards, SndCards,
-        SndUiClick, SndUiHover, SndUiClick, SndScreens, SndScreens,
+        SndUiClick, SndUiHover, SndUiClick, SndScreens, SndScreens, SndCards, SndCards,
     };
     if (!ok_) return;
     const int cat = kCat[c];
@@ -396,6 +403,8 @@ void Audio::cardPick() { cue(CueCardPick, 1.f, 0.8f, 0.1f); }
 void Audio::levelUp(int level) {
     cue(CueLevelUp, 1.f + 0.04f * static_cast<float>(std::max(0, level - 2)), 0.8f, 0.1f);
 }
+
+void Audio::classGain(bool ascended) { cue(ascended ? CueAscend : CueClassGain, 1.f, 0.9f, 0.3f); }
 
 void Audio::travel() { cue(CueTravel, 1.f, 0.7f, 0.1f); }
 

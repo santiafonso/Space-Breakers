@@ -580,6 +580,7 @@ void ShopScreen::draw(App& app, sf::RenderWindow& w) {
 
         const Tier tier = upgradeTier(k);
         drawTierFrame(w, rc, tier, h, a, it);
+        if (!sold) drawClassCardMark(w, app.font(), rc, k, r.balls, a);
         drawLabel(w, app.font(), tierName(tier), 10, {cx, rc.top + 66.f}, withAlpha(tierColor(tier), a));
 
         std::string head = upgradeCatName(cat);

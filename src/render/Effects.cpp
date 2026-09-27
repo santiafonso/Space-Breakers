@@ -20,6 +20,7 @@ void Effects::clear() {
     rings_.clear();
     coins_.clear();
     labels_.clear();
+    banners_.clear();
     for (float& e : edge_) e = 0.f;
     flash_ = 0.f;
 }
@@ -109,7 +110,25 @@ void Effects::flash(sf::Color color, float strength) {
     flash_ = std::max(flash_, clampf(strength, 0.f, 1.f));
 }
 
+void Effects::classBanner(const std::string& caption, const std::string& from, const std::string& to,
+                          sf::Color color, bool ascended) {
+    if (banners_.size() >= 4) return;   // a flood (a pact handing out balls) keeps the first few
+    Banner b;
+    b.caption = caption;
+    b.from = from;
+    b.to = to;
+    b.color = color;
+    b.ascended = ascended;
+    b.life = ascended ? 2.8f : 2.2f;
+    banners_.push_back(b);
+}
+
 void Effects::update(float dt) {
+    if (!banners_.empty()) {
+        // the next one in the queue starts a touch early, as the current fades
+        banners_.front().age += dt;
+        if (banners_.front().age >= banners_.front().life) banners_.erase(banners_.begin());
+    }
     for (auto it = rings_.begin(); it != rings_.end();) {
         it->age += dt;
         if (it->age >= it->life) it = rings_.erase(it);
@@ -190,6 +209,70 @@ void Effects::drawRings(sf::RenderWindow& window) const {
     }
 }
 
+// The class-gain band: dark glass across the screen, hairlines and corner
+// brackets in the class colour; it opens from a line, holds, and fades.
+void Effects::drawBanner(sf::RenderWindow& window, const Banner& b) const {
+    if (!font_) return;
+    const float t = b.age;
+    const float open = clampf(t / 0.18f, 0.f, 1.f);
+    const float fade = clampf((b.life - t) / 0.45f, 0.f, 1.f);
+    const float a = fade;
+    const float cy = size_.y * 0.22f;
+    const float h = (b.ascended ? 86.f : 72.f) * (1.f - (1.f - open) * (1.f - open));
+    const sf::FloatRect band{0.f, cy - h * 0.5f, size_.x, h};
+    draw::box(window, band, 0.f, withAlpha(lerpColor(theme::glassTop, b.color, 0.12f), 0.92f * a),
+              withAlpha(theme::glassBottom, 0.92f * a));
+    for (float y : {band.top, band.top + band.height})
+        draw::line(window, {0.f, y}, {size_.x, y}, 1.f, withAlpha(b.color, 0.55f * a));
+    if (open < 1.f) return;
+
+    const float in = clampf((t - 0.18f) / 0.25f, 0.f, 1.f);   // the words slide in
+    const float ta = a * in;
+    auto text = [&](const std::string& str, unsigned sz, sf::Color c, float spacing) {
+        sf::Text x(str, *font_, sz);
+        x.setLetterSpacing(spacing);
+        x.setFillColor(withAlpha(c, ta));
+        return x;
+    };
+    auto place = [&](sf::Text& x, float left, float y) {
+        const sf::FloatRect lb = x.getLocalBounds();
+        x.setOrigin(lb.left, lb.top + lb.height * 0.5f);
+        x.setPosition(std::round(left), std::round(y));
+    };
+
+    sf::Text cap = text(b.caption, 12, theme::textLo, 2.2f);
+    place(cap, size_.x * 0.5f - cap.getLocalBounds().width * 0.5f, band.top + 15.f);
+    window.draw(cap);
+
+    const float ty = band.top + h * 0.5f + (b.ascended ? 10.f : 8.f);
+    const unsigned big = b.ascended ? 34u : 30u;
+    sf::Text to = text(b.to, big, lerpColor(b.color, sf::Color::White, b.ascended ? 0.2f : 0.f), 1.6f);
+    const float toW = to.getLocalBounds().width;
+    const float slide = (1.f - in) * 18.f;
+    if (b.from.empty()) {
+        place(to, size_.x * 0.5f - toW * 0.5f + slide, ty);
+        window.draw(to);
+        const float half = toW * 0.5f + 26.f;
+        draw::brackets(window, {size_.x * 0.5f - half, ty - 24.f, 2.f * half, 48.f}, 10.f, 2.f,
+                       withAlpha(b.color, 0.8f * ta), 4.f * (1.f - in));
+        return;
+    }
+    sf::Text from = text(b.from, 20, theme::textLo, 1.6f);
+    const float fromW = from.getLocalBounds().width;
+    const float gap = 44.f;
+    const float x0 = size_.x * 0.5f - (fromW + gap + toW) * 0.5f;
+    place(from, x0, ty);
+    window.draw(from);
+    // a drawn arrow (no glyph to depend on)
+    const float ax = x0 + fromW + 12.f;
+    const sf::Color ac = withAlpha(b.color, 0.8f * ta);
+    draw::line(window, {ax, ty}, {ax + 20.f, ty}, 2.f, ac);
+    draw::line(window, {ax + 13.f, ty - 6.f}, {ax + 20.5f, ty + 0.5f}, 2.f, ac);
+    draw::line(window, {ax + 13.f, ty + 6.f}, {ax + 20.5f, ty - 0.5f}, 2.f, ac);
+    place(to, x0 + fromW + gap + slide, ty);
+    window.draw(to);
+}
+
 void Effects::drawOverlay(sf::RenderWindow& window) const {
     if (flash_ > 0.01f) {
         sf::RectangleShape r(size_);
@@ -202,7 +285,7 @@ void Effects::drawOverlay(sf::RenderWindow& window) const {
         coin.setPosition(c.pos);
         coin.setFillColor(theme::puGolden);
         coin.setOutlineThickness(1.5f);
-        coin.setOutlineColor(withAlpha(theme::elemFire, 0.8f));
+        coin.setOutlineColor(withAlpha(theme::ember, 0.8f));
         window.draw(coin);
     }
     for (const Label& l : labels_) {
@@ -213,6 +296,7 @@ void Effects::drawOverlay(sf::RenderWindow& window) const {
         text.setFillColor(withAlpha(c, clampf(fade, 0.f, 1.f)));
         window.draw(text);
     }
+    if (!banners_.empty()) drawBanner(window, banners_.front());
 }
 
 }  // namespace sb

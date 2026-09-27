@@ -22,6 +22,12 @@ public:
     void addLabel(const std::string& text, sf::Vector2f pos, sf::Color color,
                   unsigned size, float life);
     void flash(sf::Color color, float strength);
+    // "FIRE BALL  >  STRIKER": a ball gained a class. A band across the upper
+    // screen in the class colour, over every screen (cards, shop, TAB...).
+    // `from` empty = just `to` (the ascended form). Several queue up and play
+    // one after another. `caption` is the small tracked line above.
+    void classBanner(const std::string& caption, const std::string& from, const std::string& to,
+                     sf::Color color, bool ascended);
     // A gold coin that pops out at `pos` (UI units) and flies to `target`.
     // Bigger coins for a bigger combo.
     void addCoin(sf::Vector2f pos, sf::Vector2f target, float radius);
@@ -58,6 +64,16 @@ private:
         float age = 0.f;
         float radius = 4.f;
     };
+
+    struct Banner {
+        std::string caption, from, to;
+        sf::Color color;
+        bool ascended = false;
+        float age = 0.f;
+        float life = 2.2f;
+    };
+    void drawBanner(sf::RenderWindow& window, const Banner& b) const;
+    std::vector<Banner> banners_;   // front one plays
 
     std::vector<Coin> coins_;
     int arrived_ = 0;

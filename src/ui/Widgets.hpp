@@ -72,6 +72,13 @@ sf::Color tierColor(Tier t);     // Common grey .. Legendary gold
 // drives the pulse; `reveal` (0..1) snaps the brackets in as the card appears.
 void drawTierFrame(sf::RenderWindow& w, sf::FloatRect r, Tier t, float hover, float alpha, float time,
                    float reveal = 1.f);
+// A class item's card, over its tier frame: a class-coloured spine down the
+// left edge and a faint wash of the class colour - a class is what's worth
+// chasing, so its cards read louder than an element's. When taking it would
+// give some ball its class (or ascend it), a chip on the bottom edge says so
+// ("MAKES A STRIKER" / "ASCENDS: MEGA STRIKER"). No-op for untagged picks.
+void drawClassCardMark(sf::RenderWindow& w, const sf::Font& font, sf::FloatRect r, UpgradeKind k,
+                       const std::vector<BallLoadout>& balls, float alpha);
 
 // What part of a loadout panel centred at `c` the pointer is on: a slot
 // (0..kLoadoutSlots-1), kPanelPartBall = the ball / class name,

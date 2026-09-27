@@ -75,6 +75,23 @@ sf::Color elementColor(Element e) {
     return theme::ballMid;
 }
 
+sf::Color roleColor(BallRole r) {
+    switch (r) {
+        case BallRole::Normal:   return theme::textLo;
+        case BallRole::Striker:  return theme::ballFast;
+        case BallRole::Guardian: return theme::core;
+        case BallRole::Support:  return theme::puSurge;
+        case BallRole::Mage:     return theme::classMage;
+        case BallRole::Shooter:  return theme::classShooter;
+        case BallRole::Assassin: return theme::classAssassin;
+        case BallRole::Summoner: return theme::classSummoner;
+        case BallRole::Jester:   return theme::classJester;
+    }
+    return theme::textLo;
+}
+
+sf::Color ballHue(const Ball& b) { return roleColor(b.leadRole()); }
+
 const char* enemyName(EnemyKind k) {
     switch (k) {
         case EnemyKind::Grunt:    return "Grunt";

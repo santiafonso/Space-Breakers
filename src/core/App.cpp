@@ -2,6 +2,7 @@
 #include "render/Backdrop.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdlib>
 #include <filesystem>
@@ -25,6 +26,11 @@ namespace sb {
 namespace {
 
 sf::Vector2f kLogical() { return {1280.f, 800.f}; }
+
+std::string upperCase(std::string s) {
+    for (char& ch : s) ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+    return s;
+}
 
 bool envDevMode() {
     const char* v = std::getenv("SB_DEV");
@@ -150,6 +156,7 @@ BallSpec App::ballSpec(const BallLoadout& L) const {
     namespace G = cfg::changer;
     BallSpec s;
     s.roles = L.roleMask();   // from its item tags: 2 = the class, 4 = ascended
+    s.primary = tagRole(L.leadTag());
     if (const ItemTag asc = L.ascended(); asc != ItemTag::None) s.ascended = roleBit(tagRole(asc));
     if (hasPact(PactId::Duet)) s.ascended = s.roles;   // "Duet": every class it has is ascended
     s.element = L.element();
@@ -299,7 +306,76 @@ std::vector<BallSpec> App::ballSpecs() const {
     return v;
 }
 
-void App::syncWorldBalls() { world_.syncBalls(ballSpecs(), params()); }
+void App::syncWorldBalls() {
+    world_.syncBalls(ballSpecs(), params());
+    announceClassGains();
+}
+
+void App::rememberClasses() {
+    knownClasses_.clear();
+    for (const BallLoadout& L : data_.run.balls) knownClasses_.push_back({L.roleMask(), L.ascended()});
+}
+
+// "FIRE BALL > STRIKER", "STRIKER > STRIKER + SUPPORT", "ASCENDED: MEGA
+// STRIKER". A class is the thing worth chasing, so gaining one is a moment:
+// a banner in the class colour over whatever screen is up, a rising chord,
+// a soft flash, and the ball flares in its class colour when the fight runs.
+// Losing a class (sell / swap) is silent. A ball that's new (recruit, Legion)
+// compares against a classless one.
+void App::announceClassGains() {
+    const auto& balls = data_.run.balls;
+    for (std::size_t i = 0; i < balls.size(); ++i) {
+        const BallLoadout& L = balls[i];
+        const KnownClasses was = i < knownClasses_.size() ? knownClasses_[i] : KnownClasses{};
+        const RoleMask now = L.roleMask();
+        const ItemTag asc = L.ascended();
+        const RoleMask gained = now & ~was.roles;
+        const bool ascends = asc != ItemTag::None && asc != was.ascended;
+        if (!gained && !ascends) continue;
+
+        std::string caption = "BALL " + std::to_string(i + 1);
+        if (ascends) {
+            const sf::Color col = tagColor(asc);
+            effects_.classBanner(caption + "  -  ASCENDED", "", upperCase(ascendedName(tagRole(asc))), col, true);
+            effects_.flash(col, 0.55f);
+            audio_.classGain(true);
+            world_.pulseClass(static_cast<int>(i), true);
+            continue;
+        }
+        // What it was: its old class(es), or "FIRE BALL" / "BALL" without one.
+        auto names = [](RoleMask m) {
+            std::string out;
+            for (int c = 0; c < kClassCount; ++c) {
+                if ((m & roleBit(classAt(c))) == 0) continue;
+                if (!out.empty()) out += " + ";
+                out += upperCase(roleName(classAt(c)));
+            }
+            return out;
+        };
+        ItemTag order[2];
+        const int n = L.roles(order);
+        std::string to;
+        for (int k = 0; k < n; ++k) to += (k ? " + " : "") + upperCase(roleName(tagRole(order[k])));
+        std::string from = names(was.roles & now);
+        if (from.empty()) {
+            const Element el = L.element();
+            from = el == Element::Plain ? "BALL" : upperCase(elementName(el)) + " BALL";
+            caption += "  -  NEW CLASS";
+        } else {
+            caption += "  -  SECOND CLASS";
+        }
+        // the colour of the class it just got
+        ItemTag got = n > 0 ? order[0] : ItemTag::None;
+        for (int k = 0; k < n; ++k)
+            if (gained & roleBit(tagRole(order[k]))) got = order[k];
+        const sf::Color col = tagColor(got);
+        effects_.classBanner(caption, from, to, col, false);
+        effects_.flash(col, 0.4f);
+        audio_.classGain(false);
+        world_.pulseClass(static_cast<int>(i), false);
+    }
+    rememberClasses();
+}
 
 int App::startBallCount() const { return cfg::run::startBalls; }   // one ball: more come from picks and pacts
 
@@ -425,6 +501,7 @@ void App::newRun() {
         if (!pool.empty()) r.balls[0].setSlot(0, static_cast<int>(pool[0]), 1);   // its tier, else the nearest
     }
     world_.startRun(params(), ballSpecs(), r.coreHp, r.coreMaxHp);
+    rememberClasses();   // the class-gain watch starts from here (Calling announces its class)
     world_.setPhoenix(r.lastStandLeft);   // no Phoenix until it's picked; "Last stand" is one save per run
     effects_.clear();
     hitstop_ = 0.f;
@@ -1734,6 +1811,7 @@ int App::runSnapshots(const std::string& dir) {
     r.mods.catalyst = true;
     r.mods.luckyClover = true;
     r.mods.spring = true;
+    rememberClasses();   // staged, not earned: no class-gain banners for the dressed-up squad
     syncWorldBalls();
     for (int i = 0; i < static_cast<int>(r.map.nodes.size()); ++i)
         if (mapNodeOpen(i)) { travelTo(i); break; }
@@ -1741,11 +1819,31 @@ int App::runSnapshots(const std::string& dir) {
     capturePath_ = d + "04_play.png";
     render();
 
-    choices_ = {UpgradeKind::Railgun, UpgradeKind::Storm, UpgradeKind::Cleave, UpgradeKind::Hunter};
+    // Tesla would give ball 3 (Storm) its Support class: the card says so.
+    choices_ = {UpgradeKind::Railgun, UpgradeKind::Tesla, UpgradeKind::Cleave, UpgradeKind::Hunter};
     rollSource_ = RollSource::Normal;
     push(ScreenId::Choice);
     snapFrame(d + "05_choice.png");
     back();
+
+    // Class-gain moments: ball 3 takes Tesla (2 Support = the class), then -
+    // staged for a moment - two more Support items (4 = Grand Support).
+    applyUpgradeKind(UpgradeKind::Tesla, 2, -1);
+    for (int i = 0; i < 20; ++i) update(1.f / 60.f);
+    capturePath_ = d + "05b_class_gain.png";
+    render();
+    const BallLoadout keep = r.balls[2];
+    effects_.clear();
+    r.balls[2].setSlot(2, static_cast<int>(UpgradeKind::Bomber), 1);
+    r.balls[2].setSlot(3, static_cast<int>(UpgradeKind::Resonance), 1);
+    syncWorldBalls();
+    for (int i = 0; i < 24; ++i) update(1.f / 60.f);
+    capturePath_ = d + "05c_ascend.png";
+    render();
+    r.balls[2] = keep;
+    syncWorldBalls();
+    for (int i = 0; i < 90; ++i) update(1.f / 60.f);   // let the flare play out
+    effects_.clear();
 
     rollShop();
     push(ScreenId::Shop);
