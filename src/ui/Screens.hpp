@@ -70,7 +70,12 @@ private:
 
 // The peek itself: every ball's loadout, the relics and the pacts, dimming
 // whatever is underneath. `paused` adds the fight's "paused" note.
-void drawLoadoutOverlay(App& app, sf::RenderWindow& w, bool paused, bool latched);
+void drawLoadoutOverlay(App& app, sf::RenderWindow& w, bool paused, const TabPeek& peek);
+// Mouse input while the peek is open: press on a filled slot picks it up,
+// letting go on another slot / ball moves or swaps it (App::moveSlot).
+// True if it used the event.
+bool loadoutDragEvent(App& app, TabPeek& peek, const sf::Event& e);
+sf::Vector2f loadoutPanelCenter(App& app, int i);   // ball i's panel in the peek, UI units
 // A small [tab] key cap with "loadout" beside it; `topLeft` in UI units.
 void drawTabHint(App& app, sf::RenderWindow& w, sf::Vector2f topLeft);
 

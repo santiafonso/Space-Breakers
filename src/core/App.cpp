@@ -927,6 +927,64 @@ void App::cancelEquip() {
     if (equipSrc_ == EquipSource::Forge) openMap();   // walking away from the forge
 }
 
+// ---------------------------------------------------------------- TAB: move a slot between balls
+
+// Same kind only (item / type / ability). Refused: an empty source, the same
+// spot, a ball with no free slot of that kind, a closed ability slot, or a
+// result that breaks the pick rules - two copies of one pick on a ball, or
+// Conductor / Bedrock without their element (upgradeFitsBall). The type slot
+// is one per ball, so a drop on a ball's panel swaps elements.
+int App::slotMoveTarget(int fromBall, int fromSlot, int toBall, int toSlot) const {
+    const int n = runBallCount();
+    if (fromBall < 0 || fromBall >= n || toBall < 0 || toBall >= n) return -1;
+    if (fromSlot < 0 || fromSlot >= kLoadoutSlots) return -1;
+    const BallLoadout& src = data_.run.balls[static_cast<std::size_t>(fromBall)];
+    const BallLoadout& dst = data_.run.balls[static_cast<std::size_t>(toBall)];
+    if (src.kindAt(fromSlot) < 0) return -1;
+    auto sameKind = [&](int s) {
+        if (isItemSlot(fromSlot)) return isItemSlot(s);
+        if (fromSlot == kSlotType) return s == kSlotType;
+        return isAbilitySlot(s);
+    };
+    auto isOpen = [&](int s) { return !isAbilitySlot(s) || s - kSlotAbility < abilitySlotCount(dst); };
+    if (toSlot < 0) {
+        if (toBall == fromBall) return -1;
+        for (int s = 0; s < kLoadoutSlots && toSlot < 0; ++s)
+            if (sameKind(s) && isOpen(s) && dst.kindAt(s) < 0) toSlot = s;
+        if (toSlot < 0 && fromSlot == kSlotType) toSlot = kSlotType;
+    }
+    if (toSlot < 0 || toSlot >= kLoadoutSlots || !sameKind(toSlot) || !isOpen(toSlot)) return -1;
+    if (toBall == fromBall) return toSlot == fromSlot ? -1 : toSlot;   // reordering one ball
+    BallLoadout a = src, b = dst;
+    const int ka = a.kindAt(fromSlot), kb = b.kindAt(toSlot);
+    a.clearSlot(fromSlot);
+    b.clearSlot(toSlot);
+    auto fits = [](const BallLoadout& L, int kind) {
+        if (kind < 0) return true;
+        const auto k = static_cast<UpgradeKind>(kind);
+        return !L.has(k) && upgradeFitsBall(k, L);
+    };
+    return fits(b, ka) && fits(a, kb) ? toSlot : -1;
+}
+
+// Levels travel with the pick. Everything derived (classes, ascended, ability
+// slot count - Mage abilities fall asleep / wake up) comes out of the loadout,
+// so re-syncing the world balls is all it takes. A moved ability restarts its
+// cooldown like a fresh pick (World::applySpec), so a charged one can't be
+// passed around to fire twice.
+bool App::moveSlot(int fromBall, int fromSlot, int toBall, int toSlot) {
+    toSlot = slotMoveTarget(fromBall, fromSlot, toBall, toSlot);
+    if (toSlot < 0) return false;
+    BallLoadout& a = data_.run.balls[static_cast<std::size_t>(fromBall)];
+    BallLoadout& b = data_.run.balls[static_cast<std::size_t>(toBall)];
+    const int ka = a.kindAt(fromSlot), la = a.levelAt(fromSlot);
+    const int kb = b.kindAt(toSlot), lb = b.levelAt(toSlot);
+    a.setSlot(fromSlot, kb, kb < 0 ? 0 : lb);
+    b.setSlot(toSlot, ka, la);
+    syncWorldBalls();
+    return true;
+}
+
 // ---------------------------------------------------------------- shop
 
 int App::shopPrice(UpgradeKind k) const {
@@ -1308,7 +1366,7 @@ void App::handleEvent(const sf::Event& e) {
         const bool pressO = e.type == sf::Event::KeyPressed && e.key.code == sf::Keyboard::O &&
                             !sf::Mouse::isButtonPressed(sf::Mouse::Left);
         const bool clickO = e.type == sf::Event::MouseButtonPressed && e.mouseButton.button == sf::Mouse::Left &&
-                            optionsButton().contains(window_.uiMousePosition());
+                            !peek_.open && optionsButton().contains(window_.uiMousePosition());
         if (!onOptions() && (pressO || clickO)) {
             if (clickO) audio_.uiClick();
             peek_.close();
@@ -1318,7 +1376,10 @@ void App::handleEvent(const sf::Event& e) {
         // TAB anywhere in a live run: screens without their own peek get the App's.
         if (data_.run.active && !stack_.back()->ownsTab() && !onOptions()) {
             if (peek_.handle(e)) return;
-            if (peek_.open) return;   // looking: the screen underneath waits
+            if (peek_.open) {   // looking: the screen underneath waits; slots can be dragged
+                loadoutDragEvent(*this, peek_, e);
+                return;
+            }
         }
         // The play screen wants the pointer in world units (grab / throw); every
         // other screen lays its widgets out in fixed UI units, so it must get the
@@ -1664,7 +1725,7 @@ void App::render() {
         }
     }
     for (std::size_t i = start; i < stack_.size(); ++i) stack_[i]->draw(*this, w);
-    if (peek_.open) drawLoadoutOverlay(*this, w, false, peek_.latched());
+    if (peek_.open) drawLoadoutOverlay(*this, w, false, peek_);
     if (!onOptions() && !peek_.open) drawOptionsButton(w);
 
     effects_.drawOverlay(w);
@@ -1764,6 +1825,24 @@ int App::runSnapshots(const std::string& dir) {
     tab.key.code = sf::Keyboard::Tab;
     stack_.back()->handleEvent(*this, tab, {0.f, 0.f});
     snapFrame(d + "08_tab.png");
+    {   // a drag in the peek: ball 1's Cleave in hand over ball 3's free item slot
+        auto slotMid = [&](int ball, int slot) {
+            const sf::FloatRect sr = slotRect(loadoutPanelCenter(*this, ball), slot, r.balls[static_cast<std::size_t>(ball)]);
+            return sf::Vector2f{sr.left + sr.width * 0.6f, sr.top + sr.height * 0.5f};
+        };
+        sf::Event press{};
+        press.type = sf::Event::MouseButtonPressed;
+        press.mouseButton.button = sf::Mouse::Left;
+        snapMouseOn_ = true;
+        snapMouse_ = slotMid(0, 0);
+        stack_.back()->handleEvent(*this, press, {0.f, 0.f});
+        snapMouse_ = slotMid(2, 1);
+        snapFrame(d + "08_tab_drag.png");
+        snapMouse_ = {size().x * 0.5f, 20.f};   // let go off every panel: it snaps back
+        press.type = sf::Event::MouseButtonReleased;
+        stack_.back()->handleEvent(*this, press, {0.f, 0.f});
+        snapMouseOn_ = false;
+    }
     tab.type = sf::Event::KeyReleased;
     stack_.back()->handleEvent(*this, tab, {0.f, 0.f});
 

@@ -314,7 +314,8 @@ int MapScreen::nodeAt(App& app, sf::Vector2f mouse, bool openOnly) const {
 }
 
 void MapScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
-    if (peek_.handle(e) || peek_.open) return;   // TAB loadout peek: the map waits under it
+    if (peek_.handle(e)) return;   // TAB loadout peek: the map waits under it
+    if (peek_.open) { loadoutDragEvent(app, peek_, e); return; }
     if (isKey(e, sf::Keyboard::Escape)) { app.openPause(); return; }
     if (e.type == sf::Event::KeyPressed && e.key.code >= sf::Keyboard::Num1 &&
         e.key.code <= sf::Keyboard::Num4) {
@@ -457,7 +458,7 @@ void MapScreen::draw(App& app, sf::RenderWindow& w) {
     }
 
     if (peek_.open) {   // the loadout peek covers the map; its own hover help only
-        drawLoadoutOverlay(app, w, false, peek_.latched());
+        drawLoadoutOverlay(app, w, false, peek_);
         return;
     }
 

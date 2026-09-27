@@ -46,7 +46,9 @@ public:
     sf::Vector2f size() const { return window_.logicalSize(); }
     void useWorldView() { window_.useWorldView(); }
     void useUiView() { window_.useUiView(); }
-    sf::Vector2f uiMouse() const { return window_.uiMousePosition(); }   // pointer in UI units, any screen
+    sf::Vector2f uiMouse() const {   // pointer in UI units, any screen (photo mode can pin it)
+        return snapMouseOn_ ? snapMouse_ : window_.uiMousePosition();
+    }
     WorldParams params() const;
 
     int runBallCount() const { return static_cast<int>(data_.run.balls.size()); }
@@ -78,6 +80,13 @@ public:
     bool equipFitsSlot(int ball, int slot) const;
     void confirmEquip(int ball, int slot);   // slot -1 = default slot
     void cancelEquip();
+
+    // ---- TAB peek: drag a slot onto another ball / slot ----
+    // Where slot (fromBall, fromSlot) lands when dropped on toBall's slot
+    // toSlot (-1 = on the ball's panel: its first free slot of that kind);
+    // -1 = the drop is refused. moveSlot does it (a filled target swaps).
+    int slotMoveTarget(int fromBall, int fromSlot, int toBall, int toSlot) const;
+    bool moveSlot(int fromBall, int fromSlot, int toBall, int toSlot);
 
     // ---- shop ----
     int shopPrice(UpgradeKind k) const;
@@ -216,6 +225,8 @@ private:
     int runSnapshots(const std::string& dir);
     void snapFrame(const std::string& file);
     std::string capturePath_;   // non-empty: render() saves this frame here
+    bool snapMouseOn_ = false;  // photo mode: uiMouse() reports snapMouse_ (a drag in the TAB peek)
+    sf::Vector2f snapMouse_;
     void processEvents(const FrameEvents& ev);
     sf::Vector2f worldToUi(sf::Vector2f p) const;   // arena point -> UI units (for coins / labels)
     sf::Vector2f goldCounterPos() const;            // where kill coins fly to (HUD gold)
