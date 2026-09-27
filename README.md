@@ -1,6 +1,6 @@
 # Space-Breakers
 
-A roguelite about defending a core. You start a run with a single ball that
+A roguelike tower defense about defending a core. You start a run with a single ball that
 bounces freely around the arena — off the walls and off the core — clearing
 enemies that march on the core. It tracks nothing; you fling it to aim it into
 a cluster. After each wave you pick 1 of 4 rolled upgrades (more balls, core
