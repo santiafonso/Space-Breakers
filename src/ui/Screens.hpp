@@ -79,6 +79,8 @@ bool loadoutDragEvent(App& app, TabPeek& peek, const sf::Event& e);
 sf::Vector2f loadoutPanelCenter(App& app, int i);   // ball i's panel in the peek, UI units
 // A small [tab] key cap with "loadout" beside it; `topLeft` in UI units.
 void drawTabHint(App& app, sf::RenderWindow& w, sf::Vector2f topLeft);
+// The fight's bottom-left ball tally: [TAB] cap on top, a chip per ball below.
+sf::FloatRect ballTallyRect(App& app, int balls);
 
 // Combat. One or more balls bounce freely; you fling them into the enemies.
 // The fight holds still while the TAB peek is open.

@@ -814,28 +814,20 @@ void PlayScreen::draw(App& app, sf::RenderWindow& w) {
 
     app.hud().draw(w);
 
-    // Ball tally, bottom-left: how many are in play and of what element.
+    // Ball tally, bottom-left: one chip per ball in its class colour, the
+    // [TAB] cap for the loadout above them. Words only on hover.
     const std::vector<Ball>& balls = app.world().balls();
     const sf::Vector2f s = app.size();
-    const std::string n = std::to_string(balls.size());
-    {   // "3  BALLS" as a captioned readout, a row of element pips under it
-        sf::Text num = makeText(app.font(), n, 18, theme::textHi);
-        const sf::FloatRect nb = num.getLocalBounds();
-        num.setOrigin(nb.left, nb.top + nb.height * 0.5f);
-        num.setPosition(theme::margin, s.y - theme::margin - 30.f);
-        w.draw(num);
-        drawLabel(w, app.font(), balls.size() == 1 ? "ball" : "balls", 11,
-                  {theme::margin + nb.width + 8.f, s.y - theme::margin - 30.f}, theme::textLo, -1);
-    }
-    float dx = theme::margin + 5.f;
-    const float dy = s.y - theme::margin - 8.f;
+    const sf::FloatRect tally = ballTallyRect(app, static_cast<int>(balls.size()));
+    float dx = tally.left + 9.f;
+    const float dy = tally.top + tally.height - 9.f;
     for (const Ball& b : balls) {
         const sf::Color ec = ballHue(b);   // its class, not its element
-        draw::disc(w, {dx, dy}, 4.5f, lerpColor(ec, sf::Color::White, 0.2f), ec, {1.f, 1.f}, 16);
-        dx += 14.f;
+        draw::disc(w, {dx, dy}, 7.f, lerpColor(ec, sf::Color::White, 0.2f), ec, {1.f, 1.f}, 20);
+        dx += 22.f;
     }
+    drawTabHint(app, w, {theme::margin, tally.top});
 
-    drawTabHint(app, w, {theme::margin, s.y - theme::margin - 66.f});
     drawPactHud(app, w, app.uiMouse(), !peek_.open && !dragging_);
 
     if (peek_.open) {
@@ -852,7 +844,7 @@ void PlayScreen::draw(App& app, sf::RenderWindow& w) {
             drawTooltip(w, app.font(), um, s, tt, td, tc);
         } else if (hovered) {
             drawTooltip(w, app.font(), um, s, enemyName(hovered->kind), enemyDesc(hovered->kind), theme::enemy);
-        } else if (sf::FloatRect(theme::margin - 4.f, s.y - theme::margin - 64.f, 180.f, 64.f).contains(um)) {
+        } else if (sf::FloatRect(tally.left - 6.f, tally.top + 26.f, tally.width + 12.f, tally.height - 20.f).contains(um)) {
             drawTooltip(w, app.font(), um, s, "Your balls",
                         "click one to throw it at the nearest enemy, or press and pull back to aim. TAB shows each ball's classes, items, type, abilities and modifiers (the fight pauses).");
         }
@@ -925,14 +917,15 @@ bool TabPeek::handle(const sf::Event& e) {
     return false;
 }
 
+sf::FloatRect ballTallyRect(App& app, int balls) {
+    const sf::Vector2f s = app.size();
+    return {theme::margin, s.y - theme::margin - 50.f, std::max(60.f, 22.f * static_cast<float>(balls)), 50.f};
+}
+
 void drawTabHint(App& app, sf::RenderWindow& w, sf::Vector2f topLeft) {
-    const sf::FloatRect key{topLeft.x, topLeft.y, 34.f, 17.f};
-    draw::box(w, key, 0.f, withAlpha(theme::textDim, 0.18f), withAlpha(theme::textDim, 0.05f),
-              withAlpha(theme::textDim, 0.8f), 1.f);
-    drawLabel(w, app.font(), "tab", 10, {key.left + key.width * 0.5f + 1.f, key.top + key.height * 0.5f},
-              theme::textLo);
-    drawLabel(w, app.font(), "loadout", 10, {key.left + key.width + 8.f, key.top + key.height * 0.5f},
-              theme::textDim, -1);
+    const sf::Vector2f k = keyCapSize(app.font(), "tab");
+    const sf::FloatRect cap{topLeft.x, topLeft.y, k.x, k.y};
+    drawKeyCap(w, app.font(), cap, "tab", "loadout", cap.contains(app.uiMouse()));
 }
 
 // Every relic the run has picked: the whole-run passives, listed beside the

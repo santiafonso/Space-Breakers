@@ -22,6 +22,13 @@ sf::Text makeLabel(const sf::Font& font, const std::string& str, unsigned size, 
 void drawLabel(sf::RenderTarget& t, const sf::Font& font, const std::string& str, unsigned size,
                sf::Vector2f pos, sf::Color color, int align = 0);
 
+// A keyboard key cap ([TAB], [O]) for a shortcut. The caption saying what it
+// does appears beside it only while `hot` (hovered): on the right when
+// `captionRight`, else on the left. keyCapSize = the cap's box for `key`.
+sf::Vector2f keyCapSize(const sf::Font& font, const std::string& key);
+void drawKeyCap(sf::RenderWindow& w, const sf::Font& font, sf::FloatRect cap, const std::string& key,
+                const std::string& caption, bool hot, bool captionRight = true);
+
 // Draw a string centred on `pos`.
 void drawCentered(sf::RenderWindow& window, const sf::Font& font, const std::string& str,
                   unsigned size, sf::Vector2f pos, sf::Color color);

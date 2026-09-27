@@ -9,8 +9,9 @@
 
 namespace sb {
 
-// Combat HUD: the damage-combo chip, the wave / core-health banner and the
-// active power-up bar. Nothing else - lifetime numbers live on the Stats screen.
+// Combat HUD: the damage-combo chip, the stage banner with its progress bar,
+// gold and the active power-up bar. Nothing else - the core's health is its
+// own dial, lifetime numbers live on the Stats screen.
 class Hud {
 public:
     void init(const sf::Font& font, sf::Vector2f size);
@@ -32,6 +33,7 @@ private:
     int stage_ = 0;
     int stages_ = 0;
     int enemiesLeft_ = 0;
+    int enemiesPeak_ = 0;   // the stage's enemy count at its fullest: the progress bar's 100%
     int score_ = 0;
     int gold_ = 0;
     float goldPop_ = 0.f;

@@ -40,6 +40,9 @@ sf::Text makeText(const sf::Font& font, const std::string& str, unsigned size, s
 }
 
 sf::Text makeLabel(const sf::Font& font, const std::string& str, unsigned size, sf::Color color) {
+    // Captions were set at 9-12px and read as specks once the canvas is
+    // scaled up: lift the small ones two steps, never below 12.
+    if (size < 13) size = std::max(12u, size + 2u);
     std::string up = str;
     for (char& ch : up) ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
     sf::Text t(up, font, size);   // always the UI face: labels stay light, never Black
@@ -56,6 +59,22 @@ void drawLabel(sf::RenderTarget& target, const sf::Font& font, const std::string
     t.setOrigin(ox, b.top + b.height * 0.5f);
     t.setPosition(std::round(pos.x), std::round(pos.y));
     target.draw(t);
+}
+
+sf::Vector2f keyCapSize(const sf::Font& font, const std::string& key) {
+    const float lw = makeLabel(font, key, 12, theme::textLo).getLocalBounds().width;
+    return {std::max(26.f, std::round(lw + 16.f)), 22.f};
+}
+
+void drawKeyCap(sf::RenderWindow& w, const sf::Font& font, sf::FloatRect cap, const std::string& key,
+                const std::string& caption, bool hot, bool captionRight) {
+    const sf::Color c = hot ? theme::textLo : theme::textDim;
+    draw::box(w, cap, 0.f, withAlpha(c, 0.18f), withAlpha(c, hot ? 0.12f : 0.05f), withAlpha(c, 0.8f), 1.f);
+    const float cy = cap.top + cap.height * 0.5f;
+    drawLabel(w, font, key, 12, {cap.left + cap.width * 0.5f + 1.f, cy}, hot ? theme::textHi : theme::textLo);
+    if (hot && !caption.empty())
+        drawLabel(w, font, caption, 12, {captionRight ? cap.left + cap.width + 10.f : cap.left - 10.f, cy},
+                  theme::textLo, captionRight ? -1 : 1);
 }
 
 void centerOrigin(sf::Text& t) {

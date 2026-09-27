@@ -75,14 +75,14 @@ inline const sf::Color classSummoner{150, 226, 120};
 inline const sf::Color classJester{255, 124, 214};
 inline const sf::Color ability{120, 216, 255};   // ability picks and slots
 
-// Layout / type — kept compact so more can share the screen
-inline constexpr float margin = 22.f;
+// Layout / type - room to breathe: few things on screen, none of them tiny
+inline constexpr float margin = 30.f;
 inline constexpr unsigned fsTitle = 38;
 inline constexpr unsigned fsHeading = 22;
 inline constexpr unsigned fsItem = 24;
 inline constexpr unsigned fsBody = 16;
 inline constexpr unsigned fsHud = 24;
-inline constexpr unsigned fsSmall = 13;
+inline constexpr unsigned fsSmall = 14;
 
 // Colour of a plain ball for a given speed relative to its (un-buffed) cruise
 // speed: a neutral grey that just brightens as it speeds up, so class balls

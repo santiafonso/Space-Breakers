@@ -22,11 +22,13 @@ void Hud::pulseGold() { goldPop_ = std::min(1.f, goldPop_ + 0.5f); }
 void Hud::update(float dt, int act, int stage, int stages, int enemiesLeft, float coreFrac,
                  float comboMultiplier, int score, int gold, const std::optional<ActiveEffect>& effect,
                  bool bossWave, bool hasReserve, PowerUp reservePu) {
+    if (act != act_ || stage != stage_ || bossWave != bossWave_) enemiesPeak_ = 0;
     act_ = act;
     stage_ = stage;
     stages_ = stages;
     bossWave_ = bossWave;
     enemiesLeft_ = enemiesLeft;
+    enemiesPeak_ = std::max(enemiesPeak_, enemiesLeft);
     score_ = score;
     gold_ = gold;
     coreFrac_ = clampf(coreFrac, 0.f, 1.f);
@@ -52,33 +54,29 @@ bool Hud::tooltipAt(sf::Vector2f m, std::string& title, std::string& desc, sf::C
         color = theme::accent;
         return true;
     }
-    if (sf::FloatRect(size_.x - mg - 170.f, mg - 6.f, 176.f, 24.f).contains(m)) {
-        title = "Score";
-        desc = "points for kills this run; your best is kept on the Stats screen";
-        return true;
-    }
-    if (sf::FloatRect(size_.x - mg - 120.f, mg + 18.f, 126.f, 20.f).contains(m)) {
+    if (sf::FloatRect(size_.x - mg - 130.f, mg - 8.f, 136.f, 30.f).contains(m)) {
         title = "Gold";
         desc = "earned from fights; spend it in shops on the map";
         color = theme::puGolden;
         return true;
     }
-    if (hasReserve_ && sf::FloatRect(size_.x - mg - 170.f, mg + 36.f, 176.f, 20.f).contains(m)) {
+    if (hasReserve_ && sf::FloatRect(size_.x - mg - 170.f, mg + 24.f, 176.f, 24.f).contains(m)) {
         title = std::string("Reserve: ") + powerUpName(reservePu_);
         desc = std::string(powerUpDesc(reservePu_)) + " - press Q to use it";
         color = powerUpColor(reservePu_);
         return true;
     }
     if (effectAlpha_ > 0.5f && effect_ &&
-        sf::FloatRect(size_.x * 0.5f - 100.f, mg + 50.f, 200.f, 30.f).contains(m)) {
+        sf::FloatRect(size_.x * 0.5f - 110.f, mg + 40.f, 220.f, 34.f).contains(m)) {
         title = powerUpName(effect_->kind);
         desc = powerUpDesc(effect_->kind);
         color = powerUpColor(effect_->kind);
         return true;
     }
-    if (sf::FloatRect(size_.x * 0.5f - 160.f, mg - 8.f, 320.f, 60.f).contains(m)) {
-        title = bossWave_ ? "Boss" : "Stage";
-        desc = "the bar is the core's health - if it empties the run is over. Below: enemies left.";
+    if (sf::FloatRect(size_.x * 0.5f - 170.f, mg - 10.f, 340.f, 44.f).contains(m)) {
+        title = bossWave_ ? "Boss" : "Stage " + std::to_string(stage_) + " of " + std::to_string(stages_);
+        desc = std::to_string(enemiesLeft_) + (enemiesLeft_ == 1 ? " enemy" : " enemies") +
+               " left - the bar fills as you clear them. Keep them off the core: its ring is its health.";
         return true;
     }
     return false;
@@ -146,51 +144,53 @@ void Hud::draw(sf::RenderWindow& window) const {
         window.draw(combo);
     }
 
-    // Run score and gold, top-right, as captioned readouts.
+    // Gold, top-right: the one run number worth watching mid-fight.
     const float right = size_.x - mg;
-    readout(window, *font_, "score", std::to_string(score_), 18, right, mg + 6.f, theme::textDim, theme::textHi);
-    readout(window, *font_, "gold", std::to_string(static_cast<int>(std::lround(goldShown_))), theme::fsBody, right,
-            mg + 30.f, withAlpha(theme::puGolden, 0.6f), theme::puGolden, 1.f + 0.3f * goldPop_);
+    readout(window, *font_, "gold", std::to_string(static_cast<int>(std::lround(goldShown_))), 22, right,
+            mg + 6.f, withAlpha(theme::puGolden, 0.55f), theme::puGolden, 1.f + 0.3f * goldPop_);
 
     // "Stockpile" reserve power-up, under the gold.
     if (hasReserve_) {
         const sf::Color col = powerUpColor(reservePu_);
-        const float cy = mg + 52.f;
-        drawLabel(window, *font_, powerUpName(reservePu_), 11, {right, cy}, col, 1);
-        const float lw = makeLabel(*font_, powerUpName(reservePu_), 11, col).getLocalBounds().width;
-        const sf::FloatRect key{right - lw - 28.f, cy - 9.f, 18.f, 18.f};   // a [Q] key cap
+        const float cy = mg + 36.f;
+        drawLabel(window, *font_, powerUpName(reservePu_), 12, {right, cy}, col, 1);
+        const float lw = makeLabel(*font_, powerUpName(reservePu_), 12, col).getLocalBounds().width;
+        const sf::FloatRect key{right - lw - 32.f, cy - 11.f, 22.f, 22.f};   // a [Q] key cap
         draw::box(window, key, 0.f, withAlpha(col, 0.12f), withAlpha(col, 0.04f), withAlpha(col, 0.7f), 1.f);
-        drawLabel(window, *font_, "q", 11, {key.left + key.width * 0.5f + 1.f, cy}, col);
+        drawLabel(window, *font_, "q", 12, {key.left + key.width * 0.5f + 1.f, cy}, col);
     }
 
-    // Stage readout, top centre: "ACT 1  STAGE 3 / 15" over the core gauge.
+    // Stage readout, top centre: "ACT 1   STAGE 3 / 15" over the stage's
+    // progress (enemies cleared). How many are left is on hover.
     {
         char stage[32];
         if (bossWave_) std::snprintf(stage, sizeof(stage), "%s", act_ == 1 ? "miniboss" : "final boss");
         else std::snprintf(stage, sizeof(stage), "stage %d / %d", stage_, stages_);
         const std::string act = "act " + std::to_string(act_);
-        sf::Text at = makeLabel(*font_, act, 12, theme::textLo);
-        sf::Text st = makeLabel(*font_, stage, 16, bossWave_ ? theme::coreLow : theme::textHi);
-        const float aw = at.getLocalBounds().width, sw = st.getLocalBounds().width, gap = 16.f;
+        const sf::Color stCol = bossWave_ ? theme::coreLow : theme::textHi;
+        const float aw = makeLabel(*font_, act, 13, theme::textLo).getLocalBounds().width;
+        const float sw = makeLabel(*font_, stage, 18, stCol).getLocalBounds().width, gap = 18.f;
         const float x0 = size_.x * 0.5f - (aw + gap + sw) * 0.5f;
-        drawLabel(window, *font_, act, 12, {x0, mg + 4.f}, theme::textLo, -1);
-        drawLabel(window, *font_, stage, 16, {x0 + aw + gap, mg + 3.f}, bossWave_ ? theme::coreLow : theme::textHi, -1);
+        drawLabel(window, *font_, act, 13, {x0, mg + 4.f}, theme::textDim, -1);
+        drawLabel(window, *font_, stage, 18, {x0 + aw + gap, mg + 3.f}, stCol, -1);
     }
-
-    const float barW = 280.f;
-    const float x = size_.x * 0.5f - barW * 0.5f;
-    const float y = mg + 20.f;
-    gauge(window, x, y, barW, 6.f, coreFrac_, lerpColor(theme::coreLow, theme::core, coreFrac_), 1.f, 20);
-    drawLabel(window, *font_, std::to_string(enemiesLeft_) + " left", 11, {size_.x * 0.5f, y + 20.f}, theme::textLo);
+    {
+        const float barW = 300.f;
+        const float done = enemiesPeak_ > 0
+                               ? 1.f - static_cast<float>(enemiesLeft_) / static_cast<float>(enemiesPeak_)
+                               : 0.f;
+        gauge(window, size_.x * 0.5f - barW * 0.5f, mg + 24.f, barW, 4.f, done,
+              bossWave_ ? theme::coreLow : theme::accent, 0.85f, 1);
+    }
 
     // Active power-up bar, a bit lower so it clears the banner.
     if (effectAlpha_ > 0.01f && effect_) {
         const float w = 172.f;
         const float px = size_.x * 0.5f - w / 2.f;
-        const float py = mg + 64.f;
+        const float py = mg + 52.f;
         const sf::Color col = powerUpColor(effect_->kind);
         const float frac = clampf(effect_->remaining / effect_->duration, 0.f, 1.f);
-        drawLabel(window, *font_, powerUpName(effect_->kind), 11, {size_.x * 0.5f, py - 4.f},
+        drawLabel(window, *font_, powerUpName(effect_->kind), 12, {size_.x * 0.5f, py - 4.f},
                   withAlpha(col, effectAlpha_));
         gauge(window, px, py + 8.f, w, 3.f, frac, col, effectAlpha_, 1);
     }

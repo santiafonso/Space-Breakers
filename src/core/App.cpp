@@ -1425,20 +1425,15 @@ bool App::onOptions() const {
 }
 
 sf::FloatRect App::optionsButton() const {
-    return {size().x - theme::margin - 96.f, size().y - theme::margin - 17.f, 96.f, 17.f};
+    const sf::Vector2f k = keyCapSize(font_, "o");
+    return {size().x - theme::margin - k.x, size().y - theme::margin - k.y, k.x, k.y};
 }
 
-// A quiet [o] key cap + "options" in the bottom-right corner of every screen.
+// A quiet [o] key cap in the bottom-right corner of every screen; "options"
+// only shows while it's hovered.
 void App::drawOptionsButton(sf::RenderWindow& w) const {
     const sf::FloatRect r = optionsButton();
-    const bool hot = r.contains(window_.uiMousePosition());
-    const sf::FloatRect key{r.left, r.top, 22.f, r.height};
-    const sf::Color c = hot ? theme::textLo : theme::textDim;
-    draw::box(w, key, 0.f, withAlpha(c, 0.18f), withAlpha(c, hot ? 0.12f : 0.05f), withAlpha(c, 0.8f), 1.f);
-    drawLabel(w, font_, "o", 10, {key.left + key.width * 0.5f + 1.f, key.top + key.height * 0.5f},
-              hot ? theme::textHi : theme::textLo);
-    drawLabel(w, font_, "options", 10, {key.left + key.width + 8.f, key.top + key.height * 0.5f},
-              hot ? theme::textLo : theme::textDim, -1);
+    drawKeyCap(w, font_, r, "o", "options", r.contains(window_.uiMousePosition()), false);
 }
 void App::openHowTo() { push(ScreenId::HowTo); }
 
