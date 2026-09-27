@@ -12,6 +12,7 @@
 #include "core/Config.hpp"
 #include "core/Theme.hpp"
 #include "render/Draw.hpp"
+#include "ui/UiSound.hpp"
 #include "ui/Widgets.hpp"
 
 namespace sb {
@@ -112,6 +113,7 @@ void PactScreen::update(App& app, float dt, sf::Vector2f mouse) {
     const int c = cardAt(app, mouse);
     for (int i = 0; i < 4; ++i) hover_[i] = lerpf(hover_[i], c == i ? 1.f : 0.f, k);
     refuseHover_ = lerpf(refuseHover_, refuseRect(app).contains(mouse) ? 1.f : 0.f, k);
+    uisound::hover(this, c >= 0 ? c : (refuseRect(app).contains(mouse) ? 10 : -1));
 }
 
 void PactScreen::draw(App& app, sf::RenderWindow& w) {

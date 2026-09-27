@@ -13,6 +13,7 @@
 #include "core/Theme.hpp"
 #include "render/Draw.hpp"
 #include "ui/PactScreen.hpp"
+#include "ui/UiSound.hpp"
 #include "ui/Widgets.hpp"
 
 namespace sb {
@@ -131,6 +132,7 @@ void MenuScreen::rebuild(App& app) {
     menu_.setItems({{"Play", true},
                     {"Stats", true},
                     {"How to Play", true},
+                    {"Sound", true},
                     {resetArm_ > 0.f ? "Reset progress - click again to confirm" : "Reset progress",
                      true},
                     {"Quit", true}});
@@ -149,12 +151,13 @@ void MenuScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
         case 0: app.openLoadout(); break;
         case 1: app.openStats(); break;
         case 2: app.openHowTo(); break;
-        case 3:
+        case 3: app.openSound(); break;
+        case 4:
             if (resetArm_ > 0.f) { app.wipeSave(); return; }  // wipeSave rebuilds the menu
             resetArm_ = 4.f;
             rebuild(app);
             break;
-        case 4: app.quit(); break;
+        case 5: app.quit(); break;
         default: break;
     }
 }
@@ -343,6 +346,7 @@ void LoadoutScreen::update(App& app, float dt, sf::Vector2f mouse) {
     if (length(mouse - lastMouse_) > 0.5f) { keyNav_ = false; lastMouse_ = mouse; }
     hoverNode_ = nodeAt(app, mouse);
     if (hoverNode_ >= 0) { selNode_ = hoverNode_; selUsed_ = true; }   // hover drives card + E key
+    uisound::hover(this, hoverNode_);
     const int active = hoverNode_ >= 0 ? hoverNode_ : (keyNav_ ? selNode_ : -1);
     const float k = 1.f - std::exp(-16.f * dt);
     for (int i = 0; i < MetaUnlockCount; ++i)
@@ -618,6 +622,7 @@ sf::Vector2f PlayScreen::pointerVelocity() const {
 void PlayScreen::grab(App& app, sf::Vector2f mouse) {
     if (!app.canGrab()) return;   // "Hunters" / "Clockwork" pacts: hands off
     if (app.world().grabAt(mouse, cfg::app::catchRadius)) {
+        app.audio().grab();
         dragging_ = true;
         samples_.clear();
         samples_.push_back({clock_, mouse});
@@ -642,6 +647,7 @@ void PlayScreen::release(App& app) {
         const float len = length(pull);
         if (len < cfg::app::slingDeadzone * k) {
             app.world().cancelHeld();
+            app.audio().letGo();
             dragging_ = false;
             samples_.clear();
             return;
@@ -963,6 +969,11 @@ void ChoiceScreen::update(App& app, float dt, sf::Vector2f mouse) {
     }
     const bool onHeal = coreHurt(app) && healRect(app.size()).contains(mouse);
     healHover_ = lerpf(healHover_, onHeal ? 1.f : 0.f, k);
+    int hot = c;   // card, its reroll strip (10 + i) or the repair button (20)
+    for (int i = 0; i < kChoiceCount && hot < 0; ++i)
+        if (canReroll && rerollRect(app.size(), i).contains(mouse)) hot = 10 + i;
+    if (hot < 0 && onHeal) hot = 20;
+    uisound::hover(this, hot);
 }
 
 void ChoiceScreen::draw(App& app, sf::RenderWindow& w) {
@@ -1073,7 +1084,7 @@ void PauseScreen::rebuild(App& app) {
     menu_.setItems({{"Resume", true},
                     {"Stats", true},
                     {"How to Play", true},
-                    {lastSound_ ? "Sound: On" : "Sound: Off", true},
+                    {lastSound_ ? "Sound" : "Sound (muted)", true},
                     {m.slingshot ? "Aim: Slingshot" : "Aim: Flick", true},
                     {m.autoFling ? "Auto-throw: On" : "Auto-throw: Off", true},
                     {"Abandon run", true},
@@ -1090,7 +1101,7 @@ void PauseScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) 
         case 0: app.back(); break;
         case 1: app.openStats(); break;
         case 2: app.openHowTo(); break;
-        case 3: app.toggleSound(); break;
+        case 3: app.openSound(); break;
         case 4: app.toggleSlingshot(); rebuild(app); break;
         case 5: app.toggleAutoFling(); rebuild(app); break;
         case 6: app.abandonRun(); break;

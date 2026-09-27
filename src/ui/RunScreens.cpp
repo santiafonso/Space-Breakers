@@ -12,6 +12,7 @@
 #include "render/Draw.hpp"
 #include "ui/PactScreen.hpp"
 #include "ui/Screens.hpp"
+#include "ui/UiSound.hpp"
 #include "ui/Widgets.hpp"
 
 namespace sb {
@@ -180,6 +181,7 @@ void EquipScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) 
 void EquipScreen::update(App& app, float, sf::Vector2f mouse) {
     mouse_ = mouse;
     targetAt(app, mouse, hoverBall_, hoverSlot_);
+    uisound::hover(this, hoverBall_ >= 0 ? hoverBall_ * 16 + hoverSlot_ + 1 : -1);
 }
 
 void EquipScreen::draw(App& app, sf::RenderWindow& w) {
@@ -305,6 +307,7 @@ void MapScreen::update(App& app, float dt, sf::Vector2f mouse) {
     mouse_ = mouse;
     hover_ = nodeAt(app, mouse);
     info_ = nodeAt(app, mouse, false);
+    uisound::hover(this, hover_);
 }
 
 void MapScreen::draw(App& app, sf::RenderWindow& w) {
@@ -491,6 +494,7 @@ void ShopScreen::update(App& app, float dt, sf::Vector2f mouse) {
         if (offerRect(app, i).contains(mouse)) hover_ = i;
     for (int b = 0; b < 5; ++b)
         if (buttonRect(app, b).contains(mouse)) hover_ = 100 + b;
+    uisound::hover(this, hover_);
 }
 
 void ShopScreen::draw(App& app, sf::RenderWindow& w) {

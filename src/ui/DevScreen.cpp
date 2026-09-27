@@ -12,6 +12,7 @@
 #include "render/Draw.hpp"
 #include "ui/PactScreen.hpp"
 #include "ui/Screens.hpp"
+#include "ui/UiSound.hpp"
 #include "ui/Widgets.hpp"
 
 namespace sb {
@@ -227,6 +228,7 @@ void DevScreen::update(App& app, float, sf::Vector2f mouse) {
     hover_ = -1;
     for (std::size_t i = 0; i < buttons_.size(); ++i)
         if (buttons_[i].rect.contains(mouse)) hover_ = static_cast<int>(i);
+    uisound::hover(this, hover_);
 }
 
 void DevScreen::draw(App& app, sf::RenderWindow& w) {

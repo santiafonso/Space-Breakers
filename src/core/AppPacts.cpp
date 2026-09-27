@@ -131,6 +131,7 @@ void App::continueAfterPact() {
 void App::choosePact(int idx) {
     if (idx < 0 || idx >= static_cast<int>(pactChoices_.size())) return;
     const PactId id = pactChoices_[static_cast<std::size_t>(idx)];
+    audio_.cardPick();
     back();   // close the pact screen
     grantPact(id);
     continueAfterPact();

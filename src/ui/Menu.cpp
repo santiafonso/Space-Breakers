@@ -4,6 +4,7 @@
 
 #include "core/Theme.hpp"
 #include "render/Draw.hpp"
+#include "ui/UiSound.hpp"
 #include "ui/Widgets.hpp"
 
 namespace sb {
@@ -32,6 +33,7 @@ void Menu::update(float dt, sf::Vector2f mouse) {
         if (over) hovered_ = static_cast<int>(i);
         hover_[i] = lerpf(hover_[i], over ? 1.f : 0.f, k);
     }
+    uisound::hover(this, hovered_);
 }
 
 int Menu::clickIndex(sf::Vector2f mouse) const {
