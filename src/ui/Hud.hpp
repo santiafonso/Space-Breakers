@@ -19,7 +19,7 @@ public:
     // counts the boss row).
     void update(float dt, int act, int stage, int stages, int enemiesLeft, float coreFrac,
                 float comboMultiplier, int score, int gold, const std::optional<ActiveEffect>& effect,
-                bool bossWave, bool hasReserve, PowerUp reservePu);
+                bool bossWave, bool hasReserve, PowerUp reservePu, bool eliteWave = false);
     void pulseCombo();
     void pulseGold();
     void draw(sf::RenderWindow& window) const;
@@ -39,6 +39,7 @@ private:
     float goldPop_ = 0.f;
     float goldShown_ = 0.f;   // the counter rolls toward gold_ instead of jumping
     bool bossWave_ = false;
+    bool eliteWave_ = false;
     float coreFrac_ = 1.f;
     float comboMul_ = 1.f;
     float comboPop_ = 0.f;

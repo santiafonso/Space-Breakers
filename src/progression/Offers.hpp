@@ -38,7 +38,11 @@ inline constexpr int kModifierCount = 3;      // HeavyImpact..Swift
 // Items level up: picking one a ball already has (or forging it) raises its
 // level instead of taking another slot. Each item scales its own way per level
 // (App::ballSpec, upgradeLevelDesc). Elements and abilities level the same way.
-inline constexpr int kMaxItemLevel = 5;
+inline constexpr int kMaxItemLevel = 5;   // elements and abilities
+// Items stop at Lv3, but each level counts double: an item at level L plays
+// like the old level gearPower(L) (1, 3, 5), so every item level is a big step.
+inline constexpr int kMaxGearLevel = 3;
+inline int gearPower(int lvl) { return 1 + 2 * (std::clamp(lvl, 1, kMaxGearLevel) - 1); }
 
 // A ball's slots, addressed as one list: 0..3 items, then the type slot, then
 // the ability slots (kMaxAbilitySlots of them, abilitySlotCount() active).
@@ -59,6 +63,9 @@ inline UpgradeCat upgradeCat(UpgradeKind k) {
     if (i >= static_cast<int>(UpgradeKind::CoreSpring)) return UpgradeCat::Relic;
     return UpgradeCat::Item;
 }
+
+// How far a pick can level on a ball: items Lv3, elements / abilities Lv5.
+inline int maxLevelOf(UpgradeKind k) { return upgradeCat(k) == UpgradeCat::Item ? kMaxGearLevel : kMaxItemLevel; }
 
 inline const char* upgradeCatName(UpgradeCat c) {
     switch (c) {
@@ -425,7 +432,8 @@ struct BallLoadout {
     void clearSlot(int s) { setSlot(s, -1, 0); }
     int levelUp(int s) {   // +1 level on a filled slot; returns the new level
         if (kindAt(s) < 0) return 0;
-        setSlot(s, kindAt(s), levelAt(s) + 1);
+        const int cap = s < kBallSlots ? kMaxGearLevel : kMaxItemLevel;   // items stop at Lv3
+        setSlot(s, kindAt(s), std::min(levelAt(s) + 1, cap));
         return levelAt(s);
     }
 
@@ -523,7 +531,7 @@ inline bool slotAccepts(UpgradeKind k, int s, const BallLoadout& b) {
 }
 
 // Can pick `k` go on this ball? A duplicate levels up the equipped one, until
-// kMaxItemLevel; a new element / ability swaps the old one if the slot is
+// kMaxGearLevel (items) / kMaxItemLevel (elements, abilities); a new element / ability swaps the old one if the slot is
 // full; Conductor / Bedrock only with their element. Modifiers: always.
 inline bool upgradeFitsBall(UpgradeKind k, const BallLoadout& b) {
     switch (upgradeCat(k)) {
@@ -532,7 +540,7 @@ inline bool upgradeFitsBall(UpgradeKind k, const BallLoadout& b) {
         case UpgradeCat::Ability:
             return !b.has(k) || b.levelOf(k) < kMaxItemLevel;
         case UpgradeCat::Item:
-            if (b.has(k)) return b.levelOf(k) < kMaxItemLevel;
+            if (b.has(k)) return b.levelOf(k) < kMaxGearLevel;
             if (k == UpgradeKind::Conductor) return b.element() == Element::Electric;
             if (k == UpgradeKind::Bedrock) return b.element() == Element::Stone;
             return true;
@@ -863,7 +871,7 @@ inline const MetaUnlockDef& metaUnlockDef(int u) {
                          4u,  1, B::Mage,     P,  5, 303.f, 4.6f},
         /* Lucky star*/ {"Lucky star","+2 luck per level: higher chances and rarer cards",
                          12u, 3, B::Jester,   C, 20,  72.f, 3.f},
-        /* Haggler   */ {"Haggler",   "shop prices drop 10% per level",
+        /* Haggler   */ {"Haggler",   "shop prices drop 10% per level, and you may sell one more item per shop",
                          10u, 3, B::Jester,   C, 48,  88.f, 3.f},
         /* StarterKit*/ {"Starter kit","start every run with a free item on your first ball (Uncommon, then Rare)",
                          14u, 2, B::Summoner, C, MetaBrood, 164.f, 2.3f},
@@ -881,7 +889,7 @@ inline const MetaUnlockDef& metaUnlockDef(int u) {
                          3u,  1, B::Pacts,    P, 43, 138.f, 3.6f},
         /* Alchemy   */ {"Alchemy",   "the Alchemy pact can be offered: random extra elements, a ball reacts with itself",
                          3u,  1, B::Pacts,    P, 44, 152.f, 3.6f},
-        /* Merchant  */ {"Merchant",  "shops stock one more pick and their sale gets 15% deeper per level",
+        /* Merchant  */ {"Merchant",  "shops stock one more pick, their sale gets 15% deeper, and you may reroll the stock once per level",
                          12u, 2, B::Jester,   C, 38,  88.f, 4.f},
         /* Treasury  */ {"Treasury",  "start every run with +20 gold per level",
                          10u, 3, B::Jester,   C,  9,  88.f, 2.f},

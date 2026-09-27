@@ -868,9 +868,12 @@ void PlayScreen::drawWaveBanner(App& app, sf::RenderWindow& w) const {
 
     const int act = bannerWave_ / 100, row = bannerWave_ % 100;
     std::string label = "Stage " + std::to_string(row);
-    if (row > cfg::map::rows) label = act == 1 ? "Miniboss" : "Final boss";
-    drawLabel(w, app.font(), "act " + std::to_string(act), 12,
-              {s.x * 0.5f, s.y * 0.40f - 46.f - (1.f - out) * 16.f}, withAlpha(theme::accent, a));
+    const bool elite = app.data().run.eliteWave && row <= mapRows(act);
+    if (elite) label = "Elite";
+    if (row > mapRows(act)) label = act == 1 ? "Miniboss" : "Final boss";
+    const sf::Color frame = elite ? theme::ember : theme::accent;   // an elite's banner burns orange
+    drawLabel(w, app.font(), elite ? "act " + std::to_string(act) + "   -   item spoils" : "act " + std::to_string(act), 12,
+              {s.x * 0.5f, s.y * 0.40f - 46.f - (1.f - out) * 16.f}, withAlpha(frame, a));
 
     const sf::Vector2f c{s.x * 0.5f, s.y * 0.40f - (1.f - out) * 16.f};
 
@@ -885,7 +888,7 @@ void PlayScreen::drawWaveBanner(App& app, sf::RenderWindow& w) const {
     const sf::FloatRect tb = t.getGlobalBounds();
     const float pad = 18.f + 30.f * (1.f - clampf(in, 0.f, 1.f));
     draw::brackets(w, {tb.left - pad, tb.top - pad * 0.6f, tb.width + 2.f * pad, tb.height + 1.2f * pad}, 12.f, 2.f,
-                   withAlpha(theme::accent, 0.8f * a));
+                   withAlpha(frame, 0.8f * a));
 }
 
 // ================================================================ TAB peek
@@ -1253,7 +1256,7 @@ void ChoiceScreen::draw(App& app, sf::RenderWindow& w) {
         st.bottomReserve = app.rerollsLeft() > 0 ? 30.f : 0.f;
         // A ball that already has it would level it up: say so.
         for (const BallLoadout& L : app.data().run.balls)
-            if (upgradeLevelsUp(kind, L) && L.levelOf(kind) < kMaxItemLevel) {
+            if (upgradeLevelsUp(kind, L) && L.levelOf(kind) < maxLevelOf(kind)) {
                 st.note = "Lv " + std::to_string(L.levelOf(kind)) + " -> " + std::to_string(L.levelOf(kind) + 1);
                 break;
             }

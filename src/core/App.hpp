@@ -92,18 +92,16 @@ public:
     // ---- shop ----
     int shopPrice(UpgradeKind k) const;
     void buyShopOffer(int i);
-    void buyRepair();
-    int repairAmount() const;           // HP a shop repair restores
+    int repairAmount() const;           // HP a repair restores
     void leaveShop();
     // Shop extras (Fase O): a sale, a mystery box, a paid reroll, selling an
     // item back and the forge as a paid service.
     int shopOfferPrice(int i) const;    // what offer i costs right now (sale / prepaid applied)
-    int mysteryPrice() const;
-    void buyMystery();
     int shopRerollPrice() const;
+    int shopRerollsLeft() const;        // rerolls this visit still allows ("Merchant": 1 per level, else none)
+    int shopSellsLeft() const;          // items this visit may still buy back (1, +1 per "Haggler" level)
     void rerollShop();
     int saleOffPercent() const;
-    void beginShopForge();
     void beginSell();
     int sellValue(int ball, int slot) const;
     int forgeCap() const;               // max forge level ("Duet" raises it)
@@ -181,7 +179,12 @@ private:
     unsigned powerUpMask() const;
     void startWaveAt(int wave, bool elite);   // fight wave N (boss waves are picked by N)
     // Where a set of cards comes from - it sets the tier odds.
-    enum class RollSource { Normal, Elite, Boss };
+    // Where a pick comes from, which decides what it may be:
+    //  Normal (Upgrade / Recruit nodes): anything but items;
+    //  PostFight (after a plain fight): modifiers only;
+    //  Elite: items only; Boss (treasure): anything; Shop: anything but a ball.
+    // A new ball is always a long shot (cfg::run::newBallCardWeight).
+    enum class RollSource { Normal, Elite, Boss, Shop, PostFight };
     void openChoice(RollSource src = RollSource::Normal);
     // One random eligible pick: rolls a tier by the source's odds (Lucky clover
     // shifts them up), then a pick of that tier not in `exclude`. `filter`

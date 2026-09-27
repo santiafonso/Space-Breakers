@@ -1710,6 +1710,34 @@ Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
     un nodo).
   - Falta playtest: si 4 ofertas dejan la tienda demasiado floja.
 
+- **Items escasos, pelotas escasas, rutas con carácter (2026-09-27, `ui-polish`).**
+  - **Items:** nivel máx. **3** (`kMaxGearLevel`), pero cada nivel vale doble:
+    un item Lv L rinde como el viejo nivel `gearPower(L)` = 1 / 3 / 5 (números
+    por nivel e `itemLevelDamage`). Elementos y habilidades siguen hasta Lv5.
+  - **De dónde sale cada cosa** (`App::RollSource`): tras un combate normal,
+    **solo modificadores** (`PostFight`); élite = **solo items**
+    ("Elite spoils"); tesoro del jefe = todo; nodos Upgrade / Recruit = todo
+    menos items; tienda = todo menos pelota. Los items solo vienen de élites,
+    tiendas (y el jefe).
+  - **Tienda:** solo se compra lo que aparece; sin reparar, sin forja, sin
+    caja misteriosa. Rolear solo con **Merchant** (1 por nivel y visita);
+    vender **1 item por visita** (+1 por nivel de **Haggler**). Los botones
+    que no aplican no se muestran.
+  - **Pelotas (máx. 5):** carta "Extra ball" con peso x0.3 dentro de su tier
+    (`newBallCardWeight`), nunca en la tienda; el nodo Recruit la ofrece
+    siempre (+3 picks sin items). La fila previa al jefe ya no tiene Recruit
+    (Shop / Rest / Upgrade / Forge).
+  - **Acto 1 más corto:** 10 filas (`mapRows`, `rowsAct1`); acto 2 sigue 14.
+  - **Rutas con carácter (sin decirlo):** cada camino se inclina a *Recruit*
+    (Recruit, pocos élites, sin tienda) o a *items* (muchos élites y tiendas,
+    sin Recruit); se alternan, una bifurcación toma la inclinación contraria,
+    nodos compartidos son neutros (`PathLean`, `cfg::map::w*Path`). Sim de
+    3000 mapas del acto 1: la ruta con más Recruit trae ~0.83, la con menos
+    ~0 → terminar el acto 1 con 3 pelotas es raro.
+  - **Élite se distingue:** en el mapa naranja propio (`ember`), más grande
+    y con doble marco; en la pelea el cartel dice "Elite - item spoils" y el
+    HUD "ELITE" con barra naranja.
+
 - **Fase 2 — Jefe tras la oleada 10.** Da upgrades de pelota (viento/agua/
   piedra). Extiende la run mas alla de 10 en "modo infinito" opcional.
 - **Fase 3 — Variedad.** Repulsor, bumper, rampa. Corredor, tanque, escindido.

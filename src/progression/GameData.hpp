@@ -83,6 +83,7 @@ struct RunState {
     std::vector<char> shopDeal;       // per offer: 0 full price, 1 on sale, 2 prepaid (a revealed mystery box)
     int shopMystery = 0;              // 0 none, 1 on offer, 2 bought (its pick sits in shopOffers)
     int shopRerolls = 0;              // paid rerolls at this shop (each costs more)
+    int shopSells = 0;                // items sold at this shop
 
     // Pacts (Fase O): PactId values, at most kMaxPacts.
     std::vector<int> pacts;

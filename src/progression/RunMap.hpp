@@ -11,7 +11,7 @@ namespace sb {
 
 // ---- the path map: one per act ---------------------------------------------
 //
-// An act is cfg::map::rows rows of branching nodes followed by the boss. Each
+// An act is mapRows(act) rows of branching nodes followed by the boss. Each
 // row plays as a "difficulty wave" (mapRowWave): the act's 9 normal waves are
 // spread over its rows, so enemy scaling and the boss waves (10 / 20) don't
 // move however long the map is; a non-combat node just skips that row's fight.
@@ -28,10 +28,13 @@ struct MapNode {
     bool visited = false;
 };
 
+// Choosable rows in an act: act 1 is a shorter climb than act 2.
+inline int mapRows(int act) { return act == 1 ? cfg::map::rowsAct1 : cfg::map::rows; }
+
 struct RunMap {
     int act = 1;
     std::vector<MapNode> nodes;
-    int bossRow() const { return cfg::map::rows + 1; }
+    int bossRow() const { return mapRows(act) + 1; }
 };
 
 inline const char* mapNodeName(MapNodeType t) {
@@ -50,13 +53,13 @@ inline const char* mapNodeName(MapNodeType t) {
 
 inline const char* mapNodeDesc(MapNodeType t) {
     switch (t) {
-        case MapNodeType::Combat:  return "a wave of enemies - pays gold";
-        case MapNodeType::Elite:   return "a much harder wave - more gold and a pick of 1 of 4";
-        case MapNodeType::Shop:    return "spend gold on balls, items, modifiers, relics or repairs";
+        case MapNodeType::Combat:  return "a wave of enemies - pays gold and a modifier pick";
+        case MapNodeType::Elite:   return "a much harder wave - more gold and an item pick (items only come from elites and shops)";
+        case MapNodeType::Shop:    return "buy what's on the shelf: items, abilities, relics, modifiers. Sell one item";
         case MapNodeType::Forge:   return "level up one item a ball already carries";
         case MapNodeType::Rest:    return "no fight: the core is repaired to full";
-        case MapNodeType::Upgrade: return "no fight: a free pick of 1 of 4";
-        case MapNodeType::Recruit: return "no fight: a new ball, or an item from each of three classes to steer a ball's class";
+        case MapNodeType::Upgrade: return "no fight: a free pick of 1 of 4 (no items)";
+        case MapNodeType::Recruit: return "no fight: a new ball, or a free pick";
         case MapNodeType::Boss:    return "the act's boss";
     }
     return "";
@@ -66,24 +69,39 @@ inline const char* mapNodeDesc(MapNodeType t) {
 // over waves 1..9 of the act, the boss row is wave 10 (20 in act 2).
 inline int mapRowWave(int act, int row) {
     const int base = (act - 1) * cfg::run::bossWave;
-    if (row > cfg::map::rows) return base + cfg::run::bossWave;
+    const int rows = mapRows(act);
+    if (row > rows) return base + cfg::run::bossWave;
     const int span = cfg::run::bossWave - 1;
-    return base + std::clamp((row * span + cfg::map::rows - 1) / cfg::map::rows, 1, span);
+    return base + std::clamp((row * span + rows - 1) / rows, 1, span);
 }
 
 namespace detail {
 
-inline MapNodeType rollNodeType(Rng& rng, int row) {
+// A path's leaning (see cfg::map): which of balls or items it tends to offer.
+enum class PathLean { Neutral, Recruit, Item };
+
+inline MapNodeType rollNodeType(Rng& rng, int row, int act, PathLean lean) {
     if (row == 1) return MapNodeType::Combat;              // always open on a fight
+    namespace M = cfg::map;
+    int recruit = M::wRecruitNeutral, elite = M::wEliteNeutral, shop = M::wShopNeutral;
+    if (lean == PathLean::Recruit) {
+        recruit = act == 1 ? M::wRecruitLean : M::wRecruitLeanAct2;
+        elite = M::wEliteRecruitPath;
+        shop = 0;
+    } else if (lean == PathLean::Item) {
+        recruit = 0;
+        elite = M::wEliteItemPath;
+        shop = M::wShopItemPath;
+    }
     struct W { MapNodeType t; int w; };
     const W table[] = {
-        {MapNodeType::Combat,  cfg::map::wCombat},
-        {MapNodeType::Elite,   row >= 3 ? cfg::map::wElite : 0},
-        {MapNodeType::Shop,    row >= 3 ? cfg::map::wShop : 0},
-        {MapNodeType::Forge,   row >= 4 ? cfg::map::wForge : 0},
-        {MapNodeType::Rest,    row >= 4 ? cfg::map::wRest : 0},
-        {MapNodeType::Upgrade, cfg::map::wUpgrade},
-        {MapNodeType::Recruit, row >= 2 ? cfg::map::wRecruit : 0},
+        {MapNodeType::Combat,  M::wCombat},
+        {MapNodeType::Elite,   row >= 3 ? elite : 0},
+        {MapNodeType::Shop,    row >= 3 ? shop : 0},
+        {MapNodeType::Forge,   row >= 4 ? M::wForge : 0},
+        {MapNodeType::Rest,    row >= 4 ? M::wRest : 0},
+        {MapNodeType::Upgrade, M::wUpgrade},
+        {MapNodeType::Recruit, row >= 3 ? recruit : 0},
     };
     int total = 0;
     for (const W& w : table) total += w.w;
@@ -98,8 +116,10 @@ inline MapNodeType rollNodeType(Rng& rng, int row) {
 }  // namespace detail
 
 // The last row before the boss is a fixed stop with no fight, one node per lane.
+// (No Recruit here: a sure ball at the end of every act would undo how
+// scarce balls are meant to be.)
 inline constexpr MapNodeType kPreBossRow[] = {MapNodeType::Shop, MapNodeType::Rest,
-                                              MapNodeType::Upgrade, MapNodeType::Recruit};
+                                              MapNodeType::Upgrade, MapNodeType::Forge};
 static_assert(sizeof(kPreBossRow) / sizeof(kPreBossRow[0]) == cfg::map::lanes);
 
 // Build an act's map. Row 1 is a single fight (the trunk). Above it a few
@@ -113,10 +133,11 @@ inline RunMap generateMap(Rng& rng, int act) {
     RunMap m;
     m.act = act;
     const int L = cfg::map::lanes;
-    const int R = cfg::map::rows;
+    const int R = mapRows(act);
 
     // Walk the paths: walkers[k] = path k's lane on the current row.
     std::vector<std::vector<int>> laneRows;   // lanes used per row 2..R-1
+    std::vector<std::vector<detail::PathLean>> leanRows;   // each of those nodes' leaning
     std::vector<std::vector<std::pair<int, int>>> steps;   // lane -> lane moves out of each of those rows
     {
         std::vector<int> walkers;
@@ -127,10 +148,26 @@ inline RunMap generateMap(Rng& rng, int act) {
             std::swap(lanes[static_cast<std::size_t>(i)], lanes[static_cast<std::size_t>(rng.irange(0, i))]);
         walkers.assign(lanes.begin(), lanes.begin() + paths);
         std::sort(walkers.begin(), walkers.end());
+        // Leanings alternate across the paths from a random start, so a map
+        // always has both kinds.
+        using detail::PathLean;
+        std::vector<PathLean> leans;
+        const bool firstRecruit = rng.irange(0, 1) == 0;
+        for (int k = 0; k < paths; ++k)
+            leans.push_back((k % 2 == 0) == firstRecruit ? PathLean::Recruit : PathLean::Item);
         for (int r = 2; r < R; ++r) {
             std::vector<int> row = walkers;
             row.erase(std::unique(row.begin(), row.end()), row.end());
             laneRows.push_back(row);
+            std::vector<PathLean> lr;
+            for (int lane : row) {   // walkers sharing a node: neutral unless they agree
+                int kinds = 0;
+                PathLean l = PathLean::Neutral;
+                for (std::size_t k = 0; k < walkers.size(); ++k)
+                    if (walkers[k] == lane && (kinds == 0 || leans[k] != l)) { l = leans[k]; ++kinds; }
+                lr.push_back(kinds == 1 ? l : PathLean::Neutral);
+            }
+            leanRows.push_back(lr);
             if (r + 1 == R) break;
             // Step every walker to the next row without crossing another's
             // step (walkers stay in lane order); keep at least 2 lanes lit.
@@ -156,12 +193,16 @@ inline RunMap generateMap(Rng& rng, int act) {
                 const int right = next[k] + 1, left = next[k] - 1;
                 const bool canR = right < L && (k + 1 >= next.size() || right <= next[k + 1]);
                 const bool canL = left >= 0 && (k == 0 || left >= next[k - 1]);
+                // The fork leans the other way from the path it leaves.
+                const PathLean other = leans[k] == PathLean::Recruit ? PathLean::Item : PathLean::Recruit;
                 if (canR && (!canL || rng.irange(0, 1) == 0)) {
                     walkers.insert(walkers.begin() + static_cast<long>(k) + 1, walkers[k]);
                     next.insert(next.begin() + static_cast<long>(k) + 1, right);
+                    leans.insert(leans.begin() + static_cast<long>(k) + 1, other);
                 } else if (canL) {
                     walkers.insert(walkers.begin() + static_cast<long>(k), walkers[k]);
                     next.insert(next.begin() + static_cast<long>(k), left);
+                    leans.insert(leans.begin() + static_cast<long>(k), other);
                 }
             }
             // A merged pair may split again later: walkers on one lane keep
@@ -176,12 +217,15 @@ inline RunMap generateMap(Rng& rng, int act) {
     std::vector<std::vector<int>> rowNodes;   // node indices per row (0-based row)
     auto addRow = [&](int r, const std::vector<int>& lanes, bool preBoss) {
         std::vector<int> ids;
-        for (int lane : lanes) {
+        for (std::size_t li = 0; li < lanes.size(); ++li) {
+            const int lane = lanes[li];
+            const detail::PathLean lean = (r >= 2 && r < R) ? leanRows[static_cast<std::size_t>(r - 2)][li]
+                                                          : detail::PathLean::Neutral;
             MapNode n;
             n.row = r;
             n.lane = lane;
             n.type = r == 1 ? MapNodeType::Combat
-                            : (preBoss ? kPreBossRow[lane] : detail::rollNodeType(rng, r));
+                            : (preBoss ? kPreBossRow[lane] : detail::rollNodeType(rng, r, act, lean));
             ids.push_back(static_cast<int>(m.nodes.size()));
             m.nodes.push_back(n);
         }

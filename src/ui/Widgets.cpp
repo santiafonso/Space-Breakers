@@ -547,11 +547,11 @@ bool loadoutTooltip(const BallLoadout& L, int part, std::string& title, std::str
         const auto k = static_cast<UpgradeKind>(kind);
         const UpgradeInfo info = upgradeInfo(k);
         title = info.title;
-        title += "  Lv " + std::to_string(L.levelAt(part)) + "/" + std::to_string(kMaxItemLevel);
+        title += "  Lv " + std::to_string(L.levelAt(part)) + "/" + std::to_string(maxLevelOf(k));
         desc = info.desc;
         if (isAbilitySlot(part) && part - kSlotAbility >= abilitySlotCount(L))
             desc = "(asleep: this slot closed when the ball lost its Mage items - it wakes up when they're back)  " + desc;
-        if (L.levelAt(part) < kMaxItemLevel && *upgradeLevelDesc(k))
+        if (L.levelAt(part) < maxLevelOf(k) && *upgradeLevelDesc(k))
             desc += std::string(".  Next level: ") + upgradeLevelDesc(k);
         desc += std::string("  [") + tierName(upgradeTier(k));
         if (itemTag(k) != ItemTag::None) desc += std::string(", ") + itemTagName(itemTag(k));

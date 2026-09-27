@@ -207,7 +207,8 @@ void App::applyDuet() {
             for (int b = 0; b < keepN; ++b)
                 for (int s2 = 0; s2 < kLoadoutSlots; ++s2)
                     if (keep[static_cast<std::size_t>(b)].kindAt(s2) >= 0 &&
-                        keep[static_cast<std::size_t>(b)].levelAt(s2) < kMaxItemLevel)
+                        keep[static_cast<std::size_t>(b)].levelAt(s2) <
+                            maxLevelOf(static_cast<UpgradeKind>(keep[static_cast<std::size_t>(b)].kindAt(s2))))
                         spots.push_back({b, s2});
             if (spots.empty()) { gold += cfg::pact::duetMeltGold; continue; }
             const auto [b, s2] = spots[static_cast<std::size_t>(rng_.irange(0, static_cast<int>(spots.size()) - 1))];
@@ -270,7 +271,12 @@ void App::devTogglePact(PactId id) {
 
 std::string App::choiceTitle() const {
     if (!choiceTitle_.empty()) return choiceTitle_;
-    return rollSource_ == RollSource::Boss ? "Boss treasure - choose one" : "Choose one";
+    switch (rollSource_) {
+        case RollSource::Boss:      return "Boss treasure - choose one";
+        case RollSource::Elite:     return "Elite spoils - choose an item";
+        case RollSource::PostFight: return "Choose a modifier";
+        default:                    return "Choose one";
+    }
 }
 
 void App::afterChoice() {
@@ -397,7 +403,7 @@ bool App::openStarterChoice() {
 
 // ---------------------------------------------------------------- shop extras
 
-int App::forgeCap() const { return kMaxItemLevel; }   // Fase N lifted every item to Lv5, Duet included
+int App::forgeCap() const { return kMaxGearLevel; }   // items stop at Lv3 (each level counts double)
 
 int App::saleOffPercent() const {
     const float off = cfg::gold::saleOff + cfg::meta::merchantSalePerLevel * static_cast<float>(data_.meta.unlock[MetaMerchant]);
@@ -415,13 +421,7 @@ int App::shopOfferPrice(int i) const {
     return base;
 }
 
-int App::mysteryPrice() const {
-    const float off = cfg::meta::hagglerPerLevel * static_cast<float>(data_.meta.unlock[MetaHaggler]);
-    return std::max(1, static_cast<int>(std::lround(static_cast<float>(cfg::gold::mysteryPrice) * (1.f - off))));
-}
-
 // Stock the shelves: shopOffers (+1 with "Merchant"), one of them on sale.
-// A revealed mystery pick that hasn't been taken yet stays on the shelf.
 void App::rollShopOffers() {
     RunState& r = data_.run;
     std::vector<int> prepaid;
@@ -433,7 +433,7 @@ void App::rollShopOffers() {
     const int count = cfg::gold::shopOffers + (data_.meta.unlock[MetaMerchant] > 0 ? 1 : 0);
     std::vector<UpgradeKind> fresh;
     for (int i = 0; i < count; ++i) {
-        const UpgradeKind k = rollPick(RollSource::Normal, taken);
+        const UpgradeKind k = rollPick(RollSource::Shop, taken);
         if (std::find(taken.begin(), taken.end(), k) != taken.end()) break;   // pool ran dry
         taken.push_back(k);
         fresh.push_back(k);
@@ -449,29 +449,16 @@ void App::rollShopOffers() {
     r.shopSold.assign(r.shopOffers.size(), false);
 }
 
-void App::buyMystery() {
-    RunState& r = data_.run;
-    if (r.shopMystery != 1 || r.gold < mysteryPrice()) return;
-    r.gold -= mysteryPrice();
-    std::vector<UpgradeKind> shown;
-    for (int k : r.shopOffers) shown.push_back(static_cast<UpgradeKind>(k));
-    const UpgradeKind k = rollPick(RollSource::Elite, shown);   // elite odds: often Rare or better
-    r.shopOffers.push_back(static_cast<int>(k));
-    r.shopSold.push_back(false);
-    r.shopDeal.push_back(2);
-    r.shopMystery = 2;
-    const sf::Color col = tierColor(upgradeTier(k));
-    effects_.flash(col, upgradeTier(k) >= Tier::Epic ? 0.8f : 0.45f);
-    effects_.addLabel(std::string(tierName(upgradeTier(k))) + "  " + upgradeInfo(k).title,
-                      {size().x * 0.5f, size().y * 0.72f}, col, 28, 1.6f);   // under the shop buttons
-    audio_.purchase();
-}
-
 int App::shopRerollPrice() const { return cfg::gold::rerollBase + cfg::gold::rerollStep * data_.run.shopRerolls; }
+
+// The shop sells only what's on the shelf: a reroll needs "Merchant" (one per
+// level per visit), selling is one item per visit (+1 per "Haggler" level).
+int App::shopRerollsLeft() const { return std::max(0, data_.meta.unlock[MetaMerchant] - data_.run.shopRerolls); }
+int App::shopSellsLeft() const { return std::max(0, 1 + data_.meta.unlock[MetaHaggler] - data_.run.shopSells); }
 
 void App::rerollShop() {
     RunState& r = data_.run;
-    if (r.gold < shopRerollPrice()) return;
+    if (shopRerollsLeft() <= 0 || r.gold < shopRerollPrice()) return;
     r.gold -= shopRerollPrice();
     ++r.shopRerolls;
     rollShopOffers();
@@ -479,20 +466,8 @@ void App::rerollShop() {
     effects_.flash(theme::accent, 0.25f);
 }
 
-void App::beginShopForge() {
-    if (data_.run.gold < cfg::gold::forgeServicePrice) return;
-    equipSrc_ = EquipSource::ShopForge;
-    equipRef_ = -1;
-    bool any = false;
-    for (int b = 0; b < runBallCount(); ++b) any = any || equipFitsBall(b);
-    if (!any) {
-        effects_.addLabel("nothing to forge yet", {size().x * 0.5f, size().y * 0.14f}, theme::textLo, 20, 1.2f);
-        return;
-    }
-    push(ScreenId::Equip);
-}
-
 void App::beginSell() {
+    if (shopSellsLeft() <= 0) return;
     equipSrc_ = EquipSource::Sell;
     equipRef_ = -1;
     bool any = false;

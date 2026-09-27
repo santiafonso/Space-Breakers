@@ -388,6 +388,7 @@ inline constexpr float bastionPerWavePerLevel = 1.0f;  // "Bastion" meta node: +
 
 // A run is a fixed sprint: survive to the final wave and you win.
 namespace run {
+inline constexpr float newBallCardWeight = 0.3f;   // an "Extra ball" card weighs this vs 1 for other picks of its tier
 inline constexpr int startBalls = 1;   // every run starts with one ball (more come from picks / pacts)
 inline constexpr int bossWave = 10;    // the miniboss duel
 inline constexpr int finalWave = 20;   // last wave once "Continue" past the boss is unlocked
@@ -397,7 +398,8 @@ inline constexpr int rerollsPerLevel = 2;     // "Foresight" web node: reroll ch
 
 // The path map between waves (one per act) and the run's gold.
 namespace map {
-inline constexpr int rows = 14;         // choosable rows per act; the boss is row rows+1
+inline constexpr int rows = 14;         // choosable rows per act (act 2); the boss is row rows+1
+inline constexpr int rowsAct1 = 10;     // act 1 is a shorter climb (see mapRows)
 inline constexpr int lanes = 4;         // max nodes per row
 inline constexpr int minPerRow = 2;     // and min, between the trunk and the pre-boss row
 inline constexpr int splitPct = 22;     // % chance per row that a path forks into a free neighbouring lane
@@ -412,7 +414,20 @@ inline constexpr int wShop = 6;
 inline constexpr int wForge = 9;
 inline constexpr int wRest = 9;
 inline constexpr int wUpgrade = 10;
-inline constexpr int wRecruit = 8;      // a new ball or a role
+inline constexpr int wRecruit = 8;      // a new ball or a free pick (unused: see the path leanings below)
+// Every path leans one way, never said out loud: a "recruit" path turns up
+// Recruit stops (new balls) and few elites; an "item" path turns up elites and
+// shops (the only places items come from) and no Recruit. Where two paths
+// share a node it's neutral. Balls stay scarce: about one Recruit per recruit
+// path in act 1.
+inline constexpr int wRecruitLean = 10;     // Recruit weight on a recruit path (act 1)
+inline constexpr int wRecruitLeanAct2 = 14;
+inline constexpr int wEliteRecruitPath = 4;
+inline constexpr int wEliteItemPath = 28;
+inline constexpr int wShopItemPath = 9;
+inline constexpr int wRecruitNeutral = 3;
+inline constexpr int wEliteNeutral = 12;
+inline constexpr int wShopNeutral = 5;
 // Elite waves: tougher and more of them.
 inline constexpr float eliteHpMul = 1.6f;
 inline constexpr float eliteCountMul = 1.3f;

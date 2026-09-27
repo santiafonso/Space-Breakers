@@ -21,7 +21,8 @@ void Hud::pulseGold() { goldPop_ = std::min(1.f, goldPop_ + 0.5f); }
 
 void Hud::update(float dt, int act, int stage, int stages, int enemiesLeft, float coreFrac,
                  float comboMultiplier, int score, int gold, const std::optional<ActiveEffect>& effect,
-                 bool bossWave, bool hasReserve, PowerUp reservePu) {
+                 bool bossWave, bool hasReserve, PowerUp reservePu, bool eliteWave) {
+    eliteWave_ = eliteWave && !bossWave;
     if (act != act_ || stage != stage_ || bossWave != bossWave_) enemiesPeak_ = 0;
     act_ = act;
     stage_ = stage;
@@ -74,7 +75,13 @@ bool Hud::tooltipAt(sf::Vector2f m, std::string& title, std::string& desc, sf::C
         return true;
     }
     if (sf::FloatRect(size_.x * 0.5f - 170.f, mg - 10.f, 340.f, 44.f).contains(m)) {
-        title = bossWave_ ? "Boss" : "Stage " + std::to_string(stage_) + " of " + std::to_string(stages_);
+        title = bossWave_ ? "Boss"
+                          : (eliteWave_ ? "Elite fight" : "Stage " + std::to_string(stage_) + " of " + std::to_string(stages_));
+        if (eliteWave_) {
+            desc = "tougher and more enemies - clear it for extra gold and an item pick (items only come from elites "
+                   "and shops). " + std::to_string(enemiesLeft_) + " left.";
+            return true;
+        }
         desc = std::to_string(enemiesLeft_) + (enemiesLeft_ == 1 ? " enemy" : " enemies") +
                " left - the bar fills as you clear them. Keep them off the core: its ring is its health.";
         return true;
@@ -165,9 +172,10 @@ void Hud::draw(sf::RenderWindow& window) const {
     {
         char stage[32];
         if (bossWave_) std::snprintf(stage, sizeof(stage), "%s", act_ == 1 ? "miniboss" : "final boss");
+        else if (eliteWave_) std::snprintf(stage, sizeof(stage), "elite  %d / %d", stage_, stages_);
         else std::snprintf(stage, sizeof(stage), "stage %d / %d", stage_, stages_);
         const std::string act = "act " + std::to_string(act_);
-        const sf::Color stCol = bossWave_ ? theme::coreLow : theme::textHi;
+        const sf::Color stCol = bossWave_ ? theme::coreLow : (eliteWave_ ? theme::ember : theme::textHi);
         const float aw = makeLabel(*font_, act, 13, theme::textLo).getLocalBounds().width;
         const float sw = makeLabel(*font_, stage, 18, stCol).getLocalBounds().width, gap = 18.f;
         const float x0 = size_.x * 0.5f - (aw + gap + sw) * 0.5f;
@@ -180,7 +188,7 @@ void Hud::draw(sf::RenderWindow& window) const {
                                ? 1.f - static_cast<float>(enemiesLeft_) / static_cast<float>(enemiesPeak_)
                                : 0.f;
         gauge(window, size_.x * 0.5f - barW * 0.5f, mg + 24.f, barW, 4.f, done,
-              bossWave_ ? theme::coreLow : theme::accent, 0.85f, 1);
+              bossWave_ ? theme::coreLow : (eliteWave_ ? theme::ember : theme::accent), 0.85f, 1);
     }
 
     // Active power-up bar, a bit lower so it clears the banner.

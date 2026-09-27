@@ -237,7 +237,7 @@ public:
 private:
     int cardCount(App& app) const;                 // offers + the mystery box while it's there
     sf::FloatRect offerRect(App& app, int i) const;
-    sf::FloatRect buttonRect(App& app, int b) const;   // 0 repair, 1 forge, 2 sell, 3 reroll, 4 leave
+    sf::FloatRect buttonRect(App& app, int b) const;   // 0 sell, 1 reroll, 2 leave; empty = not offered
     int hover_ = -1;          // card index, 100 + b = a button
     float clock_ = 0.f;
     sf::Vector2f mouse_;

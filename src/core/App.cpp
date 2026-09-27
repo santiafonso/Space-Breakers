@@ -181,7 +181,7 @@ BallSpec App::ballSpec(const BallLoadout& L) const {
 
     for (int i = 0; i < kBallSlots; ++i) {
         if (L.gear[i] < 0) continue;
-        const int lvl = std::clamp(L.gearLvl[i], 1, kMaxItemLevel);
+        const int lvl = gearPower(L.gearLvl[i]);       // Lv1-3 play as the old 1 / 3 / 5
         const float n = static_cast<float>(lvl - 1);   // levels past the first
         m.damageMult *= 1.f + C::itemLevelDamage * n;
         switch (static_cast<UpgradeKind>(L.gear[i])) {
@@ -562,7 +562,7 @@ void App::newRun() {
     r.map = generateMap(rng_, act);
     r.mapNode = -1;
     r.mapRow = 0;   // stand just before the first row that plays as startWave
-    while (r.mapRow <= cfg::map::rows && mapRowWave(act, r.mapRow + 1) < startWave) ++r.mapRow;
+    while (r.mapRow <= mapRows(act) && mapRowWave(act, r.mapRow + 1) < startWave) ++r.mapRow;
     r.wave = startWave - 1;
     replaceStack(ScreenId::Play);
     introStep_ = 0;
@@ -640,7 +640,7 @@ int App::luck() const {
     for (const BallLoadout& b : data_.run.balls)
         for (int i = 0; i < kBallSlots; ++i)
             if (b.gear[i] == static_cast<int>(UpgradeKind::LuckyCharm))
-                l += cfg::jester::charmPoints(std::clamp(b.gearLvl[i], 1, kMaxItemLevel));
+                l += cfg::jester::charmPoints(gearPower(b.gearLvl[i]));
     // web "Fool's luck": some luck always, more for every Jester ball
     if (const int fool = data_.meta.unlock[MetaFoolsLuck]; fool > 0) {
         l += cfg::meta::foolsLuckPerLevel * fool;
@@ -669,11 +669,31 @@ UpgradeKind App::rollPick(RollSource src, const std::vector<UpgradeKind>& exclud
             w[t + 1] += moved;
         }
 
-    // Eligible picks by tier.
+    // What this source may offer (see RollSource).
+    auto allowed = [src](UpgradeKind k) {
+        const UpgradeCat cat = upgradeCat(k);
+        switch (src) {
+            case RollSource::Normal:    return cat != UpgradeCat::Item;
+            case RollSource::PostFight: return cat == UpgradeCat::Modifier;
+            case RollSource::Elite:     return cat == UpgradeCat::Item;
+            case RollSource::Shop:      return cat != UpgradeCat::NewBall;
+            case RollSource::Boss:      return true;
+        }
+        return true;
+    };
+    // Eligible picks by tier. (An Elite with no item that fits anywhere falls
+    // back to anything.)
     std::vector<UpgradeKind> byTier[kTierCount];
+    bool anyAllowed = false;
+    for (int i = 0; i < kUpgradeKindCount && !anyAllowed; ++i) {
+        const auto k = static_cast<UpgradeKind>(i);
+        anyAllowed = allowed(k) && upgradeEligible(k, c) && (!filter || filter(k)) &&
+                     std::find(exclude.begin(), exclude.end(), k) == exclude.end();
+    }
     for (int i = 0; i < kUpgradeKindCount; ++i) {
         const auto k = static_cast<UpgradeKind>(i);
         if (!upgradeEligible(k, c) || (filter && !filter(k))) continue;
+        if (anyAllowed && !allowed(k)) continue;
         if (std::find(exclude.begin(), exclude.end(), k) != exclude.end()) continue;
         byTier[static_cast<int>(upgradeTier(k))].push_back(k);
     }
@@ -698,6 +718,7 @@ UpgradeKind App::rollPick(RollSource src, const std::vector<UpgradeKind>& exclud
                 if (upgradeCat(v[j]) == UpgradeCat::Item)
                     if (const int lore = classLoreNode(itemTag(v[j])); lore >= 0)
                         wk[j] += cfg::meta::lorePerLevel * static_cast<float>(u[lore]);
+                if (upgradeCat(v[j]) == UpgradeCat::NewBall) wk[j] *= cfg::run::newBallCardWeight;   // balls are rare
                 sum += wk[j];
             }
             float pick = rng_.range(0.f, sum);
@@ -734,9 +755,9 @@ void App::rerollChoice(int idx) {
     effects_.flash(theme::accent, 0.25f);
 }
 
-// Recruit node: a new ball plus one item of three different unlocked classes,
-// so you can push a ball toward the class you want. With the arena full the
-// ball card becomes a random modifier instead.
+// Recruit node: a new ball (the sure way to get one) plus three free picks
+// (no items - those come from elites and shops). With the arena full the ball
+// card becomes a random modifier instead.
 void App::rollRecruitChoices() {
     const UpgradeCtx c = buildUpgradeCtx();
     choices_[0] = upgradeEligible(UpgradeKind::AddBall, c)
@@ -744,31 +765,9 @@ void App::rollRecruitChoices() {
         : static_cast<UpgradeKind>(static_cast<int>(UpgradeKind::HeavyImpact) + rng_.irange(0, kModifierCount - 1));
     rollSource_ = RollSource::Normal;
     choiceTitle_.clear();
-    // One filter per class (rollPick takes a plain function pointer).
-    static bool (*const tagFilters[kClassCount])(UpgradeKind) = {
-        [](UpgradeKind k) { return itemTag(k) == ItemTag::Striker; },
-        [](UpgradeKind k) { return itemTag(k) == ItemTag::Guardian; },
-        [](UpgradeKind k) { return itemTag(k) == ItemTag::Support; },
-        [](UpgradeKind k) { return itemTag(k) == ItemTag::Mage; },
-        [](UpgradeKind k) { return itemTag(k) == ItemTag::Shooter; },
-        [](UpgradeKind k) { return itemTag(k) == ItemTag::Assassin; },
-        [](UpgradeKind k) { return itemTag(k) == ItemTag::Summoner; },
-        [](UpgradeKind k) { return itemTag(k) == ItemTag::Jester; },
-    };
-    std::vector<int> classes;   // unlocked classes that have an item to offer
-    for (int t = 0; t < kClassCount; ++t) {
-        bool any = false;
-        for (int i = 0; i < kUpgradeKindCount && !any; ++i)
-            any = tagFilters[t](static_cast<UpgradeKind>(i)) && upgradeEligible(static_cast<UpgradeKind>(i), c);
-        if (any) classes.push_back(t);
-    }
-    for (int i = static_cast<int>(classes.size()) - 1; i > 0; --i)
-        std::swap(classes[static_cast<std::size_t>(i)], classes[static_cast<std::size_t>(rng_.irange(0, i))]);
-    std::vector<UpgradeKind> taken{choices_[0]};
+    std::vector<UpgradeKind> taken{choices_[0], UpgradeKind::AddBall};
     for (int t = 0; t < kChoiceCount - 1; ++t) {
-        // A different class per card while there are enough; any pick after that.
-        const auto filter = t < static_cast<int>(classes.size()) ? tagFilters[classes[static_cast<std::size_t>(t)]] : nullptr;
-        choices_[t + 1] = rollPick(RollSource::Normal, taken, filter);
+        choices_[t + 1] = rollPick(RollSource::Normal, taken);
         taken.push_back(choices_[t + 1]);
     }
 }
@@ -1050,6 +1049,7 @@ void App::confirmEquip(int ball, int slot) {
             L.gear[slot] = -1;
             L.gearLvl[slot] = 0;
             r.gold += value;
+            ++r.shopSells;
             syncWorldBalls();
             audio_.purchase();
             effects_.flash(theme::puGolden, 0.35f);
@@ -1137,14 +1137,15 @@ int App::shopPrice(UpgradeKind k) const {
     return std::max(1, static_cast<int>(std::lround(static_cast<float>(base) * (1.f - off))));
 }
 
-// A fresh shop visit: new stock, a mystery box, rerolls back to full price.
+// A fresh shop visit: new stock, rerolls and sells back to full.
 void App::rollShop() {
     RunState& r = data_.run;
     r.shopOffers.clear();
     r.shopSold.clear();
     r.shopDeal.clear();
-    r.shopMystery = 1;
+    r.shopMystery = 0;
     r.shopRerolls = 0;
+    r.shopSells = 0;
     rollShopOffers();
 }
 
@@ -1166,15 +1167,6 @@ void App::buyShopOffer(int i) {
 
 int App::repairAmount() const {
     return static_cast<int>(std::lround(world_.core().maxHp * cfg::gold::repairFrac));
-}
-
-void App::buyRepair() {
-    const Core& c = world_.core();
-    if (data_.run.gold < cfg::gold::priceRepair || c.hp >= c.maxHp - 0.5f) return;
-    data_.run.gold -= cfg::gold::priceRepair;
-    playerRepair(static_cast<float>(repairAmount()));
-    audio_.purchase();
-    effects_.flash(theme::core, 0.35f);
 }
 
 void App::leaveShop() {
@@ -1395,7 +1387,7 @@ void App::devOpen(DevOpen what) {
                                   theme::textLo, 22, 1.2f);
             break;
         case DevOpen::JumpToBoss:   // stand right before the boss row and open the map
-            data_.run.mapRow = cfg::map::rows;
+            data_.run.mapRow = mapRows(data_.run.map.act);
             data_.run.mapNode = -1;
             world_.devWinWave();
             openMap();
@@ -1692,8 +1684,7 @@ void App::processEvents(const FrameEvents& ev) {
 }
 
 // After a cleared fight: the run's first fight hands the first ball its first
-// ability; an Elite then offers its pick; otherwise back to the map (build
-// picks come from the map's Upgrade / Recruit / Forge / Shop stops).
+// ability; then a plain fight offers a modifier pick, an Elite an item pick.
 void App::postFight() {
     RunState& r = data_.run;
     const bool firstFight = r.map.act == 1 && r.mapRow <= 1;
@@ -1708,8 +1699,7 @@ void App::postFight() {
 }
 
 void App::afterFightPick() {
-    if (data_.run.eliteWave) openChoice(RollSource::Elite);
-    else openMap();
+    openChoice(data_.run.eliteWave ? RollSource::Elite : RollSource::PostFight);
 }
 
 void App::update(float frameDt) {
@@ -1836,10 +1826,10 @@ void App::update(float frameDt) {
     if (const int n = effects_.takeArrivedCoins(); n > 0) hud_.pulseGold();
 
     const Core& c = world_.core();
-    hud_.update(frameDt, data_.run.map.act, data_.run.mapRow, cfg::map::rows + 1, world_.enemiesLeft(),
+    hud_.update(frameDt, data_.run.map.act, data_.run.mapRow, mapRows(data_.run.map.act) + 1, world_.enemiesLeft(),
                 c.maxHp > 0.f ? c.hp / c.maxHp : 0.f, world_.comboMultiplier(),
                 data_.run.score, data_.run.gold, world_.effect(), world_.bossWave(),
-                world_.hasReserve(), world_.reservePu());
+                world_.hasReserve(), world_.reservePu(), data_.run.eliteWave);
 }
 
 void App::render() {
@@ -2023,7 +2013,7 @@ int App::runSnapshots(const std::string& dir) {
         n.visited = true;
         r.mapNode = node;
         r.mapRow = n.row;
-        if (n.row >= cfg::map::rows || n.next.empty()) break;
+        if (n.row >= mapRows(r.map.act) || n.next.empty()) break;
         node = n.next[static_cast<std::size_t>(n.row) % n.next.size()];
     }
     world_.devWinWave();
@@ -2059,7 +2049,6 @@ int App::runSnapshots(const std::string& dir) {
     r.gold = 240;
     rollShop();
     push(ScreenId::Shop);
-    buyMystery();
     snapFrame(d + "12_shop_extras.png");
     beginSell();
     snapFrame(d + "13_sell.png");

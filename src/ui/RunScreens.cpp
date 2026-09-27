@@ -82,7 +82,7 @@ float drawRunStatus(App& app, sf::RenderWindow& w, float y) {
 sf::Color nodeColor(MapNodeType t) {
     switch (t) {
         case MapNodeType::Combat:  return theme::enemy;
-        case MapNodeType::Elite:   return theme::coreLow;
+        case MapNodeType::Elite:   return theme::ember;   // its own warm orange: the fights that pay items
         case MapNodeType::Shop:    return theme::puGolden;
         case MapNodeType::Forge:   return theme::accent;
         case MapNodeType::Rest:    return theme::core;
@@ -115,7 +115,10 @@ void drawNode(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f p, MapNode
     const bool boss = t == MapNodeType::Boss;
     const int sides = boss ? 8 : 4;
     const float rot = boss ? kPi / 8.f : 0.f;
-    const float rr = boss ? r : r * 1.2f;   // a diamond needs a longer radius to match a disc's weight
+    const bool elite = t == MapNodeType::Elite;
+    const float rr = boss ? r : r * (elite ? 1.4f : 1.2f);   // a diamond needs a longer radius to match a disc's weight
+    if (elite)   // an elite wears a second, outer frame
+        draw::polygonOutline(w, p, rr + 6.f, sides, rot, 1.5f, withAlpha(col, 0.6f * alpha));
     if (filled) {
         draw::polygon(w, p, rr, sides, rot, withAlpha(lerpColor(col, sf::Color::White, 0.15f), 0.9f * alpha),
                       withAlpha(col, 0.8f * alpha));
@@ -314,7 +317,7 @@ constexpr float kStatusY = 52.f;
 
 float MapScreen::scrollMax(App& app) const {
     const sf::Vector2f s = app.size();
-    return std::max(0.f, static_cast<float>(cfg::map::rows) * kMapStep - (s.y - kMapBottomPad - kMapTop - 60.f));
+    return std::max(0.f, static_cast<float>(mapRows(app.data().run.map.act)) * kMapStep - (s.y - kMapBottomPad - kMapTop - 60.f));
 }
 
 float MapScreen::scrollFor(App& app, int row) const {
@@ -546,7 +549,7 @@ constexpr float kBtnW = 204.f, kBtnH = 36.f, kBtnGap = 12.f;
 
 int ShopScreen::cardCount(App& app) const {
     const RunState& r = app.data().run;
-    return static_cast<int>(r.shopOffers.size()) + (r.shopMystery == 1 ? 1 : 0);
+    return static_cast<int>(r.shopOffers.size());
 }
 
 namespace {
@@ -637,33 +640,47 @@ sf::FloatRect ShopScreen::offerRect(App& app, int i) const {
     return {x, s.y * kOfferTop, wd, kOfferH};
 }
 
+namespace {
+// The shop's buttons that apply right now: Sell while this visit allows one
+// (and there's an item to sell), Reroll only with "Merchant", Leave always.
+std::vector<int> shopButtons(App& app) {
+    bool items = false;
+    for (const BallLoadout& L : app.data().run.balls)
+        for (int sl = 0; sl < kBallSlots; ++sl) items = items || L.gear[sl] >= 0;
+    std::vector<int> v;
+    if (app.shopSellsLeft() > 0 && items) v.push_back(0);
+    if (app.shopRerollsLeft() > 0) v.push_back(1);
+    v.push_back(2);
+    return v;
+}
+}  // namespace
+
 sf::FloatRect ShopScreen::buttonRect(App& app, int b) const {
     const sf::Vector2f s = app.size();
-    const float total = 5.f * kBtnW + 4.f * kBtnGap;
-    return {s.x * 0.5f - total * 0.5f + static_cast<float>(b) * (kBtnW + kBtnGap), s.y * kOfferTop + kOfferH + 48.f,
-            kBtnW, kBtnH};
+    const std::vector<int> v = shopButtons(app);
+    const auto it = std::find(v.begin(), v.end(), b);
+    if (it == v.end()) return {};
+    const float n = static_cast<float>(v.size());
+    const float total = n * kBtnW + (n - 1.f) * kBtnGap;
+    const float i = static_cast<float>(it - v.begin());
+    return {s.x * 0.5f - total * 0.5f + i * (kBtnW + kBtnGap), s.y * kOfferTop + kOfferH + 48.f, kBtnW, kBtnH};
 }
 
 void ShopScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
     if (isKey(e, sf::Keyboard::Escape)) { app.leaveShop(); return; }
     if (isKey(e, sf::Keyboard::R)) { app.rerollShop(); return; }
     if (!isLeftClick(e)) return;
-    const RunState& r = app.data().run;
-    const int offers = static_cast<int>(r.shopOffers.size());
     for (int i = 0; i < cardCount(app); ++i) {
         if (!offerRect(app, i).contains(mouse)) continue;
-        if (i < offers) app.buyShopOffer(i);
-        else app.buyMystery();
+        app.buyShopOffer(i);
         return;
     }
-    for (int b = 0; b < 5; ++b) {
+    for (int b = 0; b < 3; ++b) {
         if (!buttonRect(app, b).contains(mouse)) continue;
         switch (b) {
-            case 0: app.buyRepair(); break;
-            case 1: app.beginShopForge(); break;
-            case 2: app.beginSell(); break;
-            case 3: app.rerollShop(); break;
-            case 4: app.leaveShop(); break;
+            case 0: app.beginSell(); break;
+            case 1: app.rerollShop(); break;
+            case 2: app.leaveShop(); break;
         }
         return;
     }
@@ -675,7 +692,7 @@ void ShopScreen::update(App& app, float dt, sf::Vector2f mouse) {
     hover_ = -1;
     for (int i = 0; i < cardCount(app); ++i)
         if (offerRect(app, i).contains(mouse)) hover_ = i;
-    for (int b = 0; b < 5; ++b)
+    for (int b = 0; b < 3; ++b)
         if (buttonRect(app, b).contains(mouse)) hover_ = 100 + b;
     uisound::hover(this, hover_);
 }
@@ -751,46 +768,16 @@ void ShopScreen::draw(App& app, sf::RenderWindow& w) {
         }
     }
 
-    if (r.shopMystery == 1) {   // the mystery box: a pulsing "?" card
-        const int i = offers;
-        const float cp = clampf(introPop(it, 0.08f + 0.05f * static_cast<float>(i), 0.3f), 0.f, 1.f);
-        const float h = hover_ == i ? 1.f : 0.f;
-        const sf::FloatRect rc = offerRect(app, i);
-        const float cx = rc.left + rc.width * 0.5f;
-        drawTierFrame(w, rc, Tier::Epic, h, cp, clock_);
-        drawLabel(w, f, "mystery box", 12, {rc.left + 16.f, rc.top + 21.f}, withAlpha(tierColor(Tier::Epic), cp), -1);
-        const float bob = 3.f * std::sin(clock_ * 3.f);
-        drawCentered(w, f, "?", theme::fsTitle + 14u, {cx, rc.top + 80.f + bob}, withAlpha(theme::textHi, cp));
-        float y = rc.top + 132.f;
-        for (const std::string& l : wrapText(f, "a random pick at elite odds - often Rare or better", theme::fsSmall, rc.width - 28.f)) {
-            drawCentered(w, f, l, theme::fsSmall, {cx, y}, withAlpha(theme::textLo, cp));
-            y += 17.f;
-        }
-        const bool afford = app.gold() >= app.mysteryPrice();
-        drawCentered(w, f, std::to_string(app.mysteryPrice()) + " gold", theme::fsBody, {cx, rc.top + rc.height - 18.f},
-                     withAlpha(afford ? theme::puGolden : theme::coreLow, cp));
-    }
-
-    // Services row.
-    const Core& c = app.world().core();
-    const bool hurt = c.hp < c.maxHp - 0.5f;
-    bool forgeable = false, sellable = false;
-    for (const BallLoadout& L : r.balls)
-        for (int sl = 0; sl < kBallSlots; ++sl) {
-            if (L.gear[sl] < 0) continue;
-            sellable = true;
-            if (L.gearLvl[sl] < app.forgeCap()) forgeable = true;
-        }
+    // Services: only the ones this visit allows.
     const int g = app.gold();
-    drawButton(w, f, buttonRect(app, 0),
-               "Repair core +" + std::to_string(app.repairAmount()) + "  -  " + std::to_string(cfg::gold::priceRepair) + "g",
-               theme::core, hover_ == 100 ? 1.f : 0.f, hurt && g >= cfg::gold::priceRepair);
-    drawButton(w, f, buttonRect(app, 1), "Forge an item  -  " + std::to_string(cfg::gold::forgeServicePrice) + "g",
-               theme::accent, hover_ == 101 ? 1.f : 0.f, forgeable && g >= cfg::gold::forgeServicePrice);
-    drawButton(w, f, buttonRect(app, 2), "Sell an item", theme::puGolden, hover_ == 102 ? 1.f : 0.f, sellable);
-    drawButton(w, f, buttonRect(app, 3), "Reroll stock (R)  -  " + std::to_string(app.shopRerollPrice()) + "g",
-               theme::puSurge, hover_ == 103 ? 1.f : 0.f, g >= app.shopRerollPrice());
-    drawButton(w, f, buttonRect(app, 4), "Leave (Esc)", theme::accent, hover_ == 104 ? 1.f : 0.f, true);
+    if (const sf::FloatRect br = buttonRect(app, 0); br.width > 0.f)
+        drawButton(w, f, br, app.shopSellsLeft() > 1 ? "Sell an item (" + std::to_string(app.shopSellsLeft()) + ")"
+                                                     : "Sell an item",
+                   theme::puGolden, hover_ == 100 ? 1.f : 0.f, true);
+    if (const sf::FloatRect br = buttonRect(app, 1); br.width > 0.f)
+        drawButton(w, f, br, "Reroll (R)  -  " + std::to_string(app.shopRerollPrice()) + "g", theme::puSurge,
+                   hover_ == 101 ? 1.f : 0.f, g >= app.shopRerollPrice());
+    drawButton(w, f, buttonRect(app, 2), "Leave (Esc)", theme::accent, hover_ == 102 ? 1.f : 0.f, true);
 
     // Hover help.
     if (hover_ >= 0 && hover_ < offers) {
@@ -799,30 +786,16 @@ void ShopScreen::draw(App& app, sf::RenderWindow& w) {
         std::string d = upgradeCatDesc(cat);
         const int deal = hover_ < static_cast<int>(r.shopDeal.size()) ? r.shopDeal[static_cast<std::size_t>(hover_)] : 0;
         if (deal == 1) d += "  On sale: " + std::to_string(app.saleOffPercent()) + "% off, this visit only.";
-        if (deal == 2) d += "  You already paid for it (mystery box): click to take it.";
         drawTooltip(w, f, mouse_, s, upgradeCatName(cat), d, catColor(cat));
-    } else if (hover_ == offers && r.shopMystery == 1) {
-        drawTooltip(w, f, mouse_, s, "Mystery box",
-                    "pay now, see it after: one random pick rolled at elite odds (18% Common, 32% Uncommon, 28% Rare, "
-                    "15% Epic, 7% Legendary). It stays on the shelf, paid, until you take it.", tierColor(Tier::Epic));
     } else if (hover_ == 100) {
-        drawTooltip(w, f, mouse_, s, "Repair",
-                    "restores " + std::to_string(app.repairAmount()) +
-                        " core HP. The core also heals a little before every fight." +
-                        (app.ironCoreAlive() ? "  Ends this act's Iron core." : ""), theme::core);
-    } else if (hover_ == 101) {
-        drawTooltip(w, f, mouse_, s, "Forge",
-                    "level up one item a ball carries, like a Forge node: its bonus or chance grows by half and the "
-                    "ball hits 10% harder. Max level " + std::to_string(app.forgeCap()) + ".", theme::accent);
-    } else if (hover_ == 102) {
         drawTooltip(w, f, mouse_, s, "Sell",
                     "sell an item back for gold (" + std::to_string(static_cast<int>(cfg::gold::sellFrac * 100.f)) +
-                        "% of its tier price per forge level) and free its slot. Pick the item on the next screen.",
-                    theme::puGolden);
-    } else if (hover_ == 103) {
+                        "% of its tier price per level) and free its slot. " + std::to_string(app.shopSellsLeft()) +
+                        " left at this shop (Haggler: +1 per level).", theme::puGolden);
+    } else if (hover_ == 101) {
         drawTooltip(w, f, mouse_, s, "Reroll",
-                    "replace the stock with new picks (and a new sale). Each reroll at this shop costs " +
-                        std::to_string(cfg::gold::rerollStep) + " more. The mystery box stays.", theme::puSurge);
+                    "replace the stock with new picks (and a new sale). " + std::to_string(app.shopRerollsLeft()) +
+                        " left at this shop (Merchant: 1 per level).", theme::puSurge);
     }
 }
 
