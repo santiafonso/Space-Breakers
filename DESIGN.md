@@ -1021,6 +1021,36 @@ Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
   items / modificadores / reliquias para que sean más fuertes y más visibles
   en juego. Se ve más adelante.
 
+- **Pendiente (idea del usuario, 2026-09-26): más clases, doble rol,
+  habilidades y elemento como slot.** Todavía no se implementa.
+  - **Clases nuevas** además de Striker / Support / Guardian: **Mago**,
+    **Shooter**, **Asesino**, **Summoner**, **Bufón**, cada una con una mecánica
+    propia. Se desbloquean en la web (al principio solo hay Striker, después
+    Support, después Guardian, después las nuevas).
+    - Mago: su gracia es llevar **más habilidades**: 2 slots de habilidad por
+      ser mago, 3 con 4 items de mago (a confirmar: se entendió "2" como slots
+      de habilidad).
+    - Asesino: al matar un enemigo se **teletransporta** al enemigo más cercano.
+    - Bufón: juega con **probabilidades**.
+    - Shooter: **dispara balas**; más adelante las balas pueden rebotar entre
+      enemigos.
+    - Summoner: a definir.
+  - **Doble rol:** 2 items de una clase + 2 de otra = la pelota tiene **los dos
+    roles** (ej. Striker + Bufón). **4 items de la misma clase** = versión
+    mejorada con más cosas de su rol: **Mega Striker**, **Ancient Mage**,
+    **Shadow Assassin**, etc. (reemplaza a la "maestría" actual).
+  - **Arrancás con 1 sola pelota** (3 es demasiado fuerte al principio). Un nodo
+    de la web te deja **elegir la clase** de esa pelota inicial.
+  - **Habilidades:** activas que se disparan solas con el tiempo (cooldown), en
+    **1 slot de habilidad** por pelota (el Mago tiene más), intercambiables y
+    visibles en el TAB. **No cuentan para la clase** (no suman puntos de
+    Mago / Asesino / etc.).
+  - **Elemento como slot:** fuego / hielo / eléctrico / etc. deja de ocupar un
+    slot de item y pasa a un **slot de tipo** propio, intercambiable como las
+    habilidades.
+  - **Pelota final:** 4 slots de items + 1 de habilidad + 1 de tipo. Los items
+    pasivos globales (reliquias) aparecen a un costado en el TAB.
+
 - **Fase 2 — Jefe tras la oleada 10.** Da upgrades de pelota (viento/agua/
   piedra). Extiende la run mas alla de 10 en "modo infinito" opcional.
 - **Fase 3 — Variedad.** Repulsor, bumper, rampa. Corredor, tanque, escindido.
