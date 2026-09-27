@@ -11,7 +11,7 @@
 namespace sb {
 
 namespace {
-constexpr int kSaveVersion = 14;  // v14: snd.* sound mix; v13: appended Oath..Last stand (51 nodes); append-only since v9
+constexpr int kSaveVersion = 15;  // v15: root Squad -> Calling (refund), class nodes appended (58 nodes); v14: snd.* sound mix; v13: appended Oath..Last stand (51 nodes); append-only since v9
 }  // namespace
 
 bool hasSavedGame(const std::string& path) {
@@ -81,7 +81,7 @@ bool loadGame(const std::string& path, GameData& d) {
                 m.unlock[i] = lvl;
         }
         // v4 and earlier stored these two unlocks by name.
-        else if (key == "meta.startBalls") ls >> m.unlock[MetaStartBalls];
+        else if (key == "meta.startBalls") ls >> m.unlock[MetaCalling];
         else if (key == "meta.coreHp") ls >> m.unlock[MetaCoreHp];
         else if (key == "sound") { int v = 1; ls >> v; m.soundOn = v != 0; }
         // v14: the sound mix. Older saves keep the defaults.
@@ -114,6 +114,10 @@ bool loadGame(const std::string& path, GameData& d) {
         // "version", old run.* / ball / stat.lifetimeScrap lines: ignored.
     }
 
+    // v15: the root "Squad" (+1 starting ball, 2 levels) became "Calling" (1
+    // level). Pay back the cores spent on levels past the first.
+    if (fileVersion < 15)
+        for (int lvl = 1; lvl < m.unlock[MetaCalling]; ++lvl) m.cores += metaUnlockCost(MetaCalling, lvl);
     for (int i = 0; i < MetaUnlockCount; ++i) {
         if (m.unlock[i] < 0) m.unlock[i] = 0;
         if (m.unlock[i] > metaUnlockDef(i).maxLevel) m.unlock[i] = metaUnlockDef(i).maxLevel;

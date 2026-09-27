@@ -2,6 +2,7 @@
 
 #include <cmath>
 
+#include "render/ClassRender.hpp"
 #include "render/Draw.hpp"
 
 namespace sb {
@@ -368,18 +369,41 @@ void WorldRenderer::drawBall(sf::RenderWindow& window, const Ball& b,
     draw::glow(window, b.pos, r * 1.6f, col, 0.06f * alpha);
     draw::disc(window, b.pos, r, withAlpha(lighten(col, 0.2f), alpha), withAlpha(darken(col, 0.18f), alpha), sc);
 
-    // Role marks, kept minimal: a Guardian has a heavy rim, a Support a small
-    // inner ring, a Striker a small centre dot; a Normal ball is plain.
-    const bool guardian = b.role == BallRole::Guardian;
-    draw::ring(window, b.pos, r, guardian ? 4.f : 1.5f,
-               withAlpha(sf::Color::White, (b.held ? 0.85f : (guardian ? 0.5f : 0.25f)) * alpha));
-    if (b.role == BallRole::Support)
-        draw::ring(window, b.pos, r * 0.45f, 2.f, withAlpha(sf::Color::White, 0.65f * alpha));
-    else if (b.role == BallRole::Striker)
-        draw::disc(window, b.pos, r * 0.24f, withAlpha(sf::Color::White, 0.85f * alpha),
-                   withAlpha(sf::Color::White, 0.6f * alpha), {1.f, 1.f}, 16);
-    if (b.mods.mastery)   // mastered: a second, outer halo ring
-        draw::ring(window, b.pos, r + 5.f, 1.5f, withAlpha(lighten(col, 0.5f), 0.6f * alpha));
+    // Class marks, kept minimal (render/ClassRender.cpp): one per class it
+    // has, layered; a Normal ball is plain.
+    draw::ring(window, b.pos, r, 1.5f, withAlpha(sf::Color::White, (b.held ? 0.85f : 0.25f) * alpha));
+    const float heading = std::atan2(b.vel.y, b.vel.x);
+    for (int i = 0; i < kClassCount; ++i)
+        if (b.hasRole(classAt(i))) drawClassMark(window, classAt(i), b.pos, r, heading, alpha);
+    if (b.ascended)   // ascended: a second, outer halo ring
+        draw::ring(window, b.pos, r + 7.f, 1.5f, withAlpha(lighten(col, 0.5f), 0.6f * alpha));
+
+    // Ability charge: a hairline arc per ability slot just outside the rim,
+    // filling as it recharges; it flashes when one fires.
+    if (!b.ghost) {
+        int n = 0;
+        for (const AbilitySpec& a : b.abilities)
+            if (a.id != Ability::None) ++n;
+        if (n > 0) {
+            const float step = 2.f * kPi / static_cast<float>(n);
+            const float gap = n > 1 ? 0.35f : 0.f;
+            int k = 0;
+            for (int i = 0; i < kMaxAbilitySlots; ++i) {
+                const AbilitySpec& a = b.abilities[i];
+                if (a.id == Ability::None) continue;
+                const float full = abilityCooldown(a.id, a.level);
+                const float charge = full > 0.f ? clampf(1.f - b.abilityCd[i] / full, 0.f, 1.f) : 1.f;
+                const float a0 = -kPi * 0.5f + step * static_cast<float>(k++) + gap * 0.5f;
+                const float span = step - gap;
+                const float rr = r + 3.5f;
+                draw::ring(window, b.pos, rr, 1.5f, withAlpha(col, 0.10f * alpha), a0, a0 + span, 24);
+                const float lit = (charge >= 1.f ? 0.45f : 0.26f) + 0.5f * b.abilityFlash;
+                if (charge > 0.f)
+                    draw::ring(window, b.pos, rr, 1.5f, withAlpha(lighten(col, 0.35f), std::min(1.f, lit) * alpha),
+                               a0, a0 + span * charge, 24);
+            }
+        }
+    }
 
     // A specular highlight, top-left: reads as a solid, shiny ball.
     draw::disc(window, b.pos + sf::Vector2f{-0.34f, -0.38f} * r, r * 0.26f,
@@ -413,6 +437,7 @@ void WorldRenderer::draw(sf::RenderWindow& window, const World& world) const {
     for (const TetherBeam& t : world.tethers()) drawTether(window, t);
     for (const Bolt& bo : world.bolts()) drawBolt(window, bo);
     for (const Pickup& pu : world.pickups()) drawPickup(window, pu);
+    drawClassWorld(window, world);   // per-class things on the field (ClassRender.cpp)
     for (const Ball& g : world.ghosts()) drawBall(window, g, world.effect());
     for (const Ball& b : world.balls()) drawBall(window, b, world.effect());
 }

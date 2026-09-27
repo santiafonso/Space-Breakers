@@ -17,7 +17,7 @@
 
 namespace sb {
 
-enum class ScreenId { Menu, Loadout, Play, Choice, Pause, Stats, HowTo, BossWin, Map, Shop, Equip, Dev, Pact, Sound };
+enum class ScreenId { Menu, Loadout, Play, Choice, Pause, Stats, HowTo, BossWin, Map, Shop, Equip, Dev, Pact, Sound, ClassPick };
 
 // Who opened the ball / slot picker, and so what confirming it does.
 // ShopForge / Sell are the shop's paid forge and its "sell an item" counter.
@@ -117,6 +117,9 @@ public:
     void usePactAbility();             // "Nova" (SPACE / right-click in a fight)
     float novaCooldown() const { return novaCd_; }
     std::string choiceTitle() const;   // Choice screen heading
+    // ---- "Calling": the starting ball's class, picked in the run intro ----
+    const std::vector<ItemTag>& classChoices() const { return classChoices_; }
+    void chooseClass(int idx);         // ClassPick screen: take card idx
     void abandonRun();
     void wipeSave();        // Game menu "Reset progress" -> erase all saved data
 
@@ -140,7 +143,7 @@ public:
     float devTimeScale() const { return devTimeScale_; }
     int devBall() const { return std::min(devBall_, std::max(0, runBallCount() - 1)); }
     void devSetBall(int b) { devBall_ = b; }
-    enum class DevOpen { Shop, Forge, Upgrade, Elite, BossTreasure, Recruit, JumpToBoss, PactBoss, PactStart };
+    enum class DevOpen { Shop, Forge, Upgrade, Elite, BossTreasure, Recruit, JumpToBoss, PactBoss, PactStart, ClassPick };
     void devOpen(DevOpen what);
     void devTogglePact(PactId id);   // grant it (or drop it, if the run has it)
     void openPause();
@@ -182,9 +185,13 @@ private:
     bool autoTarget(UpgradeKind k, int& ball, int& slot) const;   // first ball / free slot it fits
     void finishChoice();                                          // after a pick: fx, close, next wave
     void afterChoice();       // a Choice closed: back to the map, or on with the run intro
-    // Run intro (newRun): Covenant pact -> Quartermaster starter pick -> map.
+    // Run intro (newRun): Covenant pact -> Calling class pick -> Quartermaster starter pick -> map.
     void advanceRunIntro();
     bool openStarterChoice();
+    std::vector<UpgradeKind> starterPool(Tier want);          // Starter kit candidates, nearest tier first
+    bool openClassChoice();                                   // "Calling" (false = nothing to pick)
+    std::vector<UpgradeKind> startClassPool(ItemTag t) const; // items that could start a class-t ball
+    void grantStartClass(ItemTag t);                          // ball 0 takes items of class t
     // Pacts.
     void foldPacts(WorldParams& p) const;  // the run's pacts into the sim params
     bool openPactChoice(PactSource src);   // false = nothing to offer (caller moves on)
@@ -249,6 +256,7 @@ private:
     RollSource rollSource_ = RollSource::Normal;   // what the current Choice was rolled from (rerolls keep it)
     std::string choiceTitle_;                      // custom Choice heading ("Starter kit ..."), empty = default
     std::vector<PactId> pactChoices_;
+    std::vector<ItemTag> classChoices_;   // "Calling": the classes on offer
     PactSource pactSrc_ = PactSource::Boss;
     int introStep_ = -1;      // >= 0 while the run intro (pact / starter pick) is still running
     float novaCd_ = 0.f;      // "Nova" pact cooldown (s)

@@ -63,9 +63,9 @@ constexpr float kRootR = 16.f;        // centre node radius
 constexpr float kWebCenterY = 0.53f;  // * size.y
 constexpr int   kBackRings = 7;       // faint rings drawn behind the web
 constexpr float kZoomMin = 0.55f, kZoomMax = 1.9f;
-constexpr MetaBranch kLegend[] = {MetaBranch::Base,    MetaBranch::Combat,  MetaBranch::Eco,  MetaBranch::Pickups,
-                                  MetaBranch::Special, MetaBranch::Arsenal, MetaBranch::Pacts};
-constexpr int kLegendCount = 7;
+constexpr MetaBranch kLegend[] = {MetaBranch::Base,    MetaBranch::Combat,  MetaBranch::Classes, MetaBranch::Eco,
+                                  MetaBranch::Pickups, MetaBranch::Special, MetaBranch::Arsenal, MetaBranch::Pacts};
+constexpr int kLegendCount = 8;
 constexpr float kLegendRow = 22.f;
 
 const sf::Color kPrismColor = theme::puSurge;   // violet - distinct from the core-blue accent
@@ -79,6 +79,7 @@ sf::Color branchColor(MetaBranch b) {
         case MetaBranch::Pickups: return theme::puPoints;
         case MetaBranch::Arsenal: return theme::puSurge;
         case MetaBranch::Pacts:   return sf::Color(226, 70, 84);   // crimson: a pact is a bargain
+        case MetaBranch::Classes: return sf::Color(186, 226, 104);  // lime: new kinds of ball
         case MetaBranch::Root:    return theme::textHi;
     }
     return theme::textHi;
@@ -99,6 +100,7 @@ const char* branchLabel(MetaBranch b) {
         case MetaBranch::Pickups: return "Power-ups";
         case MetaBranch::Arsenal: return "Arsenal";
         case MetaBranch::Pacts:   return "Pacts";
+        case MetaBranch::Classes: return "Classes";
         case MetaBranch::Root:    return "Core";
     }
     return "";
@@ -819,7 +821,7 @@ void PlayScreen::draw(App& app, sf::RenderWindow& w) {
             drawTooltip(w, app.font(), um, s, enemyName(hovered->kind), enemyDesc(hovered->kind), theme::enemy);
         } else if (sf::FloatRect(theme::margin - 4.f, s.y - theme::margin - 64.f, 180.f, 64.f).contains(um)) {
             drawTooltip(w, app.font(), um, s, "Your balls",
-                        "click one to throw it at the nearest enemy, or press and pull back to aim. TAB shows each ball's role, items and modifiers (the fight pauses).");
+                        "click one to throw it at the nearest enemy, or press and pull back to aim. TAB shows each ball's classes, items, type, abilities and modifiers (the fight pauses).");
         }
     }
 
@@ -896,58 +898,100 @@ void drawTabHint(App& app, sf::RenderWindow& w, sf::Vector2f topLeft) {
               theme::textDim, -1);
 }
 
+// Every relic the run has picked: the whole-run passives, listed beside the
+// balls in the TAB peek.
+std::vector<UpgradeKind> runRelics(const RunMods& m) {
+    const std::pair<bool, UpgradeKind> list[] = {
+        {m.spring, UpgradeKind::CoreSpring},       {m.slowField, UpgradeKind::CoreSlowField},
+        {m.strongArm, UpgradeKind::StrongArm},     {m.contagion, UpgradeKind::Contagion},
+        {m.primed, UpgradeKind::Primed},           {m.catalyst, UpgradeKind::Catalyst},
+        {m.chainReaction, UpgradeKind::ChainReaction}, {m.luckyClover, UpgradeKind::LuckyClover},
+        {m.glassCannon, UpgradeKind::GlassCannon}, {m.magneticCore, UpgradeKind::MagneticCore},
+        {m.prismCore, UpgradeKind::PrismCore},     {m.phoenix, UpgradeKind::Phoenix},
+        {m.timeDilation, UpgradeKind::TimeDilation}, {m.overcharge, UpgradeKind::Overcharge}};
+    std::vector<UpgradeKind> out;
+    for (const auto& [on, k] : list)
+        if (on) out.push_back(k);
+    return out;
+}
+
 void drawLoadoutOverlay(App& app, sf::RenderWindow& w, bool paused, bool latched) {
     const sf::Vector2f s = app.size();
     const RunState& r = app.data().run;
+    const sf::Vector2f um = app.uiMouse();
     drawDim(w, s, 0.7f);
-    drawCentered(w, app.font(), "Your balls", theme::fsHeading, {s.x * 0.5f, s.y * 0.26f}, theme::textHi);
-    drawLabel(w, app.font(), "luck " + std::to_string(app.luck()), 11, {s.x * 0.5f, s.y * 0.26f - 32.f},
+
+    // The balls on the left, the run-wide passives (relics, pacts) in a column
+    // on the right.
+    constexpr float kSideW = 210.f;
+    const float sideX = s.x - theme::margin - kSideW;
+    const float rowCx = (theme::margin + sideX - 16.f) * 0.5f;
+    const float rowY = s.y * 0.5f;
+    drawCentered(w, app.font(), "Your balls", theme::fsHeading, {rowCx, s.y * 0.2f}, theme::textHi);
+    drawLabel(w, app.font(), "luck " + std::to_string(app.luck()), 11, {rowCx, s.y * 0.2f - 32.f},
               app.luck() > 0 ? theme::puSurge : theme::textDim);
 
     // How to get out: only worth saying when it isn't "let go of TAB".
     std::string note = paused ? "paused" : "";
     if (latched) note += std::string(note.empty() ? "" : "   -   ") + "tab to close";
     if (!note.empty())
-        drawCentered(w, app.font(), note, theme::fsSmall, {s.x * 0.5f, s.y * 0.26f + 34.f}, theme::textDim);
+        drawCentered(w, app.font(), note, theme::fsSmall, {rowCx, s.y * 0.2f + 32.f}, theme::textDim);
 
     const int n = static_cast<int>(r.balls.size());
     for (int i = 0; i < n; ++i)
-        drawLoadoutPanel(w, app.font(), panelCenter(s, i, n, s.y * 0.48f), r.balls[i], 1.f, 0.f, -1, false);
+        drawLoadoutPanel(w, app.font(), panelCenter(s, i, n, rowY, rowCx), r.balls[static_cast<std::size_t>(i)],
+                         1.f, 0.f, -1, false);
 
-    std::string relics;
-    const std::pair<bool, UpgradeKind> list[] = {
-        {r.mods.spring, UpgradeKind::CoreSpring},   {r.mods.slowField, UpgradeKind::CoreSlowField},
-        {r.mods.strongArm, UpgradeKind::StrongArm}, {r.mods.contagion, UpgradeKind::Contagion},
-        {r.mods.primed, UpgradeKind::Primed}};
-    for (const auto& [on, k] : list) {
-        if (!on) continue;
-        if (!relics.empty()) relics += "   -   ";
-        relics += upgradeInfo(k).title;
+    // ---- side column: relics, then pacts
+    const float colTop = rowY - kPanelH * 0.5f;
+    draw::panel(w, {sideX, colTop, kSideW, kPanelH}, theme::puGolden, 0.9f);
+    drawLabel(w, app.font(), "relics", 11, {sideX + 14.f, colTop + 18.f}, withAlpha(theme::puGolden, 0.8f), -1);
+    drawLabel(w, app.font(), "every ball", 9, {sideX + kSideW - 14.f, colTop + 18.f}, theme::textDim, 1);
+    const std::vector<UpgradeKind> relics = runRelics(r.mods);
+    float y = colTop + 42.f;
+    const UpgradeKind* hotRelic = nullptr;
+    constexpr float kRelicStep = 19.f;
+    if (relics.empty()) {
+        drawLabel(w, app.font(), "none yet", 10, {sideX + 14.f, y}, theme::textDim, -1);
+        y += kRelicStep;
     }
-    const float relicY = s.y * 0.48f + kPanelH * 0.5f + 30.f;
-    drawCentered(w, app.font(), relics.empty() ? "no relics yet" : "Relics:  " + relics, theme::fsSmall,
-                 {s.x * 0.5f, relicY}, relics.empty() ? theme::textDim : theme::puGolden);
-    if (drawPactStrip(app, w, {s.x * 0.5f, relicY + 20.f}, true, app.uiMouse(), true)) return;   // pacts
+    for (const UpgradeKind& k : relics) {
+        const sf::FloatRect row{sideX + 8.f, y - kRelicStep * 0.5f, kSideW - 16.f, kRelicStep};
+        const bool hot = row.contains(um);
+        if (hot) {
+            hotRelic = &k;
+            draw::box(w, row, 0.f, withAlpha(theme::puGolden, 0.10f), withAlpha(theme::puGolden, 0.03f));
+        }
+        draw::box(w, {sideX + 12.f, y - 5.f, 3.f, 10.f}, 0.f, tierColor(upgradeTier(k)), tierColor(upgradeTier(k)));
+        sf::Text t = makeText(app.font(), upgradeInfo(k).title, theme::fsSmall, hot ? theme::textHi : theme::puGolden);
+        const sf::FloatRect tb = t.getLocalBounds();
+        t.setOrigin(tb.left, tb.top + tb.height * 0.5f);
+        t.setPosition(std::round(sideX + 22.f), std::round(y));
+        w.draw(t);
+        y += kRelicStep;
+    }
+    y += 10.f;
+    drawLabel(w, app.font(), "pacts", 11, {sideX + 14.f, y}, withAlpha(sf::Color(226, 70, 84), 0.9f), -1);
+    y += 16.f;
+    bool pactTip = false;
+    if (r.pacts.empty()) drawLabel(w, app.font(), "none", 10, {sideX + 14.f, y + 10.f}, theme::textDim, -1);
+    else pactTip = drawPactStrip(app, w, {sideX + 12.f, y}, false, um, true);
+    if (pactTip) return;
 
-    // Hover help on the panels and the relic line.
-    const sf::Vector2f um = app.uiMouse();
+    // Hover help on the panels and the relics.
     for (int i = 0; i < n; ++i) {
-        const int part = panelPartAt(panelCenter(s, i, n, s.y * 0.48f), um);
+        const BallLoadout& L = r.balls[static_cast<std::size_t>(i)];
+        const int part = panelPartAt(panelCenter(s, i, n, rowY, rowCx), um, L);
         std::string tt, td;
-        if (part >= 0 && loadoutTooltip(r.balls[static_cast<std::size_t>(i)], part, tt, td)) {
+        if (part >= 0 && loadoutTooltip(L, part, tt, td)) {
             drawTooltip(w, app.font(), um, s, tt, td);
             return;
         }
     }
-    if (!relics.empty() && std::fabs(um.y - relicY) < 12.f && std::fabs(um.x - s.x * 0.5f) < 300.f) {
-        std::string d;
-        for (const auto& [on, k] : list) {
-            if (!on) continue;
-            if (!d.empty()) d += ".  ";
-            d += std::string(upgradeInfo(k).title) + ": " + upgradeInfo(k).desc;
-        }
-        drawTooltip(w, app.font(), um, s, "Relics", d, theme::puGolden);
-    }
+    if (hotRelic)
+        drawTooltip(w, app.font(), um, s, std::string(upgradeInfo(*hotRelic).title) + "  -  relic",
+                    std::string(upgradeInfo(*hotRelic).desc) + "  [" + tierName(upgradeTier(*hotRelic)) + ", every ball]",
+                    theme::puGolden);
 }
 
 // ================================================================ Choice
@@ -1054,6 +1098,7 @@ void ChoiceScreen::draw(App& app, sf::RenderWindow& w) {
         const UpgradeCat cat = upgradeCat(kind);
         std::string head = std::to_string(i + 1) + "   " + upgradeCatName(cat);
         if (itemTag(kind) != ItemTag::None) head += std::string("  -  ") + itemTagName(itemTag(kind));
+        else if (cat == UpgradeCat::Element) head += "  -  type slot";
         drawLabel(w, app.font(), head, 10, {c.x, c.y - kCardH * 0.5f + 18.f},
                   withAlpha(itemTag(kind) != ItemTag::None ? tagColor(itemTag(kind)) : catColor(cat), ca));
         const int es = elementItemSlot(kind);
@@ -1194,8 +1239,8 @@ void HowToScreen::draw(App& app, sf::RenderWindow& w) {
     const std::array<const char*, 7> lines = {{
         "Enemies march on the core at the centre. Keep it alive.",
         "Click a ball to throw it at the nearest enemy; press and pull back to aim it.",
-        "Items carry a tag: 2 of one tag give a ball that role (Striker / Guardian /",
-        "Support), 4 its mastery. Two balls' elements on one enemy set off a reaction.",
+        "Items carry a class tag: 2 of a tag give a ball that class (it can have two),",
+        "4 its ascended form. Two balls' elements on one enemy set off a reaction.",
         "Between fights, pick your path on the map: fights pay gold, elites add a pick,",
         "shops / forges / rests / upgrades build your balls (4 item slots each).",
         "Beat the miniboss at wave 10, clear wave 20 to finish the run.",

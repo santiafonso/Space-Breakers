@@ -179,8 +179,8 @@ void App::applyDuet() {
     if (n <= keepN) return;
     auto score = [](const BallLoadout& L) {
         int s = 0;
-        for (int i = 0; i < kBallSlots; ++i)
-            if (L.gear[i] >= 0) s += 3 + L.gearLvl[i];
+        for (int i = 0; i < kLoadoutSlots; ++i)
+            if (L.kindAt(i) >= 0) s += 3 + L.levelAt(i);
         for (int m : L.mods) s += m;
         return s;
     };
@@ -200,17 +200,17 @@ void App::applyDuet() {
         const BallLoadout& L = r.balls[static_cast<std::size_t>(i)];
         for (int m = 0; m < kModifierCount; ++m)
             keep[static_cast<std::size_t>(turn++ % keepN)].mods[m] += L.mods[m];
-        for (int sl = 0; sl < kBallSlots; ++sl) {
-            if (L.gear[sl] < 0) continue;
+        for (int sl = 0; sl < kLoadoutSlots; ++sl) {   // items, element and abilities alike
+            if (L.kindAt(sl) < 0) continue;
             std::vector<std::pair<int, int>> spots;   // kept (ball, slot) that can still level
             for (int b = 0; b < keepN; ++b)
-                for (int s2 = 0; s2 < kBallSlots; ++s2)
-                    if (keep[static_cast<std::size_t>(b)].gear[s2] >= 0 &&
-                        keep[static_cast<std::size_t>(b)].gearLvl[s2] < kMaxItemLevel)
+                for (int s2 = 0; s2 < kLoadoutSlots; ++s2)
+                    if (keep[static_cast<std::size_t>(b)].kindAt(s2) >= 0 &&
+                        keep[static_cast<std::size_t>(b)].levelAt(s2) < kMaxItemLevel)
                         spots.push_back({b, s2});
             if (spots.empty()) { gold += cfg::pact::duetMeltGold; continue; }
             const auto [b, s2] = spots[static_cast<std::size_t>(rng_.irange(0, static_cast<int>(spots.size()) - 1))];
-            ++keep[static_cast<std::size_t>(b)].gearLvl[s2];
+            keep[static_cast<std::size_t>(b)].levelUp(s2);
             ++levels;
         }
     }
@@ -244,7 +244,7 @@ int App::randomItemFor(const BallLoadout& b, Tier maxTier) {
     for (int i = 0; i < kUpgradeKindCount; ++i) {
         const auto k = static_cast<UpgradeKind>(i);
         if (upgradeCat(k) != UpgradeCat::Item || upgradeTier(k) > maxTier) continue;
-        if ((c.locked & upgradeBit(k)) || !upgradeFitsBall(k, b)) continue;
+        if (c.isLocked(k) || !upgradeFitsBall(k, b)) continue;
         if (k == UpgradeKind::Shatter && !c.elemUnlocked[3]) continue;   // needs ice
         pool.push_back(i);
     }
@@ -287,31 +287,123 @@ void App::advanceRunIntro() {
     }
     if (introStep_ == 1) {
         introStep_ = 2;
+        if (u[MetaCalling] > 0 && openClassChoice()) return;   // "Calling": the starting ball's class
+    }
+    if (introStep_ == 2) {
+        introStep_ = 3;
         if (u[MetaQuartermaster] > 0 && u[MetaStarterKit] > 0 && openStarterChoice()) return;   // "Quartermaster"
     }
     introStep_ = -1;
     openMap();
 }
 
-// "Quartermaster": the Starter kit's free item, picked from 4 cards of its tier.
-bool App::openStarterChoice() {
-    const RunState& r = data_.run;
-    if (r.balls.empty()) return false;
-    const Tier want = data_.meta.unlock[MetaStarterKit] >= 2 ? Tier::Rare : Tier::Uncommon;
-    const UpgradeCtx c = buildUpgradeCtx();
+// ---------------------------------------------------------------- "Calling": the starting class
+
+// Items that could start a ball of class t: unlocked, fitting, not on it yet.
+std::vector<UpgradeKind> App::startClassPool(ItemTag t) const {
     std::vector<UpgradeKind> pool;
+    if (data_.run.balls.empty()) return pool;
+    const BallLoadout& L = data_.run.balls[0];
+    const UpgradeCtx c = buildUpgradeCtx();
     for (int i = 0; i < kUpgradeKindCount; ++i) {
         const auto k = static_cast<UpgradeKind>(i);
-        if (upgradeCat(k) == UpgradeCat::Item && upgradeTier(k) == want && !(c.locked & upgradeBit(k)) &&
-            upgradeFitsBall(k, r.balls[0]) && !(k == UpgradeKind::Shatter && !c.elemUnlocked[3]))   // Shatter needs ice
+        if (upgradeCat(k) == UpgradeCat::Item && itemTag(k) == t && upgradeEligible(k, c) &&
+            upgradeFitsBall(k, L) && !L.has(k))
             pool.push_back(k);
     }
-    if (static_cast<int>(pool.size()) < kChoiceCount) return false;
-    for (int i = static_cast<int>(pool.size()) - 1; i > 0; --i)
-        std::swap(pool[static_cast<std::size_t>(i)], pool[static_cast<std::size_t>(rng_.irange(0, i))]);
+    return pool;
+}
+
+// Offer every unlocked class with enough items to start with. One class: it's
+// simply granted (no screen). None: nothing to do.
+bool App::openClassChoice() {
+    classChoices_.clear();
+    for (int i = 0; i < kClassCount; ++i) {
+        const ItemTag t = classTag(i);
+        if (static_cast<int>(startClassPool(t).size()) >= cfg::classes::startItems) classChoices_.push_back(t);
+    }
+    if (classChoices_.empty()) return false;
+    if (classChoices_.size() == 1) {
+        grantStartClass(classChoices_[0]);
+        return false;
+    }
+    push(ScreenId::ClassPick);
+    return true;
+}
+
+void App::chooseClass(int idx) {
+    if (idx < 0 || idx >= static_cast<int>(classChoices_.size())) return;
+    audio_.cardPick();
+    back();   // close the class pick
+    grantStartClass(classChoices_[static_cast<std::size_t>(idx)]);
+    if (introStep_ >= 0) advanceRunIntro();   // (the dev panel can open it mid-run too)
+    save();
+}
+
+// The first ball takes cfg::classes::startItems items of the class - the
+// lowest tiers it has - so the class is live from the first fight.
+void App::grantStartClass(ItemTag t) {
+    RunState& r = data_.run;
+    if (r.balls.empty()) return;
+    BallLoadout& L = r.balls[0];
+    for (int n = 0; n < cfg::classes::startItems; ++n) {
+        std::vector<UpgradeKind> pool = startClassPool(t);
+        int slot = -1;
+        for (int i = 0; i < kBallSlots && slot < 0; ++i)
+            if (L.gear[i] < 0) slot = i;
+        if (pool.empty() || slot < 0) break;
+        Tier low = Tier::Legendary;
+        for (UpgradeKind k : pool) low = std::min(low, upgradeTier(k));
+        pool.erase(std::remove_if(pool.begin(), pool.end(), [low](UpgradeKind k) { return upgradeTier(k) != low; }),
+                   pool.end());
+        L.setSlot(slot, static_cast<int>(pool[static_cast<std::size_t>(rng_.irange(0, static_cast<int>(pool.size()) - 1))]), 1);
+    }
+    syncWorldBalls();
+    const sf::Color col = tagColor(t);
+    effects_.flash(col, 0.5f);
+    effects_.addLabel(std::string(itemTagName(t)) + " ball", {size().x * 0.5f, size().y * 0.3f}, col, 30, 1.4f);
+}
+
+// "Quartermaster": the Starter kit's free item, picked from 4 cards of its tier.
+// Items the Starter kit can give the first ball: unlocked, fitting, new to
+// it. The kit's tier first (shuffled), then the nearest tiers - with few
+// classes unlocked the kit's own tier can run short.
+std::vector<UpgradeKind> App::starterPool(Tier want) {
+    std::vector<UpgradeKind> out;
+    const RunState& r = data_.run;
+    if (r.balls.empty()) return out;
+    const UpgradeCtx c = buildUpgradeCtx();
+    const int w = static_cast<int>(want);
+    for (int d = 0; d < kTierCount; ++d)
+        for (int t : {w - d, w + d}) {
+            if (t < 0 || t >= kTierCount || (d == 0 && t != w) || (d > 0 && t == w)) continue;
+            std::vector<UpgradeKind> tier;
+            for (int i = 0; i < kUpgradeKindCount; ++i) {
+                const auto k = static_cast<UpgradeKind>(i);
+                if (upgradeCat(k) == UpgradeCat::Item && static_cast<int>(upgradeTier(k)) == t && upgradeEligible(k, c) &&
+                    upgradeFitsBall(k, r.balls[0]) && !r.balls[0].has(k))
+                    tier.push_back(k);
+            }
+            for (int i = static_cast<int>(tier.size()) - 1; i > 0; --i)
+                std::swap(tier[static_cast<std::size_t>(i)], tier[static_cast<std::size_t>(rng_.irange(0, i))]);
+            out.insert(out.end(), tier.begin(), tier.end());
+            if (d == 0) break;   // (w - 0 and w + 0 are the same tier)
+        }
+    return out;
+}
+
+bool App::openStarterChoice() {
+    const Tier want = data_.meta.unlock[MetaStarterKit] >= 2 ? Tier::Rare : Tier::Uncommon;
+    const std::vector<UpgradeKind> pool = starterPool(want);
+    if (pool.empty()) return false;
+    if (static_cast<int>(pool.size()) < kChoiceCount) {   // not enough for a choice: just hand one over
+        applyUpgradeKind(pool[0], 0, -1);
+        return false;
+    }
     for (int i = 0; i < kChoiceCount; ++i) choices_[static_cast<std::size_t>(i)] = pool[static_cast<std::size_t>(i)];
     rollSource_ = RollSource::Normal;
-    choiceTitle_ = std::string("Starter kit - pick your ") + tierName(want) + " item";
+    const bool allWant = std::all_of(choices_.begin(), choices_.end(), [want](UpgradeKind k) { return upgradeTier(k) == want; });
+    choiceTitle_ = allWant ? std::string("Starter kit - pick your ") + tierName(want) + " item" : "Starter kit - pick your item";
     push(ScreenId::Choice);
     return true;
 }

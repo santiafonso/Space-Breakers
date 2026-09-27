@@ -57,6 +57,15 @@ inline const sf::Color puSurge{198, 120, 255};
 inline const sf::Color puGolden{255, 214, 120};
 inline const sf::Color puOverdrive{255, 110, 150};
 
+// Ball classes (item tags, class names in the UI). Striker / Guardian /
+// Support reuse ballFast / core / puSurge.
+inline const sf::Color classMage{128, 146, 255};
+inline const sf::Color classShooter{255, 156, 100};
+inline const sf::Color classAssassin{232, 84, 112};
+inline const sf::Color classSummoner{150, 226, 120};
+inline const sf::Color classJester{255, 124, 214};
+inline const sf::Color ability{120, 216, 255};   // ability picks and slots
+
 // Layout / type — kept compact so more can share the screen
 inline constexpr float margin = 22.f;
 inline constexpr unsigned fsTitle = 38;

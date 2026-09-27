@@ -1,5 +1,6 @@
 #include "ui/Widgets.hpp"
 
+#include "render/ClassRender.hpp"
 #include "render/Draw.hpp"
 
 #include <algorithm>
@@ -161,17 +162,40 @@ std::vector<std::string> wrapText(const sf::Font& font, const std::string& str, 
 
 // ---- ball loadout panels (Equip picker, Tab overlay) -----------------------
 
-
-sf::Vector2f panelCenter(sf::Vector2f size, int i, int n, float cy) {
+sf::Vector2f panelCenter(sf::Vector2f size, int i, int n, float cy, float cx) {
+    if (cx < 0.f) cx = size.x * 0.5f;
     const float total = static_cast<float>(n) * kPanelW + static_cast<float>(n - 1) * kPanelGap;
-    const float x0 = size.x * 0.5f - total * 0.5f + kPanelW * 0.5f;
+    const float x0 = cx - total * 0.5f + kPanelW * 0.5f;
     return {x0 + static_cast<float>(i) * (kPanelW + kPanelGap), cy};
 }
 
-sf::FloatRect slotRect(sf::Vector2f c, int slot) {
+int abilityBoxes(const BallLoadout& L) {
+    int n = std::max(1, std::min(abilitySlotCount(L), kMaxAbilitySlots));
+    for (int i = n; i < kMaxAbilitySlots; ++i)
+        if (L.ability[i] >= 0) n = i + 1;   // a filled slot that closed still shows (asleep)
+    return n;
+}
+
+sf::FloatRect slotRect(sf::Vector2f c, int slot, const BallLoadout& L) {
     const float wd = kPanelW - 24.f;
-    const float cy = c.y - kPanelH * 0.5f + 100.f + static_cast<float>(slot) * kSlotStep;
-    return {c.x - wd * 0.5f, cy - kSlotH * 0.5f, wd, kSlotH};
+    const float top = c.y - kPanelH * 0.5f;
+    if (isItemSlot(slot)) {
+        const float cy = top + 92.f + static_cast<float>(slot) * kSlotStep;
+        return {c.x - wd * 0.5f, cy - kSlotH * 0.5f, wd, kSlotH};
+    }
+    if (slot == kSlotType) {
+        const float cy = top + 92.f + static_cast<float>(kBallSlots) * kSlotStep + 8.f;
+        return {c.x - wd * 0.5f, cy - kSlotH * 0.5f, wd, kSlotH};
+    }
+    if (isAbilitySlot(slot)) {
+        const int n = abilityBoxes(L);
+        const int i = slot - kSlotAbility;
+        const float gap = 4.f;
+        const float bw = (wd - gap * static_cast<float>(n - 1)) / static_cast<float>(n);
+        const float cy = top + 92.f + static_cast<float>(kBallSlots + 1) * kSlotStep + 8.f;
+        return {c.x - wd * 0.5f + static_cast<float>(i) * (bw + gap), cy - kSlotH * 0.5f, bw, kSlotH};
+    }
+    return {};
 }
 
 // "DMG 2  SPD 1" - a ball's stacked modifiers, compact.
@@ -191,6 +215,11 @@ sf::Color tagColor(ItemTag t) {
         case ItemTag::Striker:  return theme::ballFast;
         case ItemTag::Guardian: return theme::core;
         case ItemTag::Support:  return theme::puSurge;
+        case ItemTag::Mage:     return theme::classMage;
+        case ItemTag::Shooter:  return theme::classShooter;
+        case ItemTag::Assassin: return theme::classAssassin;
+        case ItemTag::Summoner: return theme::classSummoner;
+        case ItemTag::Jester:   return theme::classJester;
         case ItemTag::None:     return theme::textLo;
     }
     return theme::textLo;
@@ -229,6 +258,7 @@ sf::Color catColor(UpgradeCat c) {
     switch (c) {
         case UpgradeCat::NewBall:  return theme::core;
         case UpgradeCat::Element:  return theme::elemFire;
+        case UpgradeCat::Ability:  return theme::ability;
         case UpgradeCat::Item:     return theme::accent;
         case UpgradeCat::Modifier: return theme::ballMid;
         case UpgradeCat::Relic:    return theme::puGolden;
@@ -236,60 +266,105 @@ sf::Color catColor(UpgradeCat c) {
     return theme::accent;
 }
 
-// One ball of the loadout: its look (element colour + role mark, same as in the
-// arena), role / element name, its item slots and its stacked modifiers.
+// One ball of the loadout: its look (element colour + class marks, same as in
+// the arena), its classes, 4 item slots, its type slot, its ability slot(s)
+// and its stacked modifiers.
 void drawLoadoutPanel(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f c,
-                      const BallLoadout& L, float alpha, float hover, int hoverSlot, bool dim) {
+                      const BallLoadout& L, float alpha, float hover, int hoverSlot, bool dim, int placing) {
     const float a = alpha * (dim ? 0.35f : 1.f);
     // Solid, so the arena never shows through; lit a touch from the top.
     const sf::FloatRect pr{c.x - kPanelW * 0.5f, c.y - kPanelH * 0.5f, kPanelW, kPanelH};
     draw::panel(w, pr, dim ? theme::textDim : theme::accent, alpha, hover);
+    const float top = c.y - kPanelH * 0.5f;
 
+    // The ball, as in the arena: glow, shaded body, class marks, highlight.
     const Element el = L.element();
     const sf::Color ec = el == Element::Plain ? theme::textLo : elementColor(el);
-    const float r = L.role() == BallRole::Guardian ? 17.f : 13.f;
-    const sf::Vector2f bp{c.x, c.y - kPanelH * 0.5f + 30.f};
-    // The same look as in the arena: glow, shaded body, role mark, highlight.
-    const bool guardian = L.role() == BallRole::Guardian;
+    ItemTag roles[2];
+    const int nRoles = L.roles(roles);
+    const ItemTag asc = L.ascended();
+    const float r = L.hasRole(ItemTag::Guardian) ? 16.f : 13.f;
+    const sf::Vector2f bp{c.x, top + 28.f};
     draw::glow(w, bp, r * 1.6f, ec, 0.06f * a);
     draw::disc(w, bp, r, withAlpha(lerpColor(ec, sf::Color::White, 0.2f), a),
                withAlpha(lerpColor(ec, theme::bg, 0.2f), a));
-    draw::ring(w, bp, r, guardian ? 3.5f : 1.5f, withAlpha(sf::Color::White, (guardian ? 0.55f : 0.22f) * a));
-    if (L.role() == BallRole::Support)
-        draw::ring(w, bp, r * 0.45f, 2.f, withAlpha(sf::Color::White, 0.7f * a));
-    else if (L.role() == BallRole::Striker)
-        draw::disc(w, bp, r * 0.26f, withAlpha(sf::Color::White, 0.85f * a), withAlpha(sf::Color::White, 0.6f * a));
-    if (L.mastery()) draw::ring(w, bp, r + 5.f, 1.5f, withAlpha(lerpColor(ec, sf::Color::White, 0.5f), 0.7f * a));
+    draw::ring(w, bp, r, 1.5f, withAlpha(sf::Color::White, 0.22f * a));
+    for (int i = 0; i < nRoles; ++i) drawClassMark(w, tagRole(roles[i]), bp, r, 0.f, a);
+    if (asc != ItemTag::None) draw::ring(w, bp, r + 6.f, 1.5f, withAlpha(lerpColor(tagColor(asc), sf::Color::White, 0.3f), 0.8f * a));
     draw::disc(w, bp + sf::Vector2f{-0.34f, -0.38f} * r, r * 0.26f, withAlpha(sf::Color::White, 0.22f * a),
                withAlpha(sf::Color::White, 0.f), {1.f, 0.8f}, 16);
 
-    std::string name = roleName(L.role());
-    if (L.mastery()) name += "+";   // mastery: 4 items of its tag
-    if (el != Element::Plain) name = std::string(elementName(el)) + " " + name;
-    drawCentered(w, font, name, theme::fsBody, {c.x, c.y - kPanelH * 0.5f + 64.f}, withAlpha(theme::textHi, a));
-
-    for (int i = 0; i < kBallSlots; ++i) {
-        const sf::FloatRect sr = slotRect(c, i);
-        const bool hot = hoverSlot == i;
-        draw::box(w, sr, theme::corner, withAlpha(theme::bgDeep, (hot ? 0.5f : 0.7f) * a),
-                  withAlpha(theme::bgDeep, (hot ? 0.3f : 0.55f) * a),
-                  withAlpha(theme::accent, (hot ? 0.8f : 0.14f) * a), 1.f);
-        if (hot) draw::box(w, sr, 0.f, withAlpha(theme::accent, 0.14f * a), withAlpha(theme::accent, 0.04f * a));
-        std::string t = "empty";
-        sf::Color tc = theme::textDim;
-        if (L.gear[i] >= 0) {
-            const auto k = static_cast<UpgradeKind>(L.gear[i]);
-            t = upgradeInfo(k).title;
-            if (L.gearLvl[i] > 1) t += "  Lv" + std::to_string(L.gearLvl[i]);
-            tc = tagColor(itemTag(k));   // the tag shows which role it pushes toward
-            // a tier tick on the left edge of a filled slot
-            draw::box(w, {sr.left, sr.top, 3.f, sr.height}, 0.f, withAlpha(tierColor(upgradeTier(k)), a),
-                      withAlpha(tierColor(upgradeTier(k)), a));
-            drawCentered(w, font, t, theme::fsSmall, {c.x, sr.top + sr.height * 0.5f - 1.f}, withAlpha(tc, a));
-        } else {
-            drawLabel(w, font, t, 10, {c.x, sr.top + sr.height * 0.5f}, withAlpha(tc, a));
-        }
+    // "Fire  Striker / Jester": the element in its colour, then each class in
+    // its own - an ascended one by its ascended name, brighter.
+    std::vector<std::pair<std::string, sf::Color>> parts;
+    if (el != Element::Plain) parts.push_back({std::string(elementName(el)) + "  ", ec});
+    for (int i = 0; i < nRoles; ++i) {
+        if (i > 0) parts.push_back({" / ", theme::textDim});
+        const bool up = roles[i] == asc;
+        parts.push_back({up ? ascendedName(tagRole(roles[i])) : roleName(tagRole(roles[i])),
+                         up ? lerpColor(tagColor(roles[i]), sf::Color::White, 0.35f) : tagColor(roles[i])});
     }
+    if (nRoles == 0) parts.push_back({"Normal", theme::textLo});
+    auto advance = [&](const std::string& str, unsigned size) {   // pen advance, trailing spaces included
+        const sf::Text t = makeText(font, str, size, theme::textHi);
+        return t.findCharacterPos(str.size()).x - t.findCharacterPos(0).x;
+    };
+    auto widthAt = [&](unsigned size) {
+        float wd = 0.f;
+        for (const auto& pt : parts) wd += advance(pt.first, size);
+        return wd;
+    };
+    unsigned fs = theme::fsBody;
+    if (widthAt(fs) > kPanelW - 14.f) fs = theme::fsSmall;
+    if (widthAt(fs) > kPanelW - 14.f && el != Element::Plain) parts.erase(parts.begin());   // the type slot says it anyway
+    float x = c.x - widthAt(fs) * 0.5f;
+    for (const auto& [str, col] : parts) {
+        sf::Text t = makeText(font, str, fs, withAlpha(col, a));
+        const sf::FloatRect b = t.getLocalBounds();
+        t.setOrigin(b.left, b.top + b.height * 0.5f);
+        t.setPosition(std::round(x), std::round(top + 60.f));
+        w.draw(t);
+        x += advance(str, fs);
+    }
+
+    // One slot box: empty ones show a small caption, filled ones the pick's
+    // name in its tag / element / ability colour with a tier tick on the left.
+    // The type and ability slots wear their kind's colour on the edge; while a
+    // pick is being placed, the slots that take it are lit.
+    auto slotBox = [&](int s, const std::string& emptyLabel, bool asleep) {
+        const sf::FloatRect sr = slotRect(c, s, L);
+        const bool hot = hoverSlot == s;
+        const float sa = a * (asleep ? 0.45f : 1.f);
+        sf::Color edge = theme::accent;
+        if (s == kSlotType) edge = L.type >= 0 ? elementColor(L.element()) : theme::elemFire;
+        if (isAbilitySlot(s)) edge = theme::ability;
+        const bool takes = placing >= 0 && !dim && slotAccepts(static_cast<UpgradeKind>(placing), s, L);
+        draw::box(w, sr, theme::corner, withAlpha(theme::bgDeep, (hot ? 0.5f : 0.7f) * sa),
+                  withAlpha(theme::bgDeep, (hot ? 0.3f : 0.55f) * sa),
+                  withAlpha(edge, (hot ? 0.8f : takes ? 0.45f : s >= kSlotType ? 0.22f : 0.14f) * sa), 1.f);
+        if (hot) draw::box(w, sr, 0.f, withAlpha(theme::accent, 0.14f * a), withAlpha(theme::accent, 0.04f * a));
+        const int kind = L.kindAt(s);
+        const float cy = sr.top + sr.height * 0.5f;
+        if (kind < 0) {
+            drawLabel(w, font, emptyLabel, 9, {sr.left + sr.width * 0.5f, cy}, withAlpha(theme::textDim, sa));
+            return;
+        }
+        const auto k = static_cast<UpgradeKind>(kind);
+        std::string t = upgradeInfo(k).title;
+        if (L.levelAt(s) > 1) t += (sr.width > 90.f ? "  Lv" : " ") + std::to_string(L.levelAt(s));
+        sf::Color tc = tagColor(itemTag(k));   // an item's tag shows which class it pushes toward
+        if (upgradeCat(k) == UpgradeCat::Element) tc = elementColor(L.element());
+        if (upgradeCat(k) == UpgradeCat::Ability) tc = theme::ability;
+        draw::box(w, {sr.left, sr.top, 3.f, sr.height}, 0.f, withAlpha(tierColor(upgradeTier(k)), sa),
+                  withAlpha(tierColor(upgradeTier(k)), sa));
+        const unsigned size = sr.width > 90.f ? theme::fsSmall : 11u;
+        drawCentered(w, font, t, size, {sr.left + sr.width * 0.5f, cy - 1.f}, withAlpha(tc, sa));
+    };
+    for (int i = 0; i < kBallSlots; ++i) slotBox(i, "empty", false);
+    slotBox(kSlotType, "type", false);
+    const int open = abilitySlotCount(L);
+    for (int i = 0; i < abilityBoxes(L); ++i) slotBox(kSlotAbility + i, "ability", i >= open);
+
     const std::string ml = modifierLine(L);
     draw::line(w, {c.x - kPanelW * 0.5f + 14.f, c.y + kPanelH * 0.5f - 34.f},
                {c.x + kPanelW * 0.5f - 14.f, c.y + kPanelH * 0.5f - 34.f}, 1.f, withAlpha(theme::arenaEdge, 0.8f * a));
@@ -297,50 +372,79 @@ void drawLoadoutPanel(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f c,
               withAlpha(ml.empty() ? theme::textDim : theme::ballMid, a));
 }
 
-int panelPartAt(sf::Vector2f c, sf::Vector2f mouse) {
+int panelPartAt(sf::Vector2f c, sf::Vector2f mouse, const BallLoadout& L) {
     if (std::fabs(mouse.x - c.x) > kPanelW * 0.5f || std::fabs(mouse.y - c.y) > kPanelH * 0.5f) return -1;
-    for (int i = 0; i < kBallSlots; ++i)
-        if (slotRect(c, i).contains(mouse)) return i;
+    for (int s = 0; s < kSlotAbility + abilityBoxes(L); ++s)
+        if (slotRect(c, s, L).contains(mouse)) return s;
     const float top = c.y - kPanelH * 0.5f;
-    if (mouse.y < top + 76.f) return kPanelPartBall;
+    if (mouse.y < top + 74.f) return kPanelPartBall;
     if (mouse.y > c.y + kPanelH * 0.5f - 32.f) return kPanelPartMods;
     return -1;
 }
 
 bool loadoutTooltip(const BallLoadout& L, int part, std::string& title, std::string& desc) {
-    if (part >= 0 && part < kBallSlots) {
-        if (L.gear[part] < 0) {
-            title = "Empty slot";
-            desc = "items and elements go here (4 per ball)";
+    if (part >= 0 && part < kLoadoutSlots) {
+        const int kind = L.kindAt(part);
+        if (kind < 0) {
+            if (isItemSlot(part)) {
+                title = "Empty item slot";
+                desc = "items go here (4 per ball); 2 items of one tag give the ball that class, 4 its ascended form";
+            } else if (part == kSlotType) {
+                title = "Type slot";
+                desc = "the ball's element goes here - one per ball; a new one swaps it. It doesn't count toward a class.";
+            } else if (part - kSlotAbility < abilitySlotCount(L)) {
+                title = "Ability slot";
+                desc = "an ability goes here: it fires by itself every few seconds. It doesn't count toward a class.";
+            } else {
+                title = "Closed ability slot";
+                desc = "the ball can't use this ability slot right now";
+            }
             return true;
         }
-        const auto k = static_cast<UpgradeKind>(L.gear[part]);
+        const auto k = static_cast<UpgradeKind>(kind);
         const UpgradeInfo info = upgradeInfo(k);
         title = info.title;
-        title += "  Lv " + std::to_string(L.gearLvl[part]) + "/" + std::to_string(kMaxItemLevel);
+        title += "  Lv " + std::to_string(L.levelAt(part)) + "/" + std::to_string(kMaxItemLevel);
         desc = info.desc;
-        if (L.gearLvl[part] < kMaxItemLevel && *upgradeLevelDesc(k))
+        if (isAbilitySlot(part) && part - kSlotAbility >= abilitySlotCount(L))
+            desc = "(asleep: this ability slot is closed right now)  " + desc;
+        if (L.levelAt(part) < kMaxItemLevel && *upgradeLevelDesc(k))
             desc += std::string(".  Next level: ") + upgradeLevelDesc(k);
         desc += std::string("  [") + tierName(upgradeTier(k));
         if (itemTag(k) != ItemTag::None) desc += std::string(", ") + itemTagName(itemTag(k));
+        else if (upgradeCat(k) != UpgradeCat::Item) desc += std::string(", ") + upgradeCatName(upgradeCat(k));
         desc += "]";
         return true;
     }
     if (part == kPanelPartBall) {
-        title = roleName(L.role());
-        if (L.mastery()) title += " (mastery)";
-        desc = roleDesc(L.role());
-        desc += std::string(".  Roles come from item tags: 2 of a tag = that role, 4 = mastery. Now: ") +
-                std::to_string(L.tagCount(ItemTag::Striker)) + " Striker, " +
-                std::to_string(L.tagCount(ItemTag::Guardian)) + " Guardian, " +
-                std::to_string(L.tagCount(ItemTag::Support)) + " Support";
-        const Element e = L.element();
-        if (e != Element::Plain) {
-            title = std::string(elementName(e)) + " " + title;
-            desc += std::string(".  ") +
-                    upgradeInfo(static_cast<UpgradeKind>(static_cast<int>(UpgradeKind::ElemFire) +
-                                                         static_cast<int>(e) - 1)).desc;
+        ItemTag roles[2];
+        const int n = L.roles(roles);
+        const ItemTag asc = L.ascended();
+        title.clear();
+        desc.clear();
+        for (int i = 0; i < n; ++i) {
+            const BallRole r = tagRole(roles[i]);
+            if (i > 0) { title += " / "; desc += ".  "; }
+            title += roles[i] == asc ? ascendedName(r) : roleName(r);
+            desc += std::string(roleName(r)) + ": " + roleDesc(r);
+            if (roles[i] == asc) desc += std::string(".  Ascended: ") + ascendedDesc(r);
         }
+        if (n == 0) {
+            title = roleName(BallRole::Normal);
+            desc = roleDesc(BallRole::Normal);
+        }
+        // Tag count: which classes it is building toward.
+        std::string counts;
+        for (int i = 0; i < kClassCount; ++i) {
+            const int c = L.tagCount(classTag(i));
+            if (c <= 0) continue;
+            if (!counts.empty()) counts += ", ";
+            counts += std::to_string(c) + " " + itemTagName(classTag(i));
+        }
+        desc += ".  Classes come from item tags: 2 of a tag = that class (a ball can have two), 4 = ascended.";
+        if (!counts.empty()) desc += " Now: " + counts + ".";
+        const Element e = L.element();
+        if (e != Element::Plain) title = std::string(elementName(e)) + "  " + title;
         return true;
     }
     if (part == kPanelPartMods) {

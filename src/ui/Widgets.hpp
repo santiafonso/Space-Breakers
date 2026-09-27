@@ -48,18 +48,23 @@ void drawStatsPanel(sf::RenderWindow& window, const sf::Font& font, sf::Vector2f
 std::vector<std::string> wrapText(const sf::Font& font, const std::string& str, unsigned size,
                                   float maxW);
 
-// ---- ball loadout panels: one ball's look, role, 4 item slots, modifiers ----
-inline constexpr float kPanelW = 190.f;
-inline constexpr float kPanelH = 250.f;
+// ---- ball loadout panels: one ball's look, classes, slots, modifiers ----
+inline constexpr float kPanelW = 180.f;
+inline constexpr float kPanelH = 294.f;
 inline constexpr float kPanelGap = 16.f;
-inline constexpr float kSlotH = 24.f;
-inline constexpr float kSlotStep = 29.f;
+inline constexpr float kSlotH = 23.f;
+inline constexpr float kSlotStep = 27.f;
 
-sf::Vector2f panelCenter(sf::Vector2f size, int i, int n, float cy);   // i of n, in a row
-sf::FloatRect slotRect(sf::Vector2f panelCentre, int slot);
+// Centre of panel i of n in a row at height cy, the row centred on cx (the
+// screen centre by default).
+sf::Vector2f panelCenter(sf::Vector2f size, int i, int n, float cy, float cx = -1.f);
+// Where slot s (0..3 items, kSlotType, kSlotAbility + i) sits on that ball's
+// panel. The ability row splits into abilityBoxes(L) boxes.
+sf::FloatRect slotRect(sf::Vector2f panelCentre, int slot, const BallLoadout& L);
+int abilityBoxes(const BallLoadout& L);   // open ability slots + any filled closed ones
 std::string modifierLine(const BallLoadout& L);
 sf::Color catColor(UpgradeCat c);
-sf::Color tagColor(ItemTag t);   // Striker / Guardian / Support item colour
+sf::Color tagColor(ItemTag t);   // a class's colour (its items, its name)
 sf::Color tierColor(Tier t);     // Common grey .. Legendary gold
 // A pick's card frame: dark glass lit from the top by the tier colour, a tier
 // band along the top edge and corner brackets; Epic / Legendary get a second
@@ -68,12 +73,12 @@ sf::Color tierColor(Tier t);     // Common grey .. Legendary gold
 void drawTierFrame(sf::RenderWindow& w, sf::FloatRect r, Tier t, float hover, float alpha, float time,
                    float reveal = 1.f);
 
-// What part of a loadout panel centred at `c` the pointer is on: 0..3 = item
-// slot, kPanelPartBall = the ball / role name, kPanelPartMods = the modifier
-// line, -1 = nothing.
-inline constexpr int kPanelPartBall = 10;
-inline constexpr int kPanelPartMods = 11;
-int panelPartAt(sf::Vector2f c, sf::Vector2f mouse);
+// What part of a loadout panel centred at `c` the pointer is on: a slot
+// (0..kLoadoutSlots-1), kPanelPartBall = the ball / class name,
+// kPanelPartMods = the modifier line, -1 = nothing.
+inline constexpr int kPanelPartBall = 20;
+inline constexpr int kPanelPartMods = 21;
+int panelPartAt(sf::Vector2f c, sf::Vector2f mouse, const BallLoadout& L);
 // Hover text for that part. False when there's nothing to say.
 bool loadoutTooltip(const BallLoadout& L, int part, std::string& title, std::string& desc);
 
@@ -81,7 +86,8 @@ bool loadoutTooltip(const BallLoadout& L, int part, std::string& title, std::str
 // kept on screen.
 void drawTooltip(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f mouse, sf::Vector2f screen,
                  const std::string& title, const std::string& desc, sf::Color titleColor = theme::textHi);
+// `placing` = the UpgradeKind being equipped (-1 none): the slots that take it light up.
 void drawLoadoutPanel(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f c,
-                      const BallLoadout& L, float alpha, float hover, int hoverSlot, bool dim);
+                      const BallLoadout& L, float alpha, float hover, int hoverSlot, bool dim, int placing = -1);
 
 }  // namespace sb

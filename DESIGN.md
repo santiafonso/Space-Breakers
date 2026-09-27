@@ -1113,8 +1113,143 @@ Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
   más pistas (menú, boss, etc.); ahí se retoma el sonido (qué pista suena en
   cada pantalla, transiciones, y el resto de ajustes de la pantalla Sound).
 
+- **Fase P — marco de clases: 8 clases, doble rol, ascendidas, habilidades y
+  slot de tipo. [IMPLEMENTADO 2026-09-26]** (fase 1 de 2: el marco; la fase 2
+  son cinco agentes, uno por clase nueva, que llenan sus items / mecánica /
+  forma ascendida).
+  - **Ocho clases** (`BallRole` en `sim/Entities.hpp` = `ItemTag` en
+    `progression/UpgradeKind.hpp`, mismo orden): Striker, Guardian, Support,
+    **Mage** (más slots de habilidad), **Shooter** (dispara balas), **Assassin**
+    (al matar se teletransporta al enemigo más cercano), **Summoner** (invoca:
+    pelotitas temporales, torretas, un dragoncito...), **Jester** ("bufón",
+    juega con la suerte). Color por clase (`theme::classMage`..., `tagColor`),
+    nombre + descripción + forma ascendida en `Entities.cpp`.
+  - **Doble rol + ascendida.** Una pelota tiene **cada** clase de la que lleva
+    2+ items (con 4 slots: 0, 1 o 2 clases). 4 items del mismo tag = **forma
+    ascendida** (reemplaza "maestría"): Mega Striker, Iron Guardian, Grand
+    Support, Ancient Mage, Deadeye, Shadow Assassin, Archsummoner, Grand Jester.
+    Las maestrías viejas pasaron a ser las ascendidas de Striker / Guardian /
+    Support. Con dos clases se aplican las dos (p. ej. Striker + Support: escala
+    con la velocidad **y** marca, y pega x0.8). "Duet": toda clase que tenga
+    cuenta como ascendida.
+  - **API.** Loadout: `BallLoadout::hasRole(tag)`, `roles(out[2])` (orden de
+    slot), `roleMask()`, `ascended()`, `tagCount()`, `leadTag()`. Sim:
+    `Ball::roles` / `Ball::ascended` (máscaras `RoleMask`, `roleBit()`),
+    `b.hasRole(BallRole::X)`, `b.isAscended(BallRole::X)`; `BallSpec` lleva lo
+    mismo. `classHasItems(tag)`, `classUnlocked(tag, unlocks)`,
+    `classUnlockNode(tag)`.
+  - **Elemento = slot de tipo.** Cada pelota tiene 1 slot de tipo
+    (`BallLoadout::type/typeLvl`); una carta de elemento va ahí (si es otro, lo
+    **cambia**; si es el mismo, sube de nivel). Los elementos ya no ocupan slot
+    de item ni cuentan para ninguna clase (antes Fire/Electric contaban como
+    Striker, etc.).
+  - **Habilidades** (categoría nueva ABILITY, `UpgradeKind::Ability*`, `enum
+    class Ability` en el sim): activas que se disparan **solas** cuando se
+    cumple el cooldown y tienen sobre qué actuar (si no, esperan cargadas). 1
+    slot por pelota; `abilitySlotCount(L)` (Offers.hpp) es la **única** función
+    que decide cuántos (hasta `kMaxAbilitySlots` = 3; el Mago la sube). Una
+    habilidad en un slot que se cierra queda "dormida". No cuentan para la
+    clase. Suben de nivel por duplicado (tope `kMaxItemLevel`, -10% cooldown
+    por nivel + su propio bono) y la forja también las sube. Cinco: **Dash**
+    (Uncommon: sale disparada al enemigo más cercano, x3 crucero), **Nova**
+    (Rare: onda alrededor de la pelota, daño x1.2 del golpe + empuje + su
+    elemento), **Split** (Rare: dos copias fantasma ~2.6 s), **Bulwark**
+    (Uncommon: el núcleo empuja y aturde cuando hay enemigos cerca), **Overclock**
+    (Rare: 3 s más rápida y x1.5 de daño). Tuning en `cfg::ability`, lógica en
+    `sim/WorldAbilities.cpp`. Indicador: un arco finito por slot justo afuera
+    del borde que se llena al recargar y destella al disparar. Las copias no
+    disparan habilidades.
+  - **Slots unificados:** 0..3 items, `kSlotType` (4), `kSlotAbility`+i (5..7);
+    `BallLoadout::kindAt/levelAt/setSlot/levelUp/slotOf`, `slotAccepts(k, slot,
+    L)`, `defaultSlot`. El selector (Equip) resalta los slots que aceptan la
+    carta, dice "Swap X -> Y" al pasar por uno lleno; la forja sube items, tipo
+    y habilidades; vender sigue siendo solo items.
+  - **Arrancás con 1 pelota.** "Squad" (+1 pelota inicial, raíz de la web) pasa
+    a ser **Calling** (raíz, 8 núcleos, 1 nivel): al empezar la run elegís la
+    **clase** de tu pelota (cartas, `ClassPickScreen`, vía
+    `App::advanceRunIntro`: Covenant → Calling → Quartermaster → mapa) y
+    arranca con 2 items de esa clase (los de tier más bajo que tenga). Solo
+    clases desbloqueadas **y con items**; si hay una sola se da directo (cartel
+    "Striker ball"), si no hay ninguna no pasa nada. Los niveles viejos de
+    Squad se devuelven en núcleos al cargar.
+  - **Desbloqueo de clases en la web:** rama nueva **Classes** (lima) colgando
+    de Mass: Support (12) → Guardian (18) → abanico de Mage / Shooter / Assassin
+    / Summoner / Jester (24 cada una). Striker libre desde el principio. Los
+    items de una clase bloqueada nunca salen (ofertas, tienda, recluta, starter
+    kit, Legion) — se bloquean en `App::buildUpgradeCtx`. Las cinco nuevas no
+    tienen items todavía: sus nodos existen pero no dan ofertas hasta la fase 2.
+    La rama Pacts se corrió a la derecha y Satellite un poco a la izquierda
+    para hacerle lugar.
+  - **Recluta:** pelota nueva + un item de **tres clases distintas**
+    desbloqueadas (antes uno de cada una de las 3).
+  - **Starter kit / Quartermaster:** con pocas clases desbloqueadas su tier
+    puede quedarse sin items; ahora completa con los tiers vecinos
+    (`App::starterPool`) y, si no llega a 4 cartas, da el item directo en vez
+    de no dar nada.
+  - **TAB / selector:** cada panel muestra la pelota con las marcas de sus
+    clases, "Fire  Striker / Support" (cada clase en su color, la ascendida con
+    su nombre y más clara), 4 slots de item, el slot de tipo (borde del color
+    del elemento) y los de habilidad (borde celeste). En TAB, **reliquias y
+    pactos van en una columna a la derecha** (todas las reliquias, con
+    tooltip). Marcas de clase (`render/ClassRender.cpp`): Guardian borde
+    grueso, Support anillo interno, Striker punto central, Mage rombito,
+    Shooter cañón hacia donde va, Assassin arco fino atrás, Summoner tres motas
+    que giran, Jester dos pips; ascendida = halo exterior.
+  - **Enum reordenado** (no se guarda, es seguro): nueva pelota, elementos,
+    habilidades, modificadores, **items** (con una sección por clase nueva al
+    final), reliquias. `UpgradeCtx::locked` pasó a `std::bitset<256>` (ya no hay
+    tope de 64 picks). Panel de dev: columnas para habilidades y 3 de items,
+    botón "Class pick (start)".
+  - **Save v15:** 7 nodos nuevos al final (51 → 58), Squad → Calling con
+    reembolso. Los saves viejos cargan (Support y Guardian quedan por comprar).
+  - **Balance (sim headless, 16 corridas, filas 1-13 del acto 1 = oleadas 1,2,2,
+    3,4,4,5,6,6,7,8,8,9, sin items nuevos, click = tiro rápido al más cercano):**
+    1 pelota sola: sin tocarla gana 1.3 peleas, clickeando cada 2 s **6.5** (las
+    4 primeras 16/16), cada 1 s 11.1. Con Calling Striker (Ricochet + Keen eye)
+    7.7 / 11.6; Guardian (Rampart + Mender) 12.0 / 13 (8/16 y 16/16 limpian las
+    13). Dash sola sin tocar nada 4.9. Referencia vieja, 3 pelotas lisas (Squad
+    2): 8.7 / 12.8. Las primeras peleas se ganan siempre tirando, así que no se
+    tocó la dificultad; el Guardian inicial es el más fuerte (Mender cura).
+  - **Cómo agregar una clase (fase 2).** Cada clase toca solo SU sección de
+    estos archivos (las secciones están marcadas con `==== <Clase> ====`):
+    1. **Items:** el valor en su sección de `enum class UpgradeKind`
+       (`progression/UpgradeKind.hpp`) y una línea `ItemDef` en su tabla de
+       `progression/ClassItems.hpp` (id, título, texto, texto de nivel, tier,
+       tag). Con eso ya salen en cartas / tienda / recluta / tooltips /
+       SB_UPGRADES y quedan detrás de su nodo de web.
+    2. **Números del item → pelota:** su `foldXxx` en `core/ClassSpec.cpp`
+       (llena `m.cls.<clase>` y/o cualquier campo de `BallMods`), con tuning en
+       su namespace de `core/ConfigClasses.hpp` (`cfg::mage`, ...).
+    3. **Datos del sim:** su sección de `sim/Classes.hpp`: `XxxMods` (lo que
+       suman sus items), `XxxState` (estado por pelota, se copia a fantasmas) y
+       `XxxWorld` (estado del mundo: balas, torretas, invocaciones; se limpia en
+       `startRun`; el render lo lee con `World::classWorld()`).
+    4. **Comportamiento y forma ascendida:** su `ClassHooks<BallRole::X>` en
+       `sim/WorldClasses.cpp` (hereda de `NoClassHooks`, pisa solo lo que
+       usa): `tick`, `onHit`, `onKill`, `onWallBounce`, `onCoreBounce`,
+       `damageMul`, `worldTick` (una vez por paso, siempre), `waveStart`. Es
+       friend de `World`: tiene `enemies_`, `ghosts_`, `damageEnemy`, `strike`,
+       `nearestEnemy`, `rng_`... La ascendida se chequea con
+       `b.isAscended(BallRole::X)`. Usar `chance()` para las probabilidades
+       (pasa por la suerte); el Jester suma suerte en puntos vía `App::luck()`.
+    5. **Visual:** su marca y su `worldXxx` en `render/ClassRender.cpp`
+       (mínimo, blanco a bajo alpha; la pelota sigue siendo el foco).
+    6. **Textos:** su línea en `roleDesc` / `ascendedDesc` de
+       `sim/Entities.cpp` (nombre, color y nodo de web ya están).
+    7. **Mago además:** `abilitySlotCount` en `progression/Offers.hpp` (2 con
+       la clase, 3 ascendido).
+    El nodo de web de cada clase ya existe (`MetaClassMage`...): no hace falta
+    tocar la web ni el save.
+  - Falta: probarlo jugando (el sim no apunta), números de las habilidades y
+    si Dash / Bulwark se sienten "autopiloto"; cómo se ve el arco de cooldown
+    con 3 habilidades (Mago).
+
 - **Pendiente (idea del usuario, 2026-09-26): más clases, doble rol,
-  habilidades y elemento como slot.** Todavía no se implementa.
+  habilidades y elemento como slot.** **[PARCIAL 2026-09-26: el marco está
+  hecho (Fase P): 8 clases, doble rol, ascendidas, slot de tipo, habilidades,
+  1 pelota inicial + Calling, desbloqueos en la web, TAB. Falta la fase 2:
+  items, mecánica y forma ascendida de Mage / Shooter / Assassin / Summoner /
+  Jester.]**
   - **Clases nuevas** además de Striker / Support / Guardian: **Mago**,
     **Shooter**, **Asesino**, **Summoner**, **Bufón**, cada una con una mecánica
     propia. Se desbloquean en la web (al principio solo hay Striker, después
