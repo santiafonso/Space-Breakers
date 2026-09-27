@@ -12,6 +12,7 @@
 #include "core/Theme.hpp"
 #include "platform/Paths.hpp"
 #include "platform/Save.hpp"
+#include "ui/PactScreen.hpp"
 #include "ui/Screens.hpp"
 #include "ui/Widgets.hpp"
 
@@ -130,6 +131,7 @@ WorldParams App::params() const {
         const int lvl = u[kElemNode[i]];
         p.elemMult[i + 1] = 1.f + cfg::element::powerPerLevel * static_cast<float>(std::max(0, lvl - 1));
     }
+    foldPacts(p);   // Fase O: the run's pacts
     return p;
 }
 
@@ -144,6 +146,7 @@ BallSpec App::ballSpec(const BallLoadout& L) const {
     BallSpec s;
     s.role = L.role();   // from its item tags (2 = role, 4 = mastery)
     s.mods.mastery = L.mastery();
+    if (hasPact(PactId::Duet) && L.leadTag() != ItemTag::None) s.mods.mastery = true;   // "Duet": a role is a mastery
     s.element = L.element();
     BallMods& m = s.mods;
     auto stacks = [&L](UpgradeKind k) { return static_cast<float>(L.mods[modifierIndex(k)]); };
@@ -327,6 +330,7 @@ std::unique_ptr<Screen> App::makeScreen(ScreenId id) {
         case ScreenId::Shop:    return std::make_unique<ShopScreen>();
         case ScreenId::Equip:   return std::make_unique<EquipScreen>();
         case ScreenId::Dev:     return std::make_unique<DevScreen>();
+        case ScreenId::Pact:    return std::make_unique<PactScreen>();
     }
     return std::make_unique<MenuScreen>();
 }
@@ -373,6 +377,10 @@ void App::newRun() {
     ++data_.meta.stats.runs;
 
     r.rerollsLeft = data_.meta.unlock[MetaReroll] * cfg::run::rerollsPerLevel;
+    r.gold = cfg::meta::treasuryGoldPerLevel * data_.meta.unlock[MetaTreasury];   // "Treasury"
+    r.lastStandLeft = data_.meta.unlock[MetaLastStand] > 0 ? 1 : 0;               // "Last stand"
+    novaCd_ = 0.f;
+    introStep_ = -1;
 
     runBanked_ = false;
 
@@ -388,8 +396,10 @@ void App::newRun() {
     // (or when a dev shortcut drops us past the boss already).
     continueUnlocked_ = data_.meta.stats.wins > 0 || startWave > cfg::run::bossWave;
 
-    // "Starter kit": a free item on the first ball (Uncommon, then Rare).
-    if (const int kit = data_.meta.unlock[MetaStarterKit]; kit > 0 && !r.balls.empty()) {
+    // "Starter kit": a free item on the first ball (Uncommon, then Rare). With
+    // "Quartermaster" you pick it from 4 cards in the run intro instead.
+    if (const int kit = data_.meta.unlock[MetaStarterKit];
+        kit > 0 && !r.balls.empty() && data_.meta.unlock[MetaQuartermaster] == 0) {
         const Tier want = kit >= 2 ? Tier::Rare : Tier::Uncommon;
         std::vector<UpgradeKind> pool;
         for (int i = 0; i < kUpgradeKindCount; ++i) {
@@ -403,7 +413,7 @@ void App::newRun() {
         }
     }
     world_.startRun(params(), ballSpecs(), r.coreHp, r.coreMaxHp);
-    world_.setPhoenix(0);   // no Phoenix until it's picked
+    world_.setPhoenix(r.lastStandLeft);   // no Phoenix until it's picked; "Last stand" is one save per run
     effects_.clear();
     hitstop_ = 0.f;
     camKick_ = 0.f;
@@ -429,7 +439,8 @@ void App::newRun() {
     while (r.mapRow <= cfg::map::rows && mapRowWave(act, r.mapRow + 1) < startWave) ++r.mapRow;
     r.wave = startWave - 1;
     replaceStack(ScreenId::Play);
-    push(ScreenId::Map);
+    introStep_ = 0;
+    advanceRunIntro();   // Covenant pact, Quartermaster pick, then the map
     save();
 }
 
@@ -437,8 +448,9 @@ void App::startWaveAt(int wave, bool elite) {
     data_.run.wave = wave;
     data_.run.eliteWave = elite;
     waveIntro_ = cfg::app::waveIntroTime;   // ease the sim in instead of snapping
-    world_.repairCore(cfg::core::waveHeal +
-                      cfg::core::mendPerLevel * static_cast<float>(data_.meta.unlock[MetaMend]));
+    if (!hasPact(PactId::Fortress))   // "Fortress" pact: no free healing before a fight
+        world_.repairCore(cfg::core::waveHeal +
+                          cfg::core::mendPerLevel * static_cast<float>(data_.meta.unlock[MetaMend]));
     if (const int bastion = data_.meta.unlock[MetaBastion]; bastion > 0)   // "Bastion": max HP grows each wave
         world_.addCoreMaxHp(cfg::core::bastionPerWavePerLevel * static_cast<float>(bastion));
     const int w = data_.run.wave;
@@ -458,7 +470,7 @@ UpgradeCtx App::buildUpgradeCtx() const {
     const RunState& r = data_.run;
     UpgradeCtx c;
     c.balls = &r.balls;
-    c.maxBalls = cfg::ball::maxBalls;
+    c.maxBalls = hasPact(PactId::Duet) ? cfg::pact::duetBalls : cfg::ball::maxBalls;   // "Duet": two, ever
     static const int kElemNode[kElementItemCount] = {MetaFireItem, MetaVenom, MetaTide,
                                                      MetaFrost, MetaQuarry, MetaArc};
     for (int i = 0; i < kElementItemCount; ++i)
@@ -499,7 +511,8 @@ UpgradeKind App::rollPick(RollSource src, const std::vector<UpgradeKind>& exclud
     // Luck (the Lucky clover relic, the Lucky star node) nudges every tier's
     // odds one step up.
     const float shift = (data_.run.mods.luckyClover ? cfg::tier::luckShift : 0.f) +
-                        cfg::meta::luckyStarShift * static_cast<float>(u[MetaLuckyStar]);
+                        cfg::meta::luckyStarShift * static_cast<float>(u[MetaLuckyStar]) +
+                        (hasPact(PactId::LoadedDice) ? cfg::pact::diceTierShift : 0.f);   // "Loaded Dice"
     if (shift > 0.f)
         for (int t = kTierCount - 2; t >= 0; --t) {
             const float moved = w[t] * std::min(shift, 0.9f);
@@ -537,6 +550,7 @@ UpgradeKind App::rollPick(RollSource src, const std::vector<UpgradeKind>& exclud
 
 void App::rollChoices(RollSource src) {
     rollSource_ = src;
+    choiceTitle_.clear();
     std::vector<UpgradeKind> taken;
     for (int i = 0; i < kChoiceCount; ++i) {
         choices_[i] = rollPick(src, taken);
@@ -566,6 +580,7 @@ void App::rollRecruitChoices() {
         ? UpgradeKind::AddBall
         : static_cast<UpgradeKind>(static_cast<int>(UpgradeKind::HeavyImpact) + rng_.irange(0, kModifierCount - 1));
     rollSource_ = RollSource::Normal;
+    choiceTitle_.clear();
     static bool (*const tagFilters[3])(UpgradeKind) = {
         [](UpgradeKind k) { return itemTag(k) == ItemTag::Striker; },
         [](UpgradeKind k) { return itemTag(k) == ItemTag::Guardian; },
@@ -647,7 +662,7 @@ void App::applyUpgradeKind(UpgradeKind k, int ball, int slot) {
         case UpgradeKind::PrismCore:     m.prismCore = true; break;
         case UpgradeKind::TimeDilation:  m.timeDilation = true; break;
         case UpgradeKind::Overcharge:    m.overcharge = true; break;
-        case UpgradeKind::Phoenix:       m.phoenix = true; world_.setPhoenix(1); break;
+        case UpgradeKind::Phoenix:       m.phoenix = true; world_.setPhoenix(1 + r.lastStandLeft); break;
         case UpgradeKind::GlassCannon:   // big damage, a smaller core
             m.glassCannon = true;
             world_.addCoreMaxHp(-world_.core().maxHp * (1.f - cfg::synergy::glassCoreHp));
@@ -658,13 +673,13 @@ void App::applyUpgradeKind(UpgradeKind k, int ball, int slot) {
 
 // "Repair core" button on the Item screen: heal to full, but forfeit the pick.
 void App::repairCoreSkipItem() {
-    world_.repairCore(1e9f);
+    world_.repairCore(hasPact(PactId::Fortress) ? world_.core().maxHp * cfg::pact::fortressRestHeal : 1e9f);
     if (const int prospector = data_.meta.unlock[MetaProspector]; prospector > 0)
         data_.run.rerollsLeft += prospector;   // "Prospector": skipping refunds reroll charges
     audio_.purchase();
     effects_.flash(theme::core, 0.4f);
     back();
-    openMap();
+    afterChoice();
 }
 
 // "Stockpile" web node: fire the reserved power-up (Q during play).
@@ -679,7 +694,7 @@ void App::finishChoice() {
     audio_.purchase();
     effects_.flash(theme::accent, 0.4f);
     back();      // close the Choice
-    openMap();
+    afterChoice();
 }
 
 void App::applyUpgrade(int idx) {
@@ -722,10 +737,10 @@ void App::travelTo(int node) {
             break;
         case MapNodeType::Rest:
             r.wave = wave;
-            world_.repairCore(1e9f);
+            world_.repairCore(hasPact(PactId::Fortress) ? world_.core().maxHp * cfg::pact::fortressRestHeal : 1e9f);
             audio_.purchase();
             effects_.flash(theme::core, 0.5f);
-            effects_.addLabel("Core repaired", mid, theme::core, 26, 1.2f);
+            effects_.addLabel(hasPact(PactId::Fortress) ? "Core half repaired" : "Core repaired", mid, theme::core, 26, 1.2f);
             openMap();
             break;
         case MapNodeType::Upgrade:
@@ -748,7 +763,7 @@ void App::travelTo(int node) {
             for (int b = 0; b < runBallCount() && !any; ++b)
                 for (int sl = 0; sl < kBallSlots; ++sl)
                     if (r.balls[static_cast<std::size_t>(b)].gear[sl] >= 0 &&
-                        r.balls[static_cast<std::size_t>(b)].gearLvl[sl] < kMaxItemLevel) any = true;
+                        r.balls[static_cast<std::size_t>(b)].gearLvl[sl] < forgeCap()) any = true;
             if (any) {
                 equipSrc_ = EquipSource::Forge;
                 equipRef_ = -1;
@@ -775,14 +790,14 @@ void App::beginEquip(EquipSource src, UpgradeKind k, int ref) {
 bool App::equipFitsSlot(int ball, int slot) const {
     if (ball < 0 || ball >= runBallCount()) return false;
     const BallLoadout& b = data_.run.balls[static_cast<std::size_t>(ball)];
-    if (equipSrc_ == EquipSource::Forge)
-        return slot >= 0 && slot < kBallSlots && b.gear[slot] >= 0 &&
-               b.gearLvl[slot] < kMaxItemLevel;
+    if (equipSrc_ == EquipSource::Forge || equipSrc_ == EquipSource::ShopForge)
+        return slot >= 0 && slot < kBallSlots && b.gear[slot] >= 0 && b.gearLvl[slot] < forgeCap();
+    if (equipSrc_ == EquipSource::Sell) return slot >= 0 && slot < kBallSlots && b.gear[slot] >= 0;
     return upgradeFitsBall(equipKind_, b);
 }
 
 bool App::equipFitsBall(int ball) const {
-    if (equipSrc_ == EquipSource::Forge) {
+    if (equipSrc_ == EquipSource::Forge || equipSrc_ == EquipSource::ShopForge || equipSrc_ == EquipSource::Sell) {
         for (int sl = 0; sl < kBallSlots; ++sl)
             if (equipFitsSlot(ball, sl)) return true;
         return false;
@@ -800,7 +815,7 @@ void App::confirmEquip(int ball, int slot) {
             finishChoice();
             break;
         case EquipSource::Shop: {
-            const int price = shopPrice(equipKind_);
+            const int price = shopOfferPrice(equipRef_);
             if (r.gold < price || equipRef_ < 0 || equipRef_ >= static_cast<int>(r.shopSold.size())) return;
             r.gold -= price;
             r.shopSold[static_cast<std::size_t>(equipRef_)] = true;
@@ -820,6 +835,34 @@ void App::confirmEquip(int ball, int slot) {
             effects_.flash(theme::accent, 0.4f);
             back();
             openMap();
+            break;
+        }
+        case EquipSource::ShopForge: {   // the shop's paid forge: back to the shop after
+            if (!equipFitsSlot(ball, slot))
+                for (slot = 0; slot < kBallSlots && !equipFitsSlot(ball, slot); ++slot) {}
+            if (!equipFitsSlot(ball, slot) || r.gold < cfg::gold::forgeServicePrice) return;
+            r.gold -= cfg::gold::forgeServicePrice;
+            ++r.balls[static_cast<std::size_t>(ball)].gearLvl[slot];
+            syncWorldBalls();
+            audio_.purchase();
+            effects_.flash(theme::accent, 0.4f);
+            back();
+            break;
+        }
+        case EquipSource::Sell: {        // sell the item under the pointer back to the shop
+            if (!equipFitsSlot(ball, slot)) return;
+            const int value = sellValue(ball, slot);
+            BallLoadout& L = r.balls[static_cast<std::size_t>(ball)];
+            const std::string name = upgradeInfo(static_cast<UpgradeKind>(L.gear[slot])).title;
+            L.gear[slot] = -1;
+            L.gearLvl[slot] = 0;
+            r.gold += value;
+            syncWorldBalls();
+            audio_.purchase();
+            effects_.flash(theme::puGolden, 0.35f);
+            effects_.addLabel("sold " + name + "  +" + std::to_string(value) + " gold",
+                              {size().x * 0.5f, size().y * 0.14f}, theme::puGolden, 20, 1.2f);
+            back();
             break;
         }
     }
@@ -843,29 +886,27 @@ int App::shopPrice(UpgradeKind k) const {
     return std::max(1, static_cast<int>(std::lround(static_cast<float>(base) * (1.f - off))));
 }
 
+// A fresh shop visit: new stock, a mystery box, rerolls back to full price.
 void App::rollShop() {
     RunState& r = data_.run;
-    std::vector<UpgradeKind> taken;
-    for (int i = 0; i < cfg::gold::shopOffers; ++i) {
-        const UpgradeKind k = rollPick(RollSource::Normal, taken);
-        if (std::find(taken.begin(), taken.end(), k) != taken.end()) break;   // pool ran dry
-        taken.push_back(k);
-    }
     r.shopOffers.clear();
-    for (UpgradeKind k : taken) r.shopOffers.push_back(static_cast<int>(k));
-    r.shopSold.assign(r.shopOffers.size(), false);
+    r.shopSold.clear();
+    r.shopDeal.clear();
+    r.shopMystery = 1;
+    r.shopRerolls = 0;
+    rollShopOffers();
 }
 
 void App::buyShopOffer(int i) {
     RunState& r = data_.run;
     if (i < 0 || i >= static_cast<int>(r.shopOffers.size()) || r.shopSold[static_cast<std::size_t>(i)]) return;
     const auto k = static_cast<UpgradeKind>(r.shopOffers[static_cast<std::size_t>(i)]);
-    if (r.gold < shopPrice(k) || !upgradeEligible(k, buildUpgradeCtx())) return;
+    if (r.gold < shopOfferPrice(i) || !upgradeEligible(k, buildUpgradeCtx())) return;
     if (upgradeNeedsTarget(k)) {
         beginEquip(EquipSource::Shop, k, i);
         return;
     }
-    r.gold -= shopPrice(k);
+    r.gold -= shopOfferPrice(i);
     r.shopSold[static_cast<std::size_t>(i)] = true;
     applyUpgradeKind(k);
     audio_.purchase();
@@ -946,8 +987,10 @@ void App::continuePastBoss() {
     r.map = generateMap(rng_, 2);
     r.mapNode = -1;
     r.mapRow = 0;
-    world_.setPhoenix(r.mods.phoenix ? 1 : 0);   // "Phoenix" recharges for the new act
-    openChoice(RollSource::Boss);                // boss treasure: an Epic / Legendary pick, then the map
+    r.phoenixUsedAct = false;
+    world_.setPhoenix((r.mods.phoenix ? 1 : 0) + r.lastStandLeft);   // "Phoenix" recharges for the new act
+    // A pact first (Fase O), then the boss treasure (an Epic / Legendary pick), then the map.
+    if (!openPactChoice(PactSource::Boss)) openChoice(RollSource::Boss);
 }
 
 // "Back to menu" on the BossWin card. If the run wasn't banked yet (miniboss just
@@ -1087,6 +1130,11 @@ void App::devOpen(DevOpen what) {
         case DevOpen::Elite:        openChoice(RollSource::Elite); break;
         case DevOpen::BossTreasure: openChoice(RollSource::Boss); break;
         case DevOpen::Recruit:      rollRecruitChoices(); push(ScreenId::Choice); break;
+        case DevOpen::PactBoss:     // the pact choice; after it the boss treasure / map follow as usual
+        case DevOpen::PactStart:
+            if (!openPactChoice(what == DevOpen::PactBoss ? PactSource::Boss : PactSource::Start))
+                effects_.addLabel("no pact left to offer", {size().x * 0.5f, size().y * 0.5f}, theme::coreLow, 22, 1.2f);
+            break;
         case DevOpen::JumpToBoss:   // stand right before the boss row and open the map
             data_.run.mapRow = cfg::map::rows;
             data_.run.mapNode = -1;
@@ -1268,8 +1316,13 @@ void App::processEvents(const FrameEvents& ev) {
     if (ev.midasGold > 0 && data_.run.active)   // "Midas": extra gold per kill
         data_.run.gold += ev.midasGold;
     if (ev.phoenix) {
+        // The Phoenix relic (once per act) goes first; "Last stand" is the once-per-run spare.
+        RunState& rr = data_.run;
+        const bool relic = rr.mods.phoenix && !rr.phoenixUsedAct;
+        if (relic) rr.phoenixUsedAct = true;
+        else if (rr.lastStandLeft > 0) --rr.lastStandLeft;
         effects_.flash(theme::puGolden, 1.f);
-        effects_.addLabel("PHOENIX", {size().x * 0.5f, size().y * 0.4f}, theme::puGolden, 40, 1.6f);
+        effects_.addLabel(relic ? "PHOENIX" : "LAST STAND", {size().x * 0.5f, size().y * 0.4f}, theme::puGolden, 40, 1.6f);
         audio_.comboUp(cfg::combo::baseCapTier);
     }
     if (ev.comboTierUp) {
@@ -1327,6 +1380,12 @@ void App::processEvents(const FrameEvents& ev) {
         if (r.eliteWave)
             pay = static_cast<int>(std::lround(static_cast<float>(pay * cfg::gold::elitePerRowMul) *
                 (1.f + cfg::meta::eliteSpoilsPerLevel * static_cast<float>(data_.meta.unlock[MetaEliteSpoils]))));
+        if (hasPact(PactId::LoadedDice)) {   // "Loaded Dice": double or nothing
+            const bool win = rng_.range(0.f, 1.f) < 0.5f;
+            pay = win ? pay * 2 : 0;
+            effects_.addLabel(win ? "DOUBLE!" : "NOTHING", {size().x * 0.5f, size().y * 0.4f - 36.f},
+                              win ? theme::puGolden : theme::coreLow, 24, 1.3f);
+        }
         r.gold += pay;
         effects_.addLabel("+" + std::to_string(pay) + " gold", {size().x * 0.5f, size().y * 0.4f},
                           theme::puGolden, 26, 1.2f);
@@ -1373,6 +1432,7 @@ void App::update(float frameDt) {
             simDt *= cfg::app::aimTimeScale;
         }
         simDt *= devTimeScale_;   // dev panel: slow motion / fast forward
+        novaCd_ = std::max(0.f, novaCd_ - frameDt);   // "Nova" pact recharges while you fight
         if (hitstop_ > 0.f) {  // an impact landed: hold the frame, no catch-up after
             hitstop_ = std::max(0.f, hitstop_ - frameDt);
             simDt = 0.f;
@@ -1598,6 +1658,54 @@ int App::runSnapshots(const std::string& dir) {
     snapFrame(d + "13_pause.png");
     openStats();
     snapFrame(d + "14_stats.png");
+
+    // Fase O: the pact choice (Oath: 4 cards), a fight under two pacts, the
+    // shop's extras, the sell picker, the map with pacts and the bigger web.
+    for (int u : {MetaOath, MetaCovenant, MetaPactHunters, MetaPactLegion, MetaPactDice, MetaPactAlchemy})
+        data_.meta.unlock[u] = 1;
+    if (openPactChoice(PactSource::Boss)) {
+        snapFrame(d + "10_pact.png");
+        back();
+    }
+    grantPact(PactId::Hunters);
+    grantPact(PactId::LivingCore);
+    world_.devSpawn(EnemyKind::Grunt, 8);
+    world_.devSpawn(EnemyKind::Tank, 1);
+    for (int i = 0; i < 150; ++i) update(1.f / 60.f);
+    capturePath_ = d + "11_pact_fight.png";
+    render();
+
+    r.gold = 240;
+    rollShop();
+    push(ScreenId::Shop);
+    buyMystery();
+    snapFrame(d + "12_shop_extras.png");
+    beginSell();
+    snapFrame(d + "13_sell.png");
+    back();
+    back();
+
+    openMap();
+    snapFrame(d + "14_map_pacts.png");
+    back();
+
+    data_.run = RunState{};   // back in the game menu, a well-grown web
+    for (int u : {MetaMass, MetaArmory, MetaHaggler, MetaMerchant, MetaStarterKit, MetaBastion, MetaEmber})
+        data_.meta.unlock[u] = 1;
+    replaceStack(ScreenId::Menu);
+    openLoadout();
+    snapFrame(d + "15_web_grown.png");
+
+    // The run intro: Covenant pact -> Quartermaster starter pick -> the map.
+    data_.meta.unlock[MetaQuartermaster] = 1;
+    data_.meta.unlock[MetaStarterKit] = 1;
+    newRun();
+    snapFrame(d + "16_start_pact.png");
+    choosePact(0);
+    snapFrame(d + "17_starter_pick.png");
+    applyUpgrade(0);
+    confirmEquip(0, -1);
+    snapFrame(d + "18_intro_map.png");
     return 0;
 }
 

@@ -17,10 +17,14 @@
 
 namespace sb {
 
-enum class ScreenId { Menu, Loadout, Play, Choice, Pause, Stats, HowTo, BossWin, Map, Shop, Equip, Dev };
+enum class ScreenId { Menu, Loadout, Play, Choice, Pause, Stats, HowTo, BossWin, Map, Shop, Equip, Dev, Pact };
 
 // Who opened the ball / slot picker, and so what confirming it does.
-enum class EquipSource { Choice, Shop, Forge };
+// ShopForge / Sell are the shop's paid forge and its "sell an item" counter.
+enum class EquipSource { Choice, Shop, Forge, ShopForge, Sell };
+
+// Where a pact choice comes from: the run start ("Covenant") or the act-1 boss.
+enum class PactSource { Start, Boss };
 
 // Top-level application: owns the window, subsystems and the screen stack, runs
 // the loop (fixed-step simulation, per-frame render) and wires the flow:
@@ -78,12 +82,36 @@ public:
     void buyRepair();
     int repairAmount() const;           // HP a shop repair restores
     void leaveShop();
+    // Shop extras (Fase O): a sale, a mystery box, a paid reroll, selling an
+    // item back and the forge as a paid service.
+    int shopOfferPrice(int i) const;    // what offer i costs right now (sale / prepaid applied)
+    int mysteryPrice() const;
+    void buyMystery();
+    int shopRerollPrice() const;
+    void rerollShop();
+    int saleOffPercent() const;
+    void beginShopForge();
+    void beginSell();
+    int sellValue(int ball, int slot) const;
+    int forgeCap() const;               // max forge level ("Duet" raises it)
     void rerollChoice(int idx);   // Choice: swap card `idx` for another item (costs a Foresight charge)
     void repairCoreSkipItem();    // Choice: heal the core to full instead of taking an item
     void useReserve();            // Play: fire the "Stockpile" reserve power-up (key Q)
     void leaveBossWin();    // BossWin card "Back to menu" -> game menu (banks the run)
     void continuePastBoss();  // BossWin card "Continue" -> resume at wave 11
     bool bossWinCanContinue() const;  // true when the BossWin card should offer "Continue"
+
+    // ---- pacts (Fase O) ----
+    const std::vector<PactId>& pactChoices() const { return pactChoices_; }
+    PactSource pactSource() const { return pactSrc_; }
+    void choosePact(int idx);          // Pact screen: take card idx
+    void refusePacts();                // Pact screen: turn them all down for gold
+    bool hasPact(PactId id) const { return data_.run.hasPact(id); }
+    bool canGrab() const;              // "Hunters" / "Clockwork" take the balls out of your hands
+    float flingPower() const;          // throw speed multiplier (Strong arm, Hot Hands, Pinball)
+    void usePactAbility();             // "Nova" (SPACE / right-click in a fight)
+    float novaCooldown() const { return novaCd_; }
+    std::string choiceTitle() const;   // Choice screen heading
     void abandonRun();
     void wipeSave();        // Game menu "Reset progress" -> erase all saved data
 
@@ -107,8 +135,9 @@ public:
     float devTimeScale() const { return devTimeScale_; }
     int devBall() const { return std::min(devBall_, std::max(0, runBallCount() - 1)); }
     void devSetBall(int b) { devBall_ = b; }
-    enum class DevOpen { Shop, Forge, Upgrade, Elite, BossTreasure, Recruit, JumpToBoss };
+    enum class DevOpen { Shop, Forge, Upgrade, Elite, BossTreasure, Recruit, JumpToBoss, PactBoss, PactStart };
     void devOpen(DevOpen what);
+    void devTogglePact(PactId id);   // grant it (or drop it, if the run has it)
     void openPause();
     void openStats();
     void openHowTo();
@@ -148,6 +177,19 @@ private:
     void applyUpgradeKind(UpgradeKind k, int ball = -1, int slot = -1);
     bool autoTarget(UpgradeKind k, int& ball, int& slot) const;   // first ball / free slot it fits
     void finishChoice();                                          // after a pick: fx, close, next wave
+    void afterChoice();       // a Choice closed: back to the map, or on with the run intro
+    // Run intro (newRun): Covenant pact -> Quartermaster starter pick -> map.
+    void advanceRunIntro();
+    bool openStarterChoice();
+    // Pacts.
+    void foldPacts(WorldParams& p) const;  // the run's pacts into the sim params
+    bool openPactChoice(PactSource src);   // false = nothing to offer (caller moves on)
+    void continueAfterPact();
+    void grantPact(PactId id);
+    void applyDuet();
+    void applyLegion();
+    int randomItemFor(const BallLoadout& b, Tier maxTier);   // a random unlocked item that fits (-1 none)
+    void rollShopOffers();                                           // fresh stock (keeps prepaid reveals)
     BallSpec ballSpec(const BallLoadout& b) const;
     std::vector<BallSpec> ballSpecs() const;
     void syncWorldBalls();
@@ -195,6 +237,11 @@ private:
     UpgradeKind equipKind_ = UpgradeKind::AddBall;
     int equipRef_ = -1;       // Choice card / shop offer being placed
     RollSource rollSource_ = RollSource::Normal;   // what the current Choice was rolled from (rerolls keep it)
+    std::string choiceTitle_;                      // custom Choice heading ("Starter kit ..."), empty = default
+    std::vector<PactId> pactChoices_;
+    PactSource pactSrc_ = PactSource::Boss;
+    int introStep_ = -1;      // >= 0 while the run intro (pact / starter pick) is still running
+    float novaCd_ = 0.f;      // "Nova" pact cooldown (s)
 public:
     bool choiceIsBossTreasure() const { return rollSource_ == RollSource::Boss; }
 private:

@@ -32,6 +32,13 @@ public:
     void addCoreMaxHp(float delta);                  // raise the core's max HP mid-run
     void useReserve(const WorldParams& p);           // "Stockpile": fire the held reserve power-up
 
+    // ---- pacts (sim/WorldPacts.cpp) -----------------------------------
+    void trimBalls(int n);                     // "Duet": drop every ball past the first n
+    void pactNova(const WorldParams& p);       // "Nova": burst every ball out of the core in a ring
+    // "Hunters": each ball's current prey (valid where huntHas()[i] is set).
+    const std::vector<sf::Vector2f>& huntPrey() const { return huntPrey_; }
+    const std::vector<char>& huntHas() const { return huntHas_; }
+
     // ---- dev tools (no-ops unless the caller is in dev mode) ---------
     void devWinWave();                    // clear the current wave now
     void devSpawn(EnemyKind k, int n);    // drop n enemies of a kind in from the edges
@@ -141,6 +148,14 @@ private:
     // Guardian (or any ball when `force`): bounce toward the threat.
     void aimBounce(Ball& b, sf::Vector2f normal, const Enemy* skip, bool force = false);
 
+    // ---- pact hooks (sim/WorldPacts.cpp): each is a no-op without its pact ----
+    void updateHunters(float dt, const WorldParams& p);                         // "Hunters" homing
+    void updateCoreZap(float dt, const WorldParams& p, FrameEvents& ev);        // "Living Core" zaps
+    void pactWallBump(Ball& b, sf::Vector2f at, const WorldParams& p, FrameEvents& ev);   // "Pinball"
+    void pactClack(Ball& a, Ball& b, sf::Vector2f at, const WorldParams& p, FrameEvents& ev);  // "Legion"
+    void pactCoreBounce(Ball& b, const WorldParams& p, FrameEvents& ev);        // "Living Core" overcharge
+    void pactCoreHit(const WorldParams& p, FrameEvents& ev);                    // "Fortress" / "Bloodlust"
+
     // ---- hits, procs and reactions (Fase I) ----
     // One ball landing on one enemy: damage, statuses, procs, reactions.
     // Returns true if it killed it. No bounce - the caller handles that.
@@ -209,6 +224,12 @@ private:
     PowerUp reservePu_ = PowerUp::Points2x;   // "Stockpile"
     bool hasReserve_ = false;
     float reserveTimer_ = cfg::powerup::reserveFillTime;
+
+    // pacts
+    std::vector<sf::Vector2f> huntPrey_;   // "Hunters": per ball, where its prey was last seen
+    std::vector<char> huntHas_;            // ...and whether it has one
+    float coreZapT_ = 0.f;                 // "Living Core": time to the next zap
+    int comboExtra_ = 0;                   // "Bloodlust": extra combo steps per hit (set each step)
 };
 
 }  // namespace sb

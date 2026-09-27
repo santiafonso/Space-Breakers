@@ -10,6 +10,7 @@
 #include "core/App.hpp"
 #include "core/Theme.hpp"
 #include "render/Draw.hpp"
+#include "ui/PactScreen.hpp"
 #include "ui/Screens.hpp"
 #include "ui/Widgets.hpp"
 
@@ -23,6 +24,7 @@ constexpr int kActMisc = 200;     // + one of the Misc entries
 constexpr int kActSpawn = 300;    // + EnemyKind
 constexpr int kActSpeed = 400;    // + index into kSpeeds
 constexpr int kActOpen = 500;     // + App::DevOpen
+constexpr int kActPact = 600;     // + PactId: grant / drop that pact
 
 enum Misc { WinWave, KillAll, Heal, Invuln, Gold, AddBall, ClearBall };
 constexpr float kSpeeds[] = {0.25f, 0.5f, 1.f, 2.f, 4.f};
@@ -40,7 +42,9 @@ constexpr OpenDef kOpens[] = {
     {App::DevOpen::Upgrade, "Pick (normal)"}, {App::DevOpen::Elite, "Pick (elite)"},
     {App::DevOpen::BossTreasure, "Boss treasure"}, {App::DevOpen::Recruit, "Recruit"},
     {App::DevOpen::JumpToBoss, "Jump to boss"},
+    {App::DevOpen::PactBoss, "Pact choice (boss)"}, {App::DevOpen::PactStart, "Pact choice (start)"},
 };
+constexpr int kOpenCount = static_cast<int>(sizeof(kOpens) / sizeof(kOpens[0]));
 
 bool isKey(const sf::Event& e, sf::Keyboard::Key k) {
     return e.type == sf::Event::KeyPressed && e.key.code == k;
@@ -79,6 +83,7 @@ void DevScreen::rebuild(App& app) {
             case UpgradeCat::Relic:    cols[3].push_back(k); break;
         }
     }
+    float col0End = 112.f;
     for (int c = 0; c < 4; ++c) {
         float y = 112.f;
         for (UpgradeKind k : cols[c]) {
@@ -89,6 +94,27 @@ void DevScreen::rebuild(App& app) {
             bt.action = static_cast<int>(k);
             bt.tipTitle = std::string(upgradeInfo(k).title) + "  -  " + tierName(upgradeTier(k));
             bt.tipDesc = std::string(upgradeCatName(upgradeCat(k))) + ": " + upgradeInfo(k).desc;
+            buttons_.push_back(bt);
+            y += 25.f;
+        }
+        if (c == 0) col0End = y;
+    }
+
+    // ---- pacts, under the first column: click to grant (or drop) one
+    {
+        float y = col0End + 34.f;
+        heads_.push_back({{26.f, y - 20.f}, "PACTS (click: grant / drop)"});
+        for (int i = 0; i < kPactCount; ++i) {
+            const auto id = static_cast<PactId>(i);
+            const PactDef& d = pactDef(id);
+            Button bt;
+            bt.rect = {24.f, y, 164.f, 22.f};
+            bt.label = d.name;
+            bt.color = pactColor(d.archetype);
+            bt.action = kActPact + i;
+            bt.on = app.hasPact(id);
+            bt.tipTitle = std::string(d.name) + "  -  " + pactArchetypeName(d.archetype);
+            bt.tipDesc = std::string("+ ") + d.gain + ".  - " + d.cost + ".";
             buttons_.push_back(bt);
             y += 25.f;
         }
@@ -147,7 +173,7 @@ void DevScreen::rebuild(App& app) {
     }
     ry += 64.f;
     head("OPEN");
-    for (int i = 0; i < 7; ++i) {
+    for (int i = 0; i < kOpenCount; ++i) {
         add(kOpens[i].label, kActOpen + static_cast<int>(kOpens[i].what), theme::puGolden, false,
             "open it now (the dev panel closes)", rx + (i % 2) * 158.f, 150.f);
         if (i % 2 == 1) ry += 30.f;
@@ -167,6 +193,8 @@ void DevScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
         const int a = b.action;
         if (a < kUpgradeKindCount) {
             app.devGrant(static_cast<UpgradeKind>(a));
+        } else if (a >= kActPact) {
+            app.devTogglePact(static_cast<PactId>(a - kActPact));
         } else if (a >= kActOpen) {
             app.devOpen(static_cast<App::DevOpen>(a - kActOpen));
             return;   // this screen is gone

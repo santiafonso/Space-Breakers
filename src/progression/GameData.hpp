@@ -5,6 +5,7 @@
 
 #include "core/Config.hpp"
 #include "progression/Offers.hpp"
+#include "progression/Pacts.hpp"
 #include "progression/RunMap.hpp"
 
 namespace sb {
@@ -79,6 +80,20 @@ struct RunState {
     // Shop stock at the current Shop node.
     std::vector<int> shopOffers;      // UpgradeKind
     std::vector<bool> shopSold;
+    std::vector<char> shopDeal;       // per offer: 0 full price, 1 on sale, 2 prepaid (a revealed mystery box)
+    int shopMystery = 0;              // 0 none, 1 on offer, 2 bought (its pick sits in shopOffers)
+    int shopRerolls = 0;              // paid rerolls at this shop (each costs more)
+
+    // Pacts (Fase O): PactId values, at most kMaxPacts.
+    std::vector<int> pacts;
+    bool hasPact(PactId id) const {
+        for (int p : pacts)
+            if (p == static_cast<int>(id)) return true;
+        return false;
+    }
+
+    int lastStandLeft = 0;            // "Last stand" web node: once-per-run core save still unused
+    bool phoenixUsedAct = false;      // the Phoenix relic already fired this act
 };
 
 struct GameData {

@@ -50,7 +50,7 @@ float World::ballCruise(const Ball& b, const WorldParams& p) const {
 }
 
 float World::ballMaxSpeed(const Ball& b, const WorldParams& p) const {
-    return std::min(cruiseBase(p) * cfg::ball::maxSpeedCruiseMul * b.mods.maxSpeedMult,
+    return std::min(cruiseBase(p) * cfg::ball::maxSpeedCruiseMul * b.mods.maxSpeedMult * p.pact.speedCeilMul,
                     cfg::ball::hardSpeedCap * arenaScale());
 }
 
@@ -164,6 +164,9 @@ void World::startRun(const WorldParams& p, const std::vector<BallSpec>& balls,
     effect_.reset();
     grabbed_ = Grabbed::None;
     heldIndex_ = -1;
+    huntPrey_.clear();
+    huntHas_.clear();
+    coreZapT_ = 0.f;
     comboStreak_ = 0;
     comboCapTier_ = cfg::combo::baseCapTier;
     sinceHit_ = 0.f;
@@ -521,10 +524,11 @@ void World::cancelHeld() {
 // Auto-throw option: now and then, launch the ball that's closest to plain
 // cruising (the one doing least) at the enemy nearest the core.
 void World::updateAutoFling(float dt, const WorldParams& p, FrameEvents& ev) {
-    if (!p.autoFling || !waveRunning_) return;
+    const bool clockwork = p.pact.autoFlingEvery > 0.f;   // "Clockwork" pact: always on, faster
+    if ((!p.autoFling && !clockwork) || !waveRunning_) return;
     autoFlingTimer_ -= dt;
     if (autoFlingTimer_ > 0.f) return;
-    autoFlingTimer_ = cfg::combat::autoFlingInterval;
+    autoFlingTimer_ = clockwork ? p.pact.autoFlingEvery : cfg::combat::autoFlingInterval;
 
     const Enemy* target = nullptr;
     float best = 1e18f;
@@ -545,9 +549,10 @@ void World::updateAutoFling(float dt, const WorldParams& p, FrameEvents& ev) {
         const float ratio = length(b.vel) / std::max(1.f, ballCruise(b, p));
         if (ratio < slowest) { slowest = ratio; pick = &b; }
     }
-    if (!pick || slowest > 1.3f) return;   // everyone is already flying hot
+    if (!pick || (!clockwork && slowest > 1.3f)) return;   // everyone is already flying hot
     const sf::Vector2f d = normalized(aim - pick->pos, {1.f, 0.f});
-    pick->vel = d * std::min(ballCruise(*pick, p) * cfg::combat::autoFlingSpeedMul, ballMaxSpeed(*pick, p));
+    const float mul = clockwork ? p.pact.autoFlingSpeed : cfg::combat::autoFlingSpeedMul;
+    pick->vel = d * std::min(ballCruise(*pick, p) * mul, ballMaxSpeed(*pick, p));
     ev.autoFlung = true;
 }
 
@@ -566,8 +571,9 @@ void World::forceRelease() {
 
 void World::advanceCombo(float dt, const WorldParams& p) {
     comboCapTier_ = cfg::combo::baseCapTier * (p.overcharge ? cfg::changer::overchargeMul : 1);   // "Overcharge"
+    comboExtra_ = p.pact.bloodlust ? 1 : 0;   // "Bloodlust" pact: climbs twice as fast...
     sinceHit_ += dt;
-    if (sinceHit_ > cfg::combo::decayWindow && comboStreak_ > 0) {
+    if (!p.pact.bloodlust && sinceHit_ > cfg::combo::decayWindow && comboStreak_ > 0) {   // ...and never cools
         comboStreak_ = std::max(0, comboStreak_ - cfg::combo::bouncesPerTier);
         sinceHit_ = 0.f;
     }
@@ -596,6 +602,7 @@ void World::afterBounce(Ball& b, sf::Vector2f normal, bool countHit) {
 void World::addComboHit() {
     comboStreak_ += (effect_ && effect_->kind == PowerUp::Golden && effect_->remaining > 0.f)
                         ? cfg::powerup::goldenComboRate : 1;   // GOLDEN BOUNCE climbs faster
+    comboStreak_ += comboExtra_;   // "Bloodlust" pact
     sinceHit_ = 0.f;
 }
 
@@ -1009,13 +1016,19 @@ void World::onKill(Ball& b, Enemy& e, float dmg, const WorldParams& p, FrameEven
 // A ball leaves its element on an enemy. If a DIFFERENT ball's different
 // element is already waiting there, the two react (and the status is used up).
 Element World::hitElement(const Ball& b, const WorldParams& p) {
+    if (p.pact.alchemy && rng_.range(0.f, 1.f) < cfg::pact::alchemyChance) {   // "Alchemy" pact: a random extra element
+        Element e = static_cast<Element>(rng_.irange(1, kElementCount - 1));
+        if (e == b.element) e = static_cast<Element>(static_cast<int>(e) % (kElementCount - 1) + 1);
+        return e;
+    }
     if (b.element != Element::Plain || !p.prismCore) return b.element;
     return static_cast<Element>(rng_.irange(1, kElementCount - 1));   // "Prism core": any element at all
 }
 
 void World::applyElement(Enemy& e, Element el, int owner, float hitDmg, const WorldParams& p, FrameEvents& ev) {
     if (el == Element::Plain) return;
-    if (e.elemT > 0.f && e.elem != Element::Plain && e.elem != el && e.elemOwner != owner) {
+    if (e.elemT > 0.f && e.elem != Element::Plain && e.elem != el &&
+        (e.elemOwner != owner || p.pact.alchemy)) {   // "Alchemy" pact: a ball can react with itself
         const Element prev = e.elem;
         e.elem = Element::Plain;
         e.elemT = 0.f;
@@ -1202,6 +1215,7 @@ float World::ballDamage(const Ball& b, const WorldParams& p) const {
     if (b.element == Element::Fire)   // fire is a heavier hit; the burn DoT is the "Ember" node
         dmg *= 1.f + cfg::element::fireDamageBonus * elemPotency(b, p);
     if (b.ricochetT > 0.f) dmg *= b.mods.ricochetMult;   // "Ricochet": fresh off a wall
+    if (b.pactCharge > 0.f) dmg *= cfg::pact::coreChargeDamage;   // "Living Core" pact: overcharged
     return dmg;
 }
 
@@ -1293,7 +1307,7 @@ void World::regulateSpeed(Ball& b, float dt, const WorldParams& p) {
         return;
     }
     const float up = 1.f - std::exp(-cfg::ball::regainRate * dt);
-    const float decayRate = cfg::ball::decayRate * b.mods.flingDecay *
+    const float decayRate = cfg::ball::decayRate * b.mods.flingDecay * p.pact.flingHold *   // "Hot Hands" pact
                             (b.role == BallRole::Striker ? cfg::role::strikerFlingDecay : 1.f);
     const float down = 1.f - std::exp(-decayRate * dt);
     const float k = (sp < cruiseS) ? up : down;
@@ -1310,6 +1324,7 @@ void World::updateTrail(Ball& b) {
 
 void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev) {
     b.age += dt;
+    b.pactCharge = std::max(0.f, b.pactCharge - dt);   // "Living Core" overcharge wears off
     b.radius = ballRadius(b, p);   // role, "Big ball" gear, "Mass" web
     b.resonanceT = std::max(0.f, b.resonanceT - dt);
     if (b.mods.stormFrac > 0.f) updateStorm(b, dt, p, ev);
@@ -1378,6 +1393,7 @@ void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
             if (b.mods.splitChance > 0.f && !b.ghost && chance(b.mods.splitChance, p)) spawnGhost(b);
             b.berserkStacks = 0;   // "Berserk" resets on a wall
             if (b.mods.railFrac > 0.f) fireRail(b, p, ev);
+            pactWallBump(b, c.point, p, ev);   // "Pinball" pact
             pushFx(c);
         }
         // The core is solid: balls bounce off it (no damage to the core).
@@ -1396,6 +1412,7 @@ void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
                 aimBounce(b, c.normal, nullptr, true);
                 boostSpeed(b, b.mods.boomerangKick, p);
             }
+            pactCoreBounce(b, p, ev);   // "Living Core" pact
             pushFx(c);
         }
         if (b.mods.piercing) {   // "Piercing": no bounce - every enemy on the path takes the hit
@@ -1505,6 +1522,7 @@ void World::resolveBallPairs(FrameEvents& ev, const WorldParams& p) {
             fx.speed = std::max(length(a.vel), length(b.vel)) / arenaScale();
             fx.ballPair = true;
             ev.bounces.push_back(fx);
+            pactClack(a, b, fx.pos, p, ev);   // "Legion" pact
         }
     }
 }
@@ -1628,6 +1646,7 @@ void World::updateEnemies(float dt, const WorldParams& p, FrameEvents& ev) {
                 edt *= lerpf(1.f, cfg::powerup::slowMoEnemyMul, effStrength(p));   // eases back under "Afterglow"
             if (p.slowField && dl < cfg::combat::slowFieldRadius) edt *= cfg::combat::slowFieldMul;
             if (p.timeDilation) edt *= cfg::changer::timeDilation;   // "Time dilation"
+            edt *= p.pact.enemySpeedMul;                              // "Living Core" pact's cost
 
             e.vel += (steer - e.vel) * (1.f - std::exp(-8.f * edt));
             e.pos += e.vel * edt;
@@ -1659,13 +1678,14 @@ void World::updateEnemies(float dt, const WorldParams& p, FrameEvents& ev) {
         if (dist <= core_.radius + e.radius) {
             if (!invuln_) {
                 if (aegisChargesLeft_ > 0) --aegisChargesLeft_;   // "Aegis" soaks the hit
-                else core_.hp -= e.coreDamage;
+                else core_.hp -= e.coreDamage * p.pact.coreDamageMul;   // "Bloodlust" pact's cost
             }
             core_.hitFlash = 1.f;
             coreHitThisWave_ = true;   // "Interest" is off for this wave now
             ev.coreHit = true;
 
             it = enemies_.erase(it);
+            pactCoreHit(p, ev);   // "Fortress" blast / "Bloodlust" wipe
 
             if (core_.hp <= 0.f && phoenixLeft_ > 0) {   // "Phoenix": back from the ashes, once an act
                 --phoenixLeft_;
@@ -1965,6 +1985,7 @@ FrameEvents World::step(float dt, const WorldParams& p) {
     advanceCombo(dt, p);
     updateCoreSlide(dt);
     updateAutoFling(dt, p, ev);
+    updateHunters(dt, p);                 // "Hunters" pact
 
     for (std::size_t i = 0; i < balls_.size(); ++i) {
         Ball& b = balls_[i];
@@ -1992,6 +2013,7 @@ FrameEvents World::step(float dt, const WorldParams& p) {
     updateWaterTrails(dt, p, ev);
     updateObstacles(dt);
     updateEnemies(dt, p, ev);
+    updateCoreZap(dt, p, ev);   // "Living Core" pact
     sweepDeadEnemies(ev, p);
     updateBoss(dt, p, ev);
     updateWaveSpawner(dt, ev);

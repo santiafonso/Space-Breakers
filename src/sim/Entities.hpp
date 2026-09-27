@@ -6,6 +6,7 @@
 #include "core/Config.hpp"
 #include "core/Math.hpp"
 #include "core/Theme.hpp"
+#include "sim/PactRules.hpp"
 
 namespace sb {
 
@@ -155,6 +156,7 @@ struct Ball {
     int gluttonStacks = 0;   // "Glutton": kills this wave
     float tetherT = 0.f;     // "Tether": time to the next damage tick
     float resonanceT = 0.f;  // "Resonance": cooldown
+    float pactCharge = 0.f;  // "Living Core" pact: seconds left overcharged after a core bounce
 };
 
 // Grunt = the plain walker. The rest each want a different answer (cfg::enemy).
@@ -349,6 +351,8 @@ struct WorldParams {
     unsigned powerUpMask = 0xffffffffu;  // bit i set => PowerUp(i) can drop
     float pickupSpawnMult = 1.f;  // scales the gap between power-ups (< 1 = more often)
     float pickupDurMult = 1.f;    // scales how long a power-up lasts
+
+    PactRules pact;               // the run's pacts (sim/PactRules.hpp); defaults = none
 };
 
 }  // namespace sb

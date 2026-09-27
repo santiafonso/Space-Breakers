@@ -372,6 +372,14 @@ inline constexpr int priceRepair = 20;     // repairs repairFrac of the core's m
 inline constexpr float repairFrac = 0.30f;
 inline constexpr int shopOffers = 5;
 inline constexpr int maxItemLevel = 3;     // forge cap
+// Shop extras (Fase O): one offer is on sale, a mystery box, a paid reroll,
+// selling an item back, and the forge as a paid service.
+inline constexpr float saleOff = 0.40f;    // the sale offer costs this much less ("Merchant" deepens it)
+inline constexpr int mysteryPrice = 55;    // a pick rolled at elite odds, revealed on purchase
+inline constexpr int rerollBase = 12;      // shop reroll: this, +rerollStep per reroll at this shop
+inline constexpr int rerollStep = 6;
+inline constexpr float sellFrac = 0.45f;   // selling an item pays this of its tier price, x its level
+inline constexpr int forgeServicePrice = 45;   // level up an item without a Forge node
 }  // namespace gold
 
 // Wave 10 is a miniboss duel in a wider arena.
@@ -469,7 +477,73 @@ inline constexpr float armoryEpicPerLevel = 0.5f;      // "Armory": Epic odds x 
 inline constexpr float luckyStarShift = 0.12f;         // "Lucky star": share of each tier nudged up one, per level
 inline constexpr float hagglerPerLevel = 0.10f;        // "Haggler": shop prices -this per level
 inline constexpr float eliteSpoilsPerLevel = 0.5f;     // "Elite spoils": elite gold x (1 + this * level)
+inline constexpr float merchantSalePerLevel = 0.15f;   // "Merchant": the shop sale is this much deeper per level
+inline constexpr int treasuryGoldPerLevel = 20;        // "Treasury": starting gold per level
 }  // namespace meta
+
+// Pacts (Fase O): run-defining rules picked after the act-1 boss (and at the
+// run start with "Covenant"). Definitions in progression/Pacts.hpp, sim hooks
+// in sim/WorldPacts.cpp.
+namespace pact {
+inline constexpr int offered = 3;            // cards per pact choice ("Oath": +1)
+inline constexpr int refuseGold = 40;        // turning every pact down pays this
+// Hot Hands
+inline constexpr float hotFling = 1.7f;      // throw speed x this
+inline constexpr float hotCeil = 3.0f;       // top speed x this (so the throw isn't clipped)
+inline constexpr float hotHold = 0.3f;       // fling decay x this
+inline constexpr float hotCruise = 0.65f;    // cost: cruise x this
+// Nova
+inline constexpr float novaCooldown = 7.f;
+inline constexpr float novaSpeed = 3.0f;     // x cruise
+inline constexpr float novaRadius = 230.f;   // the core's shove
+inline constexpr float novaKnock = 420.f;
+inline constexpr float novaCoreHp = 0.8f;    // cost: core max HP x this
+// Hunters
+inline constexpr float huntTurn = 4.5f;      // rad/s a ball turns toward its prey
+inline constexpr float huntKeep = 70.f;      // prey tracked from step to step within this (px, arena-scaled)
+inline constexpr float huntMinSpeed = 1.0f;  // chases at least at cruise
+inline constexpr float huntDamage = 1.2f;
+// Clockwork
+inline constexpr float clockEvery = 0.6f;
+inline constexpr float clockSpeed = 2.5f;
+inline constexpr float clockDamage = 1.15f;
+// Pinball
+inline constexpr float pinBoost = 1.08f;     // speed x this per wall bounce (up to the ball's ceiling)
+inline constexpr float pinSparkRadius = 85.f;
+inline constexpr float pinSparkFrac = 0.4f;  // of the ball's hit
+inline constexpr float pinFling = 0.6f;      // cost: throws x this
+// Duet
+inline constexpr int duetBalls = 2;
+inline constexpr float duetDamage = 1.5f;
+inline constexpr float duetRadius = 1.2f;
+inline constexpr int duetMeltGold = 15;      // an absorbed item with nowhere to level pays this
+// Legion
+inline constexpr int legionBalls = 2;
+inline constexpr float legionSparkRadius = 95.f;
+inline constexpr float legionSparkFrac = 0.6f;
+inline constexpr float legionDamage = 0.75f;
+// Living Core
+inline constexpr float coreZapEvery = 0.8f;
+inline constexpr float coreZapRange = 330.f;
+inline constexpr float coreZapHpFrac = 0.5f;   // a zap deals this x a plain enemy's HP this wave
+inline constexpr float coreChargeTime = 2.f;
+inline constexpr float coreChargeDamage = 1.6f;
+inline constexpr float coreChargeBoost = 1.35f;
+inline constexpr float coreEnemySpeed = 1.15f; // cost
+// Fortress
+inline constexpr float fortressHp = 1.75f;
+inline constexpr float fortressBlastRadius = 160.f;
+inline constexpr float fortressBlastHpFrac = 0.3f;   // x a plain enemy's HP this wave
+inline constexpr float fortressRestHeal = 0.5f;
+// Loaded Dice
+inline constexpr float diceLuck = 2.0f;
+inline constexpr float diceTierShift = 0.5f;
+// Alchemy
+inline constexpr float alchemyChance = 0.5f;
+inline constexpr float alchemyDamage = 0.75f;
+// Bloodlust
+inline constexpr float bloodCoreDamage = 1.5f;
+}  // namespace pact
 
 // Power-up orbs drift in and buff the balls for a few seconds. Spawn cadence is
 // deliberately slow at baseline; the "Uplink" web node scales p.pickupSpawnMult
