@@ -250,8 +250,9 @@ inline constexpr int maxMissiles = 40;
 // Rare and up were made scarcer (2026-09-26, usuario): the good stuff is earned.
 namespace tier {
 inline constexpr int weightsNormal[5] = {53, 30, 12, 4, 1};   // upgrade nodes, shops (was 45/30/16/7/2)
-inline constexpr int weightsElite[5]  = {16, 32, 29, 16, 7};  // elite fights: items are scarce, so rare ones turn up
-inline constexpr int weightsShop[5]   = {32, 33, 21, 10, 4};  // the shop's shelf
+// Rare tiers stay rare so one landing is an event: ~3% Legendary per elite card.
+inline constexpr int weightsElite[5]  = {30, 36, 22, 9, 3};   // elite fights (their item pick)
+inline constexpr int weightsShop[5]   = {40, 34, 17, 7, 2};   // the shop's shelf
 inline constexpr int weightsBoss[5]   = {0, 0, 0, 65, 35};    // the treasure after a boss
 }  // namespace tier
 
@@ -389,6 +390,7 @@ inline constexpr float bastionPerWavePerLevel = 1.0f;  // "Bastion" meta node: +
 
 // A run is a fixed sprint: survive to the final wave and you win.
 namespace run {
+inline constexpr int eliteCards = 3;   // an Elite's item pick deals this many cards (others deal 4)
 inline constexpr float newBallCardWeight = 0.3f;   // an "Extra ball" card weighs this vs 1 for other picks of its tier
 inline constexpr int startBalls = 1;   // every run starts with one ball (more come from picks / pacts)
 inline constexpr int bossWave = 10;    // the miniboss duel
@@ -423,10 +425,13 @@ inline constexpr int wRecruit = 8;      // a new ball or a free pick (unused: se
 // recruit path in act 1, two in act 2.
 inline constexpr int recruitsPerPathAct1 = 1;   // Recruit stops placed on each recruit path (not rolled)
 inline constexpr int recruitsPerPathAct2 = 2;
-inline constexpr int wEliteRecruitPath = 4;
-inline constexpr int wEliteItemPath = 28;
+inline constexpr int elitesPerPathAct1Min = 1;  // Elite stops placed on each item path: 1-2 in act 1...
+inline constexpr int elitesPerPathAct1Max = 2;
+inline constexpr int elitesPerPathAct2 = 2;     // ...2 in act 2 (not rolled)
+inline constexpr int wEliteRecruitPath = 3;     // a stray elite elsewhere stays a rare find
+inline constexpr int wEliteItemPath = 0;
 inline constexpr int wShopItemPath = 9;
-inline constexpr int wEliteNeutral = 12;
+inline constexpr int wEliteNeutral = 4;
 inline constexpr int wShopNeutral = 5;
 // Elite waves: tougher and more of them.
 inline constexpr float eliteHpMul = 1.6f;
@@ -457,7 +462,8 @@ inline constexpr int priceModifier = 22;
 inline constexpr int priceByTier[5] = {30, 45, 65, 95, 150};
 inline constexpr int priceRepair = 20;     // repairs repairFrac of the core's max HP
 inline constexpr float repairFrac = 0.30f;
-inline constexpr int shopOffers = 4;   // a small shelf: shops are a side stop, fights grow the build
+inline constexpr int shopOffers = 3;   // a small shelf...
+inline constexpr int shopMaxItems = 1; // ...with at most one item on it (items are scarce)
 inline constexpr int maxItemLevel = 3;     // forge cap
 // Shop extras (Fase O): one offer is on sale, a mystery box, a paid reroll,
 // selling an item back, and the forge as a paid service.

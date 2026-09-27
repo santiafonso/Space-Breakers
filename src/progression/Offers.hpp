@@ -889,7 +889,7 @@ inline const MetaUnlockDef& metaUnlockDef(int u) {
                          3u,  1, B::Pacts,    P, 43, 138.f, 3.6f},
         /* Alchemy   */ {"Alchemy",   "the Alchemy pact can be offered: random extra elements, a ball reacts with itself",
                          3u,  1, B::Pacts,    P, 44, 152.f, 3.6f},
-        /* Merchant  */ {"Merchant",  "shops stock one more pick, their sale gets 15% deeper, and you may reroll the stock once per level",
+        /* Merchant  */ {"Merchant",  "you may reroll the shop's stock once per level, and its sale gets 15% deeper",
                          12u, 2, B::Jester,   C, 38,  88.f, 4.f},
         /* Treasury  */ {"Treasury",  "start every run with +20 gold per level",
                          10u, 3, B::Jester,   C,  9,  88.f, 2.f},

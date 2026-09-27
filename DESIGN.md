@@ -1717,7 +1717,7 @@ Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
   - **De dónde sale cada cosa** (`App::RollSource`): tras un combate normal,
     **solo modificadores** (`PostFight`); élite = **solo items**
     ("Elite spoils"); tesoro del jefe = todo; nodos Upgrade / Recruit = todo
-    menos items; tienda = todo menos pelota. Los items solo vienen de élites,
+    menos items; tienda = todo menos pelota (máx. 1 item). Los items solo vienen de élites,
     tiendas (y el jefe).
   - **Tienda:** solo se compra lo que aparece; sin reparar, sin forja, sin
     caja misteriosa. Rolear solo con **Merchant** (1 por nivel y visita);
@@ -1737,9 +1737,18 @@ Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
     a lo largo de la ruta. Al azar salía en ~39% de mapas del acto 1 sin
     ningún Recruit. Sim 3000 mapas acto 1: 0% sin Recruit, 1–2 por mapa; la
     ruta con más trae ~1.1, la con menos ~0.
-  - **Rarezas:** élite `{16,32,29,16,7}`, tienda `{32,33,21,10,4}` (antes
-    usaba las normales). Una carta Epic / Legendary en la mesa hace un flash
-    de su color.
+  - **Items difíciles de conseguir (ajuste final):** el élite reparte **3
+    cartas** (`eliteCards`); rarezas bajas para que un raro sea un evento:
+    élite `{30,36,22,9,3}` (~3% Legendary por carta), tienda `{40,34,17,7,2}`.
+    Una carta Epic / Legendary en la mesa hace un flash de su color.
+  - **Tienda:** 3 ofertas, **máx. 1 item** (`shopMaxItems`); Merchant ya no
+    suma oferta, solo rerolls (máx. 2 = su nivel máx.) y descuento.
+  - **Élites colocados, no sorteados:** 1–2 por ruta de items en el acto 1, 2
+    en el acto 2 (`elitesPerPath*`); fuera de eso un élite suelto es raro
+    (`wEliteNeutral` 4, `wEliteRecruitPath` 3). Sim acto 1: la ruta con más
+    élites ~1.8, la de reclutar ~0.2; todo mapa tiene ≥1 élite y ≥1 Recruit.
+    Idea: pelotas e items son lo más importante de una run larga — cada
+    Recruit y cada item cuestan una decisión de ruta.
   - TAB / equipar: zoom máx. 1.2 / 1.15 (con pocas pelotas quedaba enorme).
   - **Élite se distingue:** en el mapa naranja propio (`ember`), más grande
     y con doble marco; en la pelea el cartel dice "Elite - item spoils" y el

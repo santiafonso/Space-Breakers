@@ -394,6 +394,7 @@ bool App::openStarterChoice() {
         return false;
     }
     for (int i = 0; i < kChoiceCount; ++i) choices_[static_cast<std::size_t>(i)] = pool[static_cast<std::size_t>(i)];
+    choiceCount_ = kChoiceCount;
     rollSource_ = RollSource::Normal;
     const bool allWant = std::all_of(choices_.begin(), choices_.end(), [want](UpgradeKind k) { return upgradeTier(k) == want; });
     choiceTitle_ = allWant ? std::string("Starter kit - pick your ") + tierName(want) + " item" : "Starter kit - pick your item";
@@ -421,7 +422,7 @@ int App::shopOfferPrice(int i) const {
     return base;
 }
 
-// Stock the shelves: shopOffers (+1 with "Merchant"), one of them on sale.
+// Stock the shelves: shopOffers picks, at most shopMaxItems of them items, one on sale.
 void App::rollShopOffers() {
     RunState& r = data_.run;
     std::vector<int> prepaid;
@@ -430,10 +431,14 @@ void App::rollShopOffers() {
 
     std::vector<UpgradeKind> taken;
     for (int k : prepaid) taken.push_back(static_cast<UpgradeKind>(k));
-    const int count = cfg::gold::shopOffers + (data_.meta.unlock[MetaMerchant] > 0 ? 1 : 0);
+    const int count = cfg::gold::shopOffers;
     std::vector<UpgradeKind> fresh;
+    int items = 0;   // at most cfg::gold::shopMaxItems items on the shelf
     for (int i = 0; i < count; ++i) {
-        const UpgradeKind k = rollPick(RollSource::Shop, taken);
+        const UpgradeKind k = items >= cfg::gold::shopMaxItems
+            ? rollPick(RollSource::Shop, taken, [](UpgradeKind u) { return upgradeCat(u) != UpgradeCat::Item; })
+            : rollPick(RollSource::Shop, taken);
+        if (upgradeCat(k) == UpgradeCat::Item) ++items;
         if (std::find(taken.begin(), taken.end(), k) != taken.end()) break;   // pool ran dry
         taken.push_back(k);
         fresh.push_back(k);

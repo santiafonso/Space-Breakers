@@ -62,6 +62,7 @@ public:
     int bossIronCores() const { return bossIronCores_; }         // BossWin card: "Iron core" cores (0 = none)
     bool ironCoreAlive() const { return data_.run.active && !data_.run.repairedThisAct; }
     const std::array<UpgradeKind, kChoiceCount>& choices() const { return choices_; }
+    int choiceCount() const { return choiceCount_; }   // cards on the table (an Elite deals 3)
 
     void openLoadout();     // Menu -> the game menu
     void newRun();          // Loadout "Start" -> a fresh run
@@ -261,6 +262,7 @@ private:
     TabPeek peek_;   // TAB over every run screen that doesn't run its own (shop, cards, pickers...)
     bool onOptions() const;                  // the Options (sound) screen is on top
     std::array<UpgradeKind, kChoiceCount> choices_{};
+    int choiceCount_ = kChoiceCount;
     int lastRunWave_ = 0;
     int lastRunCores_ = 0;
     int lastRunPrisms_ = 0;

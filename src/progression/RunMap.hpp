@@ -140,6 +140,7 @@ inline RunMap generateMap(Rng& rng, int act) {
     std::vector<std::vector<int>> laneRows;   // lanes used per row 2..R-1
     std::vector<std::vector<detail::PathLean>> leanRows;   // each of those nodes' leaning
     std::vector<std::vector<std::pair<int, int>>> recruitTrails;   // (row, lane) of every recruit path's nodes
+    std::vector<std::vector<std::pair<int, int>>> itemTrails;      // ...and of every item path's
     std::vector<std::vector<std::pair<int, int>>> steps;   // lane -> lane moves out of each of those rows
     {
         std::vector<int> walkers;
@@ -174,7 +175,7 @@ inline RunMap generateMap(Rng& rng, int act) {
             for (std::size_t k = 0; k < walkers.size(); ++k) trail[k].emplace_back(r, walkers[k]);
             if (r + 1 == R) {
                 for (std::size_t k = 0; k < walkers.size(); ++k)
-                    if (leans[k] == PathLean::Recruit) recruitTrails.push_back(trail[k]);
+                    (leans[k] == PathLean::Recruit ? recruitTrails : itemTrails).push_back(trail[k]);
                 break;
             }
             // Step every walker to the next row without crossing another's
@@ -247,43 +248,50 @@ inline RunMap generateMap(Rng& rng, int act) {
     for (int i = 0; i < L; ++i) all[static_cast<std::size_t>(i)] = i;
     addRow(R, all, true);
 
-    // Every recruit path gets its Recruit stops (1 in act 1, 2 in act 2) on
-    // its own recruit-leaning nodes from row 3 up, spread out; a path whose
-    // nodes already hold enough (shared with another recruit path) gets none.
+    // The stops that make a path what it is aren't rolled, they're placed:
+    // every recruit path gets its Recruit stops (1 in act 1, 2 in act 2),
+    // every item path its Elites (1-2 in act 1, 2 in act 2), on the path's own
+    // leaning nodes from row 3 up (else a neutral one), spread along it. A
+    // path whose nodes already hold enough (shared with a sibling) gets none.
     {
         auto nodeAt = [&](int row, int lane) -> MapNode* {
             for (int id : rowNodes[static_cast<std::size_t>(row - 1)])
                 if (m.nodes[static_cast<std::size_t>(id)].lane == lane) return &m.nodes[static_cast<std::size_t>(id)];
             return nullptr;
         };
-        const int want = act == 1 ? cfg::map::recruitsPerPathAct1 : cfg::map::recruitsPerPathAct2;
-        for (const auto& tr : recruitTrails) {
-            std::vector<MapNode*> spots, fallback;   // recruit-leaning nodes; else neutral ones
+        auto leanOf = [&](int row, int lane) {
+            const auto& lanesR = laneRows[static_cast<std::size_t>(row - 2)];
+            const auto li = static_cast<std::size_t>(std::find(lanesR.begin(), lanesR.end(), lane) - lanesR.begin());
+            return leanRows[static_cast<std::size_t>(row - 2)][li];
+        };
+        auto place = [&](const std::vector<std::pair<int, int>>& tr, detail::PathLean lean, MapNodeType type,
+                         int want) {
+            std::vector<MapNode*> spots, fallback;
             int have = 0;
             for (const auto& [row, lane] : tr) {
                 MapNode* n = nodeAt(row, lane);
                 if (!n) continue;
-                if (n->type == MapNodeType::Recruit) ++have;
-                else if (row >= 3 && leanRows[static_cast<std::size_t>(row - 2)][static_cast<std::size_t>(
-                                         std::find(laneRows[static_cast<std::size_t>(row - 2)].begin(),
-                                                   laneRows[static_cast<std::size_t>(row - 2)].end(), lane) -
-                                         laneRows[static_cast<std::size_t>(row - 2)].begin())] == detail::PathLean::Recruit)
-                    spots.push_back(n);
-                else if (row >= 3 && n->type != MapNodeType::Elite && n->type != MapNodeType::Shop)
-                    fallback.push_back(n);
+                if (n->type == type) ++have;
+                else if (n->type == MapNodeType::Recruit || n->type == MapNodeType::Elite) continue;   // placed already
+                else if (row >= 3 && leanOf(row, lane) == lean) spots.push_back(n);
+                else if (row >= 3 && leanOf(row, lane) == detail::PathLean::Neutral) fallback.push_back(n);
             }
-            if (spots.empty()) spots = fallback;   // every node shared with an item path: use a neutral one
-            for (int k = have; k < want && !spots.empty(); ++k) {
-                // one per equal slice of the path, so two don't sit back to back
-                const int slices = want - have;
-                const int slice = k - have;
-                const std::size_t lo = spots.size() * static_cast<std::size_t>(slice) / static_cast<std::size_t>(slices);
-                const std::size_t hi = std::max(lo + 1, spots.size() * static_cast<std::size_t>(slice + 1) /
-                                                            static_cast<std::size_t>(slices));
-                spots[static_cast<std::size_t>(rng.irange(static_cast<int>(lo), static_cast<int>(hi) - 1))]->type =
-                    MapNodeType::Recruit;
+            if (spots.empty()) spots = fallback;
+            const int need = want - have;
+            for (int k = 0; k < need && !spots.empty(); ++k) {   // one per equal slice of the path
+                const std::size_t lo = spots.size() * static_cast<std::size_t>(k) / static_cast<std::size_t>(need);
+                const std::size_t hi = std::max(lo + 1, spots.size() * static_cast<std::size_t>(k + 1) /
+                                                            static_cast<std::size_t>(need));
+                spots[static_cast<std::size_t>(rng.irange(static_cast<int>(lo), static_cast<int>(hi) - 1))]->type = type;
             }
-        }
+        };
+        namespace M = cfg::map;
+        for (const auto& tr : recruitTrails)
+            place(tr, detail::PathLean::Recruit, MapNodeType::Recruit,
+                  act == 1 ? M::recruitsPerPathAct1 : M::recruitsPerPathAct2);
+        for (const auto& tr : itemTrails)
+            place(tr, detail::PathLean::Item, MapNodeType::Elite,
+                  act == 1 ? rng.irange(M::elitesPerPathAct1Min, M::elitesPerPathAct1Max) : M::elitesPerPathAct2);
     }
 
     MapNode boss;

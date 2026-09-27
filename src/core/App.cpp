@@ -736,8 +736,9 @@ UpgradeKind App::rollPick(RollSource src, const std::vector<UpgradeKind>& exclud
 void App::rollChoices(RollSource src) {
     rollSource_ = src;
     choiceTitle_.clear();
+    choiceCount_ = src == RollSource::Elite ? cfg::run::eliteCards : kChoiceCount;   // items are scarce: 3 to pick from
     std::vector<UpgradeKind> taken;
-    for (int i = 0; i < kChoiceCount; ++i) {
+    for (int i = 0; i < choiceCount_; ++i) {
         choices_[i] = rollPick(src, taken);
         taken.push_back(choices_[i]);
     }
@@ -746,7 +747,7 @@ void App::rollChoices(RollSource src) {
 // "reroll" button under a Choice card: swap that one card for a different
 // eligible item that isn't already on the table. Costs one Foresight charge.
 void App::rerollChoice(int idx) {
-    if (idx < 0 || idx >= kChoiceCount || data_.run.rerollsLeft <= 0) return;
+    if (idx < 0 || idx >= choiceCount_ || data_.run.rerollsLeft <= 0) return;
     const std::vector<UpgradeKind> shown(choices_.begin(), choices_.end());
     const UpgradeKind k = rollPick(rollSource_, shown);   // same odds as the card it replaces
     if (std::find(shown.begin(), shown.end(), k) != shown.end()) return;   // nothing new - keep the charge
@@ -766,6 +767,7 @@ void App::rollRecruitChoices() {
         : static_cast<UpgradeKind>(static_cast<int>(UpgradeKind::HeavyImpact) + rng_.irange(0, kModifierCount - 1));
     rollSource_ = RollSource::Normal;
     choiceTitle_.clear();
+    choiceCount_ = kChoiceCount;
     std::vector<UpgradeKind> taken{choices_[0], UpgradeKind::AddBall};
     for (int t = 0; t < kChoiceCount - 1; ++t) {
         choices_[t + 1] = rollPick(RollSource::Normal, taken);
@@ -778,7 +780,7 @@ void App::openChoice(RollSource src) {
     push(ScreenId::Choice);
     // An Epic / Legendary on the table: a flash in its colour as the cards land.
     Tier top = Tier::Common;
-    for (UpgradeKind k : choices_) top = std::max(top, upgradeTier(k));
+    for (int i = 0; i < choiceCount_; ++i) top = std::max(top, upgradeTier(choices_[static_cast<std::size_t>(i)]));
     if (top >= Tier::Epic) effects_.flash(tierColor(top), top == Tier::Legendary ? 0.7f : 0.4f);
 }
 
@@ -894,7 +896,7 @@ void App::finishChoice() {
 }
 
 void App::applyUpgrade(int idx) {
-    if (idx < 0 || idx >= kChoiceCount) return;
+    if (idx < 0 || idx >= choiceCount_) return;
     if (upgradeNeedsTarget(choices_[idx])) {
         beginEquip(EquipSource::Choice, choices_[idx], idx);
         return;

@@ -36,8 +36,8 @@ constexpr float kCardW = 252.f;
 constexpr float kCardH = 214.f;
 constexpr float kCardGap = 22.f;
 
-sf::Vector2f cardCenter(sf::Vector2f size, int i) {
-    const float total = kChoiceCount * kCardW + (kChoiceCount - 1) * kCardGap;
+sf::Vector2f cardCenter(sf::Vector2f size, int i, int n) {
+    const float total = static_cast<float>(n) * kCardW + static_cast<float>(n - 1) * kCardGap;
     const float startX = size.x * 0.5f - total * 0.5f;
     return {startX + kCardW * 0.5f + static_cast<float>(i) * (kCardW + kCardGap), size.y * 0.52f};
 }
@@ -1160,8 +1160,8 @@ void drawLoadoutOverlay(App& app, sf::RenderWindow& w, bool paused, const TabPee
 
 int ChoiceScreen::cardAt(App& app, sf::Vector2f mouse) const {
     const sf::Vector2f s = app.size();
-    for (int i = 0; i < kChoiceCount; ++i) {
-        const sf::Vector2f c = cardCenter(s, i);
+    for (int i = 0; i < app.choiceCount(); ++i) {
+        const sf::Vector2f c = cardCenter(s, i, app.choiceCount());
         if (std::fabs(mouse.x - c.x) < kCardW * 0.5f && std::fabs(mouse.y - c.y) < kCardH * 0.5f)
             return i;
     }
@@ -1175,8 +1175,8 @@ sf::FloatRect ChoiceScreen::healRect(sf::Vector2f s) const {
 }
 
 // A "reroll" strip along the bottom edge of card i (inside it, above the heal button).
-sf::FloatRect ChoiceScreen::rerollRect(sf::Vector2f s, int i) const {
-    const sf::Vector2f c = cardCenter(s, i);
+sf::FloatRect ChoiceScreen::rerollRect(sf::Vector2f s, int i, int n) const {
+    const sf::Vector2f c = cardCenter(s, i, n);
     const float wd = kCardW - 28.f, ht = 22.f;
     const float cy = c.y + kCardH * 0.5f - 15.f;
     return {c.x - wd * 0.5f, cy - ht * 0.5f, wd, ht};
@@ -1189,14 +1189,14 @@ bool ChoiceScreen::coreHurt(App& app) const {
 
 void ChoiceScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
     if (e.type == sf::Event::KeyPressed && e.key.code >= sf::Keyboard::Num1 &&
-        e.key.code < sf::Keyboard::Num1 + kChoiceCount) {
+        e.key.code < sf::Keyboard::Num1 + app.choiceCount()) {
         app.applyUpgrade(e.key.code - sf::Keyboard::Num1);
         return;
     }
     if (!isLeftClick(e)) return;
     if (app.rerollsLeft() > 0) {
-        for (int i = 0; i < kChoiceCount; ++i)
-            if (rerollRect(app.size(), i).contains(mouse)) { app.rerollChoice(i); return; }
+        for (int i = 0; i < app.choiceCount(); ++i)
+            if (rerollRect(app.size(), i, app.choiceCount()).contains(mouse)) { app.rerollChoice(i); return; }
     }
     if (coreHurt(app) && healRect(app.size()).contains(mouse)) {
         app.repairCoreSkipItem();
@@ -1211,16 +1211,16 @@ void ChoiceScreen::update(App& app, float dt, sf::Vector2f mouse) {
     const float k = 1.f - std::exp(-16.f * dt);
     const int c = cardAt(app, mouse);
     const bool canReroll = app.rerollsLeft() > 0;
-    for (int i = 0; i < kChoiceCount; ++i) {
+    for (int i = 0; i < app.choiceCount(); ++i) {
         hover_[i] = lerpf(hover_[i], c == i ? 1.f : 0.f, k);
-        const bool onR = canReroll && rerollRect(app.size(), i).contains(mouse);
+        const bool onR = canReroll && rerollRect(app.size(), i, app.choiceCount()).contains(mouse);
         rerollHover_[i] = lerpf(rerollHover_[i], onR ? 1.f : 0.f, k);
     }
     const bool onHeal = coreHurt(app) && healRect(app.size()).contains(mouse);
     healHover_ = lerpf(healHover_, onHeal ? 1.f : 0.f, k);
     int hot = c;   // card, its reroll strip (10 + i) or the repair button (20)
-    for (int i = 0; i < kChoiceCount && hot < 0; ++i)
-        if (canReroll && rerollRect(app.size(), i).contains(mouse)) hot = 10 + i;
+    for (int i = 0; i < app.choiceCount() && hot < 0; ++i)
+        if (canReroll && rerollRect(app.size(), i, app.choiceCount()).contains(mouse)) hot = 10 + i;
     if (hot < 0 && onHeal) hot = 20;
     uisound::hover(this, hot);
 }
@@ -1234,9 +1234,9 @@ void ChoiceScreen::draw(App& app, sf::RenderWindow& w) {
                     theme::fsTitle,
                     {s.x * 0.5f, s.y * 0.26f}, theme::textHi, introPop(it, 0.04f, 0.3f));
 
-    for (int i = 0; i < kChoiceCount; ++i) {
+    for (int i = 0; i < app.choiceCount(); ++i) {
         const UpgradeInfo info = upgradeInfo(app.choices()[i]);
-        const sf::Vector2f c0 = cardCenter(s, i);
+        const sf::Vector2f c0 = cardCenter(s, i, app.choiceCount());
         const float h = hover_[i];
         const float cp = introPop(it, 0.10f + 0.09f * static_cast<float>(i), 0.40f);
         if (cp <= 0.001f) continue;
@@ -1275,7 +1275,7 @@ void ChoiceScreen::draw(App& app, sf::RenderWindow& w) {
         }
     }
 
-    const float hintPop = introPop(it, 0.10f + 0.07f * kChoiceCount);
+    const float hintPop = introPop(it, 0.10f + 0.07f * app.choiceCount());
     if (coreHurt(app)) {
         const sf::FloatRect r = healRect(s);
         const float a = clampf(hintPop, 0.f, 1.f);
@@ -1286,8 +1286,8 @@ void ChoiceScreen::draw(App& app, sf::RenderWindow& w) {
 
     // Hover help: what the card's kind means, the reroll strip, the repair skip.
     if (app.rerollsLeft() > 0)
-        for (int i = 0; i < kChoiceCount; ++i)
-            if (rerollRect(s, i).contains(mouse_)) {
+        for (int i = 0; i < app.choiceCount(); ++i)
+            if (rerollRect(s, i, app.choiceCount()).contains(mouse_)) {
                 drawTooltip(w, app.font(), mouse_, s, "Reroll",
                             "swap this card for a different pick (" + std::to_string(app.rerollsLeft()) +
                                 " left this run)");
