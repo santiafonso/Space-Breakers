@@ -44,6 +44,7 @@ constexpr OpenDef kOpens[] = {
     {App::DevOpen::BossTreasure, "Boss treasure"}, {App::DevOpen::Recruit, "Recruit"},
     {App::DevOpen::JumpToBoss, "Jump to boss"},
     {App::DevOpen::PactBoss, "Pact choice (boss)"}, {App::DevOpen::PactStart, "Pact choice (start)"},
+    {App::DevOpen::ClassPick, "Class pick (start)"},
 };
 constexpr int kOpenCount = static_cast<int>(sizeof(kOpens) / sizeof(kOpens[0]));
 
@@ -72,20 +73,24 @@ void DevScreen::rebuild(App& app) {
         buttons_.push_back(bt);
     }
 
-    // ---- every pick, in four columns: balls + elements | items | items | modifiers + relics
-    std::vector<UpgradeKind> cols[4];
+    // ---- every pick, in five columns: balls + elements + abilities | items (x3) | modifiers + relics
+    std::vector<UpgradeKind> items;
+    std::vector<UpgradeKind> cols[5];
     for (int i = 0; i < kUpgradeKindCount; ++i) {
         const auto k = static_cast<UpgradeKind>(i);
         switch (upgradeCat(k)) {
             case UpgradeCat::NewBall:
-            case UpgradeCat::Element:  cols[0].push_back(k); break;
-            case UpgradeCat::Item:     (cols[1].size() < 15 ? cols[1] : cols[2]).push_back(k); break;
+            case UpgradeCat::Element:
+            case UpgradeCat::Ability:  cols[0].push_back(k); break;
+            case UpgradeCat::Item:     items.push_back(k); break;
             case UpgradeCat::Modifier:
-            case UpgradeCat::Relic:    cols[3].push_back(k); break;
+            case UpgradeCat::Relic:    cols[4].push_back(k); break;
         }
     }
+    const std::size_t perCol = (items.size() + 2) / 3;
+    for (std::size_t i = 0; i < items.size(); ++i) cols[1 + std::min<std::size_t>(2, i / std::max<std::size_t>(1, perCol))].push_back(items[i]);
     float col0End = 112.f;
-    for (int c = 0; c < 4; ++c) {
+    for (int c = 0; c < 5; ++c) {
         float y = 112.f;
         for (UpgradeKind k : cols[c]) {
             Button bt;
@@ -243,9 +248,15 @@ void DevScreen::draw(App& app, sf::RenderWindow& w) {
     // What the target ball carries right now.
     if (app.runBallCount() > 0) {
         const BallLoadout& L = app.data().run.balls[static_cast<std::size_t>(app.devBall())];
-        std::string line = std::string(roleName(L.role())) + (L.mastery() ? "+" : "") + ":";
-        for (int g : L.gear)
-            if (g >= 0) line += std::string("  ") + upgradeInfo(static_cast<UpgradeKind>(g)).title;
+        ItemTag roles[2];
+        const int nr = L.roles(roles);
+        std::string line = nr == 0 ? "Normal" : "";
+        for (int i = 0; i < nr; ++i)
+            line += std::string(i ? " / " : "") +
+                    (roles[i] == L.ascended() ? ascendedName(tagRole(roles[i])) : roleName(tagRole(roles[i])));
+        line += ":";
+        for (int sl = 0; sl < kLoadoutSlots; ++sl)
+            if (L.kindAt(sl) >= 0) line += std::string("  ") + upgradeInfo(static_cast<UpgradeKind>(L.kindAt(sl))).title;
         const std::string mods = modifierLine(L);
         if (!mods.empty()) line += "   |  " + mods;
         sf::Text lt = makeText(f, line, theme::fsSmall, theme::textHi);
@@ -253,8 +264,8 @@ void DevScreen::draw(App& app, sf::RenderWindow& w) {
         w.draw(lt);
     }
 
-    const char* heads[] = {"BALLS / ELEMENTS", "ITEMS", "", "MODIFIERS / RELICS"};
-    for (int c = 0; c < 4; ++c) {
+    const char* heads[] = {"BALL / TYPE / ABILITY", "ITEMS", "", "", "MODIFIERS / RELICS"};
+    for (int c = 0; c < 5; ++c) {
         sf::Text h = makeLabel(f, heads[c], 10, theme::textDim);
         h.setPosition(26.f + static_cast<float>(c) * 172.f, 96.f);
         w.draw(h);

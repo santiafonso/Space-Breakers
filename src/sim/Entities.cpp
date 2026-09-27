@@ -1,5 +1,8 @@
 #include "sim/Entities.hpp"
 
+#include <algorithm>
+#include <cmath>
+
 namespace sb {
 
 const char* powerUpName(PowerUp p) {
@@ -72,16 +75,6 @@ sf::Color elementColor(Element e) {
     return theme::ballMid;
 }
 
-const char* roleName(BallRole r) {
-    switch (r) {
-        case BallRole::Normal:   return "Normal";
-        case BallRole::Striker:  return "Striker";
-        case BallRole::Support:  return "Support";
-        case BallRole::Guardian: return "Guardian";
-    }
-    return "Normal";
-}
-
 const char* enemyName(EnemyKind k) {
     switch (k) {
         case EnemyKind::Grunt:    return "Grunt";
@@ -106,14 +99,91 @@ const char* enemyDesc(EnemyKind k) {
     return "";
 }
 
+// Class names and texts. Each class agent owns its own line in each switch.
+const char* roleName(BallRole r) {
+    switch (r) {
+        case BallRole::Normal:   return "Normal";
+        case BallRole::Striker:  return "Striker";
+        case BallRole::Guardian: return "Guardian";
+        case BallRole::Support:  return "Support";
+        case BallRole::Mage:     return "Mage";
+        case BallRole::Shooter:  return "Shooter";
+        case BallRole::Assassin: return "Assassin";
+        case BallRole::Summoner: return "Summoner";
+        case BallRole::Jester:   return "Jester";
+    }
+    return "Normal";
+}
+
 const char* roleDesc(BallRole r) {
     switch (r) {
-        case BallRole::Normal:   return "no role yet - a ROLE pick gives it one";
+        case BallRole::Normal:   return "no class yet - 2 items of one tag give it that class";
         case BallRole::Striker:  return "hits far harder when flung fast - the one to throw";
-        case BallRole::Support:  return "weak hits, but marks enemies so every ball hits them harder";
         case BallRole::Guardian: return "big; bounces toward the closest threat, shoves and staggers it, smashes through shields";
+        case BallRole::Support:  return "weak hits, but marks enemies so every ball hits them harder";
+        case BallRole::Mage:     return "carries more abilities: 2 ability slots, 3 once ascended";
+        case BallRole::Shooter:  return "fires bullets at enemies as it flies";
+        case BallRole::Assassin: return "after a kill it teleports to the nearest enemy";
+        case BallRole::Summoner: return "summons helpers: short-lived balls, turrets, a small dragon...";
+        case BallRole::Jester:   return "plays on chance: wild odds, wild results";
     }
     return "";
+}
+
+const char* ascendedName(BallRole r) {
+    switch (r) {
+        case BallRole::Normal:   return "Normal";
+        case BallRole::Striker:  return "Mega Striker";
+        case BallRole::Guardian: return "Iron Guardian";
+        case BallRole::Support:  return "Grand Support";
+        case BallRole::Mage:     return "Ancient Mage";
+        case BallRole::Shooter:  return "Deadeye";
+        case BallRole::Assassin: return "Shadow Assassin";
+        case BallRole::Summoner: return "Archsummoner";
+        case BallRole::Jester:   return "Grand Jester";
+    }
+    return "Normal";
+}
+
+const char* ascendedDesc(BallRole r) {
+    switch (r) {
+        case BallRole::Normal:   return "";
+        case BallRole::Striker:  return "hits well above its cruise speed also throw a shockwave";
+        case BallRole::Guardian: return "every core bounce sends out a pulse that shoves and staggers";
+        case BallRole::Support:  return "its marks spread to the enemies around the one it hits";
+        case BallRole::Mage:     return "a third ability slot";
+        case BallRole::Shooter:  return "more bullets, harder";
+        case BallRole::Assassin: return "teleports chain from kill to kill";
+        case BallRole::Summoner: return "more summons, and stronger";
+        case BallRole::Jester:   return "the odds bend even further";
+    }
+    return "";
+}
+
+const char* abilityName(Ability a) {
+    switch (a) {
+        case Ability::None:      return "";
+        case Ability::Dash:      return "Dash";
+        case Ability::Nova:      return "Nova";
+        case Ability::Split:     return "Split";
+        case Ability::Bulwark:   return "Bulwark";
+        case Ability::Overclock: return "Overclock";
+    }
+    return "";
+}
+
+float abilityCooldown(Ability a, int level) {
+    namespace A = cfg::ability;
+    float base = 0.f;
+    switch (a) {
+        case Ability::None:      return 0.f;
+        case Ability::Dash:      base = A::dashCooldown; break;
+        case Ability::Nova:      base = A::novaCooldown; break;
+        case Ability::Split:     base = A::splitCooldown; break;
+        case Ability::Bulwark:   base = A::bulwarkCooldown; break;
+        case Ability::Overclock: base = A::overclockCooldown; break;
+    }
+    return base * std::pow(A::cooldownPerLevel, static_cast<float>(std::max(0, level - 1)));
 }
 
 }  // namespace sb

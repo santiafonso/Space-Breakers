@@ -41,12 +41,13 @@ float World::cruiseSpeed(const WorldParams& p) const {
 
 float World::ballBaseCruise(const Ball& b, const WorldParams& p) const {
     return cruiseBase(p) * b.mods.cruiseMult *
-           (b.role == BallRole::Guardian ? cfg::role::guardianCruiseMul : 1.f);
+           (b.hasRole(BallRole::Guardian) ? cfg::role::guardianCruiseMul : 1.f);
 }
 
 float World::ballCruise(const Ball& b, const WorldParams& p) const {
     return cruiseSpeed(p) * b.mods.cruiseMult *
-           (b.role == BallRole::Guardian ? cfg::role::guardianCruiseMul : 1.f);
+           (b.hasRole(BallRole::Guardian) ? cfg::role::guardianCruiseMul : 1.f) *
+           (b.overclockT > 0.f ? cfg::ability::overclockCruise : 1.f);   // "Overclock" ability
 }
 
 float World::ballMaxSpeed(const Ball& b, const WorldParams& p) const {
@@ -58,7 +59,7 @@ float World::ballRadius(const Ball& b, const WorldParams& p) const {
     // Every size bonus (web, Big ball, Giant, Bumper, Guardian, Glutton) stacks,
     // but never past maxRadiusMult - a ball must not fill the arena.
     float mult = p.ballRadiusMult * b.mods.radiusMult *
-                 (b.role == BallRole::Guardian ? cfg::role::guardianRadiusMul : 1.f) *
+                 (b.hasRole(BallRole::Guardian) ? cfg::role::guardianRadiusMul : 1.f) *
                  (1.f + cfg::changer::gluttonRadius * static_cast<float>(b.gluttonStacks));
     mult = std::min(mult, cfg::changer::maxRadiusMult);
     return cfg::ball::radius * mult * b.scale * (1.f + (arenaScale() - 1.f) * cfg::boss::ballRadiusArenaFrac);
@@ -66,7 +67,7 @@ float World::ballRadius(const Ball& b, const WorldParams& p) const {
 
 float World::elemPotency(const Ball& b, const WorldParams& p) const {
     return p.elemMult[static_cast<int>(b.element)] * b.mods.elemMult *   // web level x item level
-           (b.role == BallRole::Support ? cfg::role::supportElemMul : 1.f);
+           (b.hasRole(BallRole::Support) ? cfg::role::supportElemMul : 1.f);
 }
 
 void World::boostSpeed(Ball& b, float mult, const WorldParams& p) {
@@ -83,11 +84,24 @@ float World::fastestBall() const {
 
 // ---------------------------------------------------------------- lifecycle
 
-void World::spawnBall(const BallSpec& spec, const WorldParams& p) {
-    Ball b;
-    b.role = spec.role;
+// Roles, element, gear and abilities from the loadout. An ability that stays
+// in its slot keeps its cooldown; a new one starts part-charged.
+void World::applySpec(Ball& b, const BallSpec& spec) {
+    b.roles = spec.roles;
+    b.ascended = spec.ascended;
     b.element = spec.element;
     b.mods = spec.mods;
+    for (int i = 0; i < kMaxAbilitySlots; ++i) {
+        const AbilitySpec& a = spec.abilities[i];
+        if (a.id != b.abilities[i].id)
+            b.abilityCd[i] = abilityCooldown(a.id, a.level) * (1.f - cfg::ability::firstDelay);
+        b.abilities[i] = a;
+    }
+}
+
+void World::spawnBall(const BallSpec& spec, const WorldParams& p) {
+    Ball b;
+    applySpec(b, spec);
     b.radius = ballRadius(b, p);
     const float a = rng_.range(0.f, 2.f * kPi);
     b.pos = core_.pos + sf::Vector2f{std::cos(a), std::sin(a)} * (core_.radius + b.radius + 20.f);
@@ -113,9 +127,7 @@ void World::syncBalls(const std::vector<BallSpec>& specs, const WorldParams& p) 
             b.cooldown = 0.f;
         }
         b.owner = static_cast<int>(i);
-        b.role = specs[i].role;
-        b.element = specs[i].element;
-        b.mods = specs[i].mods;
+        applySpec(b, specs[i]);
         b.radius = ballRadius(b, p);
     }
 }
@@ -160,6 +172,7 @@ void World::startRun(const WorldParams& p, const std::vector<BallSpec>& balls,
     obstacles_.clear();
     blackHoles_.clear();
     tethers_.clear();
+    classWorld_ = ClassWorldState{};
     pickups_.clear();
     effect_.reset();
     grabbed_ = Grabbed::None;
@@ -207,6 +220,8 @@ void World::carryBalls(const WorldParams& p) {
         b.gluttonStacks = 0;   // "Glutton" grows per wave
         b.preyId = -1;
         b.homing = false;
+        b.overclockT = 0.f;
+        resetAbilityCooldowns(b);
     }
     ghosts_.clear();   // "Split shot" / "Mitosis" copies don't outlive their wave
     pendingGhosts_.clear();
@@ -217,6 +232,7 @@ void World::carryBalls(const WorldParams& p) {
     heldIndex_ = -1;
     aegisChargesLeft_ = p.aegisHits;   // "Aegis": the shield recharges each wave
     coreHitThisWave_ = false;          // "Interest": track a damage-free wave
+    classWaveStart(p);
 }
 
 void World::startWave(int wave, const WorldParams& p, bool elite) {
@@ -499,7 +515,7 @@ void World::releaseHeld(sf::Vector2f throwVel) {
     Ball& b = balls_[heldIndex_];
     b.held = false;
     heldGrabOffset_ = {0.f, 0.f};
-    if (b.role == BallRole::Striker) throwVel *= cfg::role::strikerFlingMult;   // built to be flung
+    if (b.hasRole(BallRole::Striker)) throwVel *= cfg::role::strikerFlingMult;   // built to be flung
     if (b.mods.cometFling > 0.f) throwVel *= b.mods.cometFling;                 // "Comet"
     b.homing = false;
     const float s = length(throwVel);
@@ -620,7 +636,7 @@ void World::addComboHit() {
 // the one it just hit, and anything already staggered and drifting away). The
 // new heading must still leave the surface it hit, or the plain bounce stands.
 void World::aimBounce(Ball& b, sf::Vector2f normal, const Enemy* skip, bool force) {
-    if (!force && (!cfg::role::guardianAimsBounces || b.role != BallRole::Guardian)) return;
+    if (!force && (!cfg::role::guardianAimsBounces || !b.hasRole(BallRole::Guardian))) return;
     const Enemy* target = nullptr;
     float best = 1e18f;
     for (const Enemy& e : enemies_) {
@@ -728,7 +744,8 @@ void World::updateTwins(const WorldParams& p) {
         const Ball* parent = (g.owner >= 0 && g.owner < static_cast<int>(balls_.size())) ? &balls_[g.owner] : nullptr;
         if (!parent || g.twinIdx >= parent->mods.twins) { g.ghostLife = 0.f; continue; }
         g.mods = parent->mods;      // keep up with new items
-        g.role = parent->role;
+        g.roles = parent->roles;
+        g.ascended = parent->ascended;
         g.element = parent->element;
         g.ghostLife = 1e9f;
     }
@@ -944,17 +961,10 @@ bool World::strike(Ball& b, Enemy& e, sf::Vector2f normal, const WorldParams& p,
     e.hp -= dmg;
     e.hitFlash = 1.f;
     const float knock = cfg::combat::knockback * m.knockMult *   // Big ball / Bumper
-                        (b.role == BallRole::Guardian ? cfg::role::guardianKnockMul : 1.f) *
+                        (b.hasRole(BallRole::Guardian) ? cfg::role::guardianKnockMul : 1.f) *
                         (m.rampartKnock > 0.f ? m.rampartKnock : 1.f);    // "Rampart"
     e.vel += -normal * knock * e.knockTaken;
-    if (b.role == BallRole::Support) {
-        e.mark = cfg::role::markDuration;
-        if (m.mastery)   // Support mastery: the mark spreads
-            for (Enemy& o : enemies_)
-                if (&o != &e && o.hp > 0.f && length(o.pos - e.pos) < S::supportSpread)
-                    o.mark = cfg::role::markDuration;
-    }
-    if (b.role == BallRole::Guardian) e.stagger = std::max(e.stagger, cfg::role::staggerDuration);
+    // (the Support mark and the Guardian stagger are their class hooks: WorldClasses.cpp)
     if (m.rampartStagger > 0.f) e.stagger = std::max(e.stagger, cfg::role::staggerDuration * m.rampartStagger);
 
     const float pot = elemPotency(b, p);
@@ -987,12 +997,8 @@ bool World::strike(Ball& b, Enemy& e, sf::Vector2f normal, const WorldParams& p,
                 bolts_.push_back(Bolt{e.pos, t->pos, cfg::element::boltLife, cfg::element::boltLife});
         }
     }
-    if (b.role == BallRole::Striker && m.mastery &&   // Striker mastery: shockwave on fast hits
-        length(b.vel) > ballCruise(b, p) * S::strikerShockSpeed) {
-        areaDamage(e.pos, S::strikerShockRadius, dmg * S::strikerShockFrac, &e);
-        ev.bursts.push_back({e.pos, S::strikerShockRadius, theme::ballFast, nullptr});
-    }
     if (m.resonanceFrac > 0.f) resonate(b, dmg, p, ev);   // "Resonance"
+    classOnHit(b, e, dmg, kill, p, ev);                   // its classes (mark, stagger, ascended forms...)
     if (kill) onKill(b, e, dmg, p, ev);
     if (!kill && allowEcho && m.echoChance > 0.f && e.hp > 0.f && chance(m.echoChance, p))   // "Echo"
         return strike(b, e, normal, p, ev, false);
@@ -1012,7 +1018,7 @@ void World::onKill(Ball& b, Enemy& e, float dmg, const WorldParams& p, FrameEven
     if (m.mitosis > 0 && b.scale >= 1.f)                            // "Mitosis": copies don't split again
         for (int i = 0; i < m.mitosis; ++i) spawnMitosis(b, p);
     if (m.blackHoleChance > 0.f && static_cast<int>(blackHoles_.size()) < C::maxBlackHoles &&
-        chance(m.blackHoleChance, p)) {                             // "Black hole"
+        chance(m.blackHoleChance, p)) {                           // "Black hole"
         BlackHole h;
         h.pos = e.pos;
         h.pull = m.blackHolePull;
@@ -1021,6 +1027,7 @@ void World::onKill(Ball& b, Enemy& e, float dmg, const WorldParams& p, FrameEven
         h.owner = b.owner;
         blackHoles_.push_back(h);
     }
+    classOnKill(b, e, dmg, p, ev);   // its classes' on-kill hooks
 }
 
 // A ball leaves its element on an enemy. If a DIFFERENT ball's different
@@ -1188,8 +1195,8 @@ void World::spawnMitosis(const Ball& parent, const WorldParams& p) {
     pendingGhosts_.push_back(g);
 }
 
-// Guardian mastery: a core bounce throws a shockwave that shoves everything
-// near the core back out and staggers it.
+// Iron Guardian (ascended): a core bounce throws a shockwave that shoves
+// everything near the core back out and staggers it.
 void World::guardianPulse(FrameEvents& ev) {
     namespace S = cfg::synergy;
     for (Enemy& e : enemies_) {
@@ -1207,16 +1214,14 @@ float World::ballDamage(const Ball& b, const WorldParams& p) const {
     const float ratio = speed / (cfg::ball::baseCruise * arenaScale());   // on-screen speed, not world
     float dmg = (cfg::combat::contactDamageBase + cfg::combat::contactDamagePerCruise * ratio) *
                 comboMultiplier() * p.damageMult * b.mods.damageMult;
-    switch (b.role) {
-        case BallRole::Striker: {   // pays off when flung: scales hard above its cruise speed
-            const float over = speed / std::max(1.f, ballCruise(b, p)) - 1.f;
-            if (over > 0.f) dmg *= 1.f + cfg::role::strikerSpeedDamage * over;
-            break;
-        }
-        case BallRole::Support:  dmg *= cfg::role::supportDamageMul; break;
-        case BallRole::Guardian: dmg *= cfg::role::guardianDamageMul; break;
-        case BallRole::Normal:   break;
+    if (b.hasRole(BallRole::Striker)) {   // pays off when flung: scales hard above its cruise speed
+        const float over = speed / std::max(1.f, ballCruise(b, p)) - 1.f;
+        if (over > 0.f) dmg *= 1.f + cfg::role::strikerSpeedDamage * over;
     }
+    if (b.hasRole(BallRole::Support)) dmg *= cfg::role::supportDamageMul;
+    if (b.hasRole(BallRole::Guardian)) dmg *= cfg::role::guardianDamageMul;
+    dmg *= classDamageMul(b, p);   // the newer classes' own multipliers
+    if (b.overclockT > 0.f) dmg *= b.overclockMul;   // "Overclock" ability
     if (effect_ && effect_->kind == PowerUp::Overdrive)
         dmg *= 1.f + (cfg::powerup::overdriveDamageMul - 1.f) * effStrength(p);   // fades under "Afterglow"
     if (b.mods.satellite) dmg *= b.mods.satelliteDamage;   // "Satellite" grinds
@@ -1318,7 +1323,7 @@ void World::regulateSpeed(Ball& b, float dt, const WorldParams& p) {
     }
     const float up = 1.f - std::exp(-cfg::ball::regainRate * dt);
     const float decayRate = cfg::ball::decayRate * b.mods.flingDecay * p.pact.flingHold *   // "Hot Hands" pact
-                            (b.role == BallRole::Striker ? cfg::role::strikerFlingDecay : 1.f);
+                            (b.hasRole(BallRole::Striker) ? cfg::role::strikerFlingDecay : 1.f);
     const float down = 1.f - std::exp(-decayRate * dt);
     const float k = (sp < cruiseS) ? up : down;
     const float ns = std::min(lerpf(sp, cruiseS, k), vMax);
@@ -1337,6 +1342,9 @@ void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
     b.pactCharge = std::max(0.f, b.pactCharge - dt);   // "Living Core" overcharge wears off
     b.radius = ballRadius(b, p);   // role, "Big ball" gear, "Mass" web
     b.resonanceT = std::max(0.f, b.resonanceT - dt);
+    b.overclockT = std::max(0.f, b.overclockT - dt);
+    if (!b.ghost) updateAbilities(b, dt, p, ev);   // copies don't fire abilities
+    classTick(b, dt, p, ev);
     if (b.mods.stormFrac > 0.f) updateStorm(b, dt, p, ev);
     if (b.mods.satellite) {
         advanceSatellite(b, dt, p, ev);
@@ -1404,6 +1412,7 @@ void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
             b.berserkStacks = 0;   // "Berserk" resets on a wall
             if (b.mods.railFrac > 0.f) fireRail(b, p, ev);
             pactWallBump(b, c.point, p, ev);   // "Pinball" pact
+            classOnWallBounce(b, c.normal, p, ev);
             pushFx(c);
         }
         // The core is solid: balls bounce off it (no damage to the core).
@@ -1415,7 +1424,6 @@ void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
             boostSpeed(b, p.coreBounceBoost, p);   // "Spring core" relic
             if (b.mods.menderHeal > 0.f && !b.ghost)   // "Mender": the core patches itself up
                 core_.hp = std::min(core_.maxHp, core_.hp + b.mods.menderHeal);
-            if (b.role == BallRole::Guardian && b.mods.mastery) guardianPulse(ev);
             if (b.mods.boomerangHit > 0.f) {   // "Boomerang": home - charge up and fly at the threat
                 b.homing = false;
                 b.charged = true;
@@ -1423,6 +1431,7 @@ void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
                 boostSpeed(b, b.mods.boomerangKick, p);
             }
             pactCoreBounce(b, p, ev);   // "Living Core" pact
+            classOnCoreBounce(b, c.normal, p, ev);
             pushFx(c);
         }
         if (b.mods.piercing) {   // "Piercing": no bounce - every enemy on the path takes the hit
@@ -1433,7 +1442,7 @@ void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
                 if (dl > b.radius + e.radius) continue;
                 const sf::Vector2f n = normalized(d, {1.f, 0.f});
                 e.pierceCd = cfg::changer::pierceCooldown;
-                if (b.role != BallRole::Guardian && shieldBlocks(e, b.pos, core_.pos)) continue;
+                if (!b.hasRole(BallRole::Guardian) && shieldBlocks(e, b.pos, core_.pos)) continue;
                 strike(b, e, n, p, ev);
                 pushFx({true, n, e.pos + n * e.radius});
             }
@@ -1450,7 +1459,7 @@ void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
             if (!c.hit) continue;
             // Off the shield: a bounce, no damage. A Guardian is heavy enough to
             // smash straight through it.
-            if (b.role != BallRole::Guardian && shieldBlocks(e, b.pos, core_.pos)) {
+            if (!b.hasRole(BallRole::Guardian) && shieldBlocks(e, b.pos, core_.pos)) {
                 afterBounce(b, c.normal, false);
                 aimBounce(b, c.normal, &e);
                 ev.shieldBlock = true;
@@ -2016,6 +2025,7 @@ FrameEvents World::step(float dt, const WorldParams& p) {
     ghosts_.insert(ghosts_.end(), pendingGhosts_.begin(), pendingGhosts_.end());
     pendingGhosts_.clear();
 
+    classWorldTick(dt, p, ev);   // bullets, summons... (WorldClasses.cpp)
     resolveBallPairs(ev, p);
     updateTethers(dt, p, ev);
     updateBlackHoles(dt, p, ev);

@@ -10,6 +10,31 @@ namespace sb {
 
 enum class Grabbed { None, Ball };
 
+class World;
+
+// A class's simulation hooks (sim/WorldClasses.cpp): one specialisation per
+// class, each a set of static functions that get the World (they're friends,
+// so they reach everything a member would). The defaults do nothing, so a
+// class only writes the hooks it needs.
+struct NoClassHooks {
+    // Every step, for every ball (and ghost) with the class, before it moves.
+    static void tick(World&, Ball&, float /*dt*/, const WorldParams&, FrameEvents&) {}
+    // It landed a hit on an enemy (after damage, statuses and procs).
+    static void onHit(World&, Ball&, Enemy&, float /*dmg*/, bool /*kill*/, const WorldParams&, FrameEvents&) {}
+    // Its hit killed an enemy (after the on-kill items).
+    static void onKill(World&, Ball&, Enemy&, float /*dmg*/, const WorldParams&, FrameEvents&) {}
+    static void onWallBounce(World&, Ball&, sf::Vector2f /*normal*/, const WorldParams&, FrameEvents&) {}
+    static void onCoreBounce(World&, Ball&, sf::Vector2f /*normal*/, const WorldParams&, FrameEvents&) {}
+    // Contact-damage multiplier for a ball with the class (World::ballDamage).
+    static float damageMul(const World&, const Ball&, const WorldParams&) { return 1.f; }
+    // Once per step, whatever the balls are: the class's own world state
+    // (bullets, turrets, summons...) in ClassWorldState.
+    static void worldTick(World&, float /*dt*/, const WorldParams&, FrameEvents&) {}
+    // A new wave starts (the balls carry over; ghosts are gone).
+    static void waveStart(World&, const WorldParams&) {}
+};
+template <BallRole R> struct ClassHooks;
+
 // The simulation: elemental balls orbiting a central core, clearing waves of
 // enemies that march on it. Knows nothing about rendering, input or progression
 // storage.
@@ -70,6 +95,7 @@ public:
     const std::vector<Bolt>& bolts() const { return bolts_; }
     const std::vector<Obstacle>& obstacles() const { return obstacles_; }
     const std::vector<BlackHole>& blackHoles() const { return blackHoles_; }   // "Black hole"
+    const ClassWorldState& classWorld() const { return classWorld_; }          // per-class world state (bullets, summons...)
     const std::vector<TetherBeam>& tethers() const { return tethers_; }        // "Tether" lasers, this step
     const std::vector<Pickup>& pickups() const { return pickups_; }
     const Core& core() const { return core_; }
@@ -105,7 +131,10 @@ public:
     float fastestBall() const;
 
 private:
+    template <BallRole R> friend struct ClassHooks;
+
     void spawnBall(const BallSpec& spec, const WorldParams& p);
+    void applySpec(Ball& b, const BallSpec& spec);   // roles / element / gear / abilities onto a ball
     float ballBaseCruise(const Ball& b, const WorldParams& p) const;   // role-scaled cruise, no buffs
     float ballCruise(const Ball& b, const WorldParams& p) const;       // + Surge / Warm-up
     float ballMaxSpeed(const Ball& b, const WorldParams& p) const;
@@ -158,6 +187,21 @@ private:
     void pactCoreBounce(Ball& b, const WorldParams& p, FrameEvents& ev);        // "Living Core" overcharge
     void pactCoreHit(const WorldParams& p, FrameEvents& ev);                    // "Fortress" / "Bloodlust"
 
+    // ---- class hooks (sim/WorldClasses.cpp): run every class the ball has ----
+    void classTick(Ball& b, float dt, const WorldParams& p, FrameEvents& ev);
+    void classOnHit(Ball& b, Enemy& e, float dmg, bool kill, const WorldParams& p, FrameEvents& ev);
+    void classOnKill(Ball& b, Enemy& e, float dmg, const WorldParams& p, FrameEvents& ev);
+    void classOnWallBounce(Ball& b, sf::Vector2f normal, const WorldParams& p, FrameEvents& ev);
+    void classOnCoreBounce(Ball& b, sf::Vector2f normal, const WorldParams& p, FrameEvents& ev);
+    float classDamageMul(const Ball& b, const WorldParams& p) const;
+    void classWorldTick(float dt, const WorldParams& p, FrameEvents& ev);
+    void classWaveStart(const WorldParams& p);
+
+    // ---- abilities (sim/WorldAbilities.cpp) ----
+    void updateAbilities(Ball& b, float dt, const WorldParams& p, FrameEvents& ev);
+    bool fireAbility(Ball& b, const AbilitySpec& a, const WorldParams& p, FrameEvents& ev);   // false = nothing to act on yet
+    void resetAbilityCooldowns(Ball& b);   // a wave starts: every ability part-charged
+
     // ---- hits, procs and reactions (Fase I) ----
     // One ball landing on one enemy: damage, statuses, procs, reactions.
     // Returns true if it killed it. No bounce - the caller handles that.
@@ -173,6 +217,7 @@ private:
     void spawnGhost(const Ball& parent);
     void spawnMitosis(const Ball& parent, const WorldParams& p);
     void guardianPulse(FrameEvents& ev);
+    const Enemy* nearestEnemy(sf::Vector2f from, float maxDist) const;   // live, not an orbiter; null if none
     void regulateSpeed(Ball& b, float dt, const WorldParams& p);
     void updateTrail(Ball& b);
     float ballDamage(const Ball& b, const WorldParams& p) const;
@@ -187,6 +232,7 @@ private:
     std::vector<Obstacle> obstacles_;
     std::vector<BlackHole> blackHoles_;
     std::vector<TetherBeam> tethers_;
+    ClassWorldState classWorld_;        // per-class world state (sim/Classes.hpp)
     std::vector<Pickup> pickups_;
     Core core_;
     Boss boss_;

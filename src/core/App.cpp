@@ -8,6 +8,7 @@
 #include <iostream>
 #include <sstream>
 
+#include "core/ClassSpec.hpp"
 #include "core/Config.hpp"
 #include "core/Theme.hpp"
 #include "platform/Paths.hpp"
@@ -148,11 +149,18 @@ BallSpec App::ballSpec(const BallLoadout& L) const {
     namespace S = cfg::synergy;
     namespace G = cfg::changer;
     BallSpec s;
-    s.role = L.role();   // from its item tags (2 = role, 4 = mastery)
-    s.mods.mastery = L.mastery();
-    if (hasPact(PactId::Duet) && L.leadTag() != ItemTag::None) s.mods.mastery = true;   // "Duet": a role is a mastery
+    s.roles = L.roleMask();   // from its item tags: 2 = the class, 4 = ascended
+    if (const ItemTag asc = L.ascended(); asc != ItemTag::None) s.ascended = roleBit(tagRole(asc));
+    if (hasPact(PactId::Duet)) s.ascended = s.roles;   // "Duet": every class it has is ascended
     s.element = L.element();
     BallMods& m = s.mods;
+    // The type slot: the element's own level makes it stronger.
+    if (L.type >= 0)
+        m.elemMult = 1.f + C::elemPerLevel * static_cast<float>(std::clamp(L.typeLvl, 1, kMaxItemLevel) - 1);
+    // Ability slots: only the open ones (abilitySlotCount) are live.
+    for (int i = 0; i < std::min(abilitySlotCount(L), kMaxAbilitySlots); ++i)
+        if (L.ability[i] >= 0)
+            s.abilities[i] = {abilityOf(static_cast<UpgradeKind>(L.ability[i])), std::clamp(L.abilityLvl[i], 1, kMaxItemLevel)};
     auto stacks = [&L](UpgradeKind k) { return static_cast<float>(L.mods[modifierIndex(k)]); };
     m.damageMult = 1.f + C::heavyImpactPerStack * stacks(UpgradeKind::HeavyImpact);
     m.radiusMult = std::min(1.f + C::bigBallPerStack * stacks(UpgradeKind::BigBall), C::bigBallMaxMult);
@@ -167,10 +175,6 @@ BallSpec App::ballSpec(const BallLoadout& L) const {
         const float n = static_cast<float>(lvl - 1);   // levels past the first
         m.damageMult *= 1.f + C::itemLevelDamage * n;
         switch (static_cast<UpgradeKind>(L.gear[i])) {
-            case UpgradeKind::ElemFire: case UpgradeKind::ElemPoison: case UpgradeKind::ElemWater:
-            case UpgradeKind::ElemIce: case UpgradeKind::ElemStone: case UpgradeKind::ElemElectric:
-                m.elemMult = 1.f + C::elemPerLevel * n;   // the element itself is read via L.element()
-                break;
             case UpgradeKind::Ricochet:
                 m.ricochetMult = C::ricochetMult + C::ricochetMultPerLevel * n;
                 m.wallBoost = C::ricochetBoost + C::ricochetBoostPerLevel * n;
@@ -281,7 +285,9 @@ BallSpec App::ballSpec(const BallLoadout& L) const {
                 break;
             case UpgradeKind::Gemini: m.twins = 1 + (lvl >= 3 ? 1 : 0) + (lvl >= 5 ? 1 : 0); break;
             case UpgradeKind::Midas:  m.midasGold = G::midasGold * lvl; break;
-            default: break;
+            default:   // the newer classes' items (core/ClassSpec.cpp)
+                foldClassItem(static_cast<UpgradeKind>(L.gear[i]), lvl, m);
+                break;
         }
     }
     return s;
@@ -295,9 +301,7 @@ std::vector<BallSpec> App::ballSpecs() const {
 
 void App::syncWorldBalls() { world_.syncBalls(ballSpecs(), params()); }
 
-int App::startBallCount() const {
-    return cfg::run::startBalls + data_.meta.unlock[MetaStartBalls];
-}
+int App::startBallCount() const { return cfg::run::startBalls; }   // one ball: more come from picks and pacts
 
 float App::startCoreHp() const {
     return cfg::core::baseHp +
@@ -336,6 +340,7 @@ std::unique_ptr<Screen> App::makeScreen(ScreenId id) {
         case ScreenId::Dev:     return std::make_unique<DevScreen>();
         case ScreenId::Pact:    return std::make_unique<PactScreen>();
         case ScreenId::Sound:   return std::make_unique<SoundScreen>();
+        case ScreenId::ClassPick: return std::make_unique<ClassPickScreen>();
     }
     return std::make_unique<MenuScreen>();
 }
@@ -350,7 +355,9 @@ void App::replaceStack(ScreenId id) {
 
 void App::push(ScreenId id) {
     switch (id) {   // a soft cue as it opens: cards being dealt, or a plain panel
-        case ScreenId::Choice: case ScreenId::Shop: case ScreenId::Pact: audio_.cardsDealt(); break;
+        case ScreenId::Choice: case ScreenId::Shop: case ScreenId::Pact: case ScreenId::ClassPick:
+            audio_.cardsDealt();
+            break;
         case ScreenId::Play: case ScreenId::Dev: break;
         default: audio_.uiOpen(); break;
     }
@@ -384,7 +391,8 @@ void App::newRun() {
     r.wave = 0;
     r.coreMaxHp = startCoreHp();
     r.coreHp = r.coreMaxHp;
-    // Every ball starts Normal; roles come from ROLE picks.
+    // Every ball starts Normal; classes come from its items ("Calling" picks
+    // the first one in the run intro).
     auto startLoadout = [](int n) { return std::vector<BallLoadout>(static_cast<std::size_t>(n)); };
     r.balls = startLoadout(startBallCount());
     ++data_.meta.stats.runs;
@@ -413,17 +421,8 @@ void App::newRun() {
     // "Quartermaster" you pick it from 4 cards in the run intro instead.
     if (const int kit = data_.meta.unlock[MetaStarterKit];
         kit > 0 && !r.balls.empty() && data_.meta.unlock[MetaQuartermaster] == 0) {
-        const Tier want = kit >= 2 ? Tier::Rare : Tier::Uncommon;
-        std::vector<UpgradeKind> pool;
-        for (int i = 0; i < kUpgradeKindCount; ++i) {
-            const auto k = static_cast<UpgradeKind>(i);
-            if (upgradeCat(k) == UpgradeCat::Item && upgradeTier(k) == want && upgradeFitsBall(k, r.balls[0]))
-                pool.push_back(k);
-        }
-        if (!pool.empty()) {
-            r.balls[0].gear[0] = static_cast<int>(pool[static_cast<std::size_t>(rng_.irange(0, static_cast<int>(pool.size()) - 1))]);
-            r.balls[0].gearLvl[0] = 1;
-        }
+        const std::vector<UpgradeKind> pool = starterPool(kit >= 2 ? Tier::Rare : Tier::Uncommon);
+        if (!pool.empty()) r.balls[0].setSlot(0, static_cast<int>(pool[0]), 1);   // its tier, else the nearest
     }
     world_.startRun(params(), ballSpecs(), r.coreHp, r.coreMaxHp);
     world_.setPhoenix(r.lastStandLeft);   // no Phoenix until it's picked; "Last stand" is one save per run
@@ -506,10 +505,15 @@ UpgradeCtx App::buildUpgradeCtx() const {
     c.overcharge = r.mods.overcharge;
     // Legendaries that still sit behind their web node.
     const int* u = data_.meta.unlock;
-    if (u[MetaSatellite] == 0) c.locked |= upgradeBit(UpgradeKind::Satellite);
-    if (u[MetaGravity] == 0)   c.locked |= upgradeBit(UpgradeKind::GravityWell);
-    if (u[MetaGemini] == 0)    c.locked |= upgradeBit(UpgradeKind::Gemini);
-    if (u[MetaPrism] == 0)     c.locked |= upgradeBit(UpgradeKind::PrismCore);
+    if (u[MetaSatellite] == 0) c.lock(UpgradeKind::Satellite);
+    if (u[MetaGravity] == 0)   c.lock(UpgradeKind::GravityWell);
+    if (u[MetaGemini] == 0)    c.lock(UpgradeKind::Gemini);
+    if (u[MetaPrism] == 0)     c.lock(UpgradeKind::PrismCore);
+    // Items of a class that isn't unlocked yet (Striker is always open).
+    for (int i = 0; i < kUpgradeKindCount; ++i) {
+        const auto k = static_cast<UpgradeKind>(i);
+        if (upgradeCat(k) == UpgradeCat::Item && !classUnlocked(itemTag(k), u)) c.lock(k);
+    }
     return c;
 }
 
@@ -590,9 +594,9 @@ void App::rerollChoice(int idx) {
     effects_.flash(theme::accent, 0.25f);
 }
 
-// Recruit node: a new ball plus one item of each tag, so you can push a ball
-// toward the role you want. With the arena full the ball card becomes a random
-// modifier instead.
+// Recruit node: a new ball plus one item of three different unlocked classes,
+// so you can push a ball toward the class you want. With the arena full the
+// ball card becomes a random modifier instead.
 void App::rollRecruitChoices() {
     const UpgradeCtx c = buildUpgradeCtx();
     choices_[0] = upgradeEligible(UpgradeKind::AddBall, c)
@@ -600,14 +604,31 @@ void App::rollRecruitChoices() {
         : static_cast<UpgradeKind>(static_cast<int>(UpgradeKind::HeavyImpact) + rng_.irange(0, kModifierCount - 1));
     rollSource_ = RollSource::Normal;
     choiceTitle_.clear();
-    static bool (*const tagFilters[3])(UpgradeKind) = {
+    // One filter per class (rollPick takes a plain function pointer).
+    static bool (*const tagFilters[kClassCount])(UpgradeKind) = {
         [](UpgradeKind k) { return itemTag(k) == ItemTag::Striker; },
         [](UpgradeKind k) { return itemTag(k) == ItemTag::Guardian; },
         [](UpgradeKind k) { return itemTag(k) == ItemTag::Support; },
+        [](UpgradeKind k) { return itemTag(k) == ItemTag::Mage; },
+        [](UpgradeKind k) { return itemTag(k) == ItemTag::Shooter; },
+        [](UpgradeKind k) { return itemTag(k) == ItemTag::Assassin; },
+        [](UpgradeKind k) { return itemTag(k) == ItemTag::Summoner; },
+        [](UpgradeKind k) { return itemTag(k) == ItemTag::Jester; },
     };
+    std::vector<int> classes;   // unlocked classes that have an item to offer
+    for (int t = 0; t < kClassCount; ++t) {
+        bool any = false;
+        for (int i = 0; i < kUpgradeKindCount && !any; ++i)
+            any = tagFilters[t](static_cast<UpgradeKind>(i)) && upgradeEligible(static_cast<UpgradeKind>(i), c);
+        if (any) classes.push_back(t);
+    }
+    for (int i = static_cast<int>(classes.size()) - 1; i > 0; --i)
+        std::swap(classes[static_cast<std::size_t>(i)], classes[static_cast<std::size_t>(rng_.irange(0, i))]);
     std::vector<UpgradeKind> taken{choices_[0]};
-    for (int t = 0; t < 3; ++t) {
-        choices_[t + 1] = rollPick(RollSource::Normal, taken, tagFilters[t]);
+    for (int t = 0; t < kChoiceCount - 1; ++t) {
+        // A different class per card while there are enough; any pick after that.
+        const auto filter = t < static_cast<int>(classes.size()) ? tagFilters[classes[static_cast<std::size_t>(t)]] : nullptr;
+        choices_[t + 1] = rollPick(RollSource::Normal, taken, filter);
         taken.push_back(choices_[t + 1]);
     }
 }
@@ -625,7 +646,7 @@ bool App::autoTarget(UpgradeKind k, int& ball, int& slot) const {
     for (int i = 0; i < static_cast<int>(balls.size()); ++i) {
         if (!upgradeFitsBall(k, balls[i])) continue;
         const int sl = defaultSlot(k, balls[i]);
-        const bool free = balls[i].gear[sl] < 0;
+        const bool free = balls[i].kindAt(sl) < 0;
         if (ball < 0 || free) { ball = i; slot = sl; }
         if (free) break;
     }
@@ -649,17 +670,15 @@ void App::applyUpgradeKind(UpgradeKind k, int ball, int slot) {
             ++b.mods[mi];
         } else if (upgradeLevelsUp(k, b)) {
             // A duplicate levels up the copy the ball already has.
-            const int lvl = ++b.gearLvl[b.slotOf(k)];
+            const int lvl = b.levelUp(b.slotOf(k));
             audio_.levelUp(lvl);
             effects_.addLabel(std::string(upgradeInfo(k).title) + "  Lv " + std::to_string(lvl),
                               {size().x * 0.5f, size().y * 0.36f}, tierColor(upgradeTier(k)), 26, 1.3f);
         } else {
-            // One element per ball: a new element always replaces the current one.
-            if (elementItemSlot(k) >= 0 && b.elementSlot() >= 0) slot = b.elementSlot();
-            if (slot < 0) slot = defaultSlot(k, b);
-            slot = std::clamp(slot, 0, kBallSlots - 1);
-            b.gear[slot] = static_cast<int>(k);
-            b.gearLvl[slot] = 1;
+            // Items go in an item slot, an element in the type slot (swapping
+            // the old one), an ability in an open ability slot.
+            if (!slotAccepts(k, slot, b)) slot = defaultSlot(k, b);
+            b.setSlot(slot, static_cast<int>(k), 1);
         }
         syncWorldBalls();
         return;
@@ -791,9 +810,9 @@ void App::travelTo(int node) {
             r.wave = wave;
             bool any = false;
             for (int b = 0; b < runBallCount() && !any; ++b)
-                for (int sl = 0; sl < kBallSlots; ++sl)
-                    if (r.balls[static_cast<std::size_t>(b)].gear[sl] >= 0 &&
-                        r.balls[static_cast<std::size_t>(b)].gearLvl[sl] < forgeCap()) any = true;
+                for (int sl = 0; sl < kLoadoutSlots; ++sl)
+                    if (r.balls[static_cast<std::size_t>(b)].kindAt(sl) >= 0 &&
+                        r.balls[static_cast<std::size_t>(b)].levelAt(sl) < forgeCap()) any = true;
             if (any) {
                 equipSrc_ = EquipSource::Forge;
                 equipRef_ = -1;
@@ -820,15 +839,17 @@ void App::beginEquip(EquipSource src, UpgradeKind k, int ref) {
 bool App::equipFitsSlot(int ball, int slot) const {
     if (ball < 0 || ball >= runBallCount()) return false;
     const BallLoadout& b = data_.run.balls[static_cast<std::size_t>(ball)];
+    // The forge levels any filled slot (items, element, abilities); selling
+    // takes items only.
     if (equipSrc_ == EquipSource::Forge || equipSrc_ == EquipSource::ShopForge)
-        return slot >= 0 && slot < kBallSlots && b.gear[slot] >= 0 && b.gearLvl[slot] < forgeCap();
-    if (equipSrc_ == EquipSource::Sell) return slot >= 0 && slot < kBallSlots && b.gear[slot] >= 0;
+        return slot >= 0 && slot < kLoadoutSlots && b.kindAt(slot) >= 0 && b.levelAt(slot) < forgeCap();
+    if (equipSrc_ == EquipSource::Sell) return isItemSlot(slot) && b.gear[slot] >= 0;
     return upgradeFitsBall(equipKind_, b);
 }
 
 bool App::equipFitsBall(int ball) const {
     if (equipSrc_ == EquipSource::Forge || equipSrc_ == EquipSource::ShopForge || equipSrc_ == EquipSource::Sell) {
-        for (int sl = 0; sl < kBallSlots; ++sl)
+        for (int sl = 0; sl < kLoadoutSlots; ++sl)
             if (equipFitsSlot(ball, sl)) return true;
         return false;
     }
@@ -857,11 +878,10 @@ void App::confirmEquip(int ball, int slot) {
         }
         case EquipSource::Forge: {
             if (!equipFitsSlot(ball, slot))
-                for (slot = 0; slot < kBallSlots && !equipFitsSlot(ball, slot); ++slot) {}
+                for (slot = 0; slot < kLoadoutSlots && !equipFitsSlot(ball, slot); ++slot) {}
             if (!equipFitsSlot(ball, slot)) return;
-            ++r.balls[static_cast<std::size_t>(ball)].gearLvl[slot];
+            audio_.levelUp(r.balls[static_cast<std::size_t>(ball)].levelUp(slot));
             syncWorldBalls();
-            audio_.levelUp(r.balls[static_cast<std::size_t>(ball)].gearLvl[slot]);
             effects_.flash(theme::accent, 0.4f);
             back();
             openMap();
@@ -869,12 +889,11 @@ void App::confirmEquip(int ball, int slot) {
         }
         case EquipSource::ShopForge: {   // the shop's paid forge: back to the shop after
             if (!equipFitsSlot(ball, slot))
-                for (slot = 0; slot < kBallSlots && !equipFitsSlot(ball, slot); ++slot) {}
+                for (slot = 0; slot < kLoadoutSlots && !equipFitsSlot(ball, slot); ++slot) {}
             if (!equipFitsSlot(ball, slot) || r.gold < cfg::gold::forgeServicePrice) return;
             r.gold -= cfg::gold::forgeServicePrice;
-            ++r.balls[static_cast<std::size_t>(ball)].gearLvl[slot];
+            audio_.levelUp(r.balls[static_cast<std::size_t>(ball)].levelUp(slot));
             syncWorldBalls();
-            audio_.levelUp(r.balls[static_cast<std::size_t>(ball)].gearLvl[slot]);
             effects_.flash(theme::accent, 0.4f);
             back();
             break;
@@ -1168,6 +1187,11 @@ void App::devOpen(DevOpen what) {
             if (!openPactChoice(what == DevOpen::PactBoss ? PactSource::Boss : PactSource::Start))
                 effects_.addLabel("no pact left to offer", {size().x * 0.5f, size().y * 0.5f}, theme::coreLow, 22, 1.2f);
             break;
+        case DevOpen::ClassPick:    // "Calling" on the first ball, as at the run start
+            if (!openClassChoice())
+                effects_.addLabel("no class to pick (or only one: granted)", {size().x * 0.5f, size().y * 0.5f},
+                                  theme::textLo, 22, 1.2f);
+            break;
         case DevOpen::JumpToBoss:   // stand right before the boss row and open the map
             data_.run.mapRow = cfg::map::rows;
             data_.run.mapNode = -1;
@@ -1364,7 +1388,7 @@ void App::processEvents(const FrameEvents& ev) {
     const float harmony = cfg::combo::baseCapTier > 0
         ? static_cast<float>(ev.comboTier) / static_cast<float>(cfg::combo::baseCapTier)
         : 0.f;
-    // Reactions, explosions, mastery pulses: a big ring, and the reaction's
+    // Reactions, explosions, ascended pulses, abilities: a big ring, and the reaction's
     // name (rate-limited so a cascade reads as a burst, not a wall of text).
     for (const BurstFx& b : ev.bursts) {
         effects_.addBurst(b.pos, b.radius, b.color);
@@ -1668,30 +1692,43 @@ int App::runSnapshots(const std::string& dir) {
 
     data_.meta.cores = 480;
     data_.meta.prisms = 6;
-    for (int u : {MetaStartBalls, MetaCoreHp, MetaFireItem, MetaVenom, MetaTide, MetaBounty, MetaHeft, MetaUplink})
+    for (int u : {MetaCalling, MetaCoreHp, MetaFireItem, MetaVenom, MetaTide, MetaBounty, MetaHeft, MetaMass,
+                  MetaUplink, MetaClassSupport, MetaClassGuardian})
         data_.meta.unlock[u] = 1;
     openLoadout();
     snapFrame(d + "02_web.png");
 
+    // The run intro: "Calling" - pick the starting ball's class.
     newRun();
+    snapFrame(d + "03_class_pick.png");
+    chooseClass(0);
     snapFrame(d + "03_map.png");
 
-    // A dressed-up squad so the arena and the panels have something to show.
+    // A dressed-up squad so the arena and the panels have something to show:
+    // a dual-class ball, an ascended one, types and abilities in their slots.
     RunState& r = data_.run;
     r.gold = 187;
     r.balls.assign(3, BallLoadout{});
-    r.balls[0].gear[0] = static_cast<int>(UpgradeKind::ElemFire);
-    r.balls[0].gear[1] = static_cast<int>(UpgradeKind::Cleave);
-    r.balls[0].gear[2] = static_cast<int>(UpgradeKind::Crit);
-    r.balls[0].gearLvl[0] = r.balls[0].gearLvl[1] = r.balls[0].gearLvl[2] = 1;
-    r.balls[1].gear[0] = static_cast<int>(UpgradeKind::ElemIce);
-    r.balls[1].gear[1] = static_cast<int>(UpgradeKind::Rampart);
-    r.balls[1].gearLvl[0] = r.balls[1].gearLvl[1] = 1;
+    auto put = [](BallLoadout& L, int slot, UpgradeKind k, int lvl) { L.setSlot(slot, static_cast<int>(k), lvl); };
+    put(r.balls[0], kSlotType, UpgradeKind::ElemFire, 1);
+    put(r.balls[0], 0, UpgradeKind::Cleave, 2);
+    put(r.balls[0], 1, UpgradeKind::Crit, 1);
+    put(r.balls[0], 2, UpgradeKind::Tesla, 1);
+    put(r.balls[0], 3, UpgradeKind::Bomber, 1);
+    put(r.balls[0], kSlotAbility, UpgradeKind::AbilityDash, 2);          // Striker / Support
+    put(r.balls[1], kSlotType, UpgradeKind::ElemIce, 1);
+    put(r.balls[1], 0, UpgradeKind::Rampart, 1);
+    put(r.balls[1], 1, UpgradeKind::Mender, 1);
+    put(r.balls[1], 2, UpgradeKind::Bumper, 1);
+    put(r.balls[1], 3, UpgradeKind::Glutton, 1);
+    put(r.balls[1], kSlotAbility, UpgradeKind::AbilityBulwark, 1);       // Iron Guardian
     r.balls[1].mods[0] = 2;
-    r.balls[2].gear[0] = static_cast<int>(UpgradeKind::ElemElectric);
-    r.balls[2].gear[1] = static_cast<int>(UpgradeKind::Storm);
-    r.balls[2].gearLvl[0] = r.balls[2].gearLvl[1] = 1;
+    put(r.balls[2], kSlotType, UpgradeKind::ElemElectric, 1);
+    put(r.balls[2], 0, UpgradeKind::Storm, 1);
+    put(r.balls[2], kSlotAbility, UpgradeKind::AbilityNova, 1);
     r.mods.catalyst = true;
+    r.mods.luckyClover = true;
+    r.mods.spring = true;
     syncWorldBalls();
     for (int i = 0; i < static_cast<int>(r.map.nodes.size()); ++i)
         if (mapNodeOpen(i)) { travelTo(i); break; }
@@ -1712,6 +1749,9 @@ int App::runSnapshots(const std::string& dir) {
 
     beginEquip(EquipSource::Choice, UpgradeKind::Railgun, 0);
     snapFrame(d + "07_equip.png");
+    back();
+    beginEquip(EquipSource::Choice, UpgradeKind::AbilityOverclock, 0);   // an ability: the ability slots
+    snapFrame(d + "07_equip_ability.png");
     back();
 
     sf::Event tab{};
@@ -1807,9 +1847,13 @@ int App::runSnapshots(const std::string& dir) {
     newRun();
     snapFrame(d + "16_start_pact.png");
     choosePact(0);
-    snapFrame(d + "17_starter_pick.png");
-    applyUpgrade(0);
-    confirmEquip(0, -1);
+    snapFrame(d + "17_start_class.png");   // "Calling" comes between the pact and the starter item
+    chooseClass(1);
+    if (introStep_ >= 0) {   // the Quartermaster pick is up (it needs 4 items to choose from)
+        snapFrame(d + "17_starter_pick.png");
+        applyUpgrade(0);
+        confirmEquip(0, -1);
+    }
     snapFrame(d + "18_intro_map.png");
 
     // Clean-play bonuses on the BossWin card (flawless boss + "Iron core").

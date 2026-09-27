@@ -56,7 +56,7 @@ inline const char* mapNodeDesc(MapNodeType t) {
         case MapNodeType::Forge:   return "level up one item a ball already carries";
         case MapNodeType::Rest:    return "no fight: the core is repaired to full";
         case MapNodeType::Upgrade: return "no fight: a free pick of 1 of 4";
-        case MapNodeType::Recruit: return "no fight: a new ball, or one Striker / Guardian / Support item to steer a ball's role";
+        case MapNodeType::Recruit: return "no fight: a new ball, or an item from each of three classes to steer a ball's class";
         case MapNodeType::Boss:    return "the act's boss";
     }
     return "";

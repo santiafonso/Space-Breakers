@@ -152,22 +152,24 @@ void EquipScreen::targetAt(App& app, sf::Vector2f mouse, int& ball, int& slot) c
         if (!app.equipFitsBall(i)) return;
         ball = i;
         const BallLoadout& L = app.data().run.balls[static_cast<std::size_t>(i)];
+        const int shown = kSlotAbility + abilityBoxes(L);   // slots drawn on the panel
         if (forge) {
-            // The item under the pointer, else the first one that can level.
-            for (int sl = 0; sl < kBallSlots; ++sl)
-                if (slotRect(c, sl).contains(mouse) && app.equipFitsSlot(i, sl)) slot = sl;
-            for (int sl = 0; sl < kBallSlots && slot < 0; ++sl)
+            // The slot under the pointer, else the first one that can level.
+            for (int sl = 0; sl < shown; ++sl)
+                if (slotRect(c, sl, L).contains(mouse) && app.equipFitsSlot(i, sl)) slot = sl;
+            for (int sl = 0; sl < kLoadoutSlots && slot < 0; ++sl)
                 if (app.equipFitsSlot(i, sl)) slot = sl;
             return;
         }
-        // Items land in the slot under the pointer, else their default slot. An
-        // element always takes over the ball's current element slot, and a
-        // duplicate levels up its own slot. Modifiers just pick the ball.
+        // Picks land in the slot under the pointer if it takes them (items: an
+        // item slot, elements: the type slot, abilities: an open ability
+        // slot), else their default slot; a duplicate levels up its own slot.
+        // Modifiers just pick the ball.
         if (!upgradeTakesSlot(k)) return;
         slot = defaultSlot(k, L);
-        if (!L.has(k) && (elementItemSlot(k) < 0 || L.elementSlot() < 0))
-            for (int sl = 0; sl < kBallSlots; ++sl)
-                if (slotRect(c, sl).contains(mouse)) slot = sl;
+        if (!L.has(k))
+            for (int sl = 0; sl < shown; ++sl)
+                if (slotRect(c, sl, L).contains(mouse) && slotAccepts(k, sl, L)) slot = sl;
         return;
     }
 }
@@ -223,19 +225,34 @@ void EquipScreen::draw(App& app, sf::RenderWindow& w) {
             default:                   title = std::string("Equip ") + info.title + " - pick a ball and slot"; break;
         }
         sub = info.desc;
-        // Hovering a ball that already has it: this pick levels it up.
+        // Hovering a ball that already has it: this pick levels it up. One
+        // whose slot is taken: it swaps what's there.
         if (hoverBall_ >= 0 && hoverBall_ < app.runBallCount()) {
             const BallLoadout& L = app.data().run.balls[static_cast<std::size_t>(hoverBall_)];
             if (upgradeLevelsUp(k, L)) {
                 const int lv = L.levelOf(k);
                 title = std::string(info.title) + "   Lv " + std::to_string(lv) + " -> " + std::to_string(lv + 1);
                 sub = std::string("level up: ") + upgradeLevelDesc(k);
+            } else if (hoverSlot_ >= 0 && L.kindAt(hoverSlot_) >= 0) {
+                title = std::string("Swap ") + upgradeInfo(static_cast<UpgradeKind>(L.kindAt(hoverSlot_))).title +
+                        "  ->  " + info.title;
             }
         }
         if (app.equipSource() == EquipSource::Shop) sub += "   (" + std::to_string(app.shopPrice(k)) + " gold)";
-        hint = elementItemSlot(k) >= 0 ? "click a ball (one element per ball: it replaces the current one)   -   Esc: back"
-             : upgradeTakesSlot(k)     ? "click a slot (a full one gets replaced; a ball that has it levels it up)   -   Esc: back"
-                                       : "click a ball   -   Esc / right-click: back";
+        switch (upgradeCat(k)) {
+            case UpgradeCat::Element:
+                hint = "click a ball: it goes in the type slot (one element per ball - a new one swaps it)   -   Esc: back";
+                break;
+            case UpgradeCat::Ability:
+                hint = "click an ability slot (a full one gets swapped; a ball that has it levels it up)   -   Esc: back";
+                break;
+            case UpgradeCat::Item:
+                hint = "click an item slot (a full one gets replaced; a ball that has it levels it up)   -   Esc: back";
+                break;
+            default:
+                hint = "click a ball   -   Esc / right-click: back";
+                break;
+        }
     }
 
     drawCenteredPop(w, app.font(), title, theme::fsHeading, {s.x * 0.5f, s.y * 0.20f}, theme::textHi,
@@ -249,7 +266,8 @@ void EquipScreen::draw(App& app, sf::RenderWindow& w) {
         const sf::Vector2f c = panelCenter(s, i, n, s.y * 0.52f) + sf::Vector2f(0.f, (1.f - cp) * 30.f);
         const bool hot = hoverBall_ == i;
         drawLoadoutPanel(w, app.font(), c, balls[static_cast<std::size_t>(i)], cp, hot ? 1.f : 0.f,
-                         hot ? hoverSlot_ : -1, !app.equipFitsBall(i));
+                         hot ? hoverSlot_ : -1, !app.equipFitsBall(i),
+                         forge || sell || !upgradeTakesSlot(k) ? -1 : static_cast<int>(k));
         drawCentered(w, app.font(), std::to_string(i + 1), theme::fsSmall,
                      {c.x, c.y + kPanelH * 0.5f + 14.f}, withAlpha(theme::textDim, cp));
     }
@@ -257,10 +275,10 @@ void EquipScreen::draw(App& app, sf::RenderWindow& w) {
                  theme::textDim);
 
     for (int i = 0; i < n; ++i) {   // what's in the slot / on the ball under the pointer
-        const int part = panelPartAt(panelCenter(s, i, n, s.y * 0.52f), mouse_);
+        const int part = panelPartAt(panelCenter(s, i, n, s.y * 0.52f), mouse_, balls[static_cast<std::size_t>(i)]);
         std::string tt, td;
         if (part >= 0 && loadoutTooltip(balls[static_cast<std::size_t>(i)], part, tt, td)) {
-            if (sell && part < kBallSlots && balls[static_cast<std::size_t>(i)].gear[part] >= 0)
+            if (sell && isItemSlot(part) && balls[static_cast<std::size_t>(i)].gear[part] >= 0)
                 tt = "Sell " + tt + "  for " + std::to_string(app.sellValue(i, part)) + " gold";
             drawTooltip(w, app.font(), mouse_, s, tt, td);
         }

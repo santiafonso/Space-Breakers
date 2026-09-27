@@ -29,10 +29,11 @@ private:
 };
 
 // The game menu: a radial skill web. Spend cores (and prisms on a few key
-// nodes) to unlock permanent buffs, then start a run. The centre node is "+1
-// starting ball"; branches fan out - Base left, Ball combat down, Economy up,
-// Special balls right - and each node stays locked until the node that gates
-// it toward the centre has a level.
+// nodes) to unlock permanent buffs, then start a run. The centre node is
+// "Calling" (pick your starting ball's class); branches fan out - Base left,
+// Ball combat down with the Classes chain below it, Economy up, Special balls
+// right - and each node stays locked until the node that gates it toward the
+// centre has a level.
 class LoadoutScreen : public Screen {
 public:
     void onEnter(App& app) override;
@@ -129,7 +130,24 @@ private:
     sf::Vector2f mouse_;
 };
 
-// Pick which ball (and which of its 4 slots) a role / element / item /
+// "Calling" in the run intro: pick the starting ball's class (one card per
+// unlocked class with items). App::chooseClass gives it 2 items of it.
+class ClassPickScreen : public Screen {
+public:
+    void handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) override;
+    void update(App& app, float dt, sf::Vector2f mouse) override;
+    void draw(App& app, sf::RenderWindow& w) override;
+    bool opaque() const override { return false; }
+
+private:
+    sf::FloatRect cardRect(App& app, int i) const;
+    int cardAt(App& app, sf::Vector2f mouse) const;
+    float hover_[kClassCount] = {};
+    float clock_ = 0.f;
+    sf::Vector2f mouse_;
+};
+
+// Pick which ball (and which of its slots) an element / ability / item /
 // modifier goes on - from a Choice card or a shop buy. At a Forge node it
 // picks the item to level up instead.
 class EquipScreen : public Screen {

@@ -1,120 +1,69 @@
 #pragma once
 
+#include <bitset>
 #include <cstdint>
 #include <vector>
 
+#include "progression/ClassItems.hpp"
+#include "progression/UpgradeKind.hpp"
 #include "sim/Entities.hpp"
 
 namespace sb {
 
 // ---- between-wave picks ------------------------------------------------------
 //
-// Every ball is a small "character": up to four items, any number of stacked
-// modifiers, and a role that EMERGES from its items. Every item carries a tag
-// (Striker / Guardian / Support): 2 items of one tag give the ball that role,
-// 4 give its mastery. A pick is one of five kinds:
+// Every ball is a small "character": four item slots, one TYPE slot (its
+// element), one ability slot (more for a Mage), any number of stacked
+// modifiers, and up to two classes that EMERGE from its items. Every item
+// carries a tag (Striker / Guardian / Support / Mage / Shooter / Assassin /
+// Summoner / Jester): 2 items of a tag give the ball that class, 4 give its
+// ascended form. A pick is one of six kinds:
 //  - New ball: one more ball (up to cfg::ball::maxBalls).
-//  - Element:  an item that makes the ball fire / poison / ... while equipped.
-//              One element per ball. Gated by that element's web node. Two
+//  - Element:  goes in the ball's type slot and makes it fire / poison / ...;
+//              one per ball, a new one swaps it. Gated by its web node. Two
 //              DIFFERENT balls landing different elements on one enemy set off
-//              a reaction (see World).
-//  - Item:     a unique effect for one ball; takes one of its 4 slots.
+//              a reaction (see World). Doesn't count toward a class.
+//  - Ability:  a timed active in an ability slot; fires by itself on a
+//              cooldown. Doesn't count toward a class.
+//  - Item:     a unique effect for one ball; takes one of its 4 item slots.
 //  - Modifier: a stat bump for one ball; no slot, stacks without limit.
 //  - Relic:    a whole-run passive.
 
-enum class UpgradeKind {
-    // new ball
-    AddBall,
-    // elements (order = element web-node slots 0..5)
-    ElemFire,
-    ElemPoison,
-    ElemWater,
-    ElemIce,
-    ElemStone,
-    ElemElectric,
-    // items (take a slot; a duplicate levels up the one already equipped)
-    Ricochet,          // a wall bounce speeds it up and arms a harder hit [Striker]
-    Cleave,            // punches through an enemy it kills               [Striker]
-    Crit,              // "Keen eye": chance of a big hit                  [Striker]
-    Executioner,       // big bonus vs badly hurt enemies                  [Striker]
-    Overkill,          // a kill's leftover damage splashes                [Support]
-    Shatter,           // bonus damage vs frozen enemies (needs Frost)     [Support]
-    Conductor,         // its electric arc jumps on to more enemies        [Striker]
-    Bedrock,           // its stone rubble lasts far longer                [Guardian]
-    Echo,              // chance a hit strikes twice                       [Striker]
-    Tesla,             // chance a hit zaps nearby enemies                 [Support]
-    Bomber,            // chance a kill explodes                           [Support]
-    SplitShot,         // chance a wall bounce spawns a ghost copy         [Support]
-    Rampart,           // hits shove much further and stagger longer       [Guardian]
-    Mender,            // each core bounce repairs the core a little       [Guardian]
-    // behaviour items (Fase M): each one makes the ball play differently
-    Hunter,            // locks onto the biggest threat until it dies      [Striker]
-    Comet,             // flung, it flies far faster and plows through     [Striker]
-    Mitosis,           // a kill splits off small copies of it             [Striker]
-    Boomerang,         // after a hit it flies home; comes out charged     [Guardian]
-    Bumper,            // other balls bounce off it much faster            [Guardian]
-    Glutton,           // grows and hits harder with every kill (per wave) [Guardian]
-    Tether,            // a damaging laser to the nearest other ball       [Support]
-    BlackHole,         // kills may leave a black hole: sucks in, bursts   [Support]
-    Resonance,         // hits arc through every same-element ball         [Support]
-    // game-changers: they change how the ball itself behaves
-    Seeker,            // curves toward the nearest enemy                  [Striker]
-    Piercing,          // passes through enemies instead of bouncing       [Striker]
-    Railgun,           // every wall bounce fires a beam along its path    [Striker]
-    Berserk,           // each hit without touching a wall hits harder     [Striker]
-    Giant,             // huge, slower, heavier                            [Guardian]
-    Satellite,         // orbits the core instead of bouncing around       [Guardian]
-    GravityWell,       // drags nearby enemies toward itself               [Support]
-    Storm,             // zaps everything around it, all the time          [Support]
-    Gemini,            // permanent ghost twins with the same items        [Support]
-    Midas,             // its kills pay extra gold                         [Support]
-    // modifiers (no slot, stack)
-    HeavyImpact,       // +contact damage
-    BigBall,           // +radius, +knockback
-    Swift,             // +cruise and top speed, holds a fling longer
-    // relics
-    CoreSpring,        // balls ricochet off the core faster
-    CoreSlowField,     // a zone around the core slows enemies inside it
-    StrongArm,         // you fling every ball harder
-    Contagion,         // a poisoned enemy dying poisons its neighbours (needs Venom)
-    Primed,            // +damage vs enemies under any element effect (needs any element node)
-    Catalyst,          // reactions hit twice as hard and wider (needs 2 element nodes)
-    ChainReaction,     // a reaction may echo onto another afflicted enemy (needs 2 element nodes)
-    LuckyClover,       // +6 luck
-    GlassCannon,       // all damage x1.6, core max HP -30%
-    MagneticCore,      // balls leave the core aimed at the nearest enemy
-    PrismCore,         // balls with no element leave a random one on every hit (reactions everywhere)
-    Phoenix,           // once per act the core comes back from 0 at half health
-    TimeDilation,      // enemies move 25% slower, always
-    Overcharge,        // the damage combo can climb twice as high
-};
-inline constexpr int kUpgradeKindCount = 57;
-static_assert(static_cast<int>(UpgradeKind::Overcharge) + 1 == kUpgradeKindCount, "update kUpgradeKindCount");
-static_assert(kUpgradeKindCount <= 64, "UpgradeCtx::locked is a 64-bit mask");
 inline constexpr int kChoiceCount = 4;
 inline constexpr int kBallSlots = 4;          // item slots per ball
 inline constexpr int kElementItemCount = 6;
+inline constexpr int kAbilityItemCount = 5;   // AbilityDash..AbilityOverclock
 inline constexpr int kModifierCount = 3;      // HeavyImpact..Swift
 // Items level up: picking one a ball already has (or forging it) raises its
 // level instead of taking another slot. Each item scales its own way per level
-// (App::ballSpec, upgradeLevelDesc).
+// (App::ballSpec, upgradeLevelDesc). Elements and abilities level the same way.
 inline constexpr int kMaxItemLevel = 5;
 
-enum class UpgradeCat { NewBall, Element, Item, Modifier, Relic };
+// A ball's slots, addressed as one list: 0..3 items, then the type slot, then
+// the ability slots (kMaxAbilitySlots of them, abilitySlotCount() active).
+inline constexpr int kSlotType = kBallSlots;
+inline constexpr int kSlotAbility = kBallSlots + 1;
+inline constexpr int kLoadoutSlots = kSlotAbility + kMaxAbilitySlots;
+inline bool isItemSlot(int s) { return s >= 0 && s < kBallSlots; }
+inline bool isAbilitySlot(int s) { return s >= kSlotAbility && s < kLoadoutSlots; }
+
+enum class UpgradeCat { NewBall, Element, Ability, Item, Modifier, Relic };
 
 inline UpgradeCat upgradeCat(UpgradeKind k) {
     const int i = static_cast<int>(k);
     if (i <= static_cast<int>(UpgradeKind::AddBall)) return UpgradeCat::NewBall;
     if (i <= static_cast<int>(UpgradeKind::ElemElectric)) return UpgradeCat::Element;
-    if (i <= static_cast<int>(UpgradeKind::Midas)) return UpgradeCat::Item;
+    if (i <= static_cast<int>(UpgradeKind::AbilityOverclock)) return UpgradeCat::Ability;
     if (i <= static_cast<int>(UpgradeKind::Swift)) return UpgradeCat::Modifier;
-    return UpgradeCat::Relic;
+    if (i >= static_cast<int>(UpgradeKind::CoreSpring)) return UpgradeCat::Relic;
+    return UpgradeCat::Item;
 }
 
 inline const char* upgradeCatName(UpgradeCat c) {
     switch (c) {
         case UpgradeCat::NewBall:  return "NEW BALL";
         case UpgradeCat::Element:  return "ELEMENT";
+        case UpgradeCat::Ability:  return "ABILITY";
         case UpgradeCat::Item:     return "ITEM";
         case UpgradeCat::Modifier: return "MODIFIER";
         case UpgradeCat::Relic:    return "RELIC";
@@ -125,19 +74,14 @@ inline const char* upgradeCatName(UpgradeCat c) {
 inline const char* upgradeCatDesc(UpgradeCat c) {
     switch (c) {
         case UpgradeCat::NewBall:  return "adds one more ball to the arena";
-        case UpgradeCat::Element:  return "an item: one element per ball, takes one of its 4 slots. Two balls with different elements hitting the same enemy set off a reaction. Taking it again on the same ball levels it up.";
-        case UpgradeCat::Item:     return "a unique effect for one ball; takes one of its 4 slots. Its tag counts toward the ball's role. Taking it again on the same ball levels it up (max level 5).";
+        case UpgradeCat::Element:  return "goes in the ball's type slot (one element per ball; a new one swaps it). Two balls with different elements hitting the same enemy set off a reaction. Taking it again on the same ball levels it up. Doesn't count toward a class.";
+        case UpgradeCat::Ability:  return "a timed active in the ball's ability slot: it fires by itself every few seconds. Taking it again on the same ball levels it up. Doesn't count toward a class.";
+        case UpgradeCat::Item:     return "a unique effect for one ball; takes one of its 4 item slots. Its tag counts toward the ball's class: 2 of a tag = that class, 4 = its ascended form. Taking it again on the same ball levels it up (max level 5).";
         case UpgradeCat::Modifier: return "a stat bump for one ball; no slot, stacks without limit";
-        case UpgradeCat::Relic:    return "a passive for the whole run";
+        case UpgradeCat::Relic:    return "a passive for the whole run, on every ball";
     }
     return "";
 }
-
-// ---- tiers: how rare (and how strong) a pick is -----------------------------
-// Commons are small, steady bumps that grow when stacked; legendaries change
-// how the run plays.
-enum class Tier { Common, Uncommon, Rare, Epic, Legendary };
-inline constexpr int kTierCount = 5;
 
 inline Tier upgradeTier(UpgradeKind k) {
     switch (k) {
@@ -148,10 +92,12 @@ inline Tier upgradeTier(UpgradeKind k) {
         case UpgradeKind::AddBall:
         case UpgradeKind::ElemFire: case UpgradeKind::ElemPoison: case UpgradeKind::ElemWater:
         case UpgradeKind::ElemIce: case UpgradeKind::ElemStone: case UpgradeKind::ElemElectric:
+        case UpgradeKind::AbilityDash: case UpgradeKind::AbilityBulwark:
         case UpgradeKind::Rampart: case UpgradeKind::Mender: case UpgradeKind::Bedrock:
         case UpgradeKind::Conductor: case UpgradeKind::Shatter: case UpgradeKind::Bumper:
         case UpgradeKind::CoreSlowField: case UpgradeKind::Contagion: case UpgradeKind::Primed:
             return Tier::Uncommon;
+        case UpgradeKind::AbilityNova: case UpgradeKind::AbilitySplit: case UpgradeKind::AbilityOverclock:
         case UpgradeKind::Cleave: case UpgradeKind::Executioner: case UpgradeKind::Overkill:
         case UpgradeKind::Tesla: case UpgradeKind::Bomber: case UpgradeKind::Echo:
         case UpgradeKind::Berserk: case UpgradeKind::Giant: case UpgradeKind::Midas:
@@ -168,7 +114,9 @@ inline Tier upgradeTier(UpgradeKind k) {
         case UpgradeKind::Railgun: case UpgradeKind::Satellite: case UpgradeKind::GravityWell:
         case UpgradeKind::Gemini: case UpgradeKind::PrismCore: case UpgradeKind::Seeker:
             return Tier::Legendary;
+        default: break;
     }
+    if (const ItemDef* d = classItemDef(k)) return d->tier;   // the newer classes' items
     return Tier::Common;
 }
 
@@ -183,24 +131,20 @@ inline const char* tierName(Tier t) {
     return "";
 }
 
-// ---- item tags: a ball's role comes from them ------------------------------
-enum class ItemTag { None, Striker, Guardian, Support };
+// ---- item tags: a ball's classes come from them ----------------------------
 
 inline ItemTag itemTag(UpgradeKind k) {
     switch (k) {
-        case UpgradeKind::ElemFire: case UpgradeKind::ElemElectric:
         case UpgradeKind::Ricochet: case UpgradeKind::Cleave: case UpgradeKind::Crit:
         case UpgradeKind::Executioner: case UpgradeKind::Conductor: case UpgradeKind::Echo:
         case UpgradeKind::Hunter: case UpgradeKind::Comet: case UpgradeKind::Mitosis:
         case UpgradeKind::Seeker: case UpgradeKind::Piercing: case UpgradeKind::Railgun:
         case UpgradeKind::Berserk:
             return ItemTag::Striker;
-        case UpgradeKind::ElemIce: case UpgradeKind::ElemStone:
         case UpgradeKind::Bedrock: case UpgradeKind::Rampart: case UpgradeKind::Mender:
         case UpgradeKind::Boomerang: case UpgradeKind::Bumper: case UpgradeKind::Glutton:
         case UpgradeKind::Giant: case UpgradeKind::Satellite:
             return ItemTag::Guardian;
-        case UpgradeKind::ElemPoison: case UpgradeKind::ElemWater:
         case UpgradeKind::Overkill: case UpgradeKind::Shatter: case UpgradeKind::Tesla:
         case UpgradeKind::Bomber: case UpgradeKind::SplitShot:
         case UpgradeKind::Tether: case UpgradeKind::BlackHole: case UpgradeKind::Resonance:
@@ -208,35 +152,28 @@ inline ItemTag itemTag(UpgradeKind k) {
         case UpgradeKind::Midas:
             return ItemTag::Support;
         default:
-            return ItemTag::None;
+            break;
     }
+    if (const ItemDef* d = classItemDef(k)) return d->tag;   // the newer classes' items
+    return ItemTag::None;   // elements, abilities, modifiers, relics
 }
 
-inline const char* itemTagName(ItemTag t) {
-    switch (t) {
-        case ItemTag::Striker:  return "Striker";
-        case ItemTag::Guardian: return "Guardian";
-        case ItemTag::Support:  return "Support";
-        case ItemTag::None:     return "";
-    }
-    return "";
-}
+inline BallRole tagRole(ItemTag t) { return static_cast<BallRole>(static_cast<int>(t)); }
+inline ItemTag roleTag(BallRole r) { return static_cast<ItemTag>(static_cast<int>(r)); }
+inline ItemTag classTag(int i) { return static_cast<ItemTag>(i + 1); }   // i = 0..kClassCount-1
+inline const char* itemTagName(ItemTag t) { return t == ItemTag::None ? "" : roleName(tagRole(t)); }
 
-inline BallRole tagRole(ItemTag t) {
-    switch (t) {
-        case ItemTag::Striker:  return BallRole::Striker;
-        case ItemTag::Guardian: return BallRole::Guardian;
-        case ItemTag::Support:  return BallRole::Support;
-        case ItemTag::None:     return BallRole::Normal;
-    }
-    return BallRole::Normal;
-}
-
-// Element items map onto element web-node slots 0..5 (fire..electric);
+// Element picks map onto element web-node slots 0..5 (fire..electric);
 // everything else returns -1. The ball element is Element(slot + 1).
 inline int elementItemSlot(UpgradeKind k) {
     if (upgradeCat(k) != UpgradeCat::Element) return -1;
     return static_cast<int>(k) - static_cast<int>(UpgradeKind::ElemFire);
+}
+
+// Ability picks -> the sim's Ability (None for anything else).
+inline Ability abilityOf(UpgradeKind k) {
+    if (upgradeCat(k) != UpgradeCat::Ability) return Ability::None;
+    return static_cast<Ability>(static_cast<int>(k) - static_cast<int>(UpgradeKind::AbilityDash) + 1);
 }
 
 // Modifiers index 0..kModifierCount-1 into BallLoadout::mods; -1 otherwise.
@@ -260,6 +197,11 @@ inline const char* upgradeKindId(UpgradeKind k) {
         case UpgradeKind::ElemIce:        return "ElemIce";
         case UpgradeKind::ElemStone:      return "ElemStone";
         case UpgradeKind::ElemElectric:   return "ElemElectric";
+        case UpgradeKind::AbilityDash:    return "AbilityDash";
+        case UpgradeKind::AbilityNova:    return "AbilityNova";
+        case UpgradeKind::AbilitySplit:   return "AbilitySplit";
+        case UpgradeKind::AbilityBulwark: return "AbilityBulwark";
+        case UpgradeKind::AbilityOverclock: return "AbilityOverclock";
         case UpgradeKind::Ricochet:       return "Ricochet";
         case UpgradeKind::Cleave:         return "Cleave";
         case UpgradeKind::Crit:           return "Crit";
@@ -310,7 +252,9 @@ inline const char* upgradeKindId(UpgradeKind k) {
         case UpgradeKind::Phoenix:        return "Phoenix";
         case UpgradeKind::TimeDilation:   return "TimeDilation";
         case UpgradeKind::Overcharge:     return "Overcharge";
+        default: break;
     }
+    if (const ItemDef* d = classItemDef(k)) return d->id;
     return "";
 }
 
@@ -323,6 +267,11 @@ inline UpgradeInfo upgradeInfo(UpgradeKind k) {
         case UpgradeKind::ElemIce:       return {"Ice", "the ball turns ice: hits freeze enemies in place"};
         case UpgradeKind::ElemStone:     return {"Stone", "the ball turns stone: drops grinding rubble"};
         case UpgradeKind::ElemElectric:  return {"Electric", "the ball turns electric: zaps nearby enemies"};
+        case UpgradeKind::AbilityDash:   return {"Dash", "every few seconds the ball bursts straight at the nearest enemy"};
+        case UpgradeKind::AbilityNova:   return {"Nova", "every few seconds the ball lets out a shockwave that hits and shoves everything around it"};
+        case UpgradeKind::AbilitySplit:  return {"Split", "every few seconds two ghost copies of the ball fan out for a moment, with its items"};
+        case UpgradeKind::AbilityBulwark: return {"Bulwark", "when enemies close in, the core pushes out a pulse that shoves and staggers them"};
+        case UpgradeKind::AbilityOverclock: return {"Overclock", "every few seconds the ball runs hot: faster and 50% harder-hitting for 3 s"};
         case UpgradeKind::Ricochet:      return {"Ricochet", "every wall bounce speeds it up and arms a harder hit for a moment"};
         case UpgradeKind::Cleave:        return {"Cleave", "punches straight through an enemy it kills"};
         case UpgradeKind::Crit:          return {"Keen eye", "12% chance a hit deals double damage"};
@@ -373,17 +322,24 @@ inline UpgradeInfo upgradeInfo(UpgradeKind k) {
         case UpgradeKind::Phoenix:       return {"Phoenix", "once per act, when the core breaks it comes back at half health"};
         case UpgradeKind::TimeDilation:  return {"Time dilation", "all enemies move 25% slower, all the time"};
         case UpgradeKind::Overcharge:    return {"Overcharge", "the damage combo can climb twice as high"};
+        default: break;
     }
+    if (const ItemDef* d = classItemDef(k)) return {d->title, d->desc};
     return {"", ""};
 }
 
-// What one more level of an item does (items and elements; "" otherwise).
-// Every level past the first also makes the ball hit 10% harder.
+// What one more level of an item does (items, elements and abilities; ""
+// otherwise). Every item level past the first also makes the ball hit 10% harder.
 inline const char* upgradeLevelDesc(UpgradeKind k) {
     switch (k) {
         case UpgradeKind::ElemFire: case UpgradeKind::ElemPoison: case UpgradeKind::ElemWater:
         case UpgradeKind::ElemIce: case UpgradeKind::ElemStone: case UpgradeKind::ElemElectric:
                                          return "its element is 30% stronger";
+        case UpgradeKind::AbilityDash:   return "a faster burst, a shorter cooldown";
+        case UpgradeKind::AbilityNova:   return "a wider, harder shockwave, a shorter cooldown";
+        case UpgradeKind::AbilitySplit:  return "the copies last longer, a shorter cooldown";
+        case UpgradeKind::AbilityBulwark: return "a wider pulse that staggers longer, a shorter cooldown";
+        case UpgradeKind::AbilityOverclock: return "runs hot longer and harder, a shorter cooldown";
         case UpgradeKind::Ricochet:      return "a bigger speed kick and a harder armed hit";
         case UpgradeKind::Cleave:        return "also cuts through - and finishes - enemies it leaves under 8% more health";
         case UpgradeKind::Crit:          return "+7% chance, and crits hit harder";
@@ -417,66 +373,113 @@ inline const char* upgradeLevelDesc(UpgradeKind k) {
         case UpgradeKind::Storm:         return "zaps more often and harder";
         case UpgradeKind::Gemini:        return "a 2nd twin at level 3, a 3rd at level 5";
         case UpgradeKind::Midas:         return "+3 gold per kill";
-        default:                         return "";
+        default:                         break;
     }
+    if (const ItemDef* d = classItemDef(k)) return d->levelDesc;
+    return "";
 }
 
-// One ball of the run: its item slots and its stacked modifiers. Its element
-// is whichever element item is equipped (Plain if none); its role is the tag
-// with 2+ items (4 = mastery).
+// One ball of the run: 4 item slots, a type slot (its element), its ability
+// slots and its stacked modifiers. Its classes are the item tags it holds 2+
+// of (so 0, 1 or 2 classes); 4 of one tag is that class's ascended form.
+// Elements and abilities never count toward a class.
 struct BallLoadout {
     int gear[kBallSlots] = {-1, -1, -1, -1};   // UpgradeKind per item slot, -1 = empty
     int gearLvl[kBallSlots] = {0, 0, 0, 0};    // item level: 1 once equipped, up to kMaxItemLevel
+    int type = -1;                             // element pick in the type slot, -1 = none (Plain)
+    int typeLvl = 0;
+    int ability[kMaxAbilitySlots] = {-1, -1, -1};   // ability picks, -1 = empty
+    int abilityLvl[kMaxAbilitySlots] = {0, 0, 0};
     int mods[kModifierCount] = {};             // stacks per modifier (modifierIndex)
 
-    // Slot holding item k, -1 if none.
+    // ---- any slot, addressed 0..kLoadoutSlots-1 (see kSlotType / kSlotAbility)
+    int kindAt(int s) const {
+        if (isItemSlot(s)) return gear[s];
+        if (s == kSlotType) return type;
+        if (isAbilitySlot(s)) return ability[s - kSlotAbility];
+        return -1;
+    }
+    int levelAt(int s) const {
+        if (isItemSlot(s)) return gearLvl[s];
+        if (s == kSlotType) return typeLvl;
+        if (isAbilitySlot(s)) return abilityLvl[s - kSlotAbility];
+        return 0;
+    }
+    void setSlot(int s, int kind, int level) {
+        if (isItemSlot(s)) { gear[s] = kind; gearLvl[s] = level; }
+        else if (s == kSlotType) { type = kind; typeLvl = level; }
+        else if (isAbilitySlot(s)) { ability[s - kSlotAbility] = kind; abilityLvl[s - kSlotAbility] = level; }
+    }
+    void clearSlot(int s) { setSlot(s, -1, 0); }
+    int levelUp(int s) {   // +1 level on a filled slot; returns the new level
+        if (kindAt(s) < 0) return 0;
+        setSlot(s, kindAt(s), levelAt(s) + 1);
+        return levelAt(s);
+    }
+
+    // Slot holding pick k (item, element or ability), -1 if none.
     int slotOf(UpgradeKind k) const {
-        for (int i = 0; i < kBallSlots; ++i)
-            if (gear[i] == static_cast<int>(k)) return i;
+        for (int s = 0; s < kLoadoutSlots; ++s)
+            if (kindAt(s) == static_cast<int>(k)) return s;
         return -1;
     }
     bool has(UpgradeKind k) const { return slotOf(k) >= 0; }
     int levelOf(UpgradeKind k) const {
         const int s = slotOf(k);
-        return s < 0 ? 0 : gearLvl[s];
+        return s < 0 ? 0 : levelAt(s);
     }
-    // Slot holding an element item, -1 if none.
-    int elementSlot() const {
-        for (int i = 0; i < kBallSlots; ++i)
-            if (gear[i] >= 0 && elementItemSlot(static_cast<UpgradeKind>(gear[i])) >= 0) return i;
-        return -1;
-    }
+    int elementSlot() const { return type >= 0 ? kSlotType : -1; }
     Element element() const {
-        const int s = elementSlot();
-        return s < 0 ? Element::Plain
-                     : static_cast<Element>(elementItemSlot(static_cast<UpgradeKind>(gear[s])) + 1);
+        return type < 0 ? Element::Plain
+                        : static_cast<Element>(elementItemSlot(static_cast<UpgradeKind>(type)) + 1);
     }
+
+    // ---- classes
     int tagCount(ItemTag t) const {
         int n = 0;
         for (int g : gear)
             if (g >= 0 && itemTag(static_cast<UpgradeKind>(g)) == t) ++n;
         return n;
     }
-    // The tag with the most items, if it has 2+. Ties go to the tag of the
-    // earliest slot.
-    ItemTag leadTag() const {
-        ItemTag best = ItemTag::None;
-        int bestN = 1;
+    bool hasRole(ItemTag t) const { return t != ItemTag::None && tagCount(t) >= 2; }
+    // Its classes (at most 2), in slot order: the class of the earliest item first.
+    int roles(ItemTag out[2]) const {
+        int n = 0;
         for (int g : gear) {
-            if (g < 0) continue;
+            if (g < 0 || n >= 2) continue;
             const ItemTag t = itemTag(static_cast<UpgradeKind>(g));
-            const int n = tagCount(t);
-            if (t != ItemTag::None && n > bestN) { best = t; bestN = n; }
+            if (!hasRole(t) || (n == 1 && out[0] == t)) continue;
+            out[n++] = t;
         }
-        return best;
+        return n;
     }
-    BallRole role() const { return tagRole(leadTag()); }
-    bool mastery() const { return leadTag() != ItemTag::None && tagCount(leadTag()) >= 4; }
+    RoleMask roleMask() const {
+        ItemTag r[2];
+        RoleMask m = 0;
+        for (int i = 0, n = roles(r); i < n; ++i) m |= roleBit(tagRole(r[i]));
+        return m;
+    }
+    // The class it has 4 items of, if any.
+    ItemTag ascended() const {
+        ItemTag r[2];
+        for (int i = 0, n = roles(r); i < n; ++i)
+            if (tagCount(r[i]) >= 4) return r[i];
+        return ItemTag::None;
+    }
+    ItemTag leadTag() const {   // its first class, None without one
+        ItemTag r[2];
+        return roles(r) > 0 ? r[0] : ItemTag::None;
+    }
 };
+
+// How many ability slots are open on a ball: 1 on every ball. (Phase 2: the
+// Mage raises it - 2 with the Mage class, 3 ascended. This is the only place
+// that decides it; abilities in closed slots stay on the ball but sleep.)
+inline int abilitySlotCount(const BallLoadout& /*b*/) { return 1; }
 
 inline bool upgradeTakesSlot(UpgradeKind k) {
     const UpgradeCat c = upgradeCat(k);
-    return c == UpgradeCat::Item || c == UpgradeCat::Element;
+    return c == UpgradeCat::Item || c == UpgradeCat::Element || c == UpgradeCat::Ability;
 }
 
 inline bool upgradeNeedsTarget(UpgradeKind k) {
@@ -489,13 +492,26 @@ inline bool upgradeLevelsUp(UpgradeKind k, const BallLoadout& b) {
     return upgradeTakesSlot(k) && b.has(k);
 }
 
-// Can pick `k` go on this ball? Items: a duplicate levels up the equipped one,
-// until kMaxItemLevel; Conductor / Bedrock only with their element equipped.
-// Modifiers: always.
+// Can pick `k` go into slot `s` of this ball? Items: an item slot. Elements:
+// the type slot. Abilities: an open ability slot.
+inline bool slotAccepts(UpgradeKind k, int s, const BallLoadout& b) {
+    switch (upgradeCat(k)) {
+        case UpgradeCat::Item:    return isItemSlot(s);
+        case UpgradeCat::Element: return s == kSlotType;
+        case UpgradeCat::Ability: return isAbilitySlot(s) && s - kSlotAbility < abilitySlotCount(b);
+        default:                  return false;
+    }
+}
+
+// Can pick `k` go on this ball? A duplicate levels up the equipped one, until
+// kMaxItemLevel; a new element / ability swaps the old one if the slot is
+// full; Conductor / Bedrock only with their element. Modifiers: always.
 inline bool upgradeFitsBall(UpgradeKind k, const BallLoadout& b) {
     switch (upgradeCat(k)) {
         case UpgradeCat::Modifier: return true;
         case UpgradeCat::Element:
+        case UpgradeCat::Ability:
+            return !b.has(k) || b.levelOf(k) < kMaxItemLevel;
         case UpgradeCat::Item:
             if (b.has(k)) return b.levelOf(k) < kMaxItemLevel;
             if (k == UpgradeKind::Conductor) return b.element() == Element::Electric;
@@ -505,15 +521,23 @@ inline bool upgradeFitsBall(UpgradeKind k, const BallLoadout& b) {
     }
 }
 
-// Where an item lands on this ball when no slot is picked: a duplicate levels
-// its own slot; an element always replaces the ball's current element (one per
-// ball); otherwise the first free slot, else slot 0.
+// Where a pick lands on this ball when no slot is picked: a duplicate levels
+// its own slot; an element goes in the type slot; an ability in the first free
+// open ability slot (else the first one); an item in the first free item slot,
+// else slot 0.
 inline int defaultSlot(UpgradeKind k, const BallLoadout& b) {
     if (b.has(k)) return b.slotOf(k);
-    if (elementItemSlot(k) >= 0 && b.elementSlot() >= 0) return b.elementSlot();
-    for (int i = 0; i < kBallSlots; ++i)
-        if (b.gear[i] < 0) return i;
-    return 0;
+    switch (upgradeCat(k)) {
+        case UpgradeCat::Element: return kSlotType;
+        case UpgradeCat::Ability:
+            for (int i = 0; i < abilitySlotCount(b); ++i)
+                if (b.ability[i] < 0) return kSlotAbility + i;
+            return kSlotAbility;
+        default:
+            for (int i = 0; i < kBallSlots; ++i)
+                if (b.gear[i] < 0) return i;
+            return 0;
+    }
 }
 
 // What the roll needs to know to drop picks that would do nothing.
@@ -535,10 +559,12 @@ struct UpgradeCtx {
     bool phoenix = false;
     bool timeDilation = false;
     bool overcharge = false;
-    std::uint64_t locked = 0;   // bit k set => UpgradeKind k is locked behind the web
+    // Picks still behind the web: legendaries without their node, and every
+    // item of a class that isn't unlocked yet.
+    std::bitset<kMaxUpgradeKinds> locked;
+    void lock(UpgradeKind k) { locked.set(static_cast<std::size_t>(k)); }
+    bool isLocked(UpgradeKind k) const { return locked.test(static_cast<std::size_t>(k)); }
 };
-
-inline constexpr std::uint64_t upgradeBit(UpgradeKind k) { return std::uint64_t{1} << static_cast<int>(k); }
 
 inline int elementsUnlocked(const UpgradeCtx& c) {
     int n = 0;
@@ -548,7 +574,7 @@ inline int elementsUnlocked(const UpgradeCtx& c) {
 }
 
 inline bool upgradeEligible(UpgradeKind k, const UpgradeCtx& c) {
-    if (c.locked & upgradeBit(k)) return false;
+    if (c.isLocked(k)) return false;
     const int ballCount = c.balls ? static_cast<int>(c.balls->size()) : 0;
     auto anyBallFits = [&] {
         if (!c.balls) return false;
@@ -558,7 +584,8 @@ inline bool upgradeEligible(UpgradeKind k, const UpgradeCtx& c) {
     };
     switch (upgradeCat(k)) {
         case UpgradeCat::NewBall:  return ballCount < c.maxBalls;
-        case UpgradeCat::Modifier: return anyBallFits();
+        case UpgradeCat::Modifier:
+        case UpgradeCat::Ability:  return anyBallFits();
         case UpgradeCat::Element:  return c.elemUnlocked[elementItemSlot(k)] && anyBallFits();
         case UpgradeCat::Item:
             if (k == UpgradeKind::Shatter && !c.elemUnlocked[3]) return false;   // ice
@@ -584,22 +611,34 @@ inline bool upgradeEligible(UpgradeKind k, const UpgradeCtx& c) {
     }
 }
 
+// Does any item carry this tag? (A newer class may have none yet - it can't
+// be picked as a starting class then.)
+inline bool classHasItems(ItemTag t) {
+    for (int i = 0; i < kUpgradeKindCount; ++i) {
+        const auto k = static_cast<UpgradeKind>(i);
+        if (upgradeCat(k) == UpgradeCat::Item && itemTag(k) == t) return true;
+    }
+    return false;
+}
+
 // ---- permanent meta unlocks: the skill web in the game menu ----------------
 //
-// The menu draws these as a radial graph: a central node ("Squad", +1 ball)
-// with branches that fan out - Base (left), Combat (bottom), Economy (top),
-// Power-ups (upper-right) and Special balls (a chain fanning to the lower
-// right). A node can only be bought once the node that gates it (`parent`) has
+// The menu draws these as a radial graph: a central node ("Calling": choose
+// your starting ball's class) with branches that fan out - Base (left), Combat
+// (bottom) with the Classes chain under it, Economy (top), Power-ups
+// (upper-right) and Special balls (a chain fanning to the lower right). A node can only be bought once the node that gates it (`parent`) has
 // at least one level. Most cost cores; the prism nodes cost prisms (the win
 // currency).
 //
 // v9 inserted the five extra Special-ball nodes, shifting every index after
 // Ignition, so pre-v9 saves reset their unlock levels on load. v11 appends the
 // Fase-A nodes (Aegis..Ember) at the end, so indices stay put and older saves
-// just load with the new nodes unbought.
+// just load with the new nodes unbought. v15 turned the root "Squad" (+1
+// starting ball, 2 levels) into "Calling" (1 level; the extra level is
+// refunded on load) and appended the class unlocks.
 
 enum MetaUnlock {
-    MetaStartBalls,   // Squad     - +1 starting ball                      (root)
+    MetaCalling,      // Calling   - choose the starting ball's class       (root; was "Squad", +1 ball)
     MetaCoreHp,       // Bulwark   - +core HP at the start
     MetaMend,         // Mend      - core heals more between waves
     MetaFireItem,     // Ignition  - unlocks the fire item, +fire potency
@@ -653,10 +692,18 @@ enum MetaUnlock {
     MetaTreasury,     // Treasury      - start each run with gold
     MetaQuartermaster,// Quartermaster - choose the Starter kit item from 4 cards
     MetaLastStand,    // Last stand    - once per run the core comes back from 0
+    // ---- v15 append (indices 51+, never reorder): the Classes chain ----
+    MetaClassSupport, // Support   - Support items can appear                  (Classes, under Mass)
+    MetaClassGuardian,// Guardian  - Guardian items can appear
+    MetaClassMage,    // Mage      - Mage items can appear
+    MetaClassShooter, // Shooter   - Shooter items can appear
+    MetaClassAssassin,// Assassin  - Assassin items can appear
+    MetaClassSummoner,// Summoner  - Summoner items can appear
+    MetaClassJester,  // Jester    - Jester items can appear
     MetaUnlockCount
 };
 
-enum class MetaBranch { Root, Base, Combat, Eco, Special, Pickups, Arsenal, Pacts };
+enum class MetaBranch { Root, Base, Combat, Eco, Special, Pickups, Arsenal, Pacts, Classes };
 enum class MetaCurrency { Cores, Prisms };
 
 struct MetaUnlockDef {
@@ -672,8 +719,8 @@ struct MetaUnlockDef {
 
 inline const MetaUnlockDef& metaUnlockDef(int u) {
     static const MetaUnlockDef defs[MetaUnlockCount] = {
-        /* Squad     */ {"Squad",     "start each run with one more ball",
-                         8u,  2, MetaBranch::Root,    MetaCurrency::Cores,  -1,  0.00f,  0.00f},
+        /* Calling   */ {"Calling",   "start each run by choosing your ball's class: it starts with 2 items of it (only unlocked classes)",
+                         8u,  1, MetaBranch::Root,    MetaCurrency::Cores,  -1,  0.00f,  0.00f},
         /* Bulwark   */ {"Bulwark",   "start with +20 core health",
                          10u, 3, MetaBranch::Base,    MetaCurrency::Cores,   0, -1.00f,  0.00f},
         /* Mend      */ {"Mend",      "the core heals +3 more between waves",
@@ -743,7 +790,7 @@ inline const MetaUnlockDef& metaUnlockDef(int u) {
         /* Armory    */ {"Armory",    "Epic picks turn up more often (+50% odds per level). Opens the Arsenal.",
                          2u,  2, MetaBranch::Arsenal, MetaCurrency::Prisms, 11, -1.00f,  2.00f},
         /* Satellite */ {"Satellite", "the Satellite legendary can appear: a ball that orbits the core",
-                         2u,  1, MetaBranch::Arsenal, MetaCurrency::Prisms, 32, -0.80f,  3.00f},
+                         2u,  1, MetaBranch::Arsenal, MetaCurrency::Prisms, 32, -1.10f,  3.10f},
         /* Singularity*/{"Singularity","the Gravity well legendary can appear: a ball that drags enemies in",
                          3u,  1, MetaBranch::Arsenal, MetaCurrency::Prisms, 32, -2.00f,  3.00f},
         /* Twins     */ {"Twins",     "the Gemini legendary can appear: a permanent ghost twin",
@@ -762,15 +809,15 @@ inline const MetaUnlockDef& metaUnlockDef(int u) {
         /* Oath      */ {"Oath",      "after the act-1 boss, choose from 4 pacts instead of 3. Opens the Pacts.",
                          14u, 1, MetaBranch::Pacts,   MetaCurrency::Cores,  11,  1.00f,  2.00f},
         /* Covenant  */ {"Covenant",  "start every run by choosing a pact (1 of 3) - with the boss's, a run can hold two",
-                         3u,  1, MetaBranch::Pacts,   MetaCurrency::Prisms, 41,  2.00f,  3.00f},
+                         3u,  1, MetaBranch::Pacts,   MetaCurrency::Prisms, 41,  2.50f,  3.00f},
         /* Hunters   */ {"Hunters",   "the Hunters pact can be offered: every ball chases its own prey, hands off",
-                         2u,  1, MetaBranch::Pacts,   MetaCurrency::Prisms, 41,  0.50f,  4.00f},
+                         2u,  1, MetaBranch::Pacts,   MetaCurrency::Prisms, 41,  2.00f,  4.00f},
         /* Legion    */ {"Legion",    "the Legion pact can be offered: two more balls at once, clacks throw sparks",
-                         2u,  1, MetaBranch::Pacts,   MetaCurrency::Prisms, 41,  1.50f,  4.00f},
+                         2u,  1, MetaBranch::Pacts,   MetaCurrency::Prisms, 41,  3.00f,  4.00f},
         /* Dice      */ {"Loaded dice","the Loaded Dice pact can be offered: +12 luck, fight gold is double or nothing",
-                         3u,  1, MetaBranch::Pacts,   MetaCurrency::Prisms, 43,  0.90f,  5.00f},
+                         3u,  1, MetaBranch::Pacts,   MetaCurrency::Prisms, 43,  2.50f,  5.00f},
         /* Alchemy   */ {"Alchemy",   "the Alchemy pact can be offered: random extra elements, a ball reacts with itself",
-                         3u,  1, MetaBranch::Pacts,   MetaCurrency::Prisms, 44,  2.00f,  5.00f},
+                         3u,  1, MetaBranch::Pacts,   MetaCurrency::Prisms, 44,  3.60f,  5.00f},
         /* Merchant  */ {"Merchant",  "shops stock one more pick and their sale gets 15% deeper per level",
                          12u, 2, MetaBranch::Eco,     MetaCurrency::Cores,  38, -1.80f, -4.00f},
         /* Treasury  */ {"Treasury",  "start every run with +20 gold per level",
@@ -779,6 +826,22 @@ inline const MetaUnlockDef& metaUnlockDef(int u) {
                          16u, 1, MetaBranch::Eco,     MetaCurrency::Cores,  39, -5.00f, -2.60f},
         /* Last stand*/ {"Last stand","once per run, when the core breaks it comes back at half health",
                          20u, 1, MetaBranch::Base,    MetaCurrency::Cores,  23, -4.00f,  0.80f},
+        // ---- v15: the Classes chain, straight down from Mass. Striker is open
+        // from the start; each node lets that class's items appear.
+        /* Support   */ {"Support",   "unlocks the Support class: its items can appear (weak hits that mark enemies for every ball)",
+                         12u, 1, MetaBranch::Classes, MetaCurrency::Cores,  12,  0.00f,  3.00f},
+        /* Guardian  */ {"Guardian",  "unlocks the Guardian class: its items can appear (big, shoves and staggers, guards the core)",
+                         18u, 1, MetaBranch::Classes, MetaCurrency::Cores,  51,  0.00f,  4.00f},
+        /* Mage      */ {"Mage",      "unlocks the Mage class: its items can appear (more ability slots)",
+                         24u, 1, MetaBranch::Classes, MetaCurrency::Cores,  52, -1.40f,  4.80f},
+        /* Shooter   */ {"Shooter",   "unlocks the Shooter class: its items can appear (fires bullets)",
+                         24u, 1, MetaBranch::Classes, MetaCurrency::Cores,  52, -0.80f,  5.45f},
+        /* Assassin  */ {"Assassin",  "unlocks the Assassin class: its items can appear (teleports to the next enemy on a kill)",
+                         24u, 1, MetaBranch::Classes, MetaCurrency::Cores,  52,  0.00f,  5.75f},
+        /* Summoner  */ {"Summoner",  "unlocks the Summoner class: its items can appear (summons helpers)",
+                         24u, 1, MetaBranch::Classes, MetaCurrency::Cores,  52,  0.80f,  5.45f},
+        /* Jester    */ {"Jester",    "unlocks the Jester class: its items can appear (plays on chance)",
+                         24u, 1, MetaBranch::Classes, MetaCurrency::Cores,  52,  1.40f,  4.80f},
     };
     return defs[u];
 }
@@ -797,6 +860,25 @@ inline MetaCurrency metaUnlockCurrency(int u) { return metaUnlockDef(u).currency
 inline bool metaUnlockAvailable(int u, const int* levels) {
     const int p = metaUnlockDef(u).parent;
     return p < 0 || levels[p] > 0;
+}
+
+// The web node that unlocks a class; -1 for Striker (always open).
+inline int classUnlockNode(ItemTag t) {
+    switch (t) {
+        case ItemTag::Support:  return MetaClassSupport;
+        case ItemTag::Guardian: return MetaClassGuardian;
+        case ItemTag::Mage:     return MetaClassMage;
+        case ItemTag::Shooter:  return MetaClassShooter;
+        case ItemTag::Assassin: return MetaClassAssassin;
+        case ItemTag::Summoner: return MetaClassSummoner;
+        case ItemTag::Jester:   return MetaClassJester;
+        default:                return -1;
+    }
+}
+
+inline bool classUnlocked(ItemTag t, const int* levels) {
+    const int n = classUnlockNode(t);
+    return n < 0 || levels[n] > 0;
 }
 
 }  // namespace sb

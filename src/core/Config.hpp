@@ -18,7 +18,7 @@ inline constexpr float radius = 18.f;
 inline constexpr float baseCruise = 300.f;       // px/s orbit speed at level 0
 inline constexpr float hardSpeedCap = 2600.f;
 inline constexpr float maxSpeedCruiseMul = 4.0f; // ceiling = cruise * this (capped by hardSpeedCap)
-inline constexpr int maxBalls = 5;   // few balls, each one a built-up "character" (role + element + 2 gear slots)
+inline constexpr int maxBalls = 5;   // few balls, each one a built-up "character" (classes, 4 items, type, abilities)
 
 // Speed regulation: cruise is a floor the ball climbs back to quickly and a
 // target it eases down to slowly, so a fling stays fast for a moment.
@@ -136,7 +136,7 @@ inline constexpr int luckyStarPerLevel = 2;   // "Lucky star" web node, per leve
 inline constexpr int dicePoints = 12;         // "Loaded Dice" pact (chances x1.96)
 }  // namespace luck
 
-// Synergies (Fase I): procs, element reactions, role masteries and the big
+// Synergies (Fase I): procs, element reactions, ascended classes and the big
 // relics. Every chance goes through the run's luck.
 namespace synergy {
 inline constexpr float chanceCap = 0.9f;
@@ -176,7 +176,7 @@ inline constexpr float steamRadius = 120.f, steamFrac = 0.8f, steamStagger = 1.2
 inline constexpr float superRadius = 120.f, superFrac = 0.5f, brittleTime = 5.f;     // ice + electric
 inline constexpr float brittleMul = 1.5f;                             // brittle enemies take x this
 inline constexpr float clashRadius = 80.f, clashFrac = 1.0f;          // any other pair
-// role masteries (4 items of one tag)
+// ascended Striker / Guardian / Support (4 items of one tag; sim/WorldClasses.cpp)
 inline constexpr float strikerShockSpeed = 1.2f;   // above this x cruise, hits shockwave...
 inline constexpr float strikerShockRadius = 90.f;
 inline constexpr float strikerShockFrac = 0.5f;
@@ -185,6 +185,40 @@ inline constexpr float guardianPulseKnock = 380.f;
 inline constexpr float guardianPulseStagger = 0.8f;
 inline constexpr float supportSpread = 100.f;      // marks spread this far
 }  // namespace synergy
+
+// Abilities: timed actives in a ball's ability slot(s). Each fires by itself
+// when its cooldown is up and it has something to act on (Bulwark waits for an
+// enemy near the core, the rest for any enemy). Levels: cooldown x
+// cooldownPerLevel per level past 1, and each one's power grows its own way.
+namespace ability {
+inline constexpr float cooldownPerLevel = 0.9f;
+inline constexpr float firstDelay = 0.35f;     // share of the cooldown already charged when a wave starts
+// Dash: a burst straight at the nearest enemy.
+inline constexpr float dashCooldown = 5.0f;
+inline constexpr float dashSpeed = 3.0f;       // x its cruise (capped by its top speed)...
+inline constexpr float dashSpeedPerLevel = 0.3f;
+inline constexpr float dashRange = 700.f;      // only if an enemy is this close
+// Nova: a shockwave around the ball.
+inline constexpr float novaCooldown = 6.5f;
+inline constexpr float novaRadius = 105.f, novaRadiusPerLevel = 12.f;
+inline constexpr float novaFrac = 1.2f, novaFracPerLevel = 0.25f;   // damage x the ball's hit
+inline constexpr float novaKnock = 260.f;
+// Split: two short-lived ghost copies fan out from the ball.
+inline constexpr float splitCooldown = 9.0f;
+inline constexpr float splitLife = 2.6f, splitLifePerLevel = 0.5f;
+inline constexpr float splitSpread = 0.55f;    // rad each copy veers off the heading
+// Bulwark: the core pushes out a pulse that shoves and staggers.
+inline constexpr float bulwarkCooldown = 8.0f;
+inline constexpr float bulwarkRadius = 180.f, bulwarkRadiusPerLevel = 18.f;
+inline constexpr float bulwarkKnock = 420.f;
+inline constexpr float bulwarkStagger = 0.9f, bulwarkStaggerPerLevel = 0.15f;
+inline constexpr float bulwarkFrac = 0.5f;     // damage x the ball's hit
+// Overclock: a few seconds hot - faster and harder-hitting.
+inline constexpr float overclockCooldown = 10.0f;
+inline constexpr float overclockTime = 3.0f, overclockTimePerLevel = 0.4f;
+inline constexpr float overclockDamage = 1.5f, overclockDamagePerLevel = 0.1f;
+inline constexpr float overclockCruise = 1.4f;
+}  // namespace ability
 
 // Tiers: how rare a pick is. Each card rolls a tier first (by these weights),
 // then an eligible pick of that tier (falling back to lower tiers if none).
@@ -329,7 +363,7 @@ inline constexpr float bastionPerWavePerLevel = 1.0f;  // "Bastion" meta node: +
 
 // A run is a fixed sprint: survive to the final wave and you win.
 namespace run {
-inline constexpr int startBalls = 1;   // before the "Squad" meta unlock
+inline constexpr int startBalls = 1;   // every run starts with one ball (more come from picks / pacts)
 inline constexpr int bossWave = 10;    // the miniboss duel
 inline constexpr int finalWave = 20;   // last wave once "Continue" past the boss is unlocked
 inline constexpr float coreSlideTime = 1.4f;  // core eases left -> arena centre entering wave 11
@@ -626,3 +660,5 @@ inline constexpr float heatAlpha = 0.6f;         // strength of the combo tint a
 }  // namespace app
 
 }  // namespace sb::cfg
+
+#include "core/ConfigClasses.hpp"   // per-class tuning (cfg::mage, cfg::shooter, ...)

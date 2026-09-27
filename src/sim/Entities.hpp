@@ -6,6 +6,7 @@
 #include "core/Config.hpp"
 #include "core/Math.hpp"
 #include "core/Theme.hpp"
+#include "sim/Classes.hpp"
 #include "sim/PactRules.hpp"
 
 namespace sb {
@@ -32,16 +33,47 @@ inline constexpr int kElementCount = 7;
 const char* elementName(Element e);
 sf::Color elementColor(Element e);
 
-// ---------------------------------------------------------------- ball roles
+// ---------------------------------------------------------------- ball classes
 
-// Every ball starts Normal; a ROLE pick turns it into Striker (worth
-// flinging), Support (marks enemies + stronger element) or Guardian (big,
-// shoves, staggers, aims its bounces) - see cfg::role.
-enum class BallRole { Normal, Striker, Support, Guardian };
-inline constexpr int kBallRoleCount = 4;
+// A ball's classes ("roles") come from its item tags: 2 items of a tag give it
+// that class, so with 4 item slots a ball has 0, 1 or 2 of them; 4 items of
+// one tag make it the ASCENDED form of that class. Normal = no class. The
+// order matches ItemTag (progression/Offers.hpp). Striker: worth flinging;
+// Guardian: big, shoves, staggers, aims its bounces; Support: marks enemies +
+// a stronger element (see cfg::role). The other five are built per class in
+// sim/Classes.hpp + sim/WorldClasses.cpp.
+enum class BallRole { Normal, Striker, Guardian, Support, Mage, Shooter, Assassin, Summoner, Jester };
+inline constexpr int kBallRoleCount = 9;
+inline constexpr int kClassCount = 8;   // every role but Normal
 
-const char* roleName(BallRole r);
-const char* roleDesc(BallRole r);
+// A set of classes, one bit per BallRole (Normal has no bit).
+using RoleMask = unsigned;
+inline constexpr RoleMask roleBit(BallRole r) {
+    return r == BallRole::Normal ? 0u : 1u << static_cast<unsigned>(r);
+}
+inline constexpr BallRole classAt(int i) { return static_cast<BallRole>(i + 1); }   // i = 0..kClassCount-1
+
+const char* roleName(BallRole r);       // "Striker"
+const char* roleDesc(BallRole r);       // what the class does
+const char* ascendedName(BallRole r);   // "Mega Striker"
+const char* ascendedDesc(BallRole r);   // what 4 items of the tag add
+
+// ---------------------------------------------------------------- abilities
+
+// Timed actives in a ball's ability slot(s): each fires on its own when its
+// cooldown is up (and it has something to act on). They don't count toward a
+// class. Levelled by picking the same one again (cfg::ability).
+enum class Ability { None, Dash, Nova, Split, Bulwark, Overclock };
+inline constexpr int kAbilityCount = 6;        // with None
+inline constexpr int kMaxAbilitySlots = 3;     // 1 by default, the Mage raises it (abilitySlotCount)
+
+struct AbilitySpec {
+    Ability id = Ability::None;
+    int level = 0;
+};
+
+const char* abilityName(Ability a);
+float abilityCooldown(Ability a, int level);   // seconds between two firings
 
 // What a ball's equipped gear adds up to. Built by App from the run loadout and
 // pushed into the World (World::syncBalls) - the sim never sees gear kinds.
@@ -78,7 +110,6 @@ struct BallMods {
     float rampartKnock = 0.f;  // Rampart: knockback x this...
     float rampartStagger = 0.f;// ...stagger x this
     float menderHeal = 0.f;    // Mender: core hp per core bounce
-    bool mastery = false;      // 4 items of its role's tag
     // behaviour items (Fase M)
     float hunterMult = 0.f;    // Hunter: hits on its prey x this
     float hunterTurn = 0.f;
@@ -114,13 +145,16 @@ struct BallMods {
     float stormInterval = 0.f;
     int twins = 0;             // Gemini: ghost twins
     int midasGold = 0;         // Midas: extra gold per kill
+    ClassMods cls;             // the five newer classes' item numbers (sim/Classes.hpp)
 };
 
 // Everything the World needs to build / refresh one ball.
 struct BallSpec {
-    BallRole role = BallRole::Normal;
+    RoleMask roles = 0;        // classes it has (2 items of a tag each)
+    RoleMask ascended = 0;     // classes it has in ascended form (4 items of a tag)
     Element element = Element::Plain;
     BallMods mods;
+    AbilitySpec abilities[kMaxAbilitySlots];   // active ability slots only
 };
 
 // ---------------------------------------------------------------- entities
@@ -130,7 +164,8 @@ struct Ball {
     sf::Vector2f vel;
     float radius = cfg::ball::radius;
     bool held = false;
-    BallRole role = BallRole::Normal;
+    RoleMask roles = 0;      // its classes (see BallRole)
+    RoleMask ascended = 0;   // ...and which of them are ascended
     Element element = Element::Plain;
     BallMods mods;          // this ball's items + modifiers
     float cooldown = 0.f;   // water drip / stone drop / electric zap timer
@@ -157,6 +192,16 @@ struct Ball {
     float tetherT = 0.f;     // "Tether": time to the next damage tick
     float resonanceT = 0.f;  // "Resonance": cooldown
     float pactCharge = 0.f;  // "Living Core" pact: seconds left overcharged after a core bounce
+    // abilities (sim/WorldAbilities.cpp)
+    AbilitySpec abilities[kMaxAbilitySlots];
+    float abilityCd[kMaxAbilitySlots] = {};   // seconds until each can fire again
+    float abilityFlash = 0.f;                 // 1 when one just fired, fades (the cooldown arc flashes)
+    float overclockT = 0.f;                   // "Overclock": seconds left hot...
+    float overclockMul = 1.f;                 // ...hitting this much harder
+    ClassState cls;          // per-class runtime state (sim/Classes.hpp)
+
+    bool hasRole(BallRole r) const { return (roles & roleBit(r)) != 0; }
+    bool isAscended(BallRole r) const { return (ascended & roleBit(r)) != 0; }
 };
 
 // Grunt = the plain walker. The rest each want a different answer (cfg::enemy).
@@ -291,7 +336,7 @@ struct BounceFx {
     bool ballPair = false;   // ball-vs-ball clack (vs a wall / core / enemy impact)
 };
 
-// A burst on the field: a reaction, an explosion, a mastery pulse. `label` is
+// A burst on the field: a reaction, an explosion, an ascended pulse, an ability. `label` is
 // set for element reactions (shown as a small floating word).
 struct BurstFx {
     sf::Vector2f pos;
