@@ -1424,6 +1424,57 @@ Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
       fantasmas `maxGhosts`), y el Asesino en la arena ancha / boss (salta a
       enemigos, nunca al boss ni a los escudos orbitales).
 
+  - **Clase Summoner. [IMPLEMENTADO 2026-09-26]** (fase 2; tuning en
+    `cfg::summoner`, lógica en `ClassHooks<BallRole::Summoner>`).
+    - **Clase (2 items):** cada 4.5 s llama una **spriteling**: pelotita
+      (x0.5 de radio), lisa, de su elemento, ~3 s, lanzada al enemigo más
+      cercano, pega x0.6 (es un fantasma de `ghosts_`, respeta `maxGhosts`;
+      máx 2 por pelota). Además **todas sus invocaciones pegan y duran x1.3**.
+    - **Archsummoner (4 items):** spritelings cada 2.5 s (máx 4) que **llevan
+      los items de la pelota**, invocaciones x1.6, y cada golpe de invocación
+      deja el **efecto completo** del elemento (quema / veneno / congela), no
+      solo el cebo de reacción.
+    - **Items** (el daño es fracción del golpe de la pelota al invocar; los
+      ítems andan en cualquier pelota, sin la clase también):
+      - **Turret** (Common): un rebote en pared planta una torreta ahí que
+        dispara al enemigo más cercano (330 px). 5 s +1/nivel, 1.2 tiros/s
+        +0.25, x0.4 +0.1; 2 por pelota, +1 en Lv3 y Lv5; 1.2 s entre plantas.
+      - **Wisps** (Common): cada enemigo que muere cerca de la pelota (sus
+        kills, casi siempre) suelta un fuego fatuo que persigue y revienta con
+        su elemento. x0.35 +0.1/nivel; 1 por kill, 2 en Lv3, 3 en Lv5. Las
+        kills de invocaciones no sueltan wisps (sin cadena).
+      - **Totem** (Uncommon): con enemigos cerca planta un tótem (hexágono +
+        aro tenue) que frena 35% (+6%/nivel) lo que camina adentro (radio 95
+        +10) y pulsa x0.3 por segundo. Cada 7 s (−0.6/nivel), dura 5 s
+        (+0.75); máx 2 por pelota.
+      - **Warden** (Uncommon): 2 espíritus giran alrededor del núcleo, pegan
+        x0.5 (+0.12) y empujan hacia afuera; descansan 0.55 s tras pegar. +1
+        en Lv3 y Lv5 (tope 4).
+      - **Dragonling** (Rare): un dragoncito vuela al lado de la pelota y
+        cada 1.7 s (−0.15/nivel) escupe un cono de su elemento (250 px,
+        semiángulo 0.45 +0.05) al enemigo más cercano: x0.8 (+0.2), con el
+        efecto completo del elemento.
+    - Invocaciones contra el boss: x0.5 (sin i-frames). Solo las pelotas
+      reales invocan (copias, gemelos y spritelings no). Todo corre en
+      `worldTick` (el rebote en pared se detecta por la velocidad que se
+      invierte junto a una pared). Topes de mundo: 48 tiros/wisps, 8
+      torretas, 6 tótems. Todo se limpia al empezar la oleada.
+    - **Visual:** chiquito, translúcido y del color del elemento (verde
+      Summoner si es lisa): torreta = triangulito con cañón, tiro = punto,
+      wisp = punto con brillo, tótem = hexágono + aro, warden = mota,
+      dragón = puntita de flecha con alas que aletean + cono tenue al escupir.
+    - **Balance** (sim headless, 1 pelota, filas 1-13 del acto 1, click al
+      más cercano cada 2 s, 32 corridas; ±0.3): lisa 7.1 · Striker (Ricochet +
+      Keen eye) 8.2 · Keen eye solo 6.9 · Mitosis 8.3 · Turret L1 7.8 / L5
+      10.4 · Wisps L1 8.2 / L5 11.1 · Totem 7.6 · Warden 7.9 · Dragonling L1
+      8.6 / L5 11.4 · solo la clase (spritelings) 7.9 · **Summoner inicial
+      (Turret + Wisps) 10.3** · Totem + Warden 10.3 · Archsummoner 4×L1 12.8 ·
+      4×L5 13/13. Sin tocar la pelota: lisa 1.4, Turret 3.4, Dragonling 3.8
+      (L5 6.9), Summoner inicial 4.4 — las invocaciones pegan solas, es su
+      gracia, pero ojo con el "autopiloto". Ningún NaN; ~1 µs por paso.
+    - Falta playtest: que no se llene la pantalla con 3 Summoners, y si el
+      dragón L5 queda muy autopiloto.
+
 - **Pendiente (idea del usuario, 2026-09-26): más clases, doble rol,
   habilidades y elemento como slot.** **[PARCIAL 2026-09-26: el marco está
   hecho (Fase P): 8 clases, doble rol, ascendidas, slot de tipo, habilidades,

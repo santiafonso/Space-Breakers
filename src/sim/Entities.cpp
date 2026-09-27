@@ -124,7 +124,7 @@ const char* roleDesc(BallRole r) {
         case BallRole::Mage:     return "carries more abilities: a 2nd ability slot, and every hit it lands brings its abilities 0.25 s closer";
         case BallRole::Shooter:  return "fires small bullets at the nearest enemy as it flies - faster the faster it goes";
         case BallRole::Assassin: return "after a kill it blinks next to the nearest enemy and dives at it";
-        case BallRole::Summoner: return "summons helpers: short-lived balls, turrets, a small dragon...";
+        case BallRole::Summoner: return "calls a small spriteling ball every few seconds; all its summons hit harder and last longer";
         case BallRole::Jester:   return "plays on chance: each hit may land twice, spark to another enemy or leave a random element (luck helps)";
     }
     return "";
@@ -154,7 +154,7 @@ const char* ascendedDesc(BallRole r) {
         case BallRole::Mage:     return "a 3rd ability slot, and every ability it casts also lets out an arcane nova around it";
         case BallRole::Shooter:  return "every 4th volley is also a rail shot through the whole line; bullets hop once more";
         case BallRole::Assassin: return "each blink cuts through up to 3 enemies on the way, and blinks come twice as often";
-        case BallRole::Summoner: return "more summons, and stronger";
+        case BallRole::Summoner: return "spritelings twice as often, carrying its items; summons stronger and leave their full element";
         case BallRole::Jester:   return "every Jester roll is taken twice and the best kept; its doubles triple";
     }
     return "";

@@ -107,7 +107,82 @@ void markSummoner(sf::RenderTarget& t, sf::Vector2f p, float r, float, float a) 
                    white(0.75f * a), white(0.5f * a), {1.f, 1.f}, 10);
     }
 }
-void worldSummoner(sf::RenderTarget&, const World&) {}
+// Summons are small, see-through and tinted by the summoner's element - always
+// clearly secondary to the balls. Turret = a small triangle with a barrel,
+// shot / wisp = a dot, totem = a hexagon with a faint zone ring, warden = a
+// small mote on a ring around the core, dragonling = a tiny winged body with a
+// brief cone of breath.
+sf::Color summonColor(int elem) {
+    const Element e = static_cast<Element>(elem);
+    return e == Element::Plain ? theme::classSummoner : lerpColor(elementColor(e), sf::Color::White, 0.25f);
+}
+
+void worldSummoner(sf::RenderTarget& t, const World& world) {
+    const SummonerWorld& sw = world.classWorld().summoner;
+
+    for (const SummonTotem& to : sw.totems) {
+        const float fade = clampf(to.life / 0.6f, 0.f, 1.f) * clampf((to.maxLife - to.life) / 0.2f, 0.f, 1.f);
+        const sf::Color c = summonColor(to.elem);
+        draw::ring(t, to.pos, to.radius, 1.f, withAlpha(c, (0.10f + 0.12f * to.flash) * fade), 0.f, 2.f * kPi, 56);
+        draw::polygon(t, to.pos, 6.f, 6, 0.f, withAlpha(c, 0.5f * fade), withAlpha(c, 0.3f * fade));
+    }
+
+    for (const DragonBreath& br : sw.breaths) {
+        const float k = clampf(br.life / cfg::summoner::breathLife, 0.f, 1.f);
+        const sf::Color c = withAlpha(summonColor(br.elem), 0.16f * k);
+        sf::VertexArray fan(sf::TriangleFan);
+        fan.append({br.pos, c});
+        const float reach = br.range * (1.1f - 0.3f * k);   // it rolls outward as it fades
+        for (int i = 0; i <= 8; ++i) {
+            const float a = br.dir - br.cone + 2.f * br.cone * static_cast<float>(i) / 8.f;
+            fan.append({br.pos + sf::Vector2f{std::cos(a), std::sin(a)} * reach, withAlpha(c, 0.f)});
+        }
+        t.draw(fan);
+    }
+
+    for (const SummonTurret& tu : sw.turrets) {
+        const float fade = clampf(tu.life, 0.f, 1.f);
+        const sf::Color c = summonColor(tu.elem);
+        const sf::Vector2f d{std::cos(tu.aim), std::sin(tu.aim)};
+        draw::line(t, tu.pos, tu.pos + d * 11.f, 2.f, withAlpha(c, 0.6f * fade));
+        draw::polygon(t, tu.pos, 7.f, 3, tu.aim, withAlpha(c, 0.55f * fade), withAlpha(c, 0.35f * fade));
+    }
+
+    for (const SummonShot& s : sw.shots) {
+        const sf::Color c = summonColor(s.elem);
+        if (s.wisp) {
+            draw::glow(t, s.pos, 10.f, c, 0.10f);
+            draw::disc(t, s.pos, cfg::summoner::wispRadius, withAlpha(c, 0.75f), withAlpha(c, 0.35f), {1.f, 1.f}, 12);
+        } else {
+            draw::disc(t, s.pos, cfg::summoner::shotRadius, withAlpha(c, 0.8f), withAlpha(c, 0.5f), {1.f, 1.f}, 8);
+        }
+    }
+
+    for (const Ball& b : world.balls()) {
+        const SummonerMods& m = b.mods.cls.summoner;
+        const SummonerState& s = b.cls.summoner;
+        const sf::Color c = summonColor(static_cast<int>(b.element));
+        for (int i = 0; i < m.wardens; ++i) {
+            const sf::Vector2f at = summonerWardenPos(world.core().pos, s.wardenAng, b.owner, i, m.wardens,
+                                                      cfg::summoner::wardenOrbit * world.arenaScale());
+            const float a = s.wardenRest[i] > 0.f ? 0.25f : 0.6f;   // dim while it rests after a hit
+            draw::disc(t, at, cfg::summoner::wardenRadius * 0.8f, withAlpha(c, a), withAlpha(c, a * 0.5f), {1.f, 1.f}, 14);
+        }
+        if (m.dragonInterval > 0.f && s.dragonOut) {
+            const float h = s.dragonHeading;
+            const sf::Vector2f f{std::cos(h), std::sin(h)}, n{-f.y, f.x};
+            const sf::Vector2f p = s.dragonPos;
+            const float flap = 0.6f + 0.4f * std::sin(classClock() * 11.f + static_cast<float>(b.owner));
+            // a small round body, a snout, and two wings that flap (no
+            // arrowhead - that shape reads as an enemy)
+            const sf::Color cc = withAlpha(c, 0.7f);
+            for (float sd : {-1.f, 1.f})
+                draw::line(t, p, p - f * (3.f * flap) + n * (sd * 8.f * flap), 1.5f, withAlpha(c, 0.5f));
+            draw::line(t, p, p + f * 6.f, 1.5f, cc);
+            draw::disc(t, p, 3.5f, cc, withAlpha(c, 0.45f), {1.f, 1.f}, 12);
+        }
+    }
+}
 
 // ==================================================================== Jester
 void markJester(sf::RenderTarget& t, sf::Vector2f p, float r, float, float a) {

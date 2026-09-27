@@ -96,6 +96,11 @@ enum class UpgradeKind {
     Phantom,           // a shadow copy stays behind where it blinked from [Assassin]
 
     // ---- Summoner items ----
+    SummonTurret,      // a wall bounce plants a turret                    [Summoner]
+    SummonWisps,       // kills let loose homing wisps                     [Summoner]
+    SummonTotem,       // plants a totem that slows enemies around it      [Summoner]
+    SummonWarden,      // spirits circle the core, hitting what they touch [Summoner]
+    SummonDragon,      // a dragonling breathes the ball's element         [Summoner]
 
     // ---- Jester items ----
     LuckyCharm,        // + luck points for the whole run                  [Jester]
