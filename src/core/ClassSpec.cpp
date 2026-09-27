@@ -13,9 +13,20 @@ namespace sb {
 namespace {
 
 // ==================================================================== Mage
-bool foldMage(UpgradeKind k, int /*level*/, BallMods& /*m*/) {
+bool foldMage(UpgradeKind k, int level, BallMods& m) {
+    namespace M = cfg::mage;
+    const float n = static_cast<float>(level - 1);   // levels past the first
+    MageMods& g = m.cls.mage;
     switch (k) {
-        // case UpgradeKind::Example: m.cls.mage.x = cfg::mage::x + cfg::mage::xPerLevel * (level - 1); return true;
+        case UpgradeKind::Focus: g.focus = M::focus + M::focusPerLevel * n; return true;
+        case UpgradeKind::ArcaneMissile:
+            g.missileFrac = M::missileFrac + M::missileFracPerLevel * n;
+            g.missileEvery = M::missileEvery + M::missileEveryPerLevel * n;
+            g.missileTargets = level >= 5 ? 3 : level >= 3 ? 2 : 1;
+            return true;
+        case UpgradeKind::Attunement: g.power = M::power + M::powerPerLevel * n; return true;
+        case UpgradeKind::Twincast: g.twincast = M::twincast + M::twincastPerLevel * n; return true;
+        case UpgradeKind::ManaSpring: g.manaSpring = M::manaSpring + M::manaSpringPerLevel * n; return true;
         default: return false;
     }
 }

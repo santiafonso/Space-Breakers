@@ -218,6 +218,17 @@ inline constexpr float overclockCooldown = 10.0f;
 inline constexpr float overclockTime = 3.0f, overclockTimePerLevel = 0.4f;
 inline constexpr float overclockDamage = 1.5f, overclockDamagePerLevel = 0.1f;
 inline constexpr float overclockCruise = 1.4f;
+// Arc (added with the Mage): a bolt leaps from the ball through a chain of enemies.
+inline constexpr float arcCooldown = 5.5f;
+inline constexpr float arcRange = 320.f;       // the first enemy must be this close...
+inline constexpr float arcJump = 170.f;        // ...then each leap reaches this far
+inline constexpr int arcTargets = 4;           // +1 per level
+inline constexpr float arcFrac = 0.8f, arcFracPerLevel = 0.12f;   // damage x the ball's hit
+// Meteor (added with the Mage): crushes the thickest pack of enemies, anywhere.
+inline constexpr float meteorCooldown = 9.0f;
+inline constexpr float meteorRadius = 95.f, meteorRadiusPerLevel = 10.f;
+inline constexpr float meteorFrac = 2.0f, meteorFracPerLevel = 0.3f;   // damage x the ball's hit
+inline constexpr float meteorStagger = 0.5f;
 }  // namespace ability
 
 // Tiers: how rare a pick is. Each card rolls a tier first (by these weights),

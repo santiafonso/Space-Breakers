@@ -201,6 +201,10 @@ private:
     void updateAbilities(Ball& b, float dt, const WorldParams& p, FrameEvents& ev);
     bool fireAbility(Ball& b, const AbilitySpec& a, const WorldParams& p, FrameEvents& ev);   // false = nothing to act on yet
     void resetAbilityCooldowns(Ball& b);   // a wave starts: every ability part-charged
+    // Mage (defined in its section of sim/WorldClasses.cpp): its items act through casts.
+    float mageCastRate(const Ball& b) const;   // cooldowns tick this much faster ("Focus")
+    void mageOnCast(Ball& b, int slot, bool echo, const WorldParams& p, FrameEvents& ev);   // an ability just fired
+    void mageTick(Ball& b, float dt, const WorldParams& p, FrameEvents& ev);   // missiles, Twincast echoes
 
     // ---- hits, procs and reactions (Fase I) ----
     // One ball landing on one enemy: damage, statuses, procs, reactions.

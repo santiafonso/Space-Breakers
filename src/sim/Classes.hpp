@@ -39,10 +39,31 @@ struct SupportState {};
 struct SupportWorld {};
 
 // ==================================================================== Mage
-// More ability slots (see abilitySlotCount in progression/Offers.hpp).
-struct MageMods {};
-struct MageState {};
-struct MageWorld {};
+// More ability slots (see abilitySlotCount in progression/Offers.hpp). Its
+// items act through the ball's abilities (World::mageCastRate / mageOnCast /
+// mageTick, called from sim/WorldAbilities.cpp), so they work on any ball.
+struct MageMods {
+    float focus = 0.f;          // Focus: abilities recharge this much faster (0.15 = 15%)
+    float missileFrac = 0.f;    // Arcane missile: damage x the ball's hit (0 = off)...
+    float missileEvery = 0.f;   // ...a timed volley this often (plus one per cast)...
+    int missileTargets = 0;     // ...at this many enemies
+    float power = 1.f;          // Attunement: ability damage x this
+    float twincast = 0.f;       // Twincast: chance a cast fires again
+    float manaSpring = 0.f;     // Mana spring: a cast charges its other abilities this share
+};
+struct MageState {
+    float missileT = 0.f;       // Arcane missile: time to the next timed volley
+    int echoSlot = -1;          // Twincast: the ability slot about to fire again...
+    float echoT = 0.f;          // ...in this long
+};
+struct MageWorld {
+    // Arcane missile visuals: short fading streaks (render/ClassRender.cpp).
+    struct Streak {
+        sf::Vector2f a, b;
+        float life = 0.f;
+    };
+    std::vector<Streak> streaks;
+};
 
 // ==================================================================== Shooter
 // Fires bullets at nearby enemies (sim/WorldClasses.cpp).

@@ -29,24 +29,29 @@ void World::resetAbilityCooldowns(Ball& b) {
 void World::updateAbilities(Ball& b, float dt, const WorldParams& p, FrameEvents& ev) {
     b.abilityFlash = std::max(0.f, b.abilityFlash - dt * 2.5f);
     if (!waveRunning_) return;
+    const float rate = mageCastRate(b);   // Mage "Focus"
     for (int i = 0; i < kMaxAbilitySlots; ++i) {
         const AbilitySpec& a = b.abilities[i];
         if (a.id == Ability::None) continue;
-        b.abilityCd[i] -= dt;
+        b.abilityCd[i] -= dt * rate;
         if (b.abilityCd[i] > 0.f) continue;
         if (fireAbility(b, a, p, ev)) {
             b.abilityCd[i] = abilityCooldown(a.id, a.level);
             b.abilityFlash = 1.f;
+            mageOnCast(b, i, false, p, ev);   // Mage items / Ancient Mage react to the cast
         } else {
             b.abilityCd[i] = 0.f;   // charged: fires the moment it has a target
         }
     }
+    mageTick(b, dt, p, ev);   // Mage: arcane missiles, Twincast echoes
 }
 
 bool World::fireAbility(Ball& b, const AbilitySpec& a, const WorldParams& p, FrameEvents& ev) {
     namespace A = cfg::ability;
     const float n = static_cast<float>(std::max(0, a.level - 1));   // levels past the first
     const float as = arenaScale();
+    const float pw = b.mods.cls.mage.power;              // Mage "Attunement": damage x this...
+    const float reach = 1.f + (pw - 1.f) * 0.5f;         // ...radius / duration x this
     const bool anyEnemy = !enemies_.empty() || (boss_.alive && boss_.intro <= 0.f);
     switch (a.id) {
         case Ability::None: return false;
@@ -58,7 +63,7 @@ bool World::fireAbility(Ball& b, const AbilitySpec& a, const WorldParams& p, Fra
             else if (boss_.alive && boss_.intro <= 0.f) target = boss_.pos;
             else return false;
             const sf::Vector2f d = normalized(target - b.pos, {1.f, 0.f});
-            const float sp = std::max(length(b.vel), ballCruise(b, p) * (A::dashSpeed + A::dashSpeedPerLevel * n));
+            const float sp = std::max(length(b.vel), ballCruise(b, p) * (A::dashSpeed + A::dashSpeedPerLevel * n) * reach);
             b.vel = d * std::min(sp, ballMaxSpeed(b, p));
             b.homing = false;
             b.squash = 1.f;
@@ -68,9 +73,9 @@ bool World::fireAbility(Ball& b, const AbilitySpec& a, const WorldParams& p, Fra
         }
 
         case Ability::Nova: {   // a shockwave around the ball
-            const float R = (A::novaRadius + A::novaRadiusPerLevel * n) * as;
+            const float R = (A::novaRadius + A::novaRadiusPerLevel * n) * as * reach;
             if (!nearestEnemy(b.pos, R + cfg::wave::enemyRadius)) return false;   // wait until something is close
-            const float dmg = ballDamage(b, p) * (A::novaFrac + A::novaFracPerLevel * n);
+            const float dmg = ballDamage(b, p) * (A::novaFrac + A::novaFracPerLevel * n) * pw;
             const Element el = hitElement(b, p);
             for (Enemy& e : enemies_) {
                 if (e.hp <= 0.f || e.orbiter) continue;
@@ -91,7 +96,7 @@ bool World::fireAbility(Ball& b, const AbilitySpec& a, const WorldParams& p, Fra
                 Ball g = b;
                 g.ghost = true;
                 g.twin = false;
-                g.ghostLife = A::splitLife + A::splitLifePerLevel * n;
+                g.ghostLife = (A::splitLife + A::splitLifePerLevel * n) * reach;
                 g.age = 0.f;
                 g.held = false;
                 g.trail.clear();
@@ -107,9 +112,9 @@ bool World::fireAbility(Ball& b, const AbilitySpec& a, const WorldParams& p, Fra
         }
 
         case Ability::Bulwark: {   // the core pushes out a pulse
-            const float R = (A::bulwarkRadius + A::bulwarkRadiusPerLevel * n) * as;
+            const float R = (A::bulwarkRadius + A::bulwarkRadiusPerLevel * n) * as * reach;
             if (!nearestEnemy(core_.pos, R)) return false;   // only when enemies close in
-            const float dmg = ballDamage(b, p) * A::bulwarkFrac;
+            const float dmg = ballDamage(b, p) * A::bulwarkFrac * pw;
             for (Enemy& e : enemies_) {
                 if (e.hp <= 0.f || e.orbiter) continue;
                 const sf::Vector2f d = e.pos - core_.pos;
@@ -124,8 +129,62 @@ bool World::fireAbility(Ball& b, const AbilitySpec& a, const WorldParams& p, Fra
 
         case Ability::Overclock: {   // a few seconds hot
             if (!anyEnemy) return false;
-            b.overclockT = A::overclockTime + A::overclockTimePerLevel * n;
+            b.overclockT = (A::overclockTime + A::overclockTimePerLevel * n) * reach;
             b.overclockMul = A::overclockDamage + A::overclockDamagePerLevel * n;
+            return true;
+        }
+
+        // ---- added with the Mage (generic: any ball can carry them) ----
+
+        case Ability::Arc: {   // a bolt leaps from the ball through a chain of enemies
+            const float dmg = ballDamage(b, p) * (A::arcFrac + A::arcFracPerLevel * n) * pw;
+            const Element el = hitElement(b, p);
+            const int hops = A::arcTargets + static_cast<int>(n);
+            std::vector<const Enemy*> hit;
+            sf::Vector2f from = b.pos;
+            float reachNext = A::arcRange * as * reach;   // the first leap, then arcJump
+            while (static_cast<int>(hit.size()) < hops) {
+                Enemy* t = nullptr;   // the nearest enemy not hit yet
+                float best = reachNext * reachNext;
+                for (Enemy& o : enemies_) {
+                    if (o.hp <= 0.f || o.orbiter || std::find(hit.begin(), hit.end(), &o) != hit.end()) continue;
+                    const float d2 = dot(o.pos - from, o.pos - from);
+                    if (d2 < best) { best = d2; t = &o; }
+                }
+                if (!t) break;
+                damageEnemy(*t, dmg);
+                applyElement(*t, el, b.owner, dmg, p, ev);
+                if (static_cast<int>(bolts_.size()) < cfg::element::maxBolts)
+                    bolts_.push_back(Bolt{from, t->pos, cfg::element::boltLife, cfg::element::boltLife});
+                hit.push_back(t);
+                from = t->pos;
+                reachNext = A::arcJump * as * reach;
+            }
+            return !hit.empty();   // nothing in range: wait, charged
+        }
+
+        case Ability::Meteor: {   // crushes the thickest pack of enemies, anywhere
+            const float R = (A::meteorRadius + A::meteorRadiusPerLevel * n) * as * reach;
+            const Enemy* at = nullptr;
+            int most = 0;
+            for (const Enemy& e : enemies_) {   // the enemy with the most others around it
+                if (e.hp <= 0.f || e.orbiter) continue;
+                int c = 0;
+                for (const Enemy& o : enemies_)
+                    if (o.hp > 0.f && !o.orbiter && dot(o.pos - e.pos, o.pos - e.pos) < R * R) ++c;
+                if (c > most) { most = c; at = &e; }
+            }
+            if (!at) return false;
+            const sf::Vector2f c = at->pos;
+            const float dmg = ballDamage(b, p) * (A::meteorFrac + A::meteorFracPerLevel * n) * pw;
+            const Element el = hitElement(b, p);
+            for (Enemy& e : enemies_) {
+                if (e.hp <= 0.f || e.orbiter || length(e.pos - c) > R + e.radius) continue;
+                damageEnemy(e, dmg);
+                e.stagger = std::max(e.stagger, A::meteorStagger);
+                applyElement(e, el, b.owner, dmg, p, ev);
+            }
+            ev.bursts.push_back({c, R, b.color, nullptr});
             return true;
         }
     }
