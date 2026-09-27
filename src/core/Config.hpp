@@ -354,15 +354,17 @@ inline constexpr int elitePerRowMul = 2;  // an elite pays 2x a fight (and a pic
 inline constexpr int perRow = 2;
 inline constexpr int bossPay = 40;
 // Playing well pays: every kill drops gold that grows with the damage combo,
-// kills in a quick burst pay a multi-kill bonus, a wave with no core damage
-// pays a clean bonus.
+// kills in a quick burst pay a multi-kill bonus, a flawless fight (nothing
+// reached the core) pays a bonus on top.
 inline constexpr float perKill = 0.5f;
 inline constexpr float comboBonusPerTier = 0.25f;  // per-kill gold x (1 + this * combo tier)
 inline constexpr float multiKillWindow = 0.35f;    // kills this close together chain into one burst
 inline constexpr int multiKillMin = 3;
 inline constexpr int multiKillGoldPer = 1;         // bonus gold per enemy in a multi-kill
-inline constexpr int cleanBase = 4;                // clean wave: this + cleanPerRow * row
-inline constexpr int cleanPerRow = 1;
+inline constexpr int flawlessBase = 5;             // flawless fight: this + flawlessPerRow * row (~75% of its pay)
+inline constexpr int flawlessPerRow = 2;
+inline constexpr int flawlessEliteMul = 2;         // a flawless elite pays this x
+inline constexpr int flawlessBoss = 30;            // a flawless act-1 boss (the final boss ends the run)
 // Shop prices.
 inline constexpr int priceNewBall = 60;
 inline constexpr int priceModifier = 22;
@@ -479,6 +481,9 @@ inline constexpr float hagglerPerLevel = 0.10f;        // "Haggler": shop prices
 inline constexpr float eliteSpoilsPerLevel = 0.5f;     // "Elite spoils": elite gold x (1 + this * level)
 inline constexpr float merchantSalePerLevel = 0.15f;   // "Merchant": the shop sale is this much deeper per level
 inline constexpr int treasuryGoldPerLevel = 20;        // "Treasury": starting gold per level
+// "Iron core": beat an act's boss without a single deliberate repair that act
+// (rest, shop repair, the Choice repair-skip) and the run banks this many cores.
+inline constexpr int ironCoreCores = 15;
 }  // namespace meta
 
 // Pacts (Fase O): run-defining rules picked after the act-1 boss (and at the

@@ -94,6 +94,7 @@ struct RunState {
 
     int lastStandLeft = 0;            // "Last stand" web node: once-per-run core save still unused
     bool phoenixUsedAct = false;      // the Phoenix relic already fired this act
+    bool repairedThisAct = false;     // "Iron core": a rest / shop repair / repair-skip healed the core this act
 };
 
 struct GameData {
