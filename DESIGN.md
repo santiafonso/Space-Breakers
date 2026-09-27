@@ -1244,6 +1244,52 @@ Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
     si Dash / Bulwark se sienten "autopiloto"; cómo se ve el arco de cooldown
     con 3 habilidades (Mago).
 
+- **Clase Shooter (fase 2 de la Fase P). [IMPLEMENTADO 2026-09-26]** Pedido
+  (usuario): "el shooter dispara balas, y después capaz estas balas rebotan
+  entre los enemigos".
+  - **Rol base (2 items):** cada 0.9 s dispara una bala al enemigo más cercano
+    a menos de 330 px (apunta un poco adelantado; si no hay nadie espera
+    cargada; al boss también, a x0.5). Dispara **más rápido cuanto más rápido
+    va** (x velocidad/crucero, entre x0.75 y x2): tirarla la convierte en
+    ametralladora. Bala = x0.35 del golpe de la pelota (combo, fuego, marca de
+    Support incluidos), 620 px/s, vive 0.9 s; un escudo la frena. Las balas
+    viven en `ShooterWorld` (tope 90), no llaman a los on-hit de items.
+  - **Items** (`cfg::shooter`, valor Lv1 + por nivel):
+    - **Rapid fire** (Common): dispara x1.3 más seguido (+0.15 por nivel).
+    - **Scattershot** (Common): cada ráfaga es un abanico de 2 perdigones
+      (x0.75 c/u); 3 en Lv3, 4 en Lv5, +6% de daño por nivel.
+    - **Rebound** (Uncommon): la bala que pega **salta a otro enemigo**
+      cercano (190 px) — 1 salto +1 por nivel, conserva x0.8 (+4%/nivel) por
+      salto. Lo que pidió el usuario.
+    - **Tracer** (Uncommon): 40% (+15%/nivel, 100% en Lv5) de las balas
+      llevan el elemento de la pelota (pueden disparar reacciones) y +5% de
+      daño de bala por nivel. Sin elemento no hace nada más que eso.
+    - **Drill rounds** (Rare): atraviesan 2 enemigos (+1/nivel) **y escudos**,
+      x1.15 de daño (+8%/nivel).
+    - **Hair trigger** (Rare): cada golpe de la pelota suelta una ráfaga de 3
+      balas (+1/nivel) a los enemigos de alrededor (las que sobran salen en
+      anillo), x0.8 (+5%/nivel); cooldown 0.35 s para que Satellite no la
+      abuse.
+    - Calling Shooter arranca con los dos Common (Rapid fire + Scattershot).
+  - **Deadeye (4 items):** cada 4ª ráfaga además sale un **tiro de riel**
+    que atraviesa toda la línea hasta la pared (x1.6 del golpe, con el
+    elemento), y toda bala salta una vez más.
+  - **Visual:** marca = cañoncito hacia donde va (ya estaba); balas = punto de
+    2.6 px + estela corta, blanco (o el color del elemento si lo lleva) a
+    alpha ≤0.85, muy por debajo de una pelota; el riel es una línea fina que
+    se apaga en 0.25 s.
+  - **Sim headless** (protocolo de la Fase P: 1 pelota, filas 1-13 del acto 1,
+    16 corridas; sin tocar / click cada 2 s / cada 1 s): lisa 1.6 / 7.0 /
+    10.8 · Calling Striker 1.8 / 8.4 / 11.6 · Calling Guardian 2.7 / 11.6 / 13
+    · **Calling Shooter (Rapid+Scatter L1) 3.4-3.6 / 9.3-9.6 / 13** · Rapid+
+    Rebound 4.6 / 10.5 / 13 · Drill+Hair 4.3 / 11.4 / 13 · Tracer+Rapid (fuego)
+    5.3 / 11.1 / 13 · Scatter+Rebound L5 6.3 / 12.4 / 13 · Deadeye L1 4.9-5.3
+    / 11.9-12.3 / 13 · Deadeye L5 10.6 / 13 / 13. Sin NaN; ≤3 µs por paso;
+    3 Deadeye L5 a la vez tienen ~30 balas vivas (lejos del tope).
+  - Falta playtest: si el Shooter inicial se siente "autopiloto" (sin tocar es
+    el que más aguanta de los tres iniciales, tirando queda entre Striker y
+    Guardian); el riel de Deadeye no se vio en un snapshot todavía.
+
 - **Pendiente (idea del usuario, 2026-09-26): más clases, doble rol,
   habilidades y elemento como slot.** **[PARCIAL 2026-09-26: el marco está
   hecho (Fase P): 8 clases, doble rol, ascendidas, slot de tipo, habilidades,

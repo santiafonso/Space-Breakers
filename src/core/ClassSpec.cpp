@@ -21,8 +21,32 @@ bool foldMage(UpgradeKind k, int /*level*/, BallMods& /*m*/) {
 }
 
 // ==================================================================== Shooter
-bool foldShooter(UpgradeKind k, int /*level*/, BallMods& /*m*/) {
+bool foldShooter(UpgradeKind k, int level, BallMods& m) {
+    namespace S = cfg::shooter;
+    ShooterMods& s = m.cls.shooter;
+    const float n = static_cast<float>(level - 1);   // levels past the first
     switch (k) {
+        case UpgradeKind::RapidFire: s.rate *= S::rapidRate + S::rapidRatePerLevel * n; return true;
+        case UpgradeKind::Scattershot:
+            s.pellets = S::scatterPellets + (level >= 3 ? 1 : 0) + (level >= 5 ? 1 : 0);
+            s.pelletFrac = S::scatterFrac + S::scatterFracPerLevel * n;
+            return true;
+        case UpgradeKind::Rebound:
+            s.hops += S::reboundHops + (level - 1);
+            s.hopKeep = S::reboundKeep + S::reboundKeepPerLevel * n;
+            return true;
+        case UpgradeKind::Tracer:
+            s.tracerChance = S::tracerChance + S::tracerChancePerLevel * n;
+            s.dmgMul *= 1.f + S::tracerFracPerLevel * n;
+            return true;
+        case UpgradeKind::DrillRounds:
+            s.pierce = S::drillPierce + (level - 1);
+            s.dmgMul *= S::drillFrac + S::drillFracPerLevel * n;
+            return true;
+        case UpgradeKind::HairTrigger:
+            s.burst = S::triggerBurst + (level - 1);
+            s.burstFrac = S::triggerFrac + S::triggerFracPerLevel * n;
+            return true;
         default: return false;
     }
 }
