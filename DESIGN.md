@@ -1243,6 +1243,47 @@ Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
   - Falta: probarlo jugando (el sim no apunta), números de las habilidades y
     si Dash / Bulwark se sienten "autopiloto"; cómo se ve el arco de cooldown
     con 3 habilidades (Mago).
+  - **Clase Bufón (Jester). [IMPLEMENTADO 2026-09-26]** "El bufón juega en
+    base a probabilidades."
+    - **Rol (2 items):** cada golpe tira un resultado: normal, **doble** (el
+      golpe pega otra vez; si ya lo mató, el resto salta al vecino), **chispa**
+      (x0.8 del golpe al enemigo más cercano) o **elemento al azar** sin dueño
+      (reacciona con cualquiera, incluso con el propio elemento de la pelota).
+      15% cada banda, x la suerte, tope 75% entre las tres.
+    - **Grand Jester (4 items):** toda tirada del Bufón (resultado, moneda,
+      wild card, jackpot) se tira **dos veces y se queda con la mejor**, y los
+      dobles pasan a ser **triples**.
+    - **Items** (`cfg::jester`, Lv1 → +por nivel): **Lucky charm** (Common,
+      +2 suerte, +1 por nivel; suma en `App::luck()` por cada charm de cada
+      pelota) · **Coin flip** (Common, cada golpe tira moneda: cara x2 (+0.25),
+      cruz x0.6; la suerte favorece la cara) · **Wild card** (Uncommon, 15%
+      (+5%) de que un golpe dispare un proc al azar **prestado de los items de
+      cualquier pelota** en juego (Keen eye, Echo, Tesla, Bomber, Black hole, con
+      sus números), +10% de potencia por nivel; sin ninguno: zap / bomba / eco)
+      · **Reroll** (Uncommon, una tirada fallida del Bufón tiene 35% (+15%) de
+      segundo intento) · **Chaos bounce** (Rare, al rebotar en la pared sale en
+      ángulo al azar (±63° de la normal) y arma el próximo golpe x1.5 (+0.15)) ·
+      **Jackpot** (Epic, 4% (+1.5%) de que una kill dé 10 (+5) de oro y una
+      explosión grande x3 (+0.5) del golpe, cartel "JACKPOT" dorado).
+    - **Los items del Bufón funcionan sueltos** (1 solo item en cualquier
+      pelota): `ClassMods::loose` (máscara de clases cuyos hooks corren sin
+      tener la clase; el Bufón se anota desde su fold). El resultado del rol sí
+      pide la clase. La moneda se tira después de cada golpe y la lee
+      `damageMul` en el siguiente.
+    - **Visual:** los dos pips de la marca; en un doble, dos pips chicos que
+      suben y se apagan sobre el enemigo (espaciados 0.12 s, máx. 8). Jackpot usa
+      el cartel de burst. Nada más.
+    - **Balance (sim headless, 1 pelota, filas 1-13 del acto 1, 32 corridas,
+      click cada 2 s / sin tocar):** lisa 7.0 / 1.5 · Striker Calling 7.9 / 1.7
+      · Bufón Calling (Lucky charm + Coin flip) 7.2 / 1.8 · rol solo 7.6 ·
+      Chaos + Reroll 7.7 / 2.3 · Jackpot + Wild card 7.7 (26 de oro) · Grand
+      Jester Lv1 8.5 / 2.3 · Grand Jester Lv5 (Coin, Wild, Chaos, Jackpot) 9.2
+      (~400 de oro) · + Loaded Dice (suerte 18) 10.0 (~1040 de oro). Sin NaN,
+      ~0.5-1 µs por paso. El daño extra rinde poco en el acto 1 (los enemigos
+      caen en pocos golpes); lo que más suma es más golpes (Chaos bounce).
+    - Falta: jugarlo (moneda y chaos bounce se sienten solo en pantalla), ver
+      si el oro del Jackpot con Loaded Dice es demasiado, y si los pips del
+      doble se leen o molestan.
 
 - **Pendiente (idea del usuario, 2026-09-26): más clases, doble rol,
   habilidades y elemento como slot.** **[PARCIAL 2026-09-26: el marco está

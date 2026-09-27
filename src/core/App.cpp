@@ -521,6 +521,11 @@ int App::luck() const {
     int l = cfg::luck::luckyStarPerLevel * data_.meta.unlock[MetaLuckyStar];
     if (data_.run.mods.luckyClover) l += cfg::luck::cloverPoints;
     if (hasPact(PactId::LoadedDice)) l += cfg::luck::dicePoints;
+    // ---- Jester: every "Lucky charm" on every ball adds its points.
+    for (const BallLoadout& b : data_.run.balls)
+        for (int i = 0; i < kBallSlots; ++i)
+            if (b.gear[i] == static_cast<int>(UpgradeKind::LuckyCharm))
+                l += cfg::jester::charmPoints(std::clamp(b.gearLvl[i], 1, kMaxItemLevel));
     return l;
 }
 

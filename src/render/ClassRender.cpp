@@ -76,7 +76,16 @@ void markJester(sf::RenderTarget& t, sf::Vector2f p, float r, float, float a) {
         draw::disc(t, p + sf::Vector2f{side * r * 0.42f, -side * r * 0.42f}, std::max(1.2f, r * 0.1f),
                    white(0.8f * a), white(0.55f * a), {1.f, 1.f}, 10);
 }
-void worldJester(sf::RenderTarget&, const World&) {}
+// A double: two small pips pop up over the enemy and fade (spaced in the sim).
+void worldJester(sf::RenderTarget& t, const World& world) {
+    for (const JesterWorld::Pop& q : world.classWorld().jester.pops) {
+        const float k = q.t / cfg::jester::popLife;   // 1 -> 0
+        const sf::Vector2f c = q.pos + sf::Vector2f{0.f, -18.f - 10.f * (1.f - k)};
+        for (float side : {-1.f, 1.f})
+            draw::disc(t, c + sf::Vector2f{side * 4.f, -side * 4.f}, 2.2f, white(0.85f * k), white(0.5f * k),
+                       {1.f, 1.f}, 10);
+    }
+}
 
 }  // namespace
 

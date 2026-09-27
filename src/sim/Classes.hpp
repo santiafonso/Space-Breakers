@@ -63,10 +63,29 @@ struct SummonerState {};
 struct SummonerWorld {};
 
 // ==================================================================== Jester
-// Plays on chance.
-struct JesterMods {};
-struct JesterState {};
-struct JesterWorld {};
+// Plays on chance: every hit rolls an outcome (WorldClasses.cpp).
+struct JesterMods {
+    float coinHeads = 0.f;     // "Coin flip": heads multiplier (0 = no coin)
+    float wildChance = 0.f;    // "Wild card"
+    float wildPower = 1.f;
+    float reroll = 0.f;        // "Reroll": chance a missed roll gets a second try
+    float chaosHit = 0.f;      // "Chaos bounce": the armed hit's multiplier (0 = none)
+    float jackpotChance = 0.f; // "Jackpot"
+    float jackpotBlast = 0.f;
+    int jackpotGold = 0;
+};
+struct JesterState {
+    float coinMul = 1.f;       // this hit's coin, flipped after the last one
+    bool chaosArmed = false;   // off a chaos bounce: the next hit is armed
+};
+struct JesterWorld {
+    struct Pop {               // a small outcome pip over an enemy (a double)
+        sf::Vector2f pos;
+        float t = 0.f;         // life left
+    };
+    std::vector<Pop> pops;
+    float popCd = 0.f;
+};
 
 // ---------------------------------------------------------------- bundles
 // (no class logic below this line)
@@ -81,6 +100,11 @@ struct ClassMods {
     AssassinMods assassin;
     SummonerMods summoner;
     JesterMods jester;
+    // Classes (RoleMask bits) whose hooks also run for a ball that carries
+    // their items without having the class (a single item). A class opts in
+    // from its own fold (core/ClassSpec.cpp); its hooks must then check
+    // b.hasRole() for the role's own effect. (Jester, 2026-09-26)
+    unsigned loose = 0;
 };
 
 // On Ball (`cls`): per-ball runtime state. Copied into ghosts / twins.

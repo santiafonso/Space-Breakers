@@ -78,6 +78,12 @@ enum class UpgradeKind {
     // ---- Summoner items ----
 
     // ---- Jester items ----
+    LuckyCharm,        // + luck points for the whole run                  [Jester]
+    CoinFlip,          // every hit flips a coin: heads hits harder, tails softer [Jester]
+    WildCard,          // chance a hit fires a random proc borrowed from any ball [Jester]
+    Reroll,            // a missed Jester roll gets a second try           [Jester]
+    ChaosBounce,       // wall bounces fly off at random, arming a harder hit [Jester]
+    Jackpot,           // a kill may hit the jackpot: gold and a big blast [Jester]
 
     // ---- relics (keep CoreSpring first and Overcharge last) ----
     CoreSpring,        // balls ricochet off the core faster
