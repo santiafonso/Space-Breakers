@@ -63,8 +63,8 @@ const char* ascendedDesc(BallRole r);   // what 4 items of the tag add
 // Timed actives in a ball's ability slot(s): each fires on its own when its
 // cooldown is up (and it has something to act on). They don't count toward a
 // class. Levelled by picking the same one again (cfg::ability).
-enum class Ability { None, Dash, Nova, Split, Bulwark, Overclock };
-inline constexpr int kAbilityCount = 6;        // with None
+enum class Ability { None, Dash, Nova, Split, Bulwark, Overclock, Arc, Meteor };
+inline constexpr int kAbilityCount = 8;        // with None
 inline constexpr int kMaxAbilitySlots = 3;     // 1 by default, the Mage raises it (abilitySlotCount)
 
 struct AbilitySpec {

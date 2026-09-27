@@ -397,7 +397,7 @@ bool loadoutTooltip(const BallLoadout& L, int part, std::string& title, std::str
                 desc = "an ability goes here: it fires by itself every few seconds. It doesn't count toward a class.";
             } else {
                 title = "Closed ability slot";
-                desc = "the ball can't use this ability slot right now";
+                desc = "the ball can't use this ability slot right now: a Mage opens a 2nd one (2 Mage items), an Ancient Mage a 3rd (4)";
             }
             return true;
         }
@@ -407,7 +407,7 @@ bool loadoutTooltip(const BallLoadout& L, int part, std::string& title, std::str
         title += "  Lv " + std::to_string(L.levelAt(part)) + "/" + std::to_string(kMaxItemLevel);
         desc = info.desc;
         if (isAbilitySlot(part) && part - kSlotAbility >= abilitySlotCount(L))
-            desc = "(asleep: this ability slot is closed right now)  " + desc;
+            desc = "(asleep: this slot closed when the ball lost its Mage items - it wakes up when they're back)  " + desc;
         if (L.levelAt(part) < kMaxItemLevel && *upgradeLevelDesc(k))
             desc += std::string(".  Next level: ") + upgradeLevelDesc(k);
         desc += std::string("  [") + tierName(upgradeTier(k));

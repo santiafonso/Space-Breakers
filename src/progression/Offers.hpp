@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <bitset>
 #include <cstdint>
 #include <vector>
@@ -32,7 +33,7 @@ namespace sb {
 inline constexpr int kChoiceCount = 4;
 inline constexpr int kBallSlots = 4;          // item slots per ball
 inline constexpr int kElementItemCount = 6;
-inline constexpr int kAbilityItemCount = 5;   // AbilityDash..AbilityOverclock
+inline constexpr int kAbilityItemCount = 7;   // AbilityDash..AbilityMeteor
 inline constexpr int kModifierCount = 3;      // HeavyImpact..Swift
 // Items level up: picking one a ball already has (or forging it) raises its
 // level instead of taking another slot. Each item scales its own way per level
@@ -53,7 +54,7 @@ inline UpgradeCat upgradeCat(UpgradeKind k) {
     const int i = static_cast<int>(k);
     if (i <= static_cast<int>(UpgradeKind::AddBall)) return UpgradeCat::NewBall;
     if (i <= static_cast<int>(UpgradeKind::ElemElectric)) return UpgradeCat::Element;
-    if (i <= static_cast<int>(UpgradeKind::AbilityOverclock)) return UpgradeCat::Ability;
+    if (i <= static_cast<int>(UpgradeKind::AbilityMeteor)) return UpgradeCat::Ability;
     if (i <= static_cast<int>(UpgradeKind::Swift)) return UpgradeCat::Modifier;
     if (i >= static_cast<int>(UpgradeKind::CoreSpring)) return UpgradeCat::Relic;
     return UpgradeCat::Item;
@@ -92,12 +93,13 @@ inline Tier upgradeTier(UpgradeKind k) {
         case UpgradeKind::AddBall:
         case UpgradeKind::ElemFire: case UpgradeKind::ElemPoison: case UpgradeKind::ElemWater:
         case UpgradeKind::ElemIce: case UpgradeKind::ElemStone: case UpgradeKind::ElemElectric:
-        case UpgradeKind::AbilityDash: case UpgradeKind::AbilityBulwark:
+        case UpgradeKind::AbilityDash: case UpgradeKind::AbilityBulwark: case UpgradeKind::AbilityArc:
         case UpgradeKind::Rampart: case UpgradeKind::Mender: case UpgradeKind::Bedrock:
         case UpgradeKind::Conductor: case UpgradeKind::Shatter: case UpgradeKind::Bumper:
         case UpgradeKind::CoreSlowField: case UpgradeKind::Contagion: case UpgradeKind::Primed:
             return Tier::Uncommon;
         case UpgradeKind::AbilityNova: case UpgradeKind::AbilitySplit: case UpgradeKind::AbilityOverclock:
+        case UpgradeKind::AbilityMeteor:
         case UpgradeKind::Cleave: case UpgradeKind::Executioner: case UpgradeKind::Overkill:
         case UpgradeKind::Tesla: case UpgradeKind::Bomber: case UpgradeKind::Echo:
         case UpgradeKind::Berserk: case UpgradeKind::Giant: case UpgradeKind::Midas:
@@ -202,6 +204,8 @@ inline const char* upgradeKindId(UpgradeKind k) {
         case UpgradeKind::AbilitySplit:   return "AbilitySplit";
         case UpgradeKind::AbilityBulwark: return "AbilityBulwark";
         case UpgradeKind::AbilityOverclock: return "AbilityOverclock";
+        case UpgradeKind::AbilityArc:     return "AbilityArc";
+        case UpgradeKind::AbilityMeteor:  return "AbilityMeteor";
         case UpgradeKind::Ricochet:       return "Ricochet";
         case UpgradeKind::Cleave:         return "Cleave";
         case UpgradeKind::Crit:           return "Crit";
@@ -272,6 +276,8 @@ inline UpgradeInfo upgradeInfo(UpgradeKind k) {
         case UpgradeKind::AbilitySplit:  return {"Split", "every few seconds two ghost copies of the ball fan out for a moment, with its items"};
         case UpgradeKind::AbilityBulwark: return {"Bulwark", "when enemies close in, the core pushes out a pulse that shoves and staggers them"};
         case UpgradeKind::AbilityOverclock: return {"Overclock", "every few seconds the ball runs hot: faster and 50% harder-hitting for 3 s"};
+        case UpgradeKind::AbilityArc:    return {"Arc", "every few seconds a bolt leaps from the ball through up to 4 enemies, with its element"};
+        case UpgradeKind::AbilityMeteor: return {"Meteor", "every few seconds a meteor falls on the thickest pack of enemies and crushes it, with the ball's element"};
         case UpgradeKind::Ricochet:      return {"Ricochet", "every wall bounce speeds it up and arms a harder hit for a moment"};
         case UpgradeKind::Cleave:        return {"Cleave", "punches straight through an enemy it kills"};
         case UpgradeKind::Crit:          return {"Keen eye", "12% chance a hit deals double damage"};
@@ -340,6 +346,8 @@ inline const char* upgradeLevelDesc(UpgradeKind k) {
         case UpgradeKind::AbilitySplit:  return "the copies last longer, a shorter cooldown";
         case UpgradeKind::AbilityBulwark: return "a wider pulse that staggers longer, a shorter cooldown";
         case UpgradeKind::AbilityOverclock: return "runs hot longer and harder, a shorter cooldown";
+        case UpgradeKind::AbilityArc:    return "leaps to one more enemy, harder, a shorter cooldown";
+        case UpgradeKind::AbilityMeteor: return "a wider, heavier impact, a shorter cooldown";
         case UpgradeKind::Ricochet:      return "a bigger speed kick and a harder armed hit";
         case UpgradeKind::Cleave:        return "also cuts through - and finishes - enemies it leaves under 8% more health";
         case UpgradeKind::Crit:          return "+7% chance, and crits hit harder";
@@ -472,10 +480,17 @@ struct BallLoadout {
     }
 };
 
-// How many ability slots are open on a ball: 1 on every ball. (Phase 2: the
-// Mage raises it - 2 with the Mage class, 3 ascended. This is the only place
-// that decides it; abilities in closed slots stay on the ball but sleep.)
-inline int abilitySlotCount(const BallLoadout& /*b*/) { return 1; }
+// How many ability slots are open on a ball: 1 on every ball, 2 with the Mage
+// class (2 Mage items), 3 as an Ancient Mage (4). This is the only place that
+// decides it. Losing the class (selling / swapping a Mage item) closes the
+// extra slots but never deletes what's in them: those abilities stay on the
+// ball asleep (not fired, shown dimmed in TAB) and wake up as soon as the slot
+// opens again. A new ability goes in an open slot; a copy of a sleeping one
+// still levels it up.
+inline int abilitySlotCount(const BallLoadout& b) {
+    const int mage = b.tagCount(ItemTag::Mage);
+    return std::min(kMaxAbilitySlots, mage >= 4 ? 3 : mage >= 2 ? 2 : 1);
+}
 
 inline bool upgradeTakesSlot(UpgradeKind k) {
     const UpgradeCat c = upgradeCat(k);

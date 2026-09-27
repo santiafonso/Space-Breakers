@@ -358,6 +358,19 @@ void App::grantStartClass(ItemTag t) {
                    pool.end());
         L.setSlot(slot, static_cast<int>(pool[static_cast<std::size_t>(rng_.irange(0, static_cast<int>(pool.size()) - 1))]), 1);
     }
+    // Mage: its items all work through abilities, so it starts with one (an
+    // Uncommon one: Dash, Bulwark or Arc).
+    if (t == ItemTag::Mage && L.ability[0] < 0) {
+        std::vector<UpgradeKind> spells;
+        const UpgradeCtx c = buildUpgradeCtx();
+        for (int i = 0; i < kUpgradeKindCount; ++i) {
+            const auto k = static_cast<UpgradeKind>(i);
+            if (upgradeCat(k) == UpgradeCat::Ability && upgradeTier(k) == Tier::Uncommon && upgradeEligible(k, c))
+                spells.push_back(k);
+        }
+        if (!spells.empty())
+            L.setSlot(kSlotAbility, static_cast<int>(spells[static_cast<std::size_t>(rng_.irange(0, static_cast<int>(spells.size()) - 1))]), 1);
+    }
     syncWorldBalls();
     const sf::Color col = tagColor(t);
     effects_.flash(col, 0.5f);

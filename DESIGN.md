@@ -1243,6 +1243,57 @@ Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
   - Falta: probarlo jugando (el sim no apunta), números de las habilidades y
     si Dash / Bulwark se sienten "autopiloto"; cómo se ve el arco de cooldown
     con 3 habilidades (Mago).
+  - **Clase Mago. [IMPLEMENTADO 2026-09-26]** Su gracia: **más habilidades**.
+    - **Slots de habilidad** (`abilitySlotCount`): 1 cualquier pelota → **2**
+      con la clase (2 items de Mago) → **3** Ancient Mage (4). Al perder la
+      clase (vender / cambiar un item de Mago) las habilidades de los slots que
+      se cierran **no se borran**: quedan **dormidas** (no se disparan, TAB las
+      muestra apagadas con "asleep") y se despiertan solas cuando vuelve la
+      clase. Una habilidad nueva va a un slot abierto; repetir una dormida la
+      sube de nivel igual. (Con el pacto Duet la ascendida sí da la nova, pero
+      no el 3er slot: el conteo sale del loadout.)
+    - **Clase (2 items):** 2do slot + cada golpe que pega acerca **0.25 s**
+      todas sus habilidades. **Ancient Mage (4):** 3er slot + **cada cast suelta
+      una nova arcana** alrededor (x0.6 del golpe, radio 90, empuje, con su
+      elemento; el anillo solo se ve si pegó).
+    - **Items** (todos actúan vía las habilidades, así que sirven en cualquier
+      pelota que las tenga; tuning en `cfg::mage`):
+      - **Focus** (Common): habilidades recargan 15% más rápido (+7%/nivel).
+      - **Arcane missile** (Common): cada 4.5 s (−0.4 s/nivel) **y** en cada
+        cast, un misil al enemigo más cercano (x0.6 del golpe +0.12/nivel, con
+        su elemento); 2 objetivos en Lv3, 3 en Lv5. Anda aunque no tenga
+        habilidades. Estela fina y tenue.
+      - **Attunement** (Uncommon): habilidades y misiles x1.3 de daño (+0.1/
+        nivel); radios / duraciones crecen la mitad.
+      - **Twincast** (Rare): 30% (+8%/nivel, pasa por la suerte) de que una
+        habilidad se dispare otra vez 0.35 s después (el eco no hace eco ni
+        dispara Mana spring, pero sí misil y nova).
+      - **Mana spring** (Epic): cada cast recarga las **otras** habilidades un
+        25% de su cooldown (+7%/nivel): con 3, se encadenan.
+    - **Habilidades nuevas** (genéricas, no cuentan para ninguna clase; van en
+      la sección de habilidades): **Arc** (Uncommon: un rayo salta por hasta 4
+      enemigos, +1 por nivel, x0.8 del golpe, con elemento) y **Meteor** (Rare:
+      cae sobre el racimo más denso de enemigos, x2.0 del golpe en radio 95,
+      aturde 0.5 s, con elemento). Ahora son 7.
+    - **Calling Mago:** arranca con los 2 Commons (Focus + Arcane missile) **y
+      una habilidad Uncommon** (Dash / Bulwark / Arc), porque sin habilidad el
+      Mago no hace nada (`App::grantStartClass`).
+    - **Código:** los items pegan en el sim por `World::mageCastRate` /
+      `mageOnCast` / `mageTick` (definidos en la sección Mago de
+      `WorldClasses.cpp`, llamados desde `updateAbilities`), no por los hooks
+      de clase (esos solo corren con la clase). Visual: rombito (ya estaba),
+      al castear el rombito se agranda y se apaga; estelas de misil.
+    - **Sim headless** (1 pelota, filas 1-13 del acto 1, click cada 2 s, 16-24
+      corridas; ±0.4): base 6.4 · Dash sola 7.3 · Arc 7.0 · Meteor 7.7 · Nova
+      6.8 · **Calling Mago** (Focus+Missile+Dash) 8.7 (Arc 8.9; ref. Striker 7.7,
+      Guardian 12.0) · Mago 2 slots Dash+Nova 9.4 · Attune+Twincast Nova+Arc 8.3
+      · 1 item de Mago sin clase (Missile + Dash) 8.2 · **Ancient** (F+M+Att+
+      Twincast, Nova+Arc+Meteor) 12.2 (10/24 limpian todo) · Ancient con Mana
+      spring 13.0 (23/24). Sin clickear: base 1.3, Calling Mago 5.4, Ancient +
+      Spring 9.3. Ningún NaN, ≤1.2 µs por paso.
+    - Falta: jugarlo (el Mago es bastante "autopiloto" sin clickear: si molesta,
+      bajar el misil por tiempo); ver si Meteor opaca a Nova; cómo se leen 3
+      arcos de cooldown + el destello del rombito con mucha acción.
 
 - **Pendiente (idea del usuario, 2026-09-26): más clases, doble rol,
   habilidades y elemento como slot.** **[PARCIAL 2026-09-26: el marco está

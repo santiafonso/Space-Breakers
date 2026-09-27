@@ -59,9 +59,115 @@ template <> struct ClassHooks<BallRole::Support> : NoClassHooks {
 };
 
 // ==================================================================== Mage
-// More ability slots: see abilitySlotCount (progression/Offers.hpp).
+// More ability slots: see abilitySlotCount (progression/Offers.hpp). Base: its
+// hits feed its abilities (each one takes cfg::mage::hitRefund off every
+// cooldown). Ancient Mage: every cast lets out an arcane nova (mageOnCast).
+// Its items act through casts and cooldowns, so they work on ANY ball that
+// holds them (Mage class or not): World::mageCastRate / mageOnCast / mageTick
+// below, called from sim/WorldAbilities.cpp.
 template <> struct ClassHooks<BallRole::Mage> : NoClassHooks {
+    static void onHit(World&, Ball& b, Enemy&, float, bool, const WorldParams&, FrameEvents&) {
+        if (b.ghost) return;   // copies never cast
+        for (float& cd : b.abilityCd) cd = std::max(0.f, cd - cfg::mage::hitRefund);
+    }
+    static void worldTick(World& w, float dt, const WorldParams&, FrameEvents&) {
+        auto& s = w.classWorld_.mage.streaks;
+        for (auto& k : s) k.life -= dt;
+        s.erase(std::remove_if(s.begin(), s.end(), [](const MageWorld::Streak& k) { return k.life <= 0.f; }), s.end());
+    }
+    static void waveStart(World& w, const WorldParams&) {
+        w.classWorld_.mage.streaks.clear();
+        for (Ball& b : w.balls_) {
+            b.cls.mage.echoSlot = -1;
+            b.cls.mage.missileT = b.mods.cls.mage.missileEvery * 0.5f;
+        }
+    }
+
+    // "Arcane missile": up to missileTargets of the nearest enemies. False if none in reach.
+    static bool missileVolley(World& w, Ball& b, const WorldParams& p, FrameEvents& ev) {
+        const MageMods& g = b.mods.cls.mage;
+        const float range = cfg::mage::missileRange * w.arenaScale();
+        std::vector<Enemy*> near;
+        for (Enemy& e : w.enemies_)
+            if (e.hp > 0.f && !e.orbiter && length(e.pos - b.pos) < range) near.push_back(&e);
+        if (near.empty()) return false;
+        const std::size_t n = std::min(near.size(), static_cast<std::size_t>(std::max(1, g.missileTargets)));
+        std::partial_sort(near.begin(), near.begin() + static_cast<std::ptrdiff_t>(n), near.end(),
+                          [&b](const Enemy* x, const Enemy* y) {
+                              return dot(x->pos - b.pos, x->pos - b.pos) < dot(y->pos - b.pos, y->pos - b.pos);
+                          });
+        const float dmg = w.ballDamage(b, p) * g.missileFrac * g.power;
+        const Element el = w.hitElement(b, p);
+        auto& streaks = w.classWorld_.mage.streaks;
+        for (std::size_t i = 0; i < n; ++i) {
+            Enemy& e = *near[i];
+            w.damageEnemy(e, dmg);
+            w.applyElement(e, el, b.owner, dmg, p, ev);
+            if (static_cast<int>(streaks.size()) < cfg::mage::maxStreaks)
+                streaks.push_back({b.pos, e.pos, cfg::mage::missileLife});
+        }
+        return true;
+    }
+
+    // Ancient Mage: an arcane nova around the ball on every cast.
+    static void arcaneNova(World& w, Ball& b, const WorldParams& p, FrameEvents& ev) {
+        namespace M = cfg::mage;
+        const float R = M::novaRadius * w.arenaScale();
+        const float dmg = w.ballDamage(b, p) * M::novaFrac * b.mods.cls.mage.power;
+        const Element el = w.hitElement(b, p);
+        bool any = false;
+        for (Enemy& e : w.enemies_) {
+            if (e.hp <= 0.f || e.orbiter) continue;
+            const sf::Vector2f d = e.pos - b.pos;
+            if (length(d) > R + e.radius) continue;
+            w.damageEnemy(e, dmg);
+            e.vel += normalized(d, {1.f, 0.f}) * M::novaKnock * e.knockTaken;
+            w.applyElement(e, el, b.owner, dmg, p, ev);
+            any = true;
+        }
+        if (any) ev.bursts.push_back({b.pos, R, theme::classMage, nullptr});
+    }
 };
+
+float World::mageCastRate(const Ball& b) const { return 1.f + b.mods.cls.mage.focus; }   // "Focus"
+
+void World::mageOnCast(Ball& b, int slot, bool echo, const WorldParams& p, FrameEvents& ev) {
+    using H = ClassHooks<BallRole::Mage>;
+    const MageMods& g = b.mods.cls.mage;
+    if (g.missileFrac > 0.f) H::missileVolley(*this, b, p, ev);   // "Arcane missile": one per cast
+    if (b.isAscended(BallRole::Mage)) H::arcaneNova(*this, b, p, ev);
+    if (echo) return;   // an echo doesn't echo again or spring the others
+    if (g.twincast > 0.f && b.cls.mage.echoSlot < 0 && chance(g.twincast, p)) {   // "Twincast"
+        b.cls.mage.echoSlot = slot;
+        b.cls.mage.echoT = cfg::mage::echoDelay;
+    }
+    if (g.manaSpring > 0.f)   // "Mana spring": the other abilities get closer
+        for (int j = 0; j < kMaxAbilitySlots; ++j)
+            if (j != slot && b.abilities[j].id != Ability::None)
+                b.abilityCd[j] = std::max(0.f, b.abilityCd[j] - abilityCooldown(b.abilities[j].id, b.abilities[j].level) * g.manaSpring);
+}
+
+void World::mageTick(Ball& b, float dt, const WorldParams& p, FrameEvents& ev) {
+    using H = ClassHooks<BallRole::Mage>;
+    const MageMods& g = b.mods.cls.mage;
+    MageState& s = b.cls.mage;
+    if (g.missileFrac > 0.f) {   // "Arcane missile": the timed volley
+        s.missileT -= dt;
+        if (s.missileT <= 0.f) s.missileT = H::missileVolley(*this, b, p, ev) ? g.missileEvery : 0.2f;
+    }
+    if (s.echoSlot >= 0) {   // "Twincast": the echo fires
+        s.echoT -= dt;
+        if (s.echoT <= 0.f) {
+            const int slot = s.echoSlot;
+            s.echoSlot = -1;
+            const AbilitySpec a = b.abilities[slot];
+            if (a.id != Ability::None && fireAbility(b, a, p, ev)) {
+                b.abilityFlash = 1.f;
+                mageOnCast(b, slot, true, p, ev);
+            }
+        }
+    }
+}
 
 // ==================================================================== Shooter
 // Fires bullets.
