@@ -216,16 +216,56 @@ void WorldRenderer::drawBoss(sf::RenderWindow& window, const Boss& b, sf::Vector
         }
     }
 
-    // A heavy armoured octagon: dark plated body with a bright rim, a slow
-    // counter-turning inner ring and a single glowing eye.
+    // Charger: before a shockwave, its reach tightens in as a pulsing ring.
+    if (b.kind == BossKind::Charger && b.timer < cfg::boss::shockWarn) {
+        const float k = 1.f - clampf(b.timer / cfg::boss::shockWarn, 0.f, 1.f);   // 0 -> 1
+        const float pulse = 0.5f + 0.5f * std::sin(t * 30.f);
+        draw::ring(window, b.pos, b.shockR, 2.f, withAlpha(theme::coreLow, 0.15f + 0.45f * k * pulse));
+        draw::ring(window, b.pos, b.radius + (b.shockR - b.radius) * (1.f - k), 3.f,
+                   withAlpha(theme::coreLow, 0.25f + 0.5f * k));
+    }
+
+    // Dasher: while it aims, the dash line it's about to take (brightening).
+    if (b.kind == BossKind::Dasher && b.phase == 1) {
+        const float k = 1.f - clampf(b.timer / cfg::boss::dasherAim, 0.f, 1.f);
+        const float len = cfg::boss::dasherDashSpeed * cfg::boss::dasherDash + b.radius;
+        for (int i = 1; i <= 14; ++i) {
+            const sf::Vector2f pt = b.pos + b.dashDir * (b.radius + len * static_cast<float>(i) / 14.f);
+            draw::disc(window, pt, 2.5f, withAlpha(theme::coreLow, 0.2f + 0.6f * k),
+                       withAlpha(theme::coreLow, 0.2f + 0.6f * k), {1.f, 1.f}, 8);
+        }
+    }
+
+    // A heavy armoured body: dark plated, bright rim, a slow counter-turning
+    // inner ring and a single glowing eye. The sides tell the bosses apart:
+    // Charger / Orbital octagon, Hive hexagon, Warden square, Dasher triangle.
     const sf::Color col = lerpColor(theme::enemy, sf::Color::White, b.hitFlash * 0.7f);
     const float intro = b.intro > 0.f ? 0.5f + 0.5f * std::sin(b.intro * 12.f) : 0.f;
-    draw::glow(window, b.pos, b.radius * 1.8f, theme::coreLow, 0.08f + 0.12f * intro + 0.25f * b.hitFlash);
-    const float rot = t * 0.25f;
-    draw::polygon(window, b.pos, b.radius * 1.04f, 8, rot, withAlpha(darken(col, 0.45f), 0.97f),
+    // The Hive swells before a burst.
+    const float swell = b.kind == BossKind::Hive ? clampf(1.f - b.timer / 0.7f, 0.f, 1.f) : 0.f;
+    const float rage = b.enraged ? 0.18f + 0.12f * std::sin(t * 7.f) : 0.f;   // phase two: a hot pulse
+    draw::glow(window, b.pos, b.radius * (b.enraged ? 2.2f : 1.8f), theme::coreLow,
+               0.08f + 0.12f * intro + 0.25f * b.hitFlash + 0.3f * swell + rage);
+    int sides = 8;
+    float rot = t * 0.25f;
+    switch (b.kind) {
+        case BossKind::Hive:   sides = 6; rot = t * 0.15f; break;
+        case BossKind::Warden: sides = 4; rot = b.shieldAng + kPi * 0.25f; break;
+        case BossKind::Dasher: sides = 3; rot = std::atan2(b.dashDir.y, b.dashDir.x); break;
+        default: break;
+    }
+    const float br = b.radius * 1.04f * (1.f + 0.06f * swell);
+    draw::polygon(window, b.pos, br, sides, rot, withAlpha(darken(col, 0.45f), 0.97f),
                   withAlpha(darken(col, 0.72f), 0.97f));
-    draw::polygonOutline(window, b.pos, b.radius * 1.04f, 8, rot, 3.f, withAlpha(lighten(col, 0.15f), 0.9f));
-    draw::polygonOutline(window, b.pos, b.radius * 0.8f, 8, rot, 1.f, withAlpha(col, 0.35f));
+    draw::polygonOutline(window, b.pos, br, sides, rot, 3.f, withAlpha(lighten(col, 0.15f), 0.9f));
+    draw::polygonOutline(window, b.pos, br * 0.77f, sides, rot, 1.f, withAlpha(col, 0.35f));
+    if (b.kind == BossKind::Warden) {   // the shield: a thick bright arc that turns around it
+        const float arc = cfg::boss::wardenShieldArc;
+        draw::ring(window, b.pos, b.radius + 10.f, 6.f, withAlpha(theme::textHi, 0.95f), b.shieldAng - arc,
+                   b.shieldAng + arc, 40);
+        draw::ring(window, b.pos, b.radius + 18.f, 1.5f, withAlpha(theme::textHi, 0.35f), b.shieldAng - arc * 0.7f,
+                   b.shieldAng + arc * 0.7f, 32);
+    }
     for (int k = 0; k < 4; ++k) {
         const float a = -t * 0.9f + static_cast<float>(k) * kPi * 0.5f;
         draw::ring(window, b.pos, b.radius * 0.58f, 3.f, withAlpha(col, 0.7f), a, a + 0.9f, 24);
@@ -280,6 +320,26 @@ void WorldRenderer::drawEnemy(sf::RenderWindow& window, const Enemy& e, sf::Vect
         case EnemyKind::Shard:
             dart(window, e.pos, r, heading, inner, outer, rim, rimW);
             break;
+        case EnemyKind::Blinker: {   // a triangle pointing at the core; flickers just before a jump
+            const float face = std::atan2(corePos.y - e.pos.y, corePos.x - e.pos.x);
+            const float warn = e.blinkT < 0.45f ? 0.5f + 0.5f * std::sin(e.blinkT * 40.f) : 0.f;
+            draw::polygon(window, e.pos, r * 1.15f, 3, face, inner, outer);
+            draw::polygonOutline(window, e.pos, r * 1.15f, 3, face, rimW, withAlpha(rim, 1.f - 0.6f * warn));
+            if (e.blinkFx > 0.f) {   // where it jumped from: a fading outline
+                draw::polygonOutline(window, e.blinkFrom, r * 1.15f, 3, face, 1.5f, withAlpha(rim, 0.5f * e.blinkFx));
+                draw::line(window, e.blinkFrom, e.pos, 1.f, withAlpha(rim, 0.25f * e.blinkFx));
+            }
+            break;
+        }
+        case EnemyKind::Brute: {     // the miniboss: a big heavy pentagon with an ember core
+            const float spin = e.age * 0.25f;
+            draw::glow(window, e.pos, r * 1.5f, theme::ember, 0.12f);
+            draw::polygon(window, e.pos, r * 1.06f, 5, spin, inner, outer);
+            draw::polygonOutline(window, e.pos, r * 1.06f, 5, spin, 3.5f, rim);
+            draw::polygonOutline(window, e.pos, r * 0.7f, 5, -spin, 1.5f, withAlpha(theme::ember, 0.6f));
+            draw::disc(window, e.pos, r * 0.22f, withAlpha(theme::ember, 0.95f), withAlpha(darken(theme::ember, 0.3f), 0.9f));
+            break;
+        }
         case EnemyKind::Tank: {
             const float spin = e.age * 0.4f;
             draw::polygon(window, e.pos, r * 1.08f, 6, spin, inner, outer);
@@ -293,6 +353,12 @@ void WorldRenderer::drawEnemy(sf::RenderWindow& window, const Enemy& e, sf::Vect
             break;
     }
 
+    if (e.kind == EnemyKind::Mender) {   // a plus, and a faint ring where it heals
+        const sf::Color pc = withAlpha(theme::venom, 0.9f);
+        draw::line(window, e.pos - sf::Vector2f{r * 0.45f, 0.f}, e.pos + sf::Vector2f{r * 0.45f, 0.f}, 3.f, pc);
+        draw::line(window, e.pos - sf::Vector2f{0.f, r * 0.45f}, e.pos + sf::Vector2f{0.f, r * 0.45f}, 3.f, pc);
+        draw::ring(window, e.pos, cfg::enemy::mendRadius, 1.f, withAlpha(theme::venom, 0.10f), 0.f, 2.f * kPi, 48);
+    }
     if (e.kind == EnemyKind::Grunt)   // a small bright eye
         draw::disc(window, e.pos, r * 0.26f, withAlpha(lighten(fill, 0.3f), 0.95f), withAlpha(fill, 0.8f), {1.f, 1.f}, 16);
     if (e.kind == EnemyKind::Splitter) {   // a zig-zag crack right through the middle

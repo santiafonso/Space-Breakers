@@ -6,5 +6,5 @@ build/
 build-*/
 dist/
 saves/
-# raw audio source; the game ships assets/music/*.ogg
-music/
+# raw audio source; the game ships assets/music/
+/music/

@@ -4,6 +4,7 @@
 
 #include <array>
 #include <cstddef>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -13,24 +14,37 @@ namespace sb {
 
 // Sound effects are synthesised at start-up into small buffers - one per
 // sound per style (Soft / Bright / Retro), picked per category by the player's
-// SoundSettings. Background music streams from OGG files under assets/music/
-// (optional - the game is silent if they are missing). Everything degrades
-// silently when no audio device is available.
+// SoundSettings. Background music streams from files under assets/music/ (the
+// menu, one loop per act, the boss; optional - a part with no file is silent). Everything degrades silently when no audio device is available.
 class Audio {
 public:
-    enum class Track { None, Menu, Game };
+    enum class Track { None, Menu, Run, Boss, Count };
+
+    // Where a file loops. A song that fades out at its end loops back from
+    // `end` (before the fade) to `start` through a `seam`-second crossfade
+    // with a second copy of itself; seam 0 = a plain loop of the whole file
+    // (for tracks already cut to loop).
+    struct Loop {
+        float start = 0.f;   // seconds
+        float end = 0.f;
+        float seam = 0.f;
+    };
 
     bool init();
-    // Streamed loops. Pass empty for a track that has no file; missing files are
-    // simply skipped.
-    void loadMusic(const std::string& menuFile, const std::string& gameFile);
+    // Add a streamed loop to a track (Run takes several: one per act, picked by
+    // setTrack's `variant`). `gain` evens out loudness between files. Empty /
+    // missing files are simply skipped.
+    void addMusic(Track t, const std::string& file, float gain, Loop loop);
+    void addMusic(Track t, const std::string& file, float gain = 1.f) { addMusic(t, file, gain, Loop{}); }
     void setEnabled(bool e);
     bool enabled() const { return enabled_; }
     // The player's mix: volumes and a style per category (takes effect at once).
     void applySettings(const SoundSettings& s);
 
-    void setTrack(Track t);   // idempotent: cross to the given looping track
+    // Idempotent: cross to the track's loop number `variant` (wraps around).
+    void setTrack(Track t, int variant = 0);
     Track track() const { return track_; }
+    void update(float dt);    // per frame: the music crossfade
     void setAmbience(bool on);   // idempotent: the quiet fight hum loop
 
     // A ball clacked off a wall / core / another ball. Plays a note from a
@@ -80,7 +94,7 @@ private:
     // One cue in its category's style; `minGap` seconds of rate limiting.
     void cue(Cue c, float pitch, float volume01, float minGap = 0.f);
     float catGain(int cat) const;       // master * sfx * category, 0 when Off / muted
-    void applyTrack();        // start / pause each music stream to match track_ + enabled_
+    float musicVolume() const;   // sf::Music volume at full fade level
     void applyAmbience();
 
     bool ok_ = false;
@@ -101,11 +115,23 @@ private:
     std::size_t next_ = 0;
     unsigned hitTick_ = 0;    // rolls forward per ball hit, for subtle note / pitch wander
 
+    // One song that fades in / out between tracks; paused at silence so it
+    // resumes from there (the boss loop restarts instead). A seamed Loop plays
+    // on two voices that take turns across the loop point.
+    struct Stream {
+        std::array<std::unique_ptr<sf::Music>, 2> voice;   // [1] only with a seam
+        Loop loop;
+        int cur = 0;         // the voice carrying the song
+        float seamT = 1.f;   // 0..1 through a loop-point crossfade (1 = none running)
+        float level = 0.f;   // 0..1 track crossfade position
+        float gain = 1.f;    // loudness match
+    };
+    // Park / run its voices, cross the loop point, set volumes. `restart`: rewind when parked.
+    void updateStream(Stream& st, bool restart, float dt, float vol);
+    static constexpr std::size_t kTracks = static_cast<std::size_t>(Track::Count);
+    std::array<std::vector<Stream>, kTracks> music_;
+    std::array<std::size_t, kTracks> pick_{};   // which of a track's loops plays
     Track track_ = Track::None;
-    sf::Music menuMusic_;
-    sf::Music gameMusic_;
-    bool menuMusicOk_ = false;
-    bool gameMusicOk_ = false;
 };
 
 }  // namespace sb

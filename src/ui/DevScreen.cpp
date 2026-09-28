@@ -34,8 +34,10 @@ struct SpawnDef { EnemyKind kind; int count; const char* label; };
 constexpr SpawnDef kSpawns[] = {
     {EnemyKind::Grunt, 5, "5 Grunts"},     {EnemyKind::Runner, 5, "5 Runners"},
     {EnemyKind::Tank, 2, "2 Tanks"},       {EnemyKind::Splitter, 3, "3 Splitters"},
-    {EnemyKind::Shielded, 3, "3 Shielded"},
+    {EnemyKind::Shielded, 3, "3 Shielded"}, {EnemyKind::Blinker, 3, "3 Blinkers"},
+    {EnemyKind::Mender, 2, "2 Menders"},   {EnemyKind::Brute, 1, "1 Brute"},
 };
+constexpr int kSpawnCount = static_cast<int>(sizeof(kSpawns) / sizeof(kSpawns[0]));
 
 struct OpenDef { App::DevOpen what; const char* label; };
 constexpr OpenDef kOpens[] = {
@@ -87,26 +89,59 @@ void DevScreen::rebuild(App& app) {
             case UpgradeCat::Relic:    cols[4].push_back(k); break;
         }
     }
-    const std::size_t perCol = (items.size() + 2) / 3;
-    for (std::size_t i = 0; i < items.size(); ++i) cols[1 + std::min<std::size_t>(2, i / std::max<std::size_t>(1, perCol))].push_back(items[i]);
+    // Items go by class: a coloured class heading, then its items in the class
+    // colour (the tier is in the tooltip). A class stays in one column; the
+    // next column starts when this one is past its share.
+    std::stable_sort(items.begin(), items.end(), [](UpgradeKind a, UpgradeKind b) {
+        return static_cast<int>(itemTag(a)) < static_cast<int>(itemTag(b));
+    });
+    constexpr float kRowH = 25.f, kClassHeadH = 18.f;
+    float itemsH = 0.f;
+    for (std::size_t i = 0; i < items.size(); ++i)
+        itemsH += kRowH + (i == 0 || itemTag(items[i]) != itemTag(items[i - 1]) ? kClassHeadH : 0.f);
+    const float colShare = itemsH / 3.f;
+    auto pickButton = [&](UpgradeKind k, float x, float y, sf::Color col) {
+        Button bt;
+        bt.rect = {x, y, 164.f, 22.f};
+        bt.label = upgradeInfo(k).title;
+        bt.color = col;
+        bt.action = static_cast<int>(k);
+        const bool item = upgradeCat(k) == UpgradeCat::Item;
+        bt.tipTitle = std::string(upgradeInfo(k).title) + "  -  " + tierName(upgradeTier(k)) +
+                      (item ? std::string("  -  ") + itemTagName(itemTag(k)) : std::string());
+        bt.tipDesc = std::string(upgradeCatName(upgradeCat(k))) + ": " + upgradeInfo(k).desc;
+        buttons_.push_back(bt);
+    };
+    {
+        int c = 1;
+        float y = 112.f;
+        for (std::size_t i = 0; i < items.size(); ++i) {
+            const ItemTag tag = itemTag(items[i]);
+            if (i == 0 || tag != itemTag(items[i - 1])) {
+                if (i > 0 && y - 112.f > colShare && c < 3) { ++c; y = 112.f; }
+                const std::string name = itemTagName(tag);
+                std::string up = name.empty() ? "CLASSLESS" : name;
+                for (char& ch : up) ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+                y += kClassHeadH;
+                heads_.push_back({{26.f + static_cast<float>(c) * 172.f, y - 18.f}, up, tagColor(tag)});
+            }
+            pickButton(items[i], 24.f + static_cast<float>(c) * 172.f, y, tagColor(tag));
+            y += kRowH;
+        }
+    }
     float col0End = 112.f, col3End = 112.f, col4End = 112.f;
-    for (int c = 0; c < 5; ++c) {
+    for (int c : {0, 4}) {
         float y = 112.f;
         for (UpgradeKind k : cols[c]) {
-            Button bt;
-            bt.rect = {24.f + static_cast<float>(c) * 172.f, y, 164.f, 22.f};
-            bt.label = upgradeInfo(k).title;
-            bt.color = tierColor(upgradeTier(k));
-            bt.action = static_cast<int>(k);
-            bt.tipTitle = std::string(upgradeInfo(k).title) + "  -  " + tierName(upgradeTier(k));
-            bt.tipDesc = std::string(upgradeCatName(upgradeCat(k))) + ": " + upgradeInfo(k).desc;
-            buttons_.push_back(bt);
-            y += 25.f;
+            pickButton(k, 24.f + static_cast<float>(c) * 172.f, y, tierColor(upgradeTier(k)));
+            y += kRowH;
         }
         if (c == 0) col0End = y;
-        if (c == 3) col3End = y;
         if (c == 4) col4End = y;
     }
+    for (const Button& b : buttons_)   // where the last item column ends (the pacts go under it)
+        if (b.rect.left > 24.f + 2.5f * 172.f && b.rect.left < 24.f + 3.5f * 172.f)
+            col3End = std::max(col3End, b.rect.top + kRowH);
 
     // ---- pacts, two columns under the last item column and the modifiers /
     // relics one: click to grant (or drop) one
@@ -114,7 +149,7 @@ void DevScreen::rebuild(App& app) {
     {
         const float px0 = 24.f + 3.f * 172.f;
         const float y0 = std::max(col3End, col4End) + 34.f;
-        heads_.push_back({{px0 + 2.f, y0 - 20.f}, "PACTS (click: grant / drop)"});
+        heads_.push_back({{px0 + 2.f, y0 - 20.f}, "PACTS (click: grant / drop)", theme::textDim});
         const int rows = (kPactCount + 1) / 2;
         for (int i = 0; i < kPactCount; ++i) {
             const auto id = static_cast<PactId>(i);
@@ -147,7 +182,7 @@ void DevScreen::rebuild(App& app) {
         bt.tipDesc = tip;
         buttons_.push_back(bt);
     };
-    auto head = [&](const char* t) { heads_.push_back({{rx, ry - 20.f}, t}); };
+    auto head = [&](const char* t) { heads_.push_back({{rx, ry - 20.f}, t, theme::textDim}); };
     head("ACTIONS");
     const bool inv = app.world().devInvuln();
     const std::pair<const char*, const char*> misc[] = {
@@ -164,10 +199,10 @@ void DevScreen::rebuild(App& app) {
     }
     ry += 44.f;
     head("SPAWN");
-    for (int i = 0; i < 5; ++i) {
+    for (int i = 0; i < kSpawnCount; ++i) {
         add(kSpawns[i].label, kActSpawn + static_cast<int>(kSpawns[i].kind), theme::enemy, false,
             enemyDesc(kSpawns[i].kind), rx + (i % 2) * 158.f, 150.f);
-        if (i % 2 == 1) ry += 30.f;
+        if (i % 2 == 1 && i + 1 < kSpawnCount) ry += 30.f;
     }
     ry += 44.f;
     head("SPEED");
@@ -278,9 +313,9 @@ void DevScreen::draw(App& app, sf::RenderWindow& w) {
         h.setPosition(26.f + static_cast<float>(c) * 172.f, 96.f);
         w.draw(h);
     }
-    for (const auto& [pos, txt] : heads_) {
-        sf::Text h = makeLabel(f, txt, 10, theme::textDim);
-        h.setPosition(pos + sf::Vector2f{0.f, 4.f});
+    for (const Head& hd : heads_) {
+        sf::Text h = makeLabel(f, hd.text, 10, hd.color);
+        h.setPosition(hd.pos + sf::Vector2f{0.f, 4.f});
         w.draw(h);
     }
 

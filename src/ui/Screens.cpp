@@ -214,7 +214,9 @@ void MenuScreen::draw(App& app, sf::RenderWindow& w) {
 void LoadoutScreen::rebuild(App& app) {
     const sf::Vector2f s = app.size();
     menu_.init(app.font(), theme::fsItem, s.y * 0.050f);
-    menu_.setItems({{"Start run", true}, {"Back", true}});
+    menu_.setItems({{"Start run", true},
+                    {app.data().meta.hardMode ? "Mode: Hard" : "Mode: Normal", true},
+                    {"Back", true}});
     menu_.layout({s.x - 150.f, s.y * 0.80f});   // bottom-right, clear of the web
 }
 
@@ -343,7 +345,12 @@ void LoadoutScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse
     if (n >= 0) { selNode_ = n; app.buyMetaUnlock(n); return; }
     switch (menu_.clickIndex(mouse)) {
         case 0: app.newRun(); return;
-        case 1: app.back(); return;
+        case 1:   // hard mode on / off for the next run (saved)
+            app.data().meta.hardMode = !app.data().meta.hardMode;
+            app.save();
+            rebuild(app);
+            return;
+        case 2: app.back(); return;
         default: break;
     }
     if (legendAt(app, mouse) >= 0) return;
@@ -626,6 +633,11 @@ void LoadoutScreen::draw(App& app, sf::RenderWindow& w) {
     }
 
     menu_.draw(w, it);
+    if (menu_.hovered() == 1)   // what hard mode means, on hover only
+        drawTooltip(w, app.font(), lastMouse_, s, "Hard mode",
+                    "enemies tougher, faster and more of them, bosses much tougher, Brutes everywhere, "
+                    "enemies hit the core harder and no free repair between fights. Pays x1.75 cores. Click to toggle.",
+                    theme::coreLow);
 }
 
 // ================================================================ Play
@@ -642,7 +654,9 @@ void PlayScreen::onEnter(App&) {
 
 void PlayScreen::grab(App& app, sf::Vector2f mouse) {
     if (!app.canGrab()) return;   // "Hunters" / "Clockwork" pacts: hands off
-    if (app.world().grabAt(mouse, cfg::app::catchRadius)) {
+    // The wide arena is framed by a pulled-back camera: scale the reach with it
+    // so a grab covers the same on screen as in act 1.
+    if (app.world().grabAt(mouse, cfg::app::catchRadius * app.world().arenaScale())) {
         app.audio().grab();
         dragging_ = true;
         aimCommitted_ = false;   // a click until the pointer moves (see update)
@@ -858,7 +872,7 @@ void PlayScreen::drawWaveBanner(App& app, sf::RenderWindow& w) const {
     std::string label = "Stage " + std::to_string(row);
     const bool elite = app.data().run.eliteWave && row <= mapRows(act);
     if (elite) label = "Elite";
-    if (row > mapRows(act)) label = act == 1 ? "Miniboss" : "Final boss";
+    if (row > mapRows(act)) label = bossName(bossOfAct(act));
     const sf::Color frame = elite ? theme::ember : theme::accent;   // an elite's banner burns orange
     drawLabel(w, app.font(), elite ? "act " + std::to_string(act) + "   -   item spoils" : "act " + std::to_string(act), 12,
               {s.x * 0.5f, s.y * 0.40f - 46.f - (1.f - out) * 16.f}, withAlpha(frame, a));
@@ -1369,7 +1383,7 @@ void HowToScreen::draw(App& app, sf::RenderWindow& w) {
         "4 its ascended form. Two balls' elements on one enemy set off a reaction.",
         "Between fights, pick your path on the map: fights pay gold, elites add a pick,",
         "shops / forges / rests / upgrades build your balls (4 item slots each).",
-        "Beat the miniboss at wave 10, clear wave 20 to finish the run.",
+        "Five acts, a boss at the end of each. Beat the last one to finish the run.",
     }};
     const float y0 = s.y * 0.32f;
     for (std::size_t i = 0; i < lines.size(); ++i)
@@ -1425,11 +1439,16 @@ void BossWinScreen::draw(App& app, sf::RenderWindow& w) {
 
     const bool goingOn = app.bossWinCanContinue();   // run still live: the reward isn't due yet
     const bool runEnd = !goingOn && app.lastRunWave() >= cfg::run::finalWave;
-    drawCenteredPop(w, app.font(), runEnd ? "Run complete" : "Miniboss defeated", theme::fsTitle,
+    const std::string downed = std::string(bossName(bossOfAct(cfg::run::actOfWave(app.data().run.wave)))) + " defeated";
+    drawCenteredPop(w, app.font(), runEnd ? "Run complete" : downed, theme::fsTitle,
                     {s.x * 0.5f, s.y * 0.28f}, theme::core, introPop(it, 0.05f, 0.34f));
 
     if (goingOn) {
-        drawCenteredPop(w, app.font(), "the run goes on: seal a pact, take the boss treasure, push on to wave 20", theme::fsBody,
+        const int next = cfg::run::actOfWave(app.data().run.wave) + 1;
+        const std::string on = next == 2 ? "the run goes on: seal a pact, take the boss treasure, on to act 2"
+                                         : "the run goes on: take the boss treasure, on to act " + std::to_string(next) +
+                                               " of " + std::to_string(cfg::run::acts);
+        drawCenteredPop(w, app.font(), on, theme::fsBody,
                         {s.x * 0.5f, s.y * 0.28f + 52.f}, theme::textDim, introPop(it, 0.16f));
     } else {
         const int pr = app.lastRunPrisms();

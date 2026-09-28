@@ -101,6 +101,31 @@ const char* enemyName(EnemyKind k) {
         case EnemyKind::Splitter: return "Splitter";
         case EnemyKind::Shard:    return "Shard";
         case EnemyKind::Shielded: return "Shielded";
+        case EnemyKind::Blinker:  return "Blinker";
+        case EnemyKind::Mender:   return "Mender";
+        case EnemyKind::Brute:    return "Brute";
+    }
+    return "";
+}
+
+const char* bossName(BossKind k) {
+    switch (k) {
+        case BossKind::Charger: return "Charger";
+        case BossKind::Hive:    return "Hive";
+        case BossKind::Warden:  return "Warden";
+        case BossKind::Dasher:  return "Dasher";
+        case BossKind::Orbital: return "Orbital";
+    }
+    return "";
+}
+
+const char* bossDesc(BossKind k) {
+    switch (k) {
+        case BossKind::Charger: return "walks dead straight at the core - fling at it, and don't let it touch the core";
+        case BossKind::Hive:    return "sways in and bursts fans of runners at the core - thin the swarm, keep hitting it";
+        case BossKind::Warden:  return "its shield turns around it and blocks balls - hit it from the open side";
+        case BossKind::Dasher:  return "aims a line, then dashes at the core - every clean hit knocks it back";
+        case BossKind::Orbital: return "spirals in behind a spinning ring of shields - the last boss";
     }
     return "";
 }
@@ -113,6 +138,9 @@ const char* enemyDesc(EnemyKind k) {
         case EnemyKind::Splitter: return "bursts into two shards when it dies";
         case EnemyKind::Shard:    return "a splitter's fragment - weak but quick";
         case EnemyKind::Shielded: return "its shield faces the core and blocks hits - strike it from the side or behind";
+        case EnemyKind::Blinker:  return "jumps closer to the core every few seconds - catch it between jumps";
+        case EnemyKind::Mender:   return "slow; heals every enemy around it - kill it first";
+        case EnemyKind::Brute:    return "miniboss: huge, very tough, barely pushed; flattens a chunk of the core";
     }
     return "";
 }

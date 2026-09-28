@@ -43,6 +43,7 @@ bool saveGame(const std::string& path, const GameData& d) {
     for (int i = 0; i < SoundCatCount; ++i)   // category index, volume, style
         f << "snd.cat " << i << ' ' << m.sound.vol[i] << ' ' << m.sound.style[i] << '\n';
     f << "fullscreen " << (m.fullscreen ? 1 : 0) << '\n';
+    f << "hard " << (m.hardMode ? 1 : 0) << '\n';
     f << "stat.enemiesKilled " << m.stats.enemiesKilled << '\n';
     f << "stat.coresEarned " << m.stats.coresEarned << '\n';
     f << "stat.bestWave " << m.stats.bestWave << '\n';
@@ -102,6 +103,7 @@ bool loadGame(const std::string& path, GameData& d) {
             }
         }
         else if (key == "fullscreen") { int v = 0; ls >> v; m.fullscreen = v != 0; }
+        else if (key == "hard") { int v = 0; ls >> v; m.hardMode = v != 0; }
         else if (key == "stat.enemiesKilled") ls >> m.stats.enemiesKilled;
         else if (key == "stat.coresEarned") ls >> m.stats.coresEarned;
         else if (key == "stat.bestWave") ls >> m.stats.bestWave;

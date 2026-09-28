@@ -83,7 +83,16 @@ App::App() : window_(kLogical()), world_(kLogical()) {
         setTitleFont(&titleFont_);
     if (!audio_.init())
         std::cerr << "Space-Breakers: audio unavailable, continuing without sound\n";
-    audio_.loadMusic(findAsset("music/menu.ogg"), findAsset("music/game.ogg"));
+    // Gains bring every loop to about -17 dBFS RMS; the songs that fade out at
+    // the end loop back before the fade over a 4 s seam. Both measured per
+    // file - re-measure when a file is swapped. The rest are cut to loop.
+    audio_.addMusic(Audio::Track::Menu, findAsset("music/menu.ogg"), 1.05f, {0.2f, 376.f, 4.f});
+    audio_.addMusic(Audio::Track::Run, findAsset("music/map.ogg"), 1.17f, {0.f, 112.5f, 4.f});
+    // Out for now (the user is trying the others): Pinball Royale.
+    // audio_.addMusic(Audio::Track::Run, findAsset("music/fight1.ogg"), 1.08f, {0.3f, 242.f, 4.f});
+    audio_.addMusic(Audio::Track::Run, findAsset("music/fight2.mp3"), 0.76f);
+    audio_.addMusic(Audio::Track::Run, findAsset("music/fight3.mp3"), 0.67f);
+    audio_.addMusic(Audio::Track::Boss, findAsset("music/boss.mp3"), 0.65f);
 
     loadGame(savePath_, data_);
     audio_.setEnabled(data_.meta.soundOn);
@@ -105,6 +114,7 @@ WorldParams App::params() const {
     const RunMods& m = data_.run.mods;
     const int* u = data_.meta.unlock;
     WorldParams p;
+    p.hard = data_.run.hard;
     p.damageMult = 1.f + cfg::combat::heftPerLevel * static_cast<float>(u[MetaHeft]);
     p.wave = std::max(1, data_.run.wave);
     p.ballRadiusMult = 1.f + cfg::combat::massPerLevel * static_cast<float>(u[MetaMass]);
@@ -486,10 +496,16 @@ void App::push(ScreenId id) {
 }
 
 void App::back() {
+    // Closing the pause menu (or what it opened, or the dev panel) just
+    // uncovers the screen underneath: no fade, no replayed intro - a card
+    // hand mustn't be dealt again every time you peek at the options.
+    const bool overlay = onPauseMenus() ||   // (and backing out of the ball / slot picker)
+                         (!stack_.empty() && dynamic_cast<const EquipScreen*>(stack_.back().get()));
     if (stack_.size() > 1) {
         stack_.pop_back();
         audio_.uiClose();
     }
+    if (overlay) return;
     fade_ = 1.f;
     if (!stack_.empty()) stack_.back()->beginIntro();   // replay the intro on the way back
 }
@@ -506,6 +522,7 @@ void App::newRun() {
     RunState& r = data_.run;
     r = RunState{};
     r.active = true;
+    r.hard = data_.meta.hardMode;
     r.wave = 0;
     r.coreMaxHp = startCoreHp();
     r.coreHp = r.coreMaxHp;
@@ -563,7 +580,7 @@ void App::newRun() {
     }
 
     // The act's path map. A dev SB_WAVE start drops you at the row before it.
-    const int act = (startWave - 1) / cfg::run::bossWave + 1;
+    const int act = cfg::run::actOfWave(startWave);
     r.map = generateMap(rng_, act);
     r.mapNode = -1;
     r.mapRow = 0;   // stand just before the first row that plays as startWave
@@ -579,20 +596,18 @@ void App::startWaveAt(int wave, bool elite) {
     data_.run.wave = wave;
     data_.run.eliteWave = elite;
     waveIntro_ = cfg::app::waveIntroTime;   // ease the sim in instead of snapping
-    if (!hasPact(PactId::Fortress))   // "Fortress" pact: no free healing before a fight
+    if (!hasPact(PactId::Fortress) && !data_.run.hard)   // "Fortress" pact / hard mode: no free healing before a fight
         world_.repairCore(cfg::core::waveHeal +
                           cfg::core::mendPerLevel * static_cast<float>(data_.meta.unlock[MetaMend]));
     if (const int bastion = data_.meta.unlock[MetaBastion]; bastion > 0)   // "Bastion": max HP grows each wave
         world_.addCoreMaxHp(cfg::core::bastionPerWavePerLevel * static_cast<float>(bastion));
     const int w = data_.run.wave;
-    if (w == cfg::run::bossWave || w == cfg::run::finalWave) audio_.bossAppear();
+    if (cfg::run::isBossWave(w)) audio_.bossAppear();
     else audio_.waveStart();
-    if (w == cfg::run::bossWave)
-        world_.startBossWave(params());              // wave 10: Charger miniboss
-    else if (w == cfg::run::finalWave)
-        world_.startFinalBossWave(params());         // wave 20: Orbital boss + shield ring
+    if (cfg::run::isBossWave(w))
+        world_.startBossWave(w, params());           // the act's boss (Charger ... Orbital)
     else if (w > cfg::run::bossWave)
-        world_.startPostBossWave(w, params(), elite);   // waves 11..19: wide arena, core slides to centre
+        world_.startPostBossWave(w, params(), elite);   // acts 2-5: wide arena, core slides to centre
     else
         world_.startWave(w, params(), elite);
     data_.meta.stats.bestWave =
@@ -1199,6 +1214,7 @@ void App::bankRun(bool won) {
 
     int cores = r.wave * cfg::meta::coresPerWave + (won ? cfg::meta::winBonus : 0);
     cores += static_cast<int>(r.bountyCores);   // "Fortune" node: cores per enemy killed
+    if (r.hard) cores = static_cast<int>(std::lround(static_cast<float>(cores) * cfg::hard::coresMul));
     lastRunCores_ = cores;
 
     lastRunPrisms_ = 0;
@@ -1230,23 +1246,25 @@ void App::finishToMenu() {
 
 bool App::bossWinCanContinue() const {
     return continueUnlocked_ && data_.run.active && !runBanked_ &&
-           data_.run.wave == cfg::run::bossWave;
+           cfg::run::isBossWave(data_.run.wave) && data_.run.wave < cfg::run::finalWave;
 }
 
-// "Continue" on the BossWin card: on to act 2 (a fresh map, waves 11-20).
+// "Continue" on the BossWin card: on to the next act (a fresh map, 10 more waves).
 // Nothing is banked - the run is still live and pays out when it truly ends.
 void App::continuePastBoss() {
     back();   // drop the BossWin card, back to the PlayScreen underneath
     RunState& r = data_.run;
     r.gold += cfg::gold::bossPay;
-    r.map = generateMap(rng_, 2);
+    const int act = r.map.act + 1;
+    r.map = generateMap(rng_, act);
     r.mapNode = -1;
     r.mapRow = 0;
     r.phoenixUsedAct = false;
     r.repairedThisAct = false;   // "Iron core": a fresh streak for the new act
     world_.setPhoenix((r.mods.phoenix ? 1 : 0) + r.lastStandLeft);   // "Phoenix" recharges for the new act
-    // A pact first (Fase O), then the boss treasure (an Epic / Legendary pick), then the map.
-    if (!openPactChoice(PactSource::Boss)) openChoice(RollSource::Boss);
+    // After act 1 a pact first (Fase O); every boss: the treasure (an Epic /
+    // Legendary pick), then the map.
+    if (act != 2 || !openPactChoice(PactSource::Boss)) openChoice(RollSource::Boss);
 }
 
 // "Back to menu" on the BossWin card. If the run wasn't banked yet (miniboss just
@@ -1410,6 +1428,15 @@ void App::openPause() {
 void App::openStats() { push(ScreenId::Stats); }
 void App::openSound() { push(ScreenId::Sound); }
 
+// The pause menu, what it opens (stats, how to play, options) and the dev
+// panel: these take Esc as "back" themselves.
+bool App::onPauseMenus() const {
+    if (stack_.empty()) return false;
+    const Screen* top = stack_.back().get();
+    return dynamic_cast<const PauseScreen*>(top) || dynamic_cast<const StatsScreen*>(top) ||
+           dynamic_cast<const HowToScreen*>(top) || dynamic_cast<const DevScreen*>(top) || onOptions();
+}
+
 bool App::onOptions() const {
     return !stack_.empty() && dynamic_cast<const SoundScreen*>(stack_.back().get()) != nullptr;
 }
@@ -1481,6 +1508,14 @@ void App::handleEvent(const sf::Event& e) {
         if (!onOptions() && pressO) {
             peek_.close();
             openSound();
+            return;
+        }
+        // Esc anywhere in a live run opens the pause menu (options, abandon,
+        // quit) over whatever is up - a card, the map, the shop, a pact. Resume
+        // comes back to it. The pause menu and what it opens handle their own
+        // Esc (back); the TAB overlay's Esc just closes it.
+        if (e.type == sf::Event::KeyPressed && e.key.code == sf::Keyboard::Escape && data_.run.active && !peek_.open && !onPauseMenus()) {
+            openPause();
             return;
         }
         // TAB anywhere in a live run: screens without their own peek get the App's.
@@ -1613,6 +1648,23 @@ void App::processEvents(const FrameEvents& ev) {
         hitstop_ = std::max(hitstop_, cfg::app::hitstopBossHit);
         camKick_ = std::max(camKick_, cfg::app::camKickBossHit);
     }
+    if (ev.bossEnraged) {   // phase two
+        effects_.flash(theme::coreLow, 0.6f);
+        effects_.addLabel("ENRAGED", {size().x * 0.5f, size().y * 0.3f}, theme::coreLow, 34, 1.4f);
+        audio_.bossAppear();
+        camKick_ = std::max(camKick_, 8.f);
+    }
+    if (ev.bossShock) {   // the Charger's shockwave
+        effects_.flash(theme::coreLow, 0.35f);
+        audio_.coreThud();
+        camKick_ = std::max(camKick_, 9.f);
+    }
+    if (ev.launched) {    // the fight-opening whirl lets go
+        audio_.thrown(0.9f);
+        camKick_ = std::max(camKick_, 5.f);
+    }
+    if (ev.bossSummon)
+        effects_.addLabel("a Brute joins the fight", {size().x * 0.5f, size().y * 0.36f}, theme::ember, 22, 1.3f);
     data_.meta.stats.bestCombo =
         std::max(data_.meta.stats.bestCombo, static_cast<std::uint32_t>(world_.comboStreak()));
     data_.meta.stats.maxSpeed = std::max(data_.meta.stats.maxSpeed, world_.fastestBall());
@@ -1630,18 +1682,18 @@ void App::processEvents(const FrameEvents& ev) {
             data_.run.bountyCores += cfg::meta::interestPerLevel * static_cast<float>(interest);
         const int w = data_.run.wave;
         const bool flawless = world_.coreCleanWave();   // nothing reached the core this fight
-        if (w == cfg::run::bossWave || w >= cfg::run::finalWave) {
-            // Boss down: a flawless act-1 boss pays gold for act 2, and an act
+        if (cfg::run::isBossWave(w)) {
+            // Boss down: a flawless boss pays gold for the next act, and an act
             // with no deliberate repair banks "Iron core" cores (before bankRun).
             RunState& r = data_.run;
-            bossFlawlessGold_ = flawless && w == cfg::run::bossWave ? cfg::gold::flawlessBoss : 0;
+            bossFlawlessGold_ = flawless && w < cfg::run::finalWave ? cfg::gold::flawlessBoss : 0;
             bossIronCores_ = r.repairedThisAct ? 0 : cfg::meta::ironCoreCores;
             r.gold += bossFlawlessGold_;
             r.bountyCores += static_cast<float>(bossIronCores_);
         }
-        if (w == cfg::run::bossWave) {
-            // Miniboss down. First win ever: bank it now, card offers only "Back".
-            // Otherwise leave the run live so "Continue" can carry it to wave 11.
+        if (cfg::run::isBossWave(w) && w < cfg::run::finalWave) {
+            // An act's boss down. First win ever: bank it now, card offers only
+            // "Back". Otherwise leave the run live so "Continue" carries it on.
             if (!continueUnlocked_) bankRun(true);
             push(ScreenId::BossWin);
             return;
@@ -1656,7 +1708,7 @@ void App::processEvents(const FrameEvents& ev) {
         // (outside "Loaded Dice"'s gamble).
         RunState& r = data_.run;
         const int row = w - (r.map.act - 1) * cfg::run::bossWave;
-        int pay = cfg::gold::combatBase + cfg::gold::perRow * row;
+        int pay = cfg::gold::combatBase + cfg::gold::perRow * row + cfg::gold::perAct * (r.map.act - 1);
         if (r.eliteWave)
             pay = static_cast<int>(std::lround(static_cast<float>(pay * cfg::gold::elitePerRowMul) *
                 (1.f + cfg::meta::eliteSpoilsPerLevel * static_cast<float>(data_.meta.unlock[MetaEliteSpoils]))));
@@ -1708,9 +1760,18 @@ void App::update(float frameDt) {
     effects_.update(frameDt);
     fade_ *= std::exp(-cfg::app::fadeRate * frameDt);
 
-    // Music follows the run: the play track through a live run (Choice / Pause /
-    // BossWin card included), the menu track everywhere else.
-    audio_.setTrack(data_.run.active ? Audio::Track::Game : Audio::Track::Menu);
+    // Music follows the run: one loop carries a whole act (map, fights, shops
+    // alike - fights are too short to switch on), the boss fight has its own,
+    // the menu loop outside a run. They crossfade.
+    static constexpr int kActLoop[] = {0, 1, 2, 1, 2};   // act 1..5 -> Run loop (see addMusic above)
+    const int act = std::clamp(data_.run.map.act, 1, 5);
+    if (!data_.run.active)
+        audio_.setTrack(Audio::Track::Menu);
+    else if (world_.waveRunning() && cfg::run::isBossWave(data_.run.wave))
+        audio_.setTrack(Audio::Track::Boss);
+    else
+        audio_.setTrack(Audio::Track::Run, kActLoop[act - 1]);
+    audio_.update(frameDt);
 
     // A quiet hum under a live fight; a soft two-note warning while the core is low.
     audio_.setAmbience(simulating() && data_.run.active);
@@ -1824,6 +1885,7 @@ void App::update(float frameDt) {
     if (const int n = effects_.takeArrivedCoins(); n > 0) hud_.pulseGold();
 
     const Core& c = world_.core();
+    hud_.setHard(data_.run.hard);
     hud_.update(frameDt, data_.run.map.act, data_.run.mapRow, mapRows(data_.run.map.act) + 1, world_.enemiesLeft(),
                 c.maxHp > 0.f ? c.hp / c.maxHp : 0.f, world_.comboMultiplier(),
                 data_.run.score, data_.run.gold, world_.effect(), world_.bossWave(),
@@ -1922,7 +1984,10 @@ int App::runSnapshots(const std::string& dir) {
     syncWorldBalls();
     for (int i = 0; i < static_cast<int>(r.map.nodes.size()); ++i)
         if (mapNodeOpen(i)) { travelTo(i); break; }
-    for (int i = 0; i < 300; ++i) update(1.f / 60.f);   // five seconds of fighting
+    for (int i = 0; i < 50 && world_.launching(); ++i) update(1.f / 60.f);   // mid-whirl at the fight's start
+    capturePath_ = d + "04a_launch.png";
+    render();
+    for (int i = 0; i < 250; ++i) update(1.f / 60.f);   // then fighting
     capturePath_ = d + "04_play.png";
     render();
 
@@ -1996,7 +2061,7 @@ int App::runSnapshots(const std::string& dir) {
 
     // A crowded field with every enemy kind, to judge readability under load.
     for (EnemyKind k : {EnemyKind::Grunt, EnemyKind::Runner, EnemyKind::Tank, EnemyKind::Splitter,
-                        EnemyKind::Shielded})
+                        EnemyKind::Shielded, EnemyKind::Blinker, EnemyKind::Mender})
         world_.devSpawn(k, 3);
     for (int i = 0; i < 90; ++i) update(1.f / 60.f);
     capturePath_ = d + "10_horde.png";
@@ -2018,7 +2083,10 @@ int App::runSnapshots(const std::string& dir) {
     snapFrame(d + "11_map_late.png");
     for (int i = 0; i < static_cast<int>(r.map.nodes.size()); ++i)
         if (mapNodeOpen(i)) { travelTo(i); break; }
-    for (int i = 0; i < 240; ++i) update(1.f / 60.f);
+    for (int i = 0; i < 70 && world_.launching(); ++i) update(1.f / 60.f);   // the opening whirl, core pinned left
+    capturePath_ = d + "12a_boss_launch.png";
+    render();
+    for (int i = 0; i < 170; ++i) update(1.f / 60.f);
     capturePath_ = d + "12_boss.png";
     render();
 
@@ -2038,7 +2106,7 @@ int App::runSnapshots(const std::string& dir) {
     grantPact(PactId::Hunters);
     grantPact(PactId::LivingCore);
     world_.devSpawn(EnemyKind::Grunt, 8);
-    world_.devSpawn(EnemyKind::Tank, 1);
+    world_.devSpawn(EnemyKind::Brute, 1);
     for (int i = 0; i < 150; ++i) update(1.f / 60.f);
     capturePath_ = d + "11_pact_fight.png";
     render();

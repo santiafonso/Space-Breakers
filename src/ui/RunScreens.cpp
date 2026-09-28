@@ -186,8 +186,23 @@ void EquipScreen::targetAt(App& app, sf::Vector2f mouse, int& ball, int& slot) c
     }
 }
 
+sf::FloatRect EquipScreen::backRect(sf::Vector2f s) {
+    const float wd = 260.f, ht = 34.f;
+    return {s.x * 0.5f - wd * 0.5f, s.y - 64.f, wd, ht};
+}
+
+// What "Back" returns to: a card you took but haven't placed goes back on the
+// table (nothing is spent), the shop, or out of the forge.
+static const char* equipBackLabel(EquipSource src) {
+    switch (src) {
+        case EquipSource::Choice: return "Back to the cards";
+        case EquipSource::Forge:  return "Leave the forge";
+        default:                  return "Back to the shop";
+    }
+}
+
 void EquipScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
-    if (isKey(e, sf::Keyboard::Escape) || isRightClick(e)) {
+    if (isRightClick(e) || (isLeftClick(e) && backRect(app.size()).contains(mouse))) {
         app.cancelEquip();
         return;
     }
@@ -205,7 +220,8 @@ void EquipScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) 
 void EquipScreen::update(App& app, float, sf::Vector2f mouse) {
     mouse_ = mouse;
     targetAt(app, mouse, hoverBall_, hoverSlot_);
-    uisound::hover(this, hoverBall_ >= 0 ? hoverBall_ * 16 + hoverSlot_ + 1 : -1);
+    const bool onBack = backRect(app.size()).contains(mouse);
+    uisound::hover(this, onBack ? 999 : hoverBall_ >= 0 ? hoverBall_ * 16 + hoverSlot_ + 1 : -1);
 }
 
 void EquipScreen::draw(App& app, sf::RenderWindow& w) {
@@ -224,13 +240,13 @@ void EquipScreen::draw(App& app, sf::RenderWindow& w) {
             : "Forge - pick an item to level up";
         sub = "each level: the item's bonus or chance grows by half, and the ball hits 10% harder (max level " +
               std::to_string(app.forgeCap()) + ")";
-        hint = src == EquipSource::ShopForge ? "click an item   -   Esc: back to the shop"
-                                             : "click an item   -   Esc: leave the forge";
+        hint = src == EquipSource::ShopForge ? "click an item   -   Back: the shop"
+                                             : "click an item   -   Back: leave the forge";
     } else if (sell) {
         title = "Sell - pick an item to sell";
         sub = "it pays " + std::to_string(static_cast<int>(cfg::gold::sellFrac * 100.f)) +
               "% of its tier price per forge level; its slot is freed";
-        hint = "click an item   -   Esc: back to the shop";
+        hint = "click an item   -   Back: the shop";
     } else {
         switch (upgradeCat(k)) {
             case UpgradeCat::Modifier: title = std::string(info.title) + " - pick a ball"; break;
@@ -253,16 +269,16 @@ void EquipScreen::draw(App& app, sf::RenderWindow& w) {
         if (app.equipSource() == EquipSource::Shop) sub += "   (" + std::to_string(app.shopPrice(k)) + " gold)";
         switch (upgradeCat(k)) {
             case UpgradeCat::Element:
-                hint = "click a ball: it goes in the type slot (one element per ball - a new one swaps it)   -   Esc: back";
+                hint = "click a ball: it goes in the type slot (one element per ball - a new one swaps it)   -   Back / right-click";
                 break;
             case UpgradeCat::Ability:
-                hint = "click an ability slot (a full one gets swapped; a ball that has it levels it up)   -   Esc: back";
+                hint = "click an ability slot (a full one gets swapped; a ball that has it levels it up)   -   Back / right-click";
                 break;
             case UpgradeCat::Item:
-                hint = "click an item slot (a full one gets replaced; a ball that has it levels it up)   -   Esc: back";
+                hint = "click an item slot (a full one gets replaced; a ball that has it levels it up)   -   Back / right-click";
                 break;
             default:
-                hint = "click a ball   -   Esc / right-click: back";
+                hint = "click a ball   -   Back / right-click";
                 break;
         }
     }
@@ -298,6 +314,14 @@ void EquipScreen::draw(App& app, sf::RenderWindow& w) {
         }
     }
     app.useUiView();
+
+    // "Back": change your mind before the pick is placed (right-click too).
+    const sf::FloatRect br = backRect(s);
+    const float ba = clampf(introPop(it, 0.15f), 0.f, 1.f);
+    const bool onBack = br.contains(mouse_);
+    draw::panel(w, br, theme::textLo, ba, onBack ? 1.f : 0.f);
+    drawCentered(w, app.font(), equipBackLabel(src), theme::fsSmall, {s.x * 0.5f, br.top + br.height * 0.5f - 1.f},
+                 withAlpha(onBack ? theme::textHi : theme::textLo, ba));
 }
 
 // ================================================================ Map
@@ -780,7 +804,7 @@ void ShopScreen::draw(App& app, sf::RenderWindow& w) {
     if (const sf::FloatRect br = buttonRect(app, 1); br.width > 0.f)
         drawButton(w, f, br, "Reroll (R)  -  " + std::to_string(app.shopRerollPrice()) + "g", theme::puSurge,
                    hover_ == 101 ? 1.f : 0.f, g >= app.shopRerollPrice());
-    drawButton(w, f, buttonRect(app, 2), "Leave (Esc)", theme::accent, hover_ == 102 ? 1.f : 0.f, true);
+    drawButton(w, f, buttonRect(app, 2), "Leave", theme::accent, hover_ == 102 ? 1.f : 0.f, true);
 
     // Hover help.
     if (hover_ >= 0 && hover_ < offers) {

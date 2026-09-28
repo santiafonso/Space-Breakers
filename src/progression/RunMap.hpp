@@ -13,7 +13,7 @@ namespace sb {
 //
 // An act is mapRows(act) rows of branching nodes followed by the boss. Each
 // row plays as a "difficulty wave" (mapRowWave): the act's 9 normal waves are
-// spread over its rows, so enemy scaling and the boss waves (10 / 20) don't
+// spread over its rows, so enemy scaling and the boss waves (10, 20 ... 50) don't
 // move however long the map is; a non-combat node just skips that row's fight.
 // From the node you're on you may step to any node it links to in the next row.
 
@@ -28,7 +28,7 @@ struct MapNode {
     bool visited = false;
 };
 
-// Choosable rows in an act: act 1 is a shorter climb than act 2.
+// Choosable rows in an act: act 1 is a shorter climb than the rest.
 inline int mapRows(int act) { return act == 1 ? cfg::map::rowsAct1 : cfg::map::rows; }
 
 struct RunMap {
@@ -66,7 +66,7 @@ inline const char* mapNodeDesc(MapNodeType t) {
 }
 
 // The difficulty wave map row `row` of act `act` plays as: rows 1..rows spread
-// over waves 1..9 of the act, the boss row is wave 10 (20 in act 2).
+// over waves 1..9 of the act, the boss row is wave 10 of the act (10, 20 ... 50).
 inline int mapRowWave(int act, int row) {
     const int base = (act - 1) * cfg::run::bossWave;
     const int rows = mapRows(act);

@@ -47,9 +47,8 @@ public:
                   float coreHp, float coreMaxHp);
     // elite: an Elite map node - tougher and more enemies (cfg::map).
     void startWave(int wave, const WorldParams& p, bool elite = false);
-    void startBossWave(const WorldParams& p);   // the wave-10 miniboss duel (Charger)
-    void startPostBossWave(int wave, const WorldParams& p, bool elite = false);  // waves 11..19: wide arena, core slides to centre
-    void startFinalBossWave(const WorldParams& p);           // wave 20: the Orbital boss + shield ring
+    void startBossWave(int wave, const WorldParams& p);   // an act's boss (wave 10, 20, ... 50)
+    void startPostBossWave(int wave, const WorldParams& p, bool elite = false);  // past act 1: wide arena, core slides to centre
     // Match the balls to the run loadout: refresh role / element / gear of the
     // existing ones in place (they keep flying) and spawn any new ones.
     void syncBalls(const std::vector<BallSpec>& specs, const WorldParams& p);
@@ -118,6 +117,7 @@ public:
     sf::Vector2f viewCenter() const { return size_ * 0.5f; }
 
     bool waveRunning() const { return waveRunning_; }
+    bool launching() const { return launchT_ > 0.f; }   // the fight-opening whirl is on
     bool bossWave() const { return bossWave_; }
     bool runOver() const { return runOver_; }
     int wave() const { return wave_; }
@@ -148,8 +148,22 @@ private:
     float ballRadius(const Ball& b, const WorldParams& p) const;
     float elemPotency(const Ball& b, const WorldParams& p) const;      // web level x Support bonus
     void boostSpeed(Ball& b, float mult, const WorldParams& p);        // bounce boosts, capped
-    void spawnEnemy();
-    void spawnOrbiter(float phase);   // one shield enemy on the wave-20 ring
+    void spawnEnemy(std::optional<EnemyKind> force = std::nullopt);   // force: this kind, at the wave's stats
+    void spawnPack();                 // a bunch of runners from one spot (act 2+)
+    void spawnOrbiter(float phase);   // one shield enemy on the Orbital's ring
+    void beginWave(int wave, bool elite);          // a normal wave's spawn plan
+    void startChargerWave(const WorldParams& p);   // act 1's boss: core far left
+    void startFinalBossWave(const WorldParams& p); // act 5's Orbital + shield ring
+    float bossHp(float grunts, int wave) const;
+    float enemyHp(int wave) const;      // the wave's plain enemy HP (hard mode on top)
+    float enemySpeed(int wave) const;
+    void updateHive(float dt);                     // sway in, burst runners
+    void updateWarden(float dt, const WorldParams& p);
+    void updateDasher(float dt, const WorldParams& p);
+    // A ball landed on the boss: damage (unless i-frames / too slow / the
+    // Warden's shield), Dasher knockback. cdMul stretches the i-frames.
+    void ballHitsBoss(Ball& b, float cdMul, const WorldParams& p, FrameEvents& ev, bool speedGate = true);
+    bool wardenBlocks(sf::Vector2f from) const;
     EnemyKind rollEnemyKind();        // weighted by wave (kinds phase in) and elite
     static void setEnemyKind(Enemy& e, EnemyKind k, float hp, float speed);
     static bool shieldBlocks(const Enemy& e, sf::Vector2f from, sf::Vector2f corePos);
@@ -273,6 +287,14 @@ private:
     float spawnTimer_ = 0.f;
     int nextEnemyId_ = 1;     // Enemy::id source
     float waveHpMul_ = 1.f;   // Elite wave: enemy HP multiplier
+    float launchT_ = 0.f;                    // >0: the balls whirl around the core (cfg::ball::launch*)
+    float launchAng_ = 0.f;                  // the whirl's current angle
+    sf::Vector2f launchCentre_{0.f, 0.f};    // the ring's centre (the core, nudged off a wall)
+    std::vector<sf::Vector2f> launchFrom_;   // where each ball was when it started (eases onto the ring)
+    void updateLaunch(float dt, const WorldParams& p, FrameEvents& ev);
+    void chargerShock(FrameEvents& ev);
+    bool hard_ = false;       // hard mode (cfg::hard), from WorldParams at each wave start
+    std::vector<int> bruteSlots_;   // toSpawn_ values at which a Brute (miniboss) spawns instead
     bool eliteWave_ = false;
 
     float pickupTimer_ = cfg::pickup::spawnMin;

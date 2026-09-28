@@ -169,6 +169,7 @@ public:
 
 private:
     void targetAt(App& app, sf::Vector2f mouse, int& ball, int& slot) const;
+    static sf::FloatRect backRect(sf::Vector2f s);   // "Back": undo the pick's target step (bottom centre)
     int hoverBall_ = -1;
     int hoverSlot_ = -1;
     sf::Vector2f mouse_;
@@ -221,7 +222,8 @@ private:
     };
     void rebuild(App& app);
     std::vector<Button> buttons_;
-    std::vector<std::pair<sf::Vector2f, std::string>> heads_;   // section titles, laid out with the buttons
+    struct Head { sf::Vector2f pos; std::string text; sf::Color color; };
+    std::vector<Head> heads_;   // section titles, laid out with the buttons
     int hover_ = -1;
     sf::Vector2f mouse_;
 };
@@ -270,7 +272,7 @@ public:
     void draw(App& app, sf::RenderWindow& w) override;
 };
 
-// Shown when the miniboss dies, and again when wave 20 is cleared. "Continue"
+// Shown when an act's boss dies, and again when the last one (wave 50) does. "Continue"
 // only appears once a run has been won before (App::bossWinCanContinue) and
 // resumes the run at wave 11; otherwise the only option is "Back to menu".
 // Opaque so the camera / mouse mapping is the plain UI one, not the wide framing.

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <deque>
 #include <vector>
 
@@ -232,7 +233,8 @@ struct Ball {
 sf::Color ballHue(const Ball& b);
 
 // Grunt = the plain walker. The rest each want a different answer (cfg::enemy).
-enum class EnemyKind { Grunt, Runner, Tank, Splitter, Shard, Shielded };
+// Brute is the miniboss: elite fights bring one (cfg::enemy).
+enum class EnemyKind { Grunt, Runner, Tank, Splitter, Shard, Shielded, Blinker, Mender, Brute };
 
 const char* enemyName(EnemyKind k);
 const char* enemyDesc(EnemyKind k);
@@ -265,6 +267,9 @@ struct Enemy {
     float stagger = 0.f;    // seconds left staggered by a Guardian (drifts, doesn't advance)
     bool orbiter = false;   // wave-20 shield: orbits the boss instead of seeking the core
     float orbitPhase = 0.f; // its slot angle on the ring
+    float blinkT = 0.f;     // Blinker: seconds to its next jump
+    float blinkFx = 0.f;    // Blinker: 1 right after a jump, fades (the render's flicker)
+    sf::Vector2f blinkFrom; // Blinker: where it jumped from (a fading afterimage)
 };
 
 // An electric ball's arc: a brief line from the ball to the enemy it zapped.
@@ -314,12 +319,22 @@ struct Core {
     float hitFlash = 0.f;
 };
 
-// Two bosses share this struct:
-//  - Charger  (wave 10): walks dead straight at the core from the right.
-//  - Orbital  (wave 20): spirals in toward the core behind a spinning ring of
-//    shield enemies; smaller and lower HP, the ring is the real problem.
-// Either one touching the core loses the run outright.
-enum class BossKind { Charger, Orbital };
+// One boss per act, all sharing this struct:
+//  - Charger  (act 1): walks dead straight at the core from the right.
+//  - Hive     (act 2): drifts in on a sway, bursting fans of runners.
+//  - Warden   (act 3): a turning shield arc blocks balls on one side; walks, plants, walks.
+//  - Dasher   (act 4): stalks, telegraphs a line, dashes; every hit knocks it back.
+//  - Orbital  (act 5): spirals in toward the core behind a spinning ring of
+//    shield enemies; the ring is the real problem.
+// Any of them touching the core loses the run outright.
+enum class BossKind { Charger, Hive, Warden, Dasher, Orbital };
+const char* bossName(BossKind k);
+const char* bossDesc(BossKind k);
+inline BossKind bossOfAct(int act) {   // act 1..cfg::run::acts
+    static const BossKind kinds[] = {BossKind::Charger, BossKind::Hive, BossKind::Warden, BossKind::Dasher,
+                                     BossKind::Orbital};
+    return kinds[std::clamp(act, 1, 5) - 1];
+}
 
 struct Boss {
     sf::Vector2f pos;
@@ -336,6 +351,14 @@ struct Boss {
     float shieldTimer = 0.f;  // Orbital: countdown to the next orbiter refill
     float intro = 0.f;        // Orbital: >0 while sliding in from the edge (invulnerable, no spiral yet)
     float hitCd = 0.f;        // i-frames after a ball lands, so it can't be melted in place
+    float timer = 0.f;        // Hive: to the next burst; Warden / Dasher: to the next phase
+    int phase = 0;            // Warden: 0 walk / 1 plant; Dasher: 0 stalk / 1 aim / 2 dash
+    float shieldAng = 0.f;    // Warden: centre of its shield arc
+    sf::Vector2f dashDir{-1.f, 0.f};   // Dasher: the line it's aiming / dashing along
+    bool enraged = false;     // below cfg::boss::enrageAt: faster everything
+    int summons = 0;          // Brutes it has called in (cfg::boss::summonAt)
+    float shockR = 0.f;       // Charger: its shockwave's reach (world units; the render's warning ring)
+    float pace() const { return enraged ? cfg::boss::enragePace : 1.f; }
 };
 
 struct Pickup {
@@ -382,6 +405,10 @@ struct FrameEvents {
     PowerUp pickupKind = PowerUp::Points2x;
     bool coreHit = false;
     bool shieldBlock = false;             // a hit bounced off a Shielded enemy's shield
+    bool bossEnraged = false;             // the boss just entered its second phase
+    bool bossSummon = false;              // the boss just called in a Brute
+    bool bossShock = false;               // the Charger's shockwave went off
+    bool launched = false;                // the fight-opening whirl just let the balls fly
     bool autoFlung = false;               // the "Clockwork" pact launched a ball
     int midasGold = 0;                    // extra gold from kills by Midas balls
     bool phoenix = false;                 // the Phoenix relic just saved the core
@@ -393,6 +420,7 @@ struct FrameEvents {
 // Per-step tuning handed to the simulation: the wave number plus whatever
 // between-wave upgrades the player has picked this run.
 struct WorldParams {
+    bool hard = false;            // hard mode (cfg::hard)
     float damageMult = 1.f;       // Heft (web): every ball
     float cruiseMult = 1.f;
     int wave = 1;

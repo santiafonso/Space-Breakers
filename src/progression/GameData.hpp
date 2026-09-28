@@ -33,6 +33,7 @@ struct MetaState {
     bool soundOn = true;
     SoundSettings sound;      // volumes + a style per sound category (the Sound screen)
     bool fullscreen = false;
+    bool hardMode = false;    // the next run starts in hard mode (cfg::hard)
     Stats stats;
 };
 
@@ -59,6 +60,7 @@ struct RunMods {
 // The current run, in memory only.
 struct RunState {
     bool active = false;
+    bool hard = false;        // hard mode, fixed at the run start
     int wave = 0;
     float coreHp = cfg::core::baseHp;
     float coreMaxHp = cfg::core::baseHp;

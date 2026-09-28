@@ -218,52 +218,107 @@ bool Audio::init() {
     return ok_;
 }
 
-void Audio::loadMusic(const std::string& menuFile, const std::string& gameFile) {
+void Audio::addMusic(Track t, const std::string& file, float gain, Loop loop) {
     if (!ok_) return;   // no audio device / SPACE_BREAKERS_NO_AUDIO
-    auto open = [](sf::Music& m, const std::string& file) {
-        if (file.empty() || !std::filesystem::exists(file)) return false;
-        if (!m.openFromFile(file)) return false;
-        m.setLoop(true);
-        return true;
-    };
-    menuMusicOk_ = open(menuMusic_, menuFile);
-    gameMusicOk_ = open(gameMusic_, gameFile);
-    applySettings(settings_);
+    if (t == Track::None || t == Track::Count || file.empty() || !std::filesystem::exists(file)) return;
+    Stream st;
+    st.loop = loop;
+    st.gain = gain;
+    for (int v = 0; v < (loop.seam > 0.f ? 2 : 1); ++v) {
+        auto m = std::make_unique<sf::Music>();
+        if (!m->openFromFile(file)) return;
+        m->setLoop(loop.seam <= 0.f);   // a seamed song loops by hand (update)
+        m->setVolume(0.f);
+        st.voice[static_cast<std::size_t>(v)] = std::move(m);
+    }
+    music_[static_cast<std::size_t>(t)].push_back(std::move(st));
 }
 
 void Audio::setEnabled(bool e) {
-    enabled_ = e;
-    applyTrack();
+    enabled_ = e;   // the music fades out / back in through update()
     applyAmbience();
+}
+
+float Audio::musicVolume() const {
+    const SoundSettings& s = settings_;
+    return s.musicOn ? kMusicVolume * clampf(s.master / 100.f, 0.f, 1.f) * clampf(s.music / 100.f, 0.f, 1.f)
+                     : 0.f;
 }
 
 void Audio::applySettings(const SoundSettings& s) {
     settings_ = s;
     for (int& st : settings_.style) st = std::clamp(st, 0, SoundStyleCount - 1);
-    const float music = s.musicOn ? kMusicVolume * clampf(s.master / 100.f, 0.f, 1.f) * clampf(s.music / 100.f, 0.f, 1.f)
-                                  : 0.f;
-    if (menuMusicOk_) menuMusic_.setVolume(music);
-    if (gameMusicOk_) gameMusic_.setVolume(music);
-    applyAmbience();
+    applyAmbience();   // the music picks the new volume up in update()
 }
 
-void Audio::setTrack(Track t) {
-    if (t == track_) return;
+void Audio::setTrack(Track t, int variant) {
     track_ = t;
-    applyTrack();
+    if (const auto& loops = music_[static_cast<std::size_t>(t)]; !loops.empty())
+        pick_[static_cast<std::size_t>(t)] = static_cast<std::size_t>(std::max(variant, 0)) % loops.size();
 }
 
-void Audio::applyTrack() {
-    auto sync = [](sf::Music& m, bool loaded, bool wantPlaying) {
-        if (!loaded) return;
-        if (wantPlaying) {
-            if (m.getStatus() != sf::Music::Playing) m.play();
-        } else if (m.getStatus() == sf::Music::Playing) {
-            m.pause();   // resume from here when we come back
+void Audio::update(float dt) {
+    // A calm hand-over: the old loop eases out first and the new one only starts
+    // rising once the old is mostly gone, so two tempos never clash at full level.
+    constexpr float kFadeOut = 1.5f;     // seconds
+    constexpr float kFadeIn = 2.5f;
+    constexpr float kHandOver = 0.25f;   // the new loop waits until the rest are below this
+    const float vol = musicVolume();
+    float others = 0.f;   // loudest loop that is on its way out
+    for (std::size_t t = 0; t < kTracks; ++t)
+        for (std::size_t i = 0; i < music_[t].size(); ++i)
+            if (t != static_cast<std::size_t>(track_) || i != pick_[t]) others = std::max(others, music_[t][i].level);
+    for (std::size_t t = 0; t < kTracks; ++t) {
+        for (std::size_t i = 0; i < music_[t].size(); ++i) {
+            Stream& st = music_[t][i];
+            const bool want = enabled_ && t == static_cast<std::size_t>(track_) && i == pick_[t];
+            if (want && others <= kHandOver) st.level = std::min(1.f, st.level + dt / kFadeIn);
+            else if (!want) st.level = std::max(0.f, st.level - dt / kFadeOut);
+            updateStream(st, t == static_cast<std::size_t>(Track::Boss), dt, vol);
         }
-    };
-    sync(menuMusic_, menuMusicOk_, enabled_ && track_ == Track::Menu);
-    sync(gameMusic_, gameMusicOk_, enabled_ && track_ == Track::Game);
+    }
+}
+
+void Audio::updateStream(Stream& st, bool restart, float dt, float vol) {
+    sf::Music& cur = *st.voice[static_cast<std::size_t>(st.cur)];
+    sf::Music* old = st.voice[1] ? st.voice[static_cast<std::size_t>(1 - st.cur)].get() : nullptr;
+    auto isPlaying = [](const sf::Music& m) { return m.getStatus() == sf::Music::Playing; };
+
+    if (st.level <= 0.f) {   // silent: park it
+        for (auto& v : st.voice) {
+            if (!v || !isPlaying(*v)) continue;
+            if (restart) v->stop();
+            else v->pause();   // resume from here
+        }
+        if (restart) { st.cur = 0; st.seamT = 1.f; }
+        return;
+    }
+    // Audible (fading in or out): keep the sounding voices going.
+    if (!isPlaying(cur)) cur.play();
+    if (old && st.seamT < 1.f && !isPlaying(*old)) old->play();
+
+    const Loop& L = st.loop;
+    if (old) {
+        // Near the loop end, the other voice picks the song up again from the
+        // loop start and the two cross over the seam.
+        if (st.seamT >= 1.f && cur.getPlayingOffset().asSeconds() >= L.end - L.seam) {
+            old->play();
+            old->setPlayingOffset(sf::seconds(L.start));
+            st.cur = 1 - st.cur;
+            st.seamT = 0.f;
+        } else if (st.seamT < 1.f) {
+            st.seamT = std::min(1.f, st.seamT + dt / L.seam);
+            if (st.seamT >= 1.f) old->stop();
+        }
+    }
+
+    // Track fade (smoothstep) x loudness match x the seam's equal-power crossfade.
+    const float l = st.level;
+    const float base = vol * st.gain * l * l * (3.f - 2.f * l);
+    const float x = st.seamT * kPi * 0.5f;
+    // (clamped: cos(pi/2) is a hair below zero, and OpenAL rejects a negative gain)
+    st.voice[static_cast<std::size_t>(st.cur)]->setVolume(std::max(0.f, base * std::sin(x)));
+    if (st.voice[1]) st.voice[static_cast<std::size_t>(1 - st.cur)]->setVolume(std::max(0.f, base * std::cos(x)));
 }
 
 void Audio::setAmbience(bool on) {

@@ -1,6 +1,7 @@
 #include "ui/Hud.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <string>
@@ -75,8 +76,12 @@ bool Hud::tooltipAt(sf::Vector2f m, std::string& title, std::string& desc, sf::C
         return true;
     }
     if (sf::FloatRect(size_.x * 0.5f - 170.f, mg - 10.f, 340.f, 44.f).contains(m)) {
-        title = bossWave_ ? "Boss"
+        title = bossWave_ ? std::string(bossName(bossOfAct(act_)))
                           : (eliteWave_ ? "Elite fight" : "Stage " + std::to_string(stage_) + " of " + std::to_string(stages_));
+        if (bossWave_) {
+            desc = bossDesc(bossOfAct(act_));
+            return true;
+        }
         if (eliteWave_) {
             desc = "tougher and more enemies - clear it for extra gold and an item pick (items only come from elites "
                    "and shops). " + std::to_string(enemiesLeft_) + " left.";
@@ -171,10 +176,14 @@ void Hud::draw(sf::RenderWindow& window) const {
     // progress (enemies cleared). How many are left is on hover.
     {
         char stage[32];
-        if (bossWave_) std::snprintf(stage, sizeof(stage), "%s", act_ == 1 ? "miniboss" : "final boss");
+        if (bossWave_) {
+            std::string n = bossName(bossOfAct(act_));
+            for (char& ch : n) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+            std::snprintf(stage, sizeof(stage), "%s", n.c_str());
+        }
         else if (eliteWave_) std::snprintf(stage, sizeof(stage), "elite  %d / %d", stage_, stages_);
         else std::snprintf(stage, sizeof(stage), "stage %d / %d", stage_, stages_);
-        const std::string act = "act " + std::to_string(act_);
+        const std::string act = "act " + std::to_string(act_) + (hard_ ? "  hard" : "");
         const sf::Color stCol = bossWave_ ? theme::coreLow : (eliteWave_ ? theme::ember : theme::textHi);
         const float aw = makeLabel(*font_, act, 13, theme::textLo).getLocalBounds().width;
         const float sw = makeLabel(*font_, stage, 18, stCol).getLocalBounds().width, gap = 18.f;

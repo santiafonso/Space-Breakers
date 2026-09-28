@@ -462,16 +462,29 @@ Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
   - Perder en cualquier oleada 11-20 (nucleo a 0) = derrota directa al
     menu, sin cartel, cobra por oleada alcanzada.
 
-- **Musica de fondo. [IMPLEMENTADO 2026-09-07]**
-  - `Audio` ahora ademas streamea dos loops OGG:
-    `assets/music/menu.ogg` (menus/loadout) y `assets/music/game.ogg`
-    (run viva: Play, Choice, Pause y cartel del boss incluidos).
-  - `Audio::setTrack(Track)` cambia de loop; `App::update` lo llama cada
-    frame con `data_.run.active ? Game : Menu` (idempotente). El toggle de
-    sonido pausa/reanuda la musica.
-  - Archivos opcionales: si faltan, el juego suena igual que antes. Los
-    `.m4a` no sirven (SFML no decodifica AAC) - hay que convertir a OGG.
-    Ride junto al resto de `assets/` en el copy de CMake y el `install`.
+- **Musica de fondo. [IMPLEMENTADO 2026-09-07, por acto 2026-09-28]**
+  - Loops en `assets/music/`: `menu.ogg` (fuera de una run), un loop por
+    acto que suena todo el acto (mapa, peleas, tienda, cartas: las peleas son
+    muy cortas para cambiar en cada una) y `boss.mp3` (solo mientras corre la
+    oleada del jefe; arranca siempre de cero, al ganar vuelve el del acto).
+    Acto 1..5 -> `map.ogg`, `fight2.mp3`, `fight3.mp3`, `fight2.mp3`,
+    `fight3.mp3` (tabla `kActLoop` en `App::update`). `fight1.ogg`
+    (Pinball Royale) esta fuera por ahora, comentado en `App.cpp`.
+  - `App::update` elige el track cada frame y llama `Audio::update(dt)`, que
+    hace el cruce: el loop que sale baja en 1.5 s y el que entra sube en 2.5 s
+    recien cuando el otro ya casi no suena (curva suave), asi dos tempos no
+    chocan. Los que salen quedan en pausa y retoman desde ahi.
+  - Cada archivo lleva una ganancia (en `App.cpp`) que lo iguala a ~-17 dBFS
+    RMS; si se cambia un archivo, medirlo de nuevo.
+  - Loop sin corte: los temas que terminan con fundido (`menu.ogg`,
+    `map.ogg`, `fight1.ogg`) llevan un `Audio::Loop{start, end, seam}`: se
+    cortan antes del fundido y vuelven al inicio con un cruce de 4 s entre dos
+    copias del mismo tema (equal-power). Los que ya vienen cortados para loop
+    (`fight2`, `fight3`, `boss`) usan el loop simple de SFML.
+  - Archivos opcionales: si faltan, ese momento queda en silencio. SFML 2.6
+    lee ogg / mp3 / wav / flac; `.m4a` no (AAC). Los originales van en
+    `music/` (ignorado por git). Ride junto al resto de `assets/` en el
+    copy de CMake y el `install`.
 
 - **Fase 1f — rework de power-ups / items / web + score. [IMPLEMENTADO 2026-09-08]**
   - Detalle completo en §7. Resumen:
@@ -1803,6 +1816,72 @@ Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
     TAB elige el color). Una ascendida (4 items) siempre es la principal.
     (`BallLoadout::roles` / `tagLevels`.)
 
+- **Dificultad: 5 actos, jefes duros, minijefes, modo difícil (2026-09-27, `ui-polish`).**
+  Pedido: "muy fácil, niveles cortos, jefes extremadamente fáciles". Todo en
+  `core/Config.hpp`.
+  - **5 actos** (`cfg::run::acts`, `finalWave` = 50, `actOfWave` /
+    `isBossWave`): la oleada 10 de cada acto es su jefe. Mapas: acto 1 = 11
+    filas, actos 2-5 = 13. "Continue" en el cartel del jefe lleva al acto
+    siguiente (pacto solo tras el jefe del acto 1; tesoro tras cada jefe). Oro
+    de pelea + `perAct` por acto.
+  - **Un jefe por acto** (`BossKind`, dibujo por forma): Charger (1, octógono,
+    núcleo a la izquierda), **Hive** (2, hexágono: se mece hacia el núcleo y
+    cada 4.2 s suelta un abanico de 4 runners), **Warden** (3, cuadrado: un
+    escudo que gira bloquea las pelotas de ese lado; camina / se planta),
+    **Dasher** (4, triángulo: se acerca, apunta con una línea punteada y
+    embiste; cada golpe limpio lo empuja atrás), Orbital (5, final).
+  - **Jefes mucho más duros:** vida medida en grunts de su oleada (12 / 10 /
+    12 / 12 / 14, +15% por pelota extra), i-frames 0.1 → 0.2 s. **Dos fases:**
+    bajo 50% se **enfurece** (todo x1.5 más rápido, adds más seguidos, cartel
+    ENRAGED) y al 66% y 33% **llama a un Brute**. Sim: el Charger pasó de
+    ~11 s a ~40 s con el mismo bot.
+  - **Minijefe Brute** (pentágono con núcleo naranja): x10 vida, lento, casi
+    no se empuja, x4 daño al núcleo. Todo élite trae uno (dos desde el acto 3);
+    desde la oleada 12 una pelea normal termina con uno (35%).
+  - **Enemigos nuevos:** **Blinker** (oleada 12+, triángulo: salta hacia el
+    núcleo cada 2.6 s, parpadea antes) y **Mender** (22+, cruz verde: cura a
+    los de alrededor). Desde la 12, **manadas** de 4 runners juntos.
+  - **Curva:** cantidad = 8 + 2.1·x + 0.07·x² (tope 120 hacia la 29); vida
+    x1.18 por oleada hasta la 20 y x1.04 después; cadencia al mínimo en la 30.
+    Sim (bot que clickea): acto 1 peleas ~50% más largas y 2-3x el daño al
+    núcleo; acto 2 más duro que el acto 2 viejo.
+  - **Modo difícil** (botón "Mode: Normal / Hard" en la pantalla de inicio de
+    run, se guarda como `hard` en el save, tooltip al hover; HUD "act N hard"):
+    enemigos x1.6 vida, x1.12 velocidad, x1.3 cantidad, x1.5 daño al núcleo,
+    jefes x1.8, Brutes desde la oleada 5 (50%) y dos por élite, **sin
+    reparación gratis** entre peleas. Paga x1.75 núcleos. `cfg::hard`.
+  - Panel F1: items agrupados por **clase** (encabezado y color de la clase;
+    la rareza en el tooltip); spawns de Blinker / Mender / Brute.
+  - **Onda de choque del Charger:** cada 5 s (más seguido enfurecido) avisa
+    0.8 s con un anillo que se cierra y pulsa, y despide lejos a toda pelota
+    dentro de su alcance (300 px del arena, más fuerte cuanto más cerca).
+    `cfg::boss::shock*`, `World::chargerShock`.
+  - **Arranque de cada pelea:** las pelotas se acomodan en un anillo
+    alrededor del núcleo, giran acelerando 1.9 s y salen disparadas todas
+    juntas (hacia afuera, inclinadas en el sentido del giro, x2.2 del
+    crucero). No se pueden agarrar mientras giran. Un solo anillo para todas,
+    medido con la pelota más grande (y con su tamaño real en la arena del
+    jefe): despeja el núcleo y entran todas lado a lado. Si no entra junto a
+    una pared, el centro del anillo se corre hacia adentro lo justo. En la
+    pelea del Charger el núcleo pasó a 250 px de la pared (`coreMarginX`, antes
+    110) para que el anillo quede centrado; medido con 1-5 pelotas de tamaño
+    x1-x3 en las oleadas 1/10/15/20/50 (con la cámara del App): nada sale de la
+    arena ni del cuadro. Modo foto `12a_boss_launch`. `cfg::ball::launch*`,
+    `World::updateLaunch`; modo foto `04a_launch`.
+  - **Esc siempre abre la pausa** en una run (cartas, mapa, tienda, pacto,
+    selector, cartel del jefe...); "Resume" vuelve a donde estabas. Solo la
+    pausa, lo que abre (stats / cómo jugar / opciones) y el panel de dev usan
+    Esc como "volver"; con TAB abierto, Esc lo cierra. Salir de la tienda /
+    cancelar el selector: su botón o clic derecho. (`App::onPauseMenus`.)
+  - Cerrar la pausa (o volver del selector) no repite la animación de la
+    pantalla de abajo (las cartas no se reparten de nuevo).
+  - **Selector de pelota / slot:** botón **"Back to the cards"** abajo (o clic
+    derecho): tomaste una carta pero todavía no la pusiste → volvés a las
+    cartas sin gastar nada. Una vez puesta, la elección terminó. En la tienda
+    dice "Back to the shop", en la forja "Leave the forge".
+  - Falta playtest: todo lo anterior es calibración relativa con un bot
+    mucho peor que un jugador; tocar `cfg::wave`, `cfg::boss`, `cfg::hard`.
+
 - **Fase 2 — Jefe tras la oleada 10.** Da upgrades de pelota (viento/agua/
   piedra). Extiende la run mas alla de 10 en "modo infinito" opcional.
 - **Fase 3 — Variedad.** Repulsor, bumper, rampa. Corredor, tanque, escindido.
@@ -1826,3 +1905,98 @@ Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
 - ¿La meta-moneda se gana solo al morir, o también por hitos a mitad de run?
 - ¿Cuántas ofertas por elección (3) y hay *reroll*? ¿Se puede saltar y coger
   chatarra?
+
+---
+
+## 10. Atrapar, Creeds, Pacts e items de estilo (decidido 2026-09-28)
+
+Idea de fondo: agarrar la pelota es una mecánica. Una pelota rápida es difícil
+de atrapar, así que una lenta que pega fuerte es un estilo válido. Tirar
+(click o gomera) y dejarlas estar son los dos estilos; ninguno es obligatorio.
+
+### 10.1 Atrapar y tirar
+- Radio de agarre: se queda en 130, **escalado con `arenaScale()`** (hecho:
+  después del acto 1 la cámara se aleja y antes el radio quedaba a la mitad).
+- Tiro rápido y cámara lenta al apuntar: se quedan como están.
+- **Premio por atrapar:** cuanto más rápido venía la pelota al agarrarla, más
+  pega el primer golpe del tiro que sigue (hasta +50%). Destello al atraparla.
+
+### 10.2 Creeds (los pactos de antes, renombrados)
+- Los 12 pactos actuales pasan a llamarse **Creed**. Se quedan todos,
+  incluidos Hunters y Clockwork: son para quien no quiere agarrar mucho.
+
+### 10.3 Pacts (carta nueva: te da y te saca)
+Solo gameplay, nada de plata. Lista aprobada:
+- Lead: +60% daño / la pelota va 40% más lenta.
+- Quick hands: premio por atrapar x2 / una pelota que nadie tira pierde 20% de daño.
+- Heavy arm: tiros x1,5 / sin cámara lenta al apuntar.
+- Glass edge: +30% chance de crítico / -1 slot de item en esa pelota.
+- Stillness: cuanto más lenta, más daño carga / el tiro rápido pierde potencia.
+- Overflow: +1 pelota / todas -15% daño.
+- Tiny: +80% daño / pelotas a la mitad de tamaño.
+- Colossus: la mejor pelota x2 tamaño y daño / las demás -30% daño.
+- Hot potato: la agarrada gana daño por segundo / pasados 3 s se cae sin fuerza.
+- Juggler: atrapadas seguidas sin tocar el núcleo suman daño / tocar el núcleo
+  corta la racha y le saca vida.
+- Void walls: los bordes te pasan al otro lado / se apagan los items de rebote en pared.
+- Anchor walls: tiros x2 / la pared frena la pelota en seco.
+- Last breath: núcleo bajo 30% = todo x2 / -20% vida máxima del núcleo.
+- Mirror: cada tiro larga una copia fantasma al revés / enemigos +20% vida.
+- Elemental: elementos x2 / contacto -30%.
+- Frenzy: el combo sube el doble / agarrar corta el combo.
+- Blind: tiros +40% / sin guía de puntería.
+- Swarm: +1 pelota por jefe / +30% enemigos por oleada.
+
+**Dónde:** nodo **Altar** (1 de 3, o ninguno). Es raro en el mapa. Camino
+secreto: en cada acto, 3 combates seguidos (élite cuenta) sin daño al núcleo
+abren un camino al Altar antes del jefe. Tiendas y descansos no cortan la
+racha; solo la corta recibir daño. La animación del camino que se abre se
+muestra recién cuando estás a 1 nodo del jefe.
+
+### 10.4 Mapa
+- Animación mientras elegís la ruta (hover / avance), para que el camino
+  elegido quede marcado y el avance se sienta fluido.
+
+### 10.5 Items nuevos
+Regla: todo lo "si está quieta" **escala con la velocidad** (más lenta = más
+efecto), nunca es un sí/no; quedarse quieta no es obligatorio.
+**Prioridad: sinergias.** Cada item nuevo tiene que combinar con items,
+elementos o Pacts que ya existen; no hace falta que cada clase tenga los tres
+estilos (quieta / en movimiento / en pareja). "En pareja" (seguir a otra
+pelota) queda solo para Support y Summoner, que juegan solas. Las clases
+donde más sentido tiene tirar (Striker, Assassin, Jester) llevan más items de
+tiro/atrapada; el reparto final se equilibra en cada tanda. Guardian juega
+solo pero cuidando el núcleo.
+
+- Sin clase: **Ballast** (modificador que se apila: -15% velocidad, +20% daño),
+  **Grip** (se curva un poco hacia el cursor cerca de él).
+- Striker: **Coil** (frena hasta 0; tirada por vos sale al doble), **Afterburner**
+  (tirada deja estela de fuego), **Catch & release** (atraparla poco después de
+  tirarla apila daño), **Wind-up** (cuanto más lenta, más daño carga; lo
+  descarga al golpear), **Momentum** (más rápido = más daño, sin techo).
+- Guardian: **Anchor** (cuanto más lenta, más frena y atrae enemigos), **Landslide**
+  (primer golpe de un tiro = onda según velocidad), **Plow** (rápida empuja lo que
+  cruza).
+- Support: **Pass** (billar: la pelota golpeada sale x1,5 con su elemento),
+  **Beacon** (cuanto más lenta, más fuerte el aura de elemento/daño), **Wake**
+  (estela que acelera), **Link** (rayo con otra pelota, comparten efectos).
+- Mage: **Spellsling** (tirarla dispara su habilidad si tiene >50%), **Meditate**
+  (más lenta = carga más rápido), **Leyline** (moviéndose deja runas).
+- Shooter: **Recoil** (al tirarla, ráfaga para atrás), **Slug** (cuanto más lenta,
+  más cadencia y más rango), **Strafe** (dispara a los costados al moverse).
+- Assassin: **Ambush** (tirada: blink al primer golpe + Backstab), **Mark throw**
+  (marca al enemigo más cercano al tiro; matarlo recarga el blink), **Execution
+  throw** (primer golpe de tiro a enemigo con vida llena = crítico), **Lurk** (más
+  lenta = más invisible, blink siguiente crítico), **Blur** (rápida atraviesa y marca).
+- Summoner: **Kennel** (más lenta = larga espíritus más seguido), **Drop turret**
+  (torreta donde soltás la gomera), **Pack** (espíritus la siguen), **Familiar**
+  (mascota de otra pelota, dispara donde esa apunta).
+- Jester: **Trick shot** (chances x3 hasta el primer golpe tras un tiro), **Double
+  down** (atrapar una pelota tirada por vos = próximo golpe doble o nada),
+  **Roulette** (cada tiro activa un item suyo al doble), **Sleight** (más lenta =
+  se teletransporta más seguido y golpea), **Wild ride** (rápida: rebotes locos
+  con golpe armado).
+
+### 10.6 Orden de trabajo
+1. Renombre Pact -> Creed.  2. Premio por atrapar.  3. Pacts + Altar + camino
+secreto + animaciones de mapa.  4. Items, clase por clase.

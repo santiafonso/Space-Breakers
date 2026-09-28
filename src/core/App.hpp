@@ -257,6 +257,7 @@ private:
 
     std::vector<std::unique_ptr<Screen>> stack_;
     TabPeek peek_;   // TAB over every run screen that doesn't run its own (shop, cards, pickers...)
+    bool onPauseMenus() const;   // pause / stats / how-to / options / dev: they own Esc
     bool onOptions() const;                  // the Options (sound) screen is on top
     std::array<UpgradeKind, kChoiceCount> choices_{};
     int choiceCount_ = 3;   // cfg::run::choiceCards until a roll sets it
