@@ -34,6 +34,7 @@ void drawBallIdentity(sf::RenderTarget& t, const BallLook& look, sf::Vector2f po
 // colour that swells off the ball; the ascended one is bigger with a second
 // ring behind it.
 void drawClassPulse(sf::RenderTarget& t, BallRole lead, bool ascended, sf::Vector2f pos, float r, float k);
+void drawElementPulse(sf::RenderTarget& t, Element el, sf::Vector2f pos, float r, float k);   // element-gain rings
 
 // Per-class things on the field (bullets, turrets, summons...), drawn over
 // the enemies and under the balls. World view.

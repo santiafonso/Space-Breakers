@@ -378,6 +378,7 @@ void WorldRenderer::drawBall(sf::RenderWindow& window, const Ball& b,
     const float heading = std::atan2(b.vel.y, b.vel.x);
     drawBallIdentity(window, look, b.pos, r, heading, alpha, b.held);
     if (!b.ghost) drawClassPulse(window, look.lead, b.pulseAscend, b.pos, r, b.classPulse);
+    if (!b.ghost) drawElementPulse(window, b.element, b.pos, r, b.elemPulse);
 
     // Ability charge: a hairline arc per ability slot just outside the rim,
     // filling as it recharges; it flashes when one fires.

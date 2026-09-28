@@ -333,7 +333,7 @@ void App::syncWorldBalls() {
 
 void App::rememberClasses() {
     knownClasses_.clear();
-    for (const BallLoadout& L : data_.run.balls) knownClasses_.push_back({L.roleMask(), L.ascended()});
+    for (const BallLoadout& L : data_.run.balls) knownClasses_.push_back({L.roleMask(), L.ascended(), L.element()});
 }
 
 // "FIRE BALL > STRIKER", "STRIKER > STRIKER + SUPPORT", "ASCENDED: MEGA
@@ -351,6 +351,11 @@ void App::announceClassGains() {
         const ItemTag asc = L.ascended();
         const RoleMask gained = now & ~was.roles;
         const bool ascends = asc != ItemTag::None && asc != was.ascended;
+        // A new element: a flash of its colour, and rings off the ball when the fight runs.
+        if (L.element() != Element::Plain && L.element() != was.element) {
+            effects_.flash(elementColor(L.element()), 0.35f);
+            world_.pulseElement(static_cast<int>(i));
+        }
         if (!gained && !ascends) continue;
 
         std::string caption = "BALL " + std::to_string(i + 1);

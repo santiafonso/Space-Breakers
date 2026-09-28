@@ -1754,6 +1754,21 @@ Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
     y con doble marco; en la pelea el cartel dice "Elite - item spoils" y el
     HUD "ELITE" con barra naranja.
 
+- **Lenguaje visual: clase / rareza / tipo / habilidad (2026-09-27).** Sin
+  texto nuevo, solo color, forma y lugar:
+  - **Rareza = brillo, arriba.** `tierColor` es una rampa gris → blanco y solo
+    Legendary es dorado pálido (nunca choca con un color de clase). En la
+    carta: banda superior que engrosa con el tier + puntos; en el casillero:
+    puntos a la derecha.
+  - **Clase = color sólido, a la izquierda.** Lomo grueso + tinte + insignia
+    en la carta; en el panel, el item es un chip teñido de su clase con lomo.
+    La cabecera del panel muestra solo las clases (ya no el elemento).
+  - **Tipo (elemento) = píldora** de su color (casillero y alrededor del
+    nombre en la carta). **Habilidad = corchetes cian.**
+  - **Elemento en la pelota:** borde más grueso con halo; al ganar uno, flash
+    de su color y dos anillos que se expanden (`Ball::elemPulse`,
+    `drawElementPulse`, `KnownClasses::element`).
+
 - **Fase 2 — Jefe tras la oleada 10.** Da upgrades de pelota (viento/agua/
   piedra). Extiende la run mas alla de 10 en "modo infinito" opcional.
 - **Fase 3 — Variedad.** Repulsor, bumper, rampa. Corredor, tanque, escindido.

@@ -173,6 +173,7 @@ struct Ball {
     RoleMask ascended = 0;   // ...and which of them are ascended
     BallRole primary = BallRole::Normal;   // its first class (see leadRole)
     float classPulse = 0.f;  // 1 -> 0: it just gained a class, a flare in its class colour
+    float elemPulse = 0.f;   // 1 -> 0: it just took an element, rings in the element's colour
     bool pulseAscend = false;   // ...and that gain was the ascended form (a bigger flare)
     Element element = Element::Plain;
     BallMods mods;          // this ball's items + modifiers

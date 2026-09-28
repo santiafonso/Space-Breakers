@@ -237,13 +237,15 @@ std::string modifierLine(const BallLoadout& L) {
 
 sf::Color tagColor(ItemTag t) { return roleColor(tagRole(t)); }   // ItemTag::None -> Normal: grey
 
+// Rarity is a brightness ramp, not a hue - dim grey up to white, and only a
+// Legendary turns pale gold - so it can never be mistaken for a class colour.
 sf::Color tierColor(Tier t) {
     switch (t) {
-        case Tier::Common:    return theme::textLo;
-        case Tier::Uncommon:  return theme::ballMid;
-        case Tier::Rare:      return theme::accent;
-        case Tier::Epic:      return theme::puSurge;
-        case Tier::Legendary: return theme::puGolden;
+        case Tier::Common:    return {104, 108, 122};
+        case Tier::Uncommon:  return {150, 156, 170};
+        case Tier::Rare:      return {196, 202, 214};
+        case Tier::Epic:      return {240, 242, 250};
+        case Tier::Legendary: return {240, 208, 140};
     }
     return theme::textLo;
 }
@@ -264,8 +266,10 @@ void drawTierFrame(sf::RenderWindow& w, sf::FloatRect r, Tier t, float hover, fl
               withAlpha(theme::glassBottom, 0.97f * alpha),
               withAlpha(lerpColor(theme::arenaEdge, col, 0.45f + 0.1f * static_cast<float>(rank)),
                         (0.55f + 0.4f * hover) * alpha), 1.f);
-    draw::box(w, {r.left, r.top, r.width, 3.f}, 0.f, withAlpha(col, 0.8f * alpha), withAlpha(col, 0.8f * alpha));
-    draw::brackets(w, r, theme::bracket + 3.f, 2.f, withAlpha(col, (0.6f + 0.3f * hover) * alpha), snap);
+    // the top edge is the rarity's place: a band that thickens with the tier
+    const float band = 2.f + static_cast<float>(rank);
+    draw::box(w, {r.left, r.top, r.width, band}, 0.f, withAlpha(col, 0.9f * alpha), withAlpha(col, 0.7f * alpha));
+    draw::brackets(w, r, theme::bracket + 3.f, 2.f, withAlpha(col, (0.45f + 0.3f * hover) * alpha), snap);
 }
 
 void drawPickCard(sf::RenderWindow& w, const sf::Font& font, sf::FloatRect r, UpgradeKind k,
@@ -314,12 +318,27 @@ void drawPickCard(sf::RenderWindow& w, const sf::Font& font, sf::FloatRect r, Up
     // The name.
     const int es = elementItemSlot(k);
     const unsigned ts = r.width > 230.f ? theme::fsItem : theme::fsHeading;
-    sf::Text title = makeText(font, info.title, ts,
-                              withAlpha(es >= 0 ? elementColor(static_cast<Element>(es + 1)) : theme::textHi, a));
+    sf::Color titleCol = theme::textHi;
+    if (es >= 0) titleCol = elementColor(static_cast<Element>(es + 1));
+    if (cat == UpgradeCat::Ability) titleCol = theme::ability;
+    sf::Text title = makeText(font, info.title, ts, withAlpha(titleCol, a));
     centerOrigin(title);
     const float sc = clampf(st.pop, 0.f, 1.1f);
     title.setScale(sc, sc);
     title.setPosition(std::round(r.left + r.width * 0.5f), std::round(r.top + 54.f));
+    // The kind's shape round the name, as on the ball's panel: an ability sits
+    // in cyan brackets, an element in a pill of its colour.
+    if (cat == UpgradeCat::Ability || cat == UpgradeCat::Element) {
+        const sf::FloatRect tb = title.getGlobalBounds();
+        const sf::FloatRect box{tb.left - 14.f, tb.top - 8.f, tb.width + 28.f, tb.height + 16.f};
+        if (cat == UpgradeCat::Ability) {
+            draw::brackets(w, box, 8.f, 2.f, withAlpha(theme::ability, 0.85f * a));
+        } else {
+            const sf::Color pc = elementColor(static_cast<Element>(es + 1));
+            draw::box(w, box, box.height * 0.5f, withAlpha(pc, 0.16f * a), withAlpha(pc, 0.06f * a),
+                      withAlpha(pc, 0.8f * a), 1.5f);
+        }
+    }
     w.draw(title);
 
     // Which class: a solid badge.
@@ -332,9 +351,8 @@ void drawPickCard(sf::RenderWindow& w, const sf::Font& font, sf::FloatRect r, Up
         draw::box(w, {cx - bw * 0.5f, y - 11.f, bw, 22.f}, 0.f, withAlpha(cc, 0.9f * a), withAlpha(lerpColor(cc, theme::bg, 0.15f), 0.9f * a));
         drawLabel(w, font, name, 12, {cx + 1.f, y}, withAlpha(theme::bgDeep, a));
         y += 26.f;
-    } else if (cat == UpgradeCat::Element) {
-        drawLabel(w, font, "type slot", 12, {cx, y}, withAlpha(theme::textDim, a));
-        y += 22.f;
+    } else if (cat == UpgradeCat::Ability || cat == UpgradeCat::Element) {
+        y += 4.f;   // (its shape round the name says what it is)
     }
     if (!st.note.empty()) {
         drawLabel(w, font, st.note, 12, {cx, y}, withAlpha(theme::accent, a));
@@ -360,10 +378,11 @@ void drawClassCardMark(sf::RenderWindow& w, const sf::Font& font, sf::FloatRect 
     const ItemTag t = itemTag(k);
     if (t == ItemTag::None || alpha <= 0.01f) return;
     const sf::Color col = tagColor(t);
-    draw::box(w, {r.left + 1.f, r.top + 3.f, r.width - 2.f, r.height * 0.5f}, 0.f, withAlpha(col, 0.12f * alpha),
-              withAlpha(col, 0.f));
-    draw::box(w, {r.left, r.top + 3.f, 4.f, r.height - 3.f}, 0.f, withAlpha(col, 0.85f * alpha),
-              withAlpha(col, 0.5f * alpha));
+    // the left edge is the class's place: a thick spine and a wash of its colour
+    draw::box(w, {r.left + 1.f, r.top + 6.f, r.width - 2.f, r.height - 7.f}, 0.f, withAlpha(col, 0.16f * alpha),
+              withAlpha(col, 0.03f * alpha));
+    draw::box(w, {r.left, r.top + 6.f, 7.f, r.height - 6.f}, 0.f, withAlpha(col, 0.95f * alpha),
+              withAlpha(col, 0.7f * alpha));
 
     // Would it make (2nd item of the tag) or ascend (4th) a ball? A copy it
     // already has only levels up, so that doesn't count.
@@ -437,10 +456,9 @@ void drawLoadoutPanel(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f c,
     draw::disc(w, bp + sf::Vector2f{-0.34f, -0.38f} * r, r * 0.26f, withAlpha(sf::Color::White, 0.22f * a),
                withAlpha(sf::Color::White, 0.f), {1.f, 0.8f}, 16);
 
-    // "Fire  Striker / Jester": the element in its colour, then each class in
-    // its own - an ascended one by its ascended name, brighter.
-    std::vector<std::pair<std::string, sf::Color>> parts;
-    if (el != Element::Plain) parts.push_back({std::string(elementName(el)) + "  ", ec});
+    // "Striker / Jester": each class in its own colour - an ascended one by
+    // its ascended name, brighter.
+    std::vector<std::pair<std::string, sf::Color>> parts;   // classes only: the element has its own pill row
     for (int i = 0; i < nRoles; ++i) {
         if (i > 0) parts.push_back({" / ", theme::textDim});
         const bool up = roles[i] == asc;
@@ -459,7 +477,6 @@ void drawLoadoutPanel(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f c,
     };
     unsigned fs = theme::fsBody;
     if (widthAt(fs) > kPanelW - 14.f) fs = theme::fsSmall;
-    if (widthAt(fs) > kPanelW - 14.f && el != Element::Plain) parts.erase(parts.begin());   // the type slot says it anyway
     float x = c.x - widthAt(fs) * 0.5f;
     for (const auto& [str, col] : parts) {
         sf::Text t = makeText(font, str, fs, withAlpha(col, a));
@@ -470,38 +487,73 @@ void drawLoadoutPanel(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f c,
         x += advance(str, fs);
     }
 
-    // One slot box: empty ones show a small caption, filled ones the pick's
-    // name in its tag / element / ability colour with a tier tick on the left.
-    // The type and ability slots wear their kind's colour on the edge; while a
-    // pick is being placed, the slots that take it are lit.
+    // One slot, its kind told by shape and colour, never by words:
+    //  item   = a square chip tinted in its class colour with a solid class
+    //           spine on the left and its rarity as pips on the right;
+    //  type   = a pill in the element's colour;
+    //  ability= cyan corner brackets.
+    // Empty slots keep the shape, faint. While a pick is being placed, the
+    // slots that take it are lit.
     auto slotBox = [&](int s, const std::string& emptyLabel, bool asleep) {
         const sf::FloatRect sr = slotRect(c, s, L);
         const bool hot = hoverSlot == s;
         const float sa = a * (asleep ? 0.45f : 1.f);
-        sf::Color edge = theme::accent;
-        if (s == kSlotType) edge = L.type >= 0 ? elementColor(L.element()) : theme::elemFire;
-        if (isAbilitySlot(s)) edge = theme::ability;
         const bool takes = placing >= 0 && !dim && slotAccepts(static_cast<UpgradeKind>(placing), s, L);
-        draw::box(w, sr, theme::corner, withAlpha(theme::bgDeep, (hot ? 0.5f : 0.7f) * sa),
-                  withAlpha(theme::bgDeep, (hot ? 0.3f : 0.55f) * sa),
-                  withAlpha(edge, (hot ? 0.8f : takes ? 0.45f : s >= kSlotType ? 0.22f : 0.14f) * sa), 1.f);
-        if (hot) draw::box(w, sr, 0.f, withAlpha(theme::accent, 0.14f * a), withAlpha(theme::accent, 0.04f * a));
         const int kind = L.kindAt(s);
         const float cy = sr.top + sr.height * 0.5f;
+        const float lit = hot ? 1.f : (takes ? 0.6f : 0.f);
+        const unsigned size = sr.width > 90.f ? theme::fsSmall : 11u;
+
+        if (s == kSlotType) {
+            const sf::Color pc = kind >= 0 ? elementColor(L.element()) : theme::textDim;
+            draw::box(w, sr, sr.height * 0.5f, withAlpha(pc, (kind >= 0 ? 0.20f : 0.04f) + 0.1f * lit),
+                      withAlpha(pc, (kind >= 0 ? 0.08f : 0.02f)), withAlpha(pc, (kind >= 0 ? 0.85f : 0.3f + 0.4f * lit) * sa),
+                      1.5f);
+            if (kind < 0) {
+                drawLabel(w, font, emptyLabel, 9, {sr.left + sr.width * 0.5f, cy}, withAlpha(theme::textDim, sa));
+                return;
+            }
+            std::string t = upgradeInfo(static_cast<UpgradeKind>(kind)).title;
+            if (L.levelAt(s) > 1) t += "  Lv" + std::to_string(L.levelAt(s));
+            drawCentered(w, font, t, size, {sr.left + sr.width * 0.5f, cy - 1.f}, withAlpha(lerpColor(pc, sf::Color::White, 0.2f), sa));
+            return;
+        }
+        if (isAbilitySlot(s)) {
+            draw::box(w, sr, 0.f, withAlpha(theme::ability, 0.05f * lit * sa), withAlpha(theme::ability, 0.02f * sa));
+            draw::brackets(w, sr, 7.f, 1.5f, withAlpha(theme::ability, (kind >= 0 ? 0.85f : 0.3f + 0.4f * lit) * sa));
+            if (kind < 0) {
+                drawLabel(w, font, emptyLabel, 9, {sr.left + sr.width * 0.5f, cy}, withAlpha(theme::textDim, sa));
+                return;
+            }
+            std::string t = upgradeInfo(static_cast<UpgradeKind>(kind)).title;
+            if (L.levelAt(s) > 1) t += (sr.width > 90.f ? "  Lv" : " ") + std::to_string(L.levelAt(s));
+            drawCentered(w, font, t, size, {sr.left + sr.width * 0.5f, cy - 1.f}, withAlpha(theme::ability, sa));
+            return;
+        }
+        // an item slot
         if (kind < 0) {
+            draw::box(w, sr, 0.f, withAlpha(theme::bgDeep, 0.6f * sa), withAlpha(theme::bgDeep, 0.5f * sa),
+                      withAlpha(theme::accent, (0.12f + 0.5f * lit) * sa), 1.f);
             drawLabel(w, font, emptyLabel, 9, {sr.left + sr.width * 0.5f, cy}, withAlpha(theme::textDim, sa));
             return;
         }
         const auto k = static_cast<UpgradeKind>(kind);
+        const sf::Color cc = tagColor(itemTag(k));
+        draw::box(w, sr, 0.f, withAlpha(lerpColor(cc, theme::bgDeep, 0.62f - 0.1f * lit), 0.95f * sa),
+                  withAlpha(lerpColor(cc, theme::bgDeep, 0.78f), 0.95f * sa), withAlpha(cc, (0.35f + 0.4f * lit) * sa), 1.f);
+        draw::box(w, {sr.left, sr.top, 5.f, sr.height}, 0.f, withAlpha(cc, sa), withAlpha(cc, sa));   // the class spine
+        // rarity: pips at the right end, the brightness ramp
+        const int rank = static_cast<int>(upgradeTier(k));
+        const sf::Color tcol = tierColor(upgradeTier(k));
+        float px = sr.left + sr.width - 7.f;
+        for (int p = 0; p <= rank; ++p) {
+            draw::polygon(w, {px, cy}, 2.6f, 4, 0.f, withAlpha(tcol, sa), withAlpha(tcol, sa));
+            px -= 6.f;
+        }
         std::string t = upgradeInfo(k).title;
         if (L.levelAt(s) > 1) t += (sr.width > 90.f ? "  Lv" : " ") + std::to_string(L.levelAt(s));
-        sf::Color tc = tagColor(itemTag(k));   // an item's tag shows which class it pushes toward
-        if (upgradeCat(k) == UpgradeCat::Element) tc = elementColor(L.element());
-        if (upgradeCat(k) == UpgradeCat::Ability) tc = theme::ability;
-        draw::box(w, {sr.left, sr.top, 3.f, sr.height}, 0.f, withAlpha(tierColor(upgradeTier(k)), sa),
-                  withAlpha(tierColor(upgradeTier(k)), sa));
-        const unsigned size = sr.width > 90.f ? theme::fsSmall : 11u;
-        drawCentered(w, font, t, size, {sr.left + sr.width * 0.5f, cy - 1.f}, withAlpha(tc, sa));
+        const float textL = sr.left + 5.f, textR = px + 2.f;   // between the spine and the pips
+        drawCentered(w, font, t, size, {(textL + textR) * 0.5f, cy - 1.f}, withAlpha(theme::textHi, sa));
     };
     for (int i = 0; i < kBallSlots; ++i) slotBox(i, "empty", false);
     slotBox(kSlotType, "type", false);

@@ -132,6 +132,11 @@ void World::syncBalls(const std::vector<BallSpec>& specs, const WorldParams& p) 
     }
 }
 
+void World::pulseElement(int idx) {
+    if (idx < 0 || idx >= static_cast<int>(balls_.size())) return;
+    balls_[static_cast<std::size_t>(idx)].elemPulse = 1.f;
+}
+
 void World::pulseClass(int idx, bool ascended) {
     if (idx < 0 || idx >= static_cast<int>(balls_.size())) return;
     balls_[static_cast<std::size_t>(idx)].classPulse = 1.f;
@@ -2020,6 +2025,7 @@ FrameEvents World::step(float dt, const WorldParams& p) {
     for (std::size_t i = 0; i < balls_.size(); ++i) {
         Ball& b = balls_[i];
         b.classPulse = std::max(0.f, b.classPulse - dt / (b.pulseAscend ? 1.4f : 0.9f));   // class-gain flare
+        b.elemPulse = std::max(0.f, b.elemPulse - dt / 1.2f);                               // element-gain rings
         if (grabbed_ == Grabbed::Ball && static_cast<int>(i) == heldIndex_) {
             b.squash *= std::exp(-cfg::ball::squashDecay * dt);
             continue;

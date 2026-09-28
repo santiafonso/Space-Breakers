@@ -224,10 +224,14 @@ BallLook ballLook(const Ball& b) {
 
 void drawBallIdentity(sf::RenderTarget& t, const BallLook& look, sf::Vector2f pos, float r, float heading,
                       float alpha, bool held) {
-    // Rim: the element, muted, as a hairline just outside the edge; plain = faint white.
+    // Rim: the element as a clear band just outside the edge (with a faint
+    // halo of its colour); plain = a faint white hairline.
     draw::ring(t, pos, r, 1.5f, withAlpha(sf::Color::White, (held ? 0.85f : 0.22f) * alpha));
-    if (look.element != Element::Plain)
-        draw::ring(t, pos, r + 1.6f, 1.6f, withAlpha(elementColor(look.element), 0.85f * alpha));
+    if (look.element != Element::Plain) {
+        const sf::Color ec = lerpColor(elementColor(look.element), sf::Color::White, 0.12f);
+        draw::ring(t, pos, r + 2.2f, 2.6f, withAlpha(ec, 0.95f * alpha));
+        draw::ring(t, pos, r + 5.f, 1.f, withAlpha(ec, 0.28f * alpha));
+    }
     // A second class: its colour along the lower half of the rim, inside.
     if (look.second != BallRole::Normal)
         draw::ring(t, pos, r - 1.8f, 3.f, withAlpha(lerpColor(roleColor(look.second), sf::Color::White, 0.1f), 0.95f * alpha),
@@ -263,6 +267,18 @@ void drawClassPulse(sf::RenderTarget& t, BallRole lead, bool ascended, sf::Vecto
     draw::ring(t, pos, r * (1.15f + (ascended ? 2.8f : 1.9f) * grow), 1.f + 2.5f * k, withAlpha(c, 0.85f * k));
     if (ascended)
         draw::ring(t, pos, r * (1.1f + 1.7f * grow), 1.f + 1.5f * k, withAlpha(c, 0.55f * k));
+}
+
+// A ball that just took an element: two rings of its colour ripple out.
+void drawElementPulse(sf::RenderTarget& t, Element el, sf::Vector2f pos, float r, float k) {
+    if (k <= 0.f || el == Element::Plain) return;
+    const sf::Color c = lerpColor(elementColor(el), sf::Color::White, 0.15f);
+    const float e = 1.f - k;
+    const float grow = 1.f - (1.f - e) * (1.f - e);
+    draw::glow(t, pos, r * (2.f + 1.2f * grow), c, 0.2f * k);
+    draw::ring(t, pos, r * (1.2f + 2.2f * grow), 1.f + 2.5f * k, withAlpha(c, 0.9f * k));
+    const float e2 = clampf(e * 1.4f - 0.3f, 0.f, 1.f);   // a second ring a beat later
+    if (e2 > 0.f) draw::ring(t, pos, r * (1.2f + 1.6f * e2), 1.f + 1.5f * k, withAlpha(c, 0.6f * k));
 }
 
 // ---------------------------------------------------------------- dispatch

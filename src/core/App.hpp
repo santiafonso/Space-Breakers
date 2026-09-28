@@ -223,7 +223,7 @@ private:
     // Class-gain feedback (one central place): compare every ball's classes
     // with what they were at the last sync; a new class, a second class or
     // the ascended form gets a banner, a sound and a flare on the ball.
-    struct KnownClasses { RoleMask roles = 0; ItemTag ascended = ItemTag::None; };
+    struct KnownClasses { RoleMask roles = 0; ItemTag ascended = ItemTag::None; Element element = Element::Plain; };
     std::vector<KnownClasses> knownClasses_;
     void rememberClasses();   // take the current loadout as the baseline (run start)
     void announceClassGains();

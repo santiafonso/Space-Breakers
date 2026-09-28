@@ -56,6 +56,7 @@ public:
     // Ball `idx` just gained a class (or its ascended form): it flares in its
     // class colour the next time the fight runs (Ball::classPulse).
     void pulseClass(int idx, bool ascended);
+    void pulseElement(int idx);   // it just took an element: rings in its colour when the fight runs
     void repairCore(float amount);
     void addCoreMaxHp(float delta);                  // raise the core's max HP mid-run
     void useReserve(const WorldParams& p);           // "Stockpile": fire the held reserve power-up
