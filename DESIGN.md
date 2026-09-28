@@ -1996,3 +1996,10 @@ secreto + animaciones de mapa.  4. Clase Slinger.  5. Items de velocidad en las 
 6. Después: repasar los elementos (quedaron desactualizados) y sumar muchos
 modificadores pasivos nuevos (hoy son solo Heavy impact / Big ball / Swift y
 siempre se eligen los mismos 3).
+7. **Clase nueva: Elementalist** (va junto con el repaso de elementos). Cada
+clase se trata de algo; esta es sacarle más a los tipos. Como el Mage con los
+slots de habilidad, pero con elementos: con la clase (2 items) la pelota tiene
+2 elementos, ascendida (4 items) tiene 3. Sus dos elementos reaccionan entre
+sí en la misma pelota. Sinergias: Catalyst, Chain reaction, Primed, el Creed
+Alchemy y los nodos de elemento del árbol. Nombre elegido porque "Alchemist"
+ya es un arquetipo de Creed.
