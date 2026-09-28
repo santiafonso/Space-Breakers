@@ -100,7 +100,7 @@ inline constexpr float conductorRange = 240.f;    // "Conductor": the electric a
 inline constexpr float conductorFalloff = 0.6f;   // ...for this fraction of the bolt's damage; one more jump per level
 inline constexpr float shatterBonus = 1.8f, shatterPerLevel = 0.4f;   // "Shatter": frozen enemies take x this
 inline constexpr float contagionRadius = 90.f;    // "Contagion": a poisoned enemy dying re-poisons others within this
-inline constexpr float bedrockLifeMult = 4.f, bedrockPerLevel = 1.5f; // "Bedrock": stone rubble lasts x this long
+inline constexpr float bedrockLifeMult = 1.5f, bedrockPerLevel = 0.25f; // "Bedrock": its cracks last x this long (and stack to 7)
 inline constexpr float primedMult = 1.35f;        // "Primed": +damage to an enemy already under an element effect
 inline constexpr float critChance = 0.12f, critChancePerLevel = 0.07f;  // "Keen eye": chance a hit deals...
 inline constexpr float critMult = 2.0f, critMultPerLevel = 0.25f;       // ...x this damage
@@ -356,34 +356,62 @@ inline constexpr int perKill = 100;   // per enemy killed; x2 while DOUBLE POINT
 // levels 2-3 raise its potency (elemMult). Unlock order, each gating the next:
 // fire -> poison -> water -> ice -> stone -> electric.
 namespace element {
-// fire: a heavier contact hit (used to be a burn) - scales the ball's damage
-inline constexpr float fireDamageBonus = 0.60f;   // + this * elemMult on top of normal contact damage
+// fire (2026-09-28): a fire that spreads. Every hit sets the enemy alight
+// (the burn climbs with each hit); a burning enemy that dies bursts and sets
+// the ones around it alight. A slightly heavier hit on top.
+inline constexpr float fireDamageBonus = 0.25f;   // + this * elemMult on top of normal contact damage
+inline constexpr float burnPerHit = 1.3f;         // each fire hit adds this burn dps (x potency, x Ember)...
+inline constexpr float burnMax = 6.5f;            // ...up to this
+inline constexpr float emberPerLevel = 0.35f;     // "Ember" web node: the burn x (1 + this * level)
+inline constexpr float fireSpreadRadius = 85.f;   // a burning enemy's death sets alight the ones this close...
+inline constexpr float fireSpreadKeep = 0.7f;     // ...at this share of its burn...
+inline constexpr float fireSpreadBlast = 1.2f;    // ...and hits them for this x its burn dps
+inline constexpr float fireSpreadMin = 0.4f;      // a burn weaker than this dps doesn't spread
+// water (2026-09-28): soaks and sweeps. A hit soaks the enemy (slower, flies
+// further when hit, freezes twice as long); the wake is a current that sweeps
+// enemies along the ball's path.
+inline constexpr float soakDuration = 3.f;        // x potency
+inline constexpr float soakSlow = 0.7f;           // a soaked enemy moves at this x speed
+inline constexpr float soakKnock = 1.5f;          // ...and takes knockback x this
+inline constexpr float soakFreeze = 2.f;          // ...and stays frozen x this
+inline constexpr float waterCurrent = 190.f;      // px/s the wake sweeps enemies along (x potency)
+// stone (2026-09-28): the heavy ball that cracks. Every hit cracks the enemy:
+// each crack makes it take more from EVERY source. Slower, shoves harder.
+inline constexpr float crackDamage = 0.12f;       // + damage taken per crack...
+inline constexpr int crackMax = 5;                // ...up to this many ("Bedrock": more)
+inline constexpr float crackTime = 4.f;           // cracks close up this long after the last one
+inline constexpr float stoneCruise = 0.9f;        // a stone ball cruises x this...
+inline constexpr float stoneKnock = 1.3f;         // ...and shoves x this
+// stone's reactions (pools and bursts)
+inline constexpr float poolLife = 4.5f;
+inline constexpr float magmaRadius = 70.f, magmaFrac = 0.35f;   // lava: dps x the hit
+inline constexpr float mudRadius = 85.f, mudSlow = 0.35f;       // mud: enemies inside move x this
+inline constexpr float toxicRadius = 75.f, toxicDps = 3.f;      // dust: poisons what's inside
+inline constexpr float shardsRadius = 110.f, shardsFrac = 0.9f; // shards: a burst that cracks twice
+inline constexpr float magnetRadius = 150.f, magnetFrac = 0.5f; // magnet: yanks enemies together
+inline constexpr int maxPools = 12;
 // poison: stacking damage-over-time, refreshed and stacked on every hit
 inline constexpr float poisonDuration = 3.5f;
 inline constexpr float poisonDpsPerHit = 1.1f;    // each hit adds this much dps...
 inline constexpr float poisonDpsMax = 7.0f;       // ...capped here
 // ice: a hit freezes the enemy in place for a moment
 inline constexpr float freezeDuration = 1.3f;
-// "Ember" web node: fire hits also light the enemy for a short burn (fire has no
-// damage-over-time on its own). Scales with elemMult[Fire] (Ignition level) and
-// the Ember node level.
-inline constexpr float burnDuration = 2.5f;
-inline constexpr float burnDps = 2.0f;
-inline constexpr float burnPerEmberLevel = 0.5f;  // + this * (emberLevel - 1) to burn dps
-// water: drags a damaging "worm" wake that follows the ball's path and tapers
-// from head to tail
+// fire's burn: refreshed by every fire hit (see burnPerHit above); the "Ember"
+// web node heats it (emberPerLevel), Ignition's level scales it (potency).
+inline constexpr float burnDuration = 3.f;
+// water: drags a wake (a current, see waterCurrent) that follows the ball's
+// path and tapers from head to tail
 inline constexpr float waterInterval = 0.035f;    // time between trail points laid down
 inline constexpr int   waterTrailPoints = 30;     // worm length (~1s of travel)
-inline constexpr float waterTrailWidth = 16.f;    // damage half-width at the head; tapers toward the tail
-inline constexpr float waterDps = 3.2f;
+inline constexpr float waterTrailWidth = 20.f;    // current half-width at the head; tapers toward the tail
 // electric: zaps the nearest enemy inside an (invisible) radius, on a timer
 inline constexpr float boltRadius = 190.f;
 inline constexpr float boltInterval = 0.7f;
 inline constexpr float boltDamage = 2.4f;
 inline constexpr float boltLife = 0.13f;          // the arc is just a brief visual flash
 inline constexpr int   maxBolts = 40;
-// stone: drops rubble that blocks enemies AND grinds any standing in it
-inline constexpr float stoneInterval = 1.7f;
+// rubble (Obstacle): blocks enemies and grinds any standing in it. Stone no
+// longer drops it (it cracks now); the system stays for later use.
 inline constexpr float obstacleRadius = 18.f;
 inline constexpr float obstacleLife = 5.0f;
 inline constexpr float stoneDps = 2.2f;

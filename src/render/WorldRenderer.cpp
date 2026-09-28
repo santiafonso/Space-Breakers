@@ -306,6 +306,7 @@ void WorldRenderer::drawEnemy(sf::RenderWindow& window, const Enemy& e, sf::Vect
     sf::Color fill = base;
     if (e.poison > 0.f) fill = lerpColor(fill, theme::elemPoison, 0.5f);
     if (e.burn > 0.f)   fill = lerpColor(fill, theme::elemFire, 0.5f);
+    if (e.soak > 0.f)   fill = lerpColor(fill, theme::elemWater, 0.4f);
     if (e.frozen > 0.f) fill = lerpColor(fill, theme::elemIce, 0.65f);
     fill = lerpColor(fill, sf::Color::White, e.hitFlash * 0.8f);
     const float hull = 0.42f * (1.f - e.hitFlash);   // how dark the body sits under its rim
@@ -379,6 +380,13 @@ void WorldRenderer::drawEnemy(sf::RenderWindow& window, const Enemy& e, sf::Vect
         draw::disc(window, e.pos, r * 0.22f, withAlpha(lighten(fill, 0.3f), 0.9f), withAlpha(fill, 0.8f), {1.f, 1.f}, 12);
     }
     if (e.frozen > 0.f) draw::ring(window, e.pos, r + 2.f, 2.f, withAlpha(theme::elemIce, 0.7f));
+    for (int c = 0; c < std::min(e.cracks, 7); ++c) {   // stone cracks: fine lines from the rim inward
+        const float a = 0.6f + static_cast<float>(c) * 2.39996f;   // golden-angle spread
+        const sf::Vector2f d{std::cos(a), std::sin(a)};
+        const sf::Vector2f side{-d.y, d.x};
+        draw::line(window, e.pos + d * (r * 0.95f), e.pos + d * (r * 0.5f) + side * (r * 0.12f), 1.5f,
+                   withAlpha(lighten(theme::elemStone, 0.35f), 0.9f));
+    }
     if (frac < 0.999f)   // health left, as a thin arc - only once it's been hurt
         draw::ring(window, e.pos, r + 8.f, 2.f, withAlpha(lighten(fill, 0.4f), 0.75f), -kPi * 0.5f,
                    -kPi * 0.5f + 2.f * kPi * frac, 32);
@@ -493,6 +501,14 @@ void WorldRenderer::draw(sf::RenderWindow& window, const World& world) const {
     for (const Ball& b : world.balls())
         if (b.element == Element::Water) drawWaterTrail(window, b);
     for (const Obstacle& o : world.obstacles()) drawObstacle(window, o);
+    for (const Pool& q : world.pools()) {   // stone reactions: lava / mud / toxic dust, fading out
+        const float f = clampf(q.life / std::max(0.01f, q.maxLife), 0.f, 1.f);
+        const float a = std::min(1.f, f * 3.f);   // hold, then fade over the last third
+        const sf::Color c = q.kind == PoolKind::Lava ? theme::ember
+                            : q.kind == PoolKind::Mud ? darken(theme::elemStone, 0.2f) : theme::elemPoison;
+        draw::disc(window, q.pos, q.radius, withAlpha(c, 0.28f * a), withAlpha(c, 0.12f * a), {1.f, 1.f}, 40);
+        draw::ring(window, q.pos, q.radius, 1.5f * as, withAlpha(c, 0.45f * a));
+    }
     for (const BlackHole& h : world.blackHoles()) drawBlackHole(window, h);
     drawCore(window, world.core());
     drawBoss(window, world.boss(), world.core().pos);

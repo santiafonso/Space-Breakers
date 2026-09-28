@@ -2207,6 +2207,22 @@ int App::runSnapshots(const std::string& dir) {
         capturePath_ = d + "25_speed_items.png";
         render();
     }
+    {   // the reworked elements: fire (spreads), water (soaks, sweeps), stone (cracks), and their reactions
+        using K = UpgradeKind;
+        const K types[3] = {K::ElemFire, K::ElemWater, K::ElemStone};
+        for (int i = 0; i < 3 && i < static_cast<int>(data_.run.balls.size()); ++i) {
+            BallLoadout& L = data_.run.balls[static_cast<std::size_t>(i)];
+            for (int sl = 0; sl < 4; ++sl) L.gear[sl] = -1;
+            L.type = static_cast<int>(types[i]);
+            L.typeLvl = 1;
+        }
+        syncWorldBalls();
+        world_.devSpawn(EnemyKind::Grunt, 16);
+        world_.devSpawn(EnemyKind::Tank, 2);
+        for (int i = 0; i < 220; ++i) update(1.f / 60.f);
+        capturePath_ = d + "26_elements.png";
+        render();
+    }
 
     r.gold = 240;
     rollShop();

@@ -680,7 +680,11 @@ template <> struct ClassHooks<BallRole::Summoner> : NoClassHooks {
                 e.frozen = std::max(e.frozen, cfg::summoner::dragonFreeze * pot);
             } else if (el == Element::Fire) {
                 e.burn = E::burnDuration;
-                e.burnDps = std::max(e.burnDps, E::burnDps * pot);
+                e.burnDps = std::min(e.burnDps + E::burnPerHit * pot, E::burnMax * pot);
+            } else if (el == Element::Water) {
+                e.soak = std::max(e.soak, E::soakDuration * pot);
+            } else if (el == Element::Stone) {
+                w.crack(e, 1, E::crackTime * pot, E::crackMax);
             }
         }
         w.applyElement(e, el, owner, dmg, p, ev);
@@ -1365,10 +1369,10 @@ template <> struct ClassHooks<BallRole::Slinger> : NoClassHooks {
                 if (dot(e.pos - f.pos, e.pos - f.pos) < (r + e.radius) * (r + e.radius) && (!in || f.dps > in->dps)) in = &f;
             if (!in) continue;
             w.damageEnemy(e, in->dps * dt);
-            if (p.emberLevel > 0) {   // "Ember": the same burn a fire ball leaves
+            {   // the same burn a fire ball leaves (it spreads on death, "Ember" heats it)
+                const float k = pot * (1.f + cfg::element::emberPerLevel * static_cast<float>(p.emberLevel));
                 e.burn = std::max(e.burn, cfg::element::burnDuration);
-                e.burnDps = std::max(e.burnDps, cfg::element::burnDps * pot *
-                                                    (1.f + cfg::element::burnPerEmberLevel * static_cast<float>(p.emberLevel - 1)));
+                e.burnDps = std::max(e.burnDps, cfg::element::burnPerHit * 2.f * k);
             }
             if (e.elem != Element::Fire) w.applyElement(e, Element::Fire, in->owner, in->dps, p, ev);   // reactions
         }

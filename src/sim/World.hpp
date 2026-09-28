@@ -105,6 +105,7 @@ public:
     const std::vector<Enemy>& enemies() const { return enemies_; }
     const std::vector<Bolt>& bolts() const { return bolts_; }
     const std::vector<Obstacle>& obstacles() const { return obstacles_; }
+    const std::vector<Pool>& pools() const { return pools_; }
     const std::vector<BlackHole>& blackHoles() const { return blackHoles_; }   // "Black hole"
     const ClassWorldState& classWorld() const { return classWorld_; }          // per-class world state (bullets, summons...)
     const std::vector<TetherBeam>& tethers() const { return tethers_; }        // "Tether" lasers, this step
@@ -195,6 +196,10 @@ private:
     void updateBolts(float dt);
     void updateWaterTrails(float dt, const WorldParams& p, FrameEvents& ev);
     void updateObstacles(float dt);
+    void updatePools(float dt);
+    void addPool(sf::Vector2f at, float radius, float power, PoolKind kind);
+    float poolSlow(const Enemy& e) const;    // mud underfoot: its time step x this
+    void crack(Enemy& e, int n, float time, int cap);   // stone: n more cracks
     void updateEnemies(float dt, const WorldParams& p, FrameEvents& ev);
     void updateBoss(float dt, const WorldParams& p, FrameEvents& ev);
     void sweepDeadEnemies(FrameEvents& ev, const WorldParams& p);
@@ -286,6 +291,7 @@ private:
     std::vector<Enemy> enemies_;
     std::vector<Bolt> bolts_;
     std::vector<Obstacle> obstacles_;
+    std::vector<Pool> pools_;                // stone reactions: lava, mud, toxic dust
     std::vector<BlackHole> blackHoles_;
     std::vector<TetherBeam> tethers_;
     ClassWorldState classWorld_;        // per-class world state (sim/Classes.hpp)

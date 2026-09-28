@@ -2018,6 +2018,20 @@ secreto + animaciones de mapa.  4. Clase Slinger.  5. Items de velocidad en las 
 6. Después: repasar los elementos (quedaron desactualizados) y sumar muchos
 modificadores pasivos nuevos (hoy son solo Heavy impact / Big ball / Swift y
 siempre se eligen los mismos 3).
+**Elementos rehechos (hecho 2026-09-28):**
+- Fuego = incendio que se contagia: cada golpe prende y la quemadura sube
+  (sin necesitar Ember); un enemigo que muere quemándose explota y prende a
+  los de al lado. Ember: +35% de quemadura por nivel. Golpe +25% (antes +60%).
+- Agua = mojar y empujar: el golpe empapa (camina 30% más lento, sale 50% más
+  lejos al ser golpeado, se congela el doble); la estela es una corriente que
+  arrastra enemigos en la dirección de la pelota (ya no daña).
+- Piedra = la pesada que agrieta (support/tanque): cada golpe agrieta (+12% de
+  daño recibido de TODO, hasta 5, 4 s); pelota 10% más lenta, empuja 30% más.
+  Ya no tira escombros. Bedrock: grietas 50% más largas y hasta 7.
+- Reacciones de piedra: Magma (charco de lava), Barro (charco que frena),
+  Polvo tóxico (nube de veneno), Esquirlas (explosión que agrieta x2), Imán
+  (junta a los enemigos).
+
 7. **Clase nueva: Elementalist** (va junto con el repaso de elementos). Cada
 clase se trata de algo; esta es sacarle más a los tipos. Como el Mage con los
 slots de habilidad, pero con elementos: con la clase (2 items) la pelota tiene

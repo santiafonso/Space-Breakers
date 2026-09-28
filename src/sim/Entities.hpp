@@ -189,7 +189,7 @@ struct Ball {
     float sinceThrow = 0.f;  // "Quick Hands" pact: seconds since you last threw it
     int juggle = 0;          // "Juggler" pact: catches in a row without touching the core
     std::deque<sf::Vector2f> trail;
-    std::deque<sf::Vector2f> waterTrail;   // water ball only: the damaging "worm" wake
+    std::deque<sf::Vector2f> waterTrail;   // water ball only: its wake, a current that sweeps enemies
     int owner = -1;          // index of the (real) ball this is / was copied from - reactions need two owners
     bool ghost = false;      // "Split shot" / "Mitosis" copy: temporary, fades out
     float ghostLife = 0.f;
@@ -262,6 +262,9 @@ struct Enemy {
     float frozen = 0.f;     // seconds left frozen in place (from an ice ball)
     float burn = 0.f;       // seconds of burn remaining ("Ember": fire ball DoT)
     float burnDps = 0.f;    // current burn damage/s while it lasts
+    float soak = 0.f;       // seconds left soaked by water (slower, knocked further, frozen longer)
+    int cracks = 0;         // stone cracks: takes more from every hit...
+    float crackT = 0.f;     // ...until this runs out
     float mark = 0.f;       // seconds left marked by a Support ball (takes more damage)
     float brittle = 0.f;    // seconds left brittle (Superconductor reaction): takes more damage
     Element elem = Element::Plain;   // last element a ball left on it, waiting for a reaction
@@ -287,12 +290,24 @@ struct Bolt {
     bool beam = false;   // a Railgun beam: straight and thick instead of a jagged arc
 };
 
-// A stone ball's rubble: enemies are pushed out of it and take chip damage.
+// Rubble: enemies are pushed out of it and take chip damage. (Stone used to
+// drop it; unused for now.)
 struct Obstacle {
     sf::Vector2f pos;
     float radius = cfg::element::obstacleRadius;
     float life = cfg::element::obstacleLife;
     float maxLife = cfg::element::obstacleLife;
+};
+
+// A patch of ground left by a stone reaction: lava burns, mud slows, toxic
+// dust poisons whatever stands in it.
+enum class PoolKind { Lava, Mud, Toxic };
+struct Pool {
+    sf::Vector2f pos;
+    float radius = 60.f;
+    float life = 1.f, maxLife = 1.f;
+    float power = 0.f;      // lava dps / toxic dps
+    PoolKind kind = PoolKind::Lava;
 };
 
 // "Black hole": left where a kill landed. Pulls enemies in, then bursts with

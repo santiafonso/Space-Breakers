@@ -59,6 +59,7 @@ float World::ballBaseCruise(const Ball& b, const WorldParams& p) const {
 float World::ballCruise(const Ball& b, const WorldParams& p) const {
     return cruiseSpeed(p) * b.mods.cruiseMult *
            (b.hasRole(BallRole::Guardian) ? cfg::role::guardianCruiseMul : 1.f) *
+           (b.element == Element::Stone ? cfg::element::stoneCruise : 1.f) *   // stone: the heavy one
            (b.overclockT > 0.f ? cfg::ability::overclockCruise : 1.f);   // "Overclock" ability
 }
 
@@ -199,6 +200,7 @@ void World::startRun(const WorldParams& p, const std::vector<BallSpec>& balls,
     enemies_.clear();
     bolts_.clear();
     obstacles_.clear();
+    pools_.clear();
     blackHoles_.clear();
     tethers_.clear();
     classWorld_ = ClassWorldState{};
@@ -1065,7 +1067,8 @@ bool World::chance(float base, const WorldParams& p) {
 }
 
 void World::damageEnemy(Enemy& e, float dmg) {
-    e.hp -= dmg * (e.brittle > 0.f ? cfg::synergy::brittleMul : 1.f);
+    e.hp -= dmg * (e.brittle > 0.f ? cfg::synergy::brittleMul : 1.f) *
+            (1.f + cfg::element::crackDamage * static_cast<float>(e.cracks));   // stone cracks
     e.hitFlash = 1.f;
 }
 
@@ -1091,6 +1094,7 @@ bool World::strike(Ball& b, Enemy& e, sf::Vector2f normal, const WorldParams& p,
     if (m.shatterMult > 0.f && e.frozen > 0.f) dmg *= m.shatterMult;       // "Shatter"
     if (e.mark > 0.f) dmg *= p.markMul;                     // marked by a Support
     if (e.brittle > 0.f) dmg *= S::brittleMul;                             // Superconductor
+    dmg *= 1.f + cfg::element::crackDamage * static_cast<float>(e.cracks); // stone cracks
     if (m.critChance > 0.f && chance(m.critChance, p)) dmg *= m.critMult;  // "Keen eye"
     else if (p.pact.glassEdge) dmg *= cfg::pact::glassMiss;                // "Glass Edge" pact: no crit, weaker
     if (m.executeThreshold > 0.f && e.hp < e.maxHp * m.executeThreshold)   // "Executioner"
@@ -1135,7 +1139,9 @@ bool World::strike(Ball& b, Enemy& e, sf::Vector2f normal, const WorldParams& p,
     e.hitFlash = 1.f;
     const float knock = cfg::combat::knockback * m.knockMult *   // Big ball / Bumper
                         (b.hasRole(BallRole::Guardian) ? cfg::role::guardianKnockMul : 1.f) *
-                        (m.rampartKnock > 0.f ? m.rampartKnock : 1.f);    // "Rampart"
+                        (m.rampartKnock > 0.f ? m.rampartKnock : 1.f) *   // "Rampart"
+                        (b.element == Element::Stone ? cfg::element::stoneKnock : 1.f) *   // stone shoves
+                        (e.soak > 0.f ? cfg::element::soakKnock : 1.f);   // a soaked enemy flies further
     e.vel += -normal * knock * e.knockTaken;
     // (the Support mark and the Guardian stagger are their class hooks: WorldClasses.cpp)
     if (m.rampartStagger > 0.f) e.stagger = std::max(e.stagger, cfg::role::staggerDuration * m.rampartStagger);
@@ -1146,11 +1152,17 @@ bool World::strike(Ball& b, Enemy& e, sf::Vector2f normal, const WorldParams& p,
         e.poisonDps = std::min(e.poisonDps + cfg::element::poisonDpsPerHit * pot,
                                cfg::element::poisonDpsMax * pot);
     } else if (b.element == Element::Ice) {
-        e.frozen = std::max(e.frozen, cfg::element::freezeDuration * pot);
-    } else if (b.element == Element::Fire && p.emberLevel > 0) {   // "Ember": light it up
+        e.frozen = std::max(e.frozen, cfg::element::freezeDuration * pot *
+                                          (e.soak > 0.f ? cfg::element::soakFreeze : 1.f));   // soaked: freezes solid
+    } else if (b.element == Element::Fire) {   // every hit sets it alight, a little hotter each time
+        const float k = pot * (1.f + cfg::element::emberPerLevel * static_cast<float>(p.emberLevel));   // "Ember"
         e.burn = cfg::element::burnDuration;
-        e.burnDps = cfg::element::burnDps * pot *
-                    (1.f + cfg::element::burnPerEmberLevel * static_cast<float>(p.emberLevel - 1));
+        e.burnDps = std::min(e.burnDps + cfg::element::burnPerHit * k, cfg::element::burnMax * k);
+    } else if (b.element == Element::Water) {   // soaks it
+        e.soak = std::max(e.soak, cfg::element::soakDuration * pot);
+    } else if (b.element == Element::Stone) {   // cracks it ("Bedrock": longer, deeper)
+        const bool bed = m.bedrockLife > 0.f;
+        crack(e, 1, cfg::element::crackTime * pot * (bed ? m.bedrockLife : 1.f), cfg::element::crackMax + (bed ? 2 : 0));
     }
     applyElement(e, hitElement(b, p), b.owner, dmg, p, ev);   // a different ball's element waiting -> reaction
 
@@ -1312,6 +1324,35 @@ void World::triggerReaction(Element x, Element y, Enemy& e, float hitDmg, const 
             o.brittle = S::brittleTime;
             damageEnemy(o, hitDmg * S::superFrac * mul);
         }
+    } else if (has(Element::Stone) && has(Element::Fire)) {    // Magma: a pool of lava
+        namespace L = cfg::element;
+        fx = {at, L::magmaRadius * rm, theme::ember, "MAGMA"};
+        addPool(at, fx.radius, hitDmg * L::magmaFrac * mul, PoolKind::Lava);
+    } else if (has(Element::Stone) && has(Element::Water)) {   // Mud: a pool that bogs down
+        namespace L = cfg::element;
+        fx = {at, L::mudRadius * rm, theme::elemStone, "MUD"};
+        addPool(at, fx.radius, 0.f, PoolKind::Mud);
+    } else if (has(Element::Stone) && has(Element::Poison)) {  // Toxic dust: a cloud that poisons
+        namespace L = cfg::element;
+        fx = {at, L::toxicRadius * rm, theme::elemPoison, "TOXIC DUST"};
+        addPool(at, fx.radius, L::toxicDps * mul, PoolKind::Toxic);
+    } else if (has(Element::Stone) && has(Element::Ice)) {     // Shards: a burst that cracks deep
+        namespace L = cfg::element;
+        fx = {at, L::shardsRadius * rm, theme::elemIce, "SHARDS"};
+        for (Enemy& o : enemies_) {
+            if (o.hp <= 0.f || length(o.pos - at) > fx.radius + o.radius) continue;
+            damageEnemy(o, hitDmg * L::shardsFrac * mul);
+            crack(o, 2, L::crackTime, L::crackMax);
+        }
+    } else if (has(Element::Stone) && has(Element::Electric)) {   // Magnet: yanks everything together
+        namespace L = cfg::element;
+        fx = {at, L::magnetRadius * rm, theme::elemElectric, "MAGNET"};
+        for (Enemy& o : enemies_) {
+            if (o.hp <= 0.f || o.orbiter || length(o.pos - at) > fx.radius + o.radius) continue;
+            o.pos += (at - o.pos) * 0.6f;
+            o.stagger = std::max(o.stagger, 0.4f);
+            damageEnemy(o, hitDmg * L::magnetFrac * mul);
+        }
     } else {                                                  // any other pair: a clash
         fx = {at, S::clashRadius * rm, theme::accent, "CLASH"};
         areaDamage(at, fx.radius, hitDmg * S::clashFrac * mul, nullptr);
@@ -1428,17 +1469,7 @@ void World::emitElement(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
                 b.waterTrail.pop_front();
             break;
         }
-        case Element::Stone: {
-            b.cooldown -= dt;
-            if (b.cooldown > 0.f) break;
-            b.cooldown = cfg::element::stoneInterval;
-            if (static_cast<int>(obstacles_.size()) < cfg::element::maxObstacles) {
-                const float life = cfg::element::obstacleLife *
-                                   (b.mods.bedrockLife > 0.f ? b.mods.bedrockLife : 1.f);   // "Bedrock"
-                obstacles_.push_back(Obstacle{b.pos, cfg::element::obstacleRadius, life, life});
-            }
-            break;
-        }
+        case Element::Stone: break;   // stone works on contact now (cracks, see strike)
         case Element::Electric: {
             b.cooldown -= dt;
             if (b.cooldown > 0.f) break;
@@ -1759,14 +1790,53 @@ void World::updateWaterTrails(float dt, const WorldParams& p, FrameEvents& ev) {
                 // head (i near n-1) is full width, tail (i=0) is ~0
                 const float taper = static_cast<float>(i + 1) / static_cast<float>(n);
                 if (length(e.pos - closest) < w0 * taper + e.radius) {
-                    damageEnemy(e, cfg::element::waterDps * dt);
-                    e.hitFlash = std::max(0.f, e.hitFlash - 0.6f);   // a wake doesn't flash like a hit
+                    // The wake is a current: it sweeps the enemy along the
+                    // ball's path and soaks it (no damage of its own).
+                    if (!e.orbiter && len2 > 1e-4f)
+                        e.pos += seg / std::sqrt(len2) * cfg::element::waterCurrent * elemPotency(b, p) *
+                                 arenaScale() * taper * dt;
+                    e.soak = std::max(e.soak, cfg::element::soakDuration * 0.5f);
                     applyElement(e, b.element, b.owner, ballDamage(b, p), p, ev);   // wading into a wake soaks it
-                    break;   // one segment's worth of damage per enemy per step
+                    break;   // one segment's worth per enemy per step
                 }
             }
         }
     }
+}
+
+// Stone's reaction pools: lava burns, toxic dust poisons (mud slows: poolSlow).
+void World::addPool(sf::Vector2f at, float radius, float power, PoolKind kind) {
+    if (static_cast<int>(pools_.size()) >= cfg::element::maxPools) pools_.erase(pools_.begin());
+    pools_.push_back({at, radius, cfg::element::poolLife, cfg::element::poolLife, power, kind});
+}
+
+void World::updatePools(float dt) {
+    for (Pool& q : pools_) {
+        q.life -= dt;
+        if (q.kind == PoolKind::Mud) continue;
+        for (Enemy& e : enemies_) {
+            if (e.hp <= 0.f || length(e.pos - q.pos) > q.radius + e.radius) continue;
+            if (q.kind == PoolKind::Lava) {
+                damageEnemy(e, q.power * dt);
+                e.hitFlash = std::max(0.f, e.hitFlash - 0.6f);   // standing in it doesn't flash like a hit
+            } else {
+                e.poison = std::max(e.poison, 1.f);
+                e.poisonDps = std::max(e.poisonDps, q.power);
+            }
+        }
+    }
+    pools_.erase(std::remove_if(pools_.begin(), pools_.end(), [](const Pool& q) { return q.life <= 0.f; }), pools_.end());
+}
+
+float World::poolSlow(const Enemy& e) const {
+    for (const Pool& q : pools_)
+        if (q.kind == PoolKind::Mud && length(e.pos - q.pos) < q.radius + e.radius) return cfg::element::mudSlow;
+    return 1.f;
+}
+
+void World::crack(Enemy& e, int n, float time, int cap) {
+    e.cracks = std::min(std::max(e.cracks, 0) + n, std::max(cap, e.cracks));
+    e.crackT = std::max(e.crackT, time);
 }
 
 void World::updateObstacles(float dt) {
@@ -1812,6 +1882,8 @@ void World::updateEnemies(float dt, const WorldParams& p, FrameEvents& ev) {
         e.age += dt;
         e.mark = std::max(0.f, e.mark - dt);
         e.brittle = std::max(0.f, e.brittle - dt);
+        e.soak = std::max(0.f, e.soak - dt);
+        if (e.cracks > 0 && (e.crackT -= dt) <= 0.f) e.cracks = 0;   // the cracks close up
         e.pierceCd = std::max(0.f, e.pierceCd - dt);
         if (e.elemT > 0.f && (e.elemT -= dt) <= 0.f) { e.elem = Element::Plain; e.elemOwner = -1; }
 
@@ -1876,6 +1948,8 @@ void World::updateEnemies(float dt, const WorldParams& p, FrameEvents& ev) {
             if (p.timeDilation) edt *= cfg::changer::timeDilation;   // "Time dilation"
             edt *= p.creed.enemySpeedMul;                              // "Living Core" creed's cost
             styleEnemyDrag(e, edt, dt);                                // "Anchor" balls
+            if (e.soak > 0.f) edt *= cfg::element::soakSlow;           // soaked by water
+            edt *= poolSlow(e);                                        // stuck in mud
 
             e.vel += (steer - e.vel) * (1.f - std::exp(-8.f * edt));
             e.pos += e.vel * edt;
@@ -1964,6 +2038,17 @@ void World::sweepDeadEnemies(FrameEvents& ev, const WorldParams& p) {
                         e.poisonDps = std::max(e.poisonDps, dps);
                     }
                 }
+            }
+            if (it->burn > 0.f && it->burnDps >= cfg::element::fireSpreadMin) {   // fire spreads on death
+                namespace L = cfg::element;
+                const float R = L::fireSpreadRadius * arenaScale();
+                for (Enemy& e : enemies_) {
+                    if (&e == &*it || e.hp <= 0.f || length(e.pos - it->pos) > R + e.radius) continue;
+                    damageEnemy(e, it->burnDps * L::fireSpreadBlast);
+                    e.burn = L::burnDuration;
+                    e.burnDps = std::max(e.burnDps, it->burnDps * L::fireSpreadKeep);
+                }
+                ev.bursts.push_back({it->pos, R, theme::elemFire, nullptr});
             }
             ev.kills.push_back(it->pos);
             it = enemies_.erase(it);
@@ -2469,6 +2554,7 @@ FrameEvents World::step(float dt, const WorldParams& p) {
     updateBolts(dt);
     updateWaterTrails(dt, p, ev);
     updateObstacles(dt);
+    updatePools(dt);
     updateEnemies(dt, p, ev);
     updateCoreZap(dt, p, ev);   // "Living Core" creed
     sweepDeadEnemies(ev, p);

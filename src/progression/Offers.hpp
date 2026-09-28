@@ -274,11 +274,11 @@ inline const char* upgradeKindId(UpgradeKind k) {
 inline UpgradeInfo upgradeInfo(UpgradeKind k) {
     switch (k) {
         case UpgradeKind::AddBall:       return {"Extra ball", "one more ball in the arena"};
-        case UpgradeKind::ElemFire:      return {"Fire", "the ball turns fire: heavier contact hits"};
+        case UpgradeKind::ElemFire:      return {"Fire", "the ball turns fire: every hit sets the enemy alight, hotter each time; a burning enemy that dies sets the ones around it on fire"};
         case UpgradeKind::ElemPoison:    return {"Poison", "the ball turns poison: hits stack damage over time"};
-        case UpgradeKind::ElemWater:     return {"Water", "the ball turns water: trails a damaging wake"};
+        case UpgradeKind::ElemWater:     return {"Water", "the ball turns water: hits soak enemies (slower, knocked further, frozen twice as long) and its wake is a current that sweeps them along"};
         case UpgradeKind::ElemIce:       return {"Ice", "the ball turns ice: hits freeze enemies in place"};
-        case UpgradeKind::ElemStone:     return {"Stone", "the ball turns stone: drops grinding rubble"};
+        case UpgradeKind::ElemStone:     return {"Stone", "the ball turns stone: heavier and slower, and every hit cracks the enemy - each crack makes it take 12% more from every ball (up to 5)"};
         case UpgradeKind::ElemElectric:  return {"Electric", "the ball turns electric: zaps nearby enemies"};
         case UpgradeKind::AbilityDash:   return {"Dash", "every few seconds the ball bursts straight at the nearest enemy"};
         case UpgradeKind::AbilityNova:   return {"Nova", "every few seconds the ball lets out a shockwave that hits and shoves everything around it"};
@@ -295,7 +295,7 @@ inline UpgradeInfo upgradeInfo(UpgradeKind k) {
         case UpgradeKind::Overkill:      return {"Overkill", "leftover damage from a kill splashes onto the next enemy"};
         case UpgradeKind::Shatter:       return {"Shatter", "hitting a frozen enemy deals bonus damage"};
         case UpgradeKind::Conductor:     return {"Conductor", "its electric arc jumps on to another enemy"};
-        case UpgradeKind::Bedrock:       return {"Bedrock", "its stone rubble lasts much longer"};
+        case UpgradeKind::Bedrock:       return {"Bedrock", "its cracks last 50% longer and go deeper: up to 7 per enemy"};
         case UpgradeKind::Echo:          return {"Echo", "25% chance a hit strikes twice (effects and all)"};
         case UpgradeKind::Tesla:         return {"Tesla", "20% chance a hit zaps up to 3 enemies nearby"};
         case UpgradeKind::Bomber:        return {"Bomber", "30% chance an enemy it kills explodes"};
@@ -366,7 +366,7 @@ inline const char* upgradeLevelDesc(UpgradeKind k) {
         case UpgradeKind::Overkill:      return "more splash; a 2nd enemy at level 3, a 3rd at level 5";
         case UpgradeKind::Shatter:       return "+40% damage vs frozen enemies";
         case UpgradeKind::Conductor:     return "the arc jumps one more time";
-        case UpgradeKind::Bedrock:       return "the rubble lasts even longer";
+        case UpgradeKind::Bedrock:       return "the cracks last even longer";
         case UpgradeKind::Echo:          return "+10% chance";
         case UpgradeKind::Tesla:         return "+8% chance, zaps one more enemy";
         case UpgradeKind::Bomber:        return "+12% chance, a bigger blast";
@@ -692,7 +692,7 @@ enum MetaUnlock {
     MetaVenom,        // Venom     - unlocks the poison ball item, +poison potency
     MetaTide,         // Tide      - unlocks the water ball item, +water potency
     MetaFrost,        // Frost     - unlocks the ice ball item, +freeze time
-    MetaQuarry,       // Quarry    - unlocks the stone ball item, +rubble potency
+    MetaQuarry,       // Quarry    - unlocks the stone ball item, +crack potency
     MetaArc,          // Arc       - unlocks the electric ball item, +zap potency
     MetaBounty,       // Fortune   - earn cores for every enemy killed
     MetaWindfall,     // Windfall  - chance a cleared run pays a 2nd prism
@@ -717,7 +717,7 @@ enum MetaUnlock {
     MetaMagnet,       // Magnet     - power-up orbs drift toward the nearest ball
     MetaAfterglow,    // Afterglow  - continuous power-ups fade out instead of cutting
     MetaCharged,      // Charged    - power-ups start with part of their duration
-    MetaEmber,        // Ember      - fire ball hits apply a burn (fire has no DoT alone)
+    MetaEmber,        // Ember      - fire burns hotter
     // ---- v12 append (indices 32+, never reorder) ----
     MetaArmory,       // Armory       - epic picks turn up more often
     MetaSatellite,    // Satellite    - the Satellite legendary can appear
@@ -814,15 +814,15 @@ inline const MetaUnlockDef& metaUnlockDef(int u) {
                          10u, 3, B::Guardian, C,  0, 330.f, 1.f},
         /* Mend      */ {"Mend",      "the core heals +3 more between waves",
                          12u, 3, B::Guardian, C,  1, 316.f, 2.f},
-        /* Ignition  */ {"Ignition",  "the fire element can appear; higher levels hit harder",
+        /* Ignition  */ {"Ignition",  "the fire element can appear; higher levels burn hotter",
                          2u,  3, B::Mage,     P, MetaAbilityMissile, 294.f, 2.f},
         /* Venom     */ {"Venom",     "the poison element can appear; higher levels stack faster",
                          2u,  3, B::Mage,     P,  3, 294.f, 3.f},
-        /* Tide      */ {"Tide",      "the water element can appear; higher levels leave a wider wake",
+        /* Tide      */ {"Tide",      "the water element can appear; higher levels soak longer and sweep harder",
                          3u,  3, B::Mage,     P,  4, 294.f, 4.f},
         /* Frost     */ {"Frost",     "the ice element can appear; higher levels freeze for longer",
                          3u,  3, B::Mage,     P,  5, 294.f, 5.f},
-        /* Quarry    */ {"Quarry",    "the stone element can appear; higher levels grind harder",
+        /* Quarry    */ {"Quarry",    "the stone element can appear; higher levels keep the cracks open longer",
                          4u,  3, B::Mage,     P,  6, 294.f, 6.f},
         /* Arc       */ {"Static",    "the electric element can appear; higher levels zap harder",
                          4u,  3, B::Mage,     P,  7, 294.f, 7.f},
@@ -870,7 +870,7 @@ inline const MetaUnlockDef& metaUnlockDef(int u) {
                          10u, 2, B::Support,  C, 28, 207.f, 5.f},
         /* Charged   */ {"Charged",   "power-ups arrive with part of their duration already charged",
                          10u, 2, B::Support,  C, 14, 222.f, 3.f},
-        /* Ember     */ {"Ember",     "fire ball hits set enemies alight for a burn; scales with Ignition",
+        /* Ember     */ {"Ember",     "fire burns 35% hotter per level (with Ignition's level on top)",
                          2u,  3, B::Mage,     P,  3, 303.f, 3.f},
         /* Armory    */ {"Armory",    "Epic picks turn up more often (+50% odds per level)",
                          2u,  2, B::Jester,   P, 47,  88.f, 5.f},

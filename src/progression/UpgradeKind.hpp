@@ -44,7 +44,7 @@ enum class UpgradeKind {
     Overkill,          // a kill's leftover damage splashes                [Support]
     Shatter,           // bonus damage vs frozen enemies (needs Frost)     [Support]
     Conductor,         // its electric arc jumps on to more enemies        [Striker]
-    Bedrock,           // its stone rubble lasts far longer                [Guardian]
+    Bedrock,           // its stone cracks last longer and go deeper       [Guardian]
     Echo,              // chance a hit strikes twice                       [Striker]
     Tesla,             // chance a hit zaps nearby enemies                 [Support]
     Bomber,            // chance a kill explodes                           [Support]
