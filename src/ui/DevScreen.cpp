@@ -27,6 +27,8 @@ constexpr int kActSpeed = 400;    // + index into kSpeeds
 constexpr int kActOpen = 500;     // + App::DevOpen
 constexpr int kActCreed = 600;     // + CreedId: grant / drop that creed
 constexpr int kActPact = 700;      // + PactId: grant / drop that pact
+constexpr int kActPage = 800;      // + page: switch the panel's page
+int gDevPage = 0;                  // the page shown (kept between openings)
 
 enum Misc { WinWave, KillAll, Heal, Invuln, Gold, AddBall, ClearBall, Currency };
 constexpr float kSpeeds[] = {0.25f, 0.5f, 1.f, 2.f, 4.f};
@@ -76,31 +78,28 @@ void DevScreen::rebuild(App& app) {
         buttons_.push_back(bt);
     }
 
-    // ---- every pick, in five columns: balls + elements + abilities | items (x3) | modifiers + relics
-    std::vector<UpgradeKind> items;
-    std::vector<UpgradeKind> cols[5];
-    for (int i = 0; i < kUpgradeKindCount; ++i) {
-        const auto k = static_cast<UpgradeKind>(i);
-        switch (upgradeCat(k)) {
-            case UpgradeCat::NewBall:
-            case UpgradeCat::Element:
-            case UpgradeCat::Ability:  cols[0].push_back(k); break;
-            case UpgradeCat::Item:     items.push_back(k); break;
-            case UpgradeCat::Modifier:
-            case UpgradeCat::Relic:    cols[4].push_back(k); break;
+    // ---- two pages (tabs, top right): ITEMS = every item by class in up to
+    // five columns; RUN = balls / types / abilities, modifiers / relics,
+    // creeds and pacts. The right column (actions, spawns, speed, screens)
+    // is on both.
+    {
+        const char* names[2] = {"Items", "Run: picks, creeds, pacts"};
+        const float widths[2] = {90.f, 210.f};
+        float x = s.x - 330.f;
+        for (int pg = 0; pg < 2; ++pg) {
+            Button bt;
+            bt.rect = {x, 58.f, widths[pg], 26.f};
+            bt.label = names[pg];
+            bt.color = theme::accent;
+            bt.action = kActPage + pg;
+            bt.on = gDevPage == pg;
+            bt.tipTitle = names[pg];
+            bt.tipDesc = pg == 0 ? "every item, by class" : "balls, types, abilities, modifiers, relics, creeds and pacts";
+            buttons_.push_back(bt);
+            x += widths[pg] + 8.f;
         }
     }
-    // Items go by class: a coloured class heading, then its items in the class
-    // colour (the tier is in the tooltip). A class stays in one column; the
-    // next column starts when this one is past its share.
-    std::stable_sort(items.begin(), items.end(), [](UpgradeKind a, UpgradeKind b) {
-        return static_cast<int>(itemTag(a)) < static_cast<int>(itemTag(b));
-    });
-    constexpr float kRowH = 25.f, kClassHeadH = 18.f;
-    float itemsH = 0.f;
-    for (std::size_t i = 0; i < items.size(); ++i)
-        itemsH += kRowH + (i == 0 || itemTag(items[i]) != itemTag(items[i - 1]) ? kClassHeadH : 0.f);
-    const float colShare = itemsH / 3.f;
+    constexpr float kRowH = 25.f, kClassHeadH = 18.f, kColW = 172.f, kTop = 112.f;
     auto pickButton = [&](UpgradeKind k, float x, float y, sf::Color col) {
         Button bt;
         bt.rect = {x, y, 164.f, 22.f};
@@ -113,51 +112,67 @@ void DevScreen::rebuild(App& app) {
         bt.tipDesc = std::string(upgradeCatName(upgradeCat(k))) + ": " + upgradeInfo(k).desc;
         buttons_.push_back(bt);
     };
-    {
-        int c = 1;
-        float y = 112.f;
+
+    if (gDevPage == 0) {
+        // Items go by class: a coloured class heading, then its items in the
+        // class colour (the tier is in the tooltip). A class stays in one
+        // column; the next column starts when this one would run off the bottom.
+        std::vector<UpgradeKind> items;
+        for (int i = 0; i < kUpgradeKindCount; ++i)
+            if (upgradeCat(static_cast<UpgradeKind>(i)) == UpgradeCat::Item) items.push_back(static_cast<UpgradeKind>(i));
+        std::stable_sort(items.begin(), items.end(), [](UpgradeKind x, UpgradeKind y) {
+            return static_cast<int>(itemTag(x)) < static_cast<int>(itemTag(y));
+        });
+        const float bottom = s.y - 44.f;
+        int c = 0;
+        float y = kTop;
         for (std::size_t i = 0; i < items.size(); ++i) {
             const ItemTag tag = itemTag(items[i]);
             if (i == 0 || tag != itemTag(items[i - 1])) {
-                if (i > 0 && y - 112.f > colShare && c < 3) { ++c; y = 112.f; }
+                int n = 0;   // this class's items: move on if they don't fit under here
+                for (std::size_t j = i; j < items.size() && itemTag(items[j]) == tag; ++j) ++n;
+                if (i > 0 && y + kClassHeadH + static_cast<float>(n) * kRowH > bottom) { ++c; y = kTop; }
                 const std::string name = itemTagName(tag);
                 std::string up = name.empty() ? "CLASSLESS" : name;
                 for (char& ch : up) ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
                 y += kClassHeadH;
-                heads_.push_back({{26.f + static_cast<float>(c) * 172.f, y - 18.f}, up, tagColor(tag)});
+                heads_.push_back({{26.f + static_cast<float>(c) * kColW, y - 18.f}, up, tagColor(tag)});
             }
-            pickButton(items[i], 24.f + static_cast<float>(c) * 172.f, y, tagColor(tag));
+            pickButton(items[i], 24.f + static_cast<float>(c) * kColW, y, tagColor(tag));
             y += kRowH;
         }
-    }
-    float col0End = 112.f, col3End = 112.f, col4End = 112.f;
-    for (int c : {0, 4}) {
-        float y = 112.f;
-        for (UpgradeKind k : cols[c]) {
-            pickButton(k, 24.f + static_cast<float>(c) * 172.f, y, tierColor(upgradeTier(k)));
-            y += kRowH;
+    } else {
+        // col 0: new ball, types, abilities; col 1: modifiers, relics;
+        // cols 2-3: creeds, then pacts under them.
+        std::vector<UpgradeKind> cols[2];
+        for (int i = 0; i < kUpgradeKindCount; ++i) {
+            const auto k = static_cast<UpgradeKind>(i);
+            switch (upgradeCat(k)) {
+                case UpgradeCat::NewBall:
+                case UpgradeCat::Element:
+                case UpgradeCat::Ability:  cols[0].push_back(k); break;
+                case UpgradeCat::Modifier:
+                case UpgradeCat::Relic:    cols[1].push_back(k); break;
+                case UpgradeCat::Item:     break;
+            }
         }
-        if (c == 0) col0End = y;
-        if (c == 4) col4End = y;
-    }
-    for (const Button& b : buttons_)   // where the last item column ends (the creeds go under it)
-        if (b.rect.left > 24.f + 2.5f * 172.f && b.rect.left < 24.f + 3.5f * 172.f)
-            col3End = std::max(col3End, b.rect.top + kRowH);
-
-    // ---- creeds, two columns under the last item column and the modifiers /
-    // relics one: click to grant (or drop) one
-    (void)col0End;
-    {
-        const float px0 = 24.f + 3.f * 172.f;
-        const float y0 = std::max(col3End, col4End) + 34.f;
-        heads_.push_back({{px0 + 2.f, y0 - 20.f}, "CREEDS (click: grant / drop)", theme::textDim});
-        const int rows = (kCreedCount + 1) / 2;
+        heads_.push_back({{26.f, kTop - 20.f}, "BALL / TYPE / ABILITY", theme::textDim});
+        heads_.push_back({{26.f + kColW, kTop - 20.f}, "MODIFIERS / RELICS", theme::textDim});
+        for (int c = 0; c < 2; ++c) {
+            float y = kTop;
+            for (UpgradeKind k : cols[c]) {
+                pickButton(k, 24.f + static_cast<float>(c) * kColW, y, tierColor(upgradeTier(k)));
+                y += kRowH;
+            }
+        }
+        const float px0 = 24.f + 2.f * kColW;
+        heads_.push_back({{px0 + 2.f, kTop - 20.f}, "CREEDS (click: grant / drop)", theme::textDim});
+        const int crows = (kCreedCount + 1) / 2;
         for (int i = 0; i < kCreedCount; ++i) {
             const auto id = static_cast<CreedId>(i);
             const CreedDef& d = creedDef(id);
-            const float y = y0 + static_cast<float>(i % rows) * 24.f;
             Button bt;
-            bt.rect = {px0 + static_cast<float>(i / rows) * 172.f, y, 164.f, 21.f};
+            bt.rect = {px0 + static_cast<float>(i / crows) * kColW, kTop + static_cast<float>(i % crows) * 24.f, 164.f, 21.f};
             bt.label = d.name;
             bt.color = creedColor(d.archetype);
             bt.action = kActCreed + i;
@@ -166,21 +181,14 @@ void DevScreen::rebuild(App& app) {
             bt.tipDesc = std::string("+ ") + d.gain + ".  - " + d.cost + ".";
             buttons_.push_back(bt);
         }
-    }
-
-    // ---- pacts, three columns under the first three item columns
-    {
-        float yEnd = 0.f;
-        for (const Button& b : buttons_)
-            if (b.rect.left < 24.f + 2.5f * 172.f) yEnd = std::max(yEnd, b.rect.top + b.rect.height);
-        const float y0 = yEnd + 34.f;
-        heads_.push_back({{26.f, y0 - 20.f}, "PACTS (click: grant / drop)", theme::textDim});
-        const int rows = (kPactCount + 2) / 3;
+        const float py0 = kTop + static_cast<float>(crows) * 24.f + 40.f;
+        heads_.push_back({{px0 + 2.f, py0 - 20.f}, "PACTS (click: grant / drop)", theme::textDim});
+        const int prows = (kPactCount + 1) / 2;
         for (int i = 0; i < kPactCount; ++i) {
             const auto id = static_cast<PactId>(i);
             const PactDef& d = pactDef(id);
             Button bt;
-            bt.rect = {24.f + static_cast<float>(i / rows) * 172.f, y0 + static_cast<float>(i % rows) * 24.f, 164.f, 21.f};
+            bt.rect = {px0 + static_cast<float>(i / prows) * kColW, py0 + static_cast<float>(i % prows) * 24.f, 164.f, 21.f};
             bt.label = d.name;
             bt.color = theme::pact;
             bt.action = kActPact + i;
@@ -265,6 +273,8 @@ void DevScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
         const int a = b.action;
         if (a < kUpgradeKindCount) {
             app.devGrant(static_cast<UpgradeKind>(a));
+        } else if (a >= kActPage) {
+            gDevPage = a - kActPage;
         } else if (a >= kActPact) {
             app.devTogglePact(static_cast<PactId>(a - kActPact));
         } else if (a >= kActCreed) {
@@ -333,12 +343,6 @@ void DevScreen::draw(App& app, sf::RenderWindow& w) {
         w.draw(lt);
     }
 
-    const char* heads[] = {"BALL / TYPE / ABILITY", "ITEMS", "", "", "MODIFIERS / RELICS"};
-    for (int c = 0; c < 5; ++c) {
-        sf::Text h = makeLabel(f, heads[c], 10, theme::textDim);
-        h.setPosition(26.f + static_cast<float>(c) * 172.f, 96.f);
-        w.draw(h);
-    }
     for (const Head& hd : heads_) {
         sf::Text h = makeLabel(f, hd.text, 10, hd.color);
         h.setPosition(hd.pos + sf::Vector2f{0.f, 4.f});

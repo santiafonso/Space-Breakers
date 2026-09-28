@@ -2097,6 +2097,15 @@ int App::runSnapshots(const std::string& dir) {
 
     push(ScreenId::Dev);
     snapFrame(d + "09_dev.png");
+    {   // its second page (the "Run" tab, top right), then back to the first
+        sf::Event click{};
+        click.type = sf::Event::MouseButtonPressed;
+        click.mouseButton.button = sf::Mouse::Left;
+        const sf::Vector2f runTab{size().x - 330.f + 98.f + 30.f, 71.f}, itemsTab{size().x - 330.f + 30.f, 71.f};
+        stack_.back()->handleEvent(*this, click, runTab);
+        snapFrame(d + "09b_dev_run.png");
+        stack_.back()->handleEvent(*this, click, itemsTab);
+    }
     back();
 
     // A crowded field with every enemy kind, to judge readability under load.

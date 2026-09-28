@@ -777,7 +777,7 @@ enum MetaUnlock {
     MetaLoreGuardian, // Guardian lore                                                    (Guardian)
     MetaStonewall,    // Stonewall      - Guardian balls patch the core on core bounces
     // ---- 2026-09-28 append (never reorder): the Slinger route ----
-    MetaClassSlinger, // Slinger        - Slinger items can appear                        (Slinger)
+    MetaClassSlinger, // Slinger        - Slinger items can appear (its own route, from the centre)
     MetaLoreSlinger,  // Slinger lore
     MetaUnlockCount
 };
@@ -982,9 +982,9 @@ inline const MetaUnlockDef& metaUnlockDef(int u) {
         /* Stonewall */ {"Stonewall", "balls with the Guardian class patch the core up by 0.5 per level on every core bounce",
                          12u, 2, B::Guardian, C, 52, 336.f, 4.f},
         /* Slinger   */ {"Slinger",   "unlocks the Slinger class: its items can appear (throwing and catching)",
-                         18u, 1, B::Slinger,  C, MetaSling, 12.f, 3.f},
+                         18u, 1, B::Slinger,  C,  0,  13.f, 2.f},
         /* SlingerLore*/{"Slinger lore","Slinger items show up 50% more often per level",
-                         10u, 2, B::Slinger,  C, MetaClassSlinger, 12.f, 4.f},
+                         10u, 2, B::Slinger,  C, MetaClassSlinger, 13.f, 3.f},
     };
     return defs[u];
 }
