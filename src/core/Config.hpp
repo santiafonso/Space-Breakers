@@ -390,7 +390,8 @@ inline constexpr float bastionPerWavePerLevel = 1.0f;  // "Bastion" meta node: +
 
 // A run is a fixed sprint: survive to the final wave and you win.
 namespace run {
-inline constexpr int eliteCards = 3;   // an Elite's item pick deals this many cards (others deal 4)
+inline constexpr int choiceCards = 3;  // every pick deals 3 cards (Quartermaster's starter pick and Calling's
+                                       // first-ability pick are the upgrades that deal more)
 inline constexpr float newBallCardWeight = 0.3f;   // an "Extra ball" card weighs this vs 1 for other picks of its tier
 inline constexpr int startBalls = 1;   // every run starts with one ball (more come from picks / pacts)
 inline constexpr int bossWave = 10;    // the miniboss duel
@@ -463,7 +464,8 @@ inline constexpr int priceByTier[5] = {30, 45, 65, 95, 150};
 inline constexpr int priceRepair = 20;     // repairs repairFrac of the core's max HP
 inline constexpr float repairFrac = 0.30f;
 inline constexpr int shopOffers = 3;   // a small shelf...
-inline constexpr int shopMaxItems = 1; // ...with at most one item on it (items are scarce)
+inline constexpr int shopMaxItems = 1; // ...with at most one item on it (items are scarce)...
+inline constexpr float shopItemChance = 0.4f;   // ...and only on this share of visits
 inline constexpr int maxItemLevel = 3;     // forge cap
 // Shop extras (Fase O): one offer is on sale, a mystery box, a paid reroll,
 // selling an item back, and the forge as a paid service.

@@ -120,7 +120,7 @@ private:
     float bannerT_ = 999.f;    // time since the banner started (large = inactive)
 };
 
-// Overlay after an Elite fight or on an Upgrade node: pick 1 of 4 (or skip to
+// Overlay after a fight or on an Upgrade node: pick 1 of 3 (or skip to
 // repair the core). Picks that go on a ball open the Equip picker.
 class ChoiceScreen : public Screen {
 public:

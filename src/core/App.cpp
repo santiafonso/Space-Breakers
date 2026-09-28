@@ -741,7 +741,7 @@ UpgradeKind App::rollPick(RollSource src, const std::vector<UpgradeKind>& exclud
 void App::rollChoices(RollSource src) {
     rollSource_ = src;
     choiceTitle_.clear();
-    choiceCount_ = src == RollSource::Elite ? cfg::run::eliteCards : kChoiceCount;   // items are scarce: 3 to pick from
+    choiceCount_ = cfg::run::choiceCards;
     std::vector<UpgradeKind> taken;
     for (int i = 0; i < choiceCount_; ++i) {
         choices_[i] = rollPick(src, taken);
@@ -762,7 +762,7 @@ void App::rerollChoice(int idx) {
     effects_.flash(theme::accent, 0.25f);
 }
 
-// Recruit node: a new ball (the sure way to get one) plus three free picks
+// Recruit node: a new ball (the sure way to get one) plus two free picks
 // (no items - those come from elites and shops). With the arena full the ball
 // card becomes a random modifier instead.
 void App::rollRecruitChoices() {
@@ -772,9 +772,9 @@ void App::rollRecruitChoices() {
         : static_cast<UpgradeKind>(static_cast<int>(UpgradeKind::HeavyImpact) + rng_.irange(0, kModifierCount - 1));
     rollSource_ = RollSource::Normal;
     choiceTitle_.clear();
-    choiceCount_ = kChoiceCount;
+    choiceCount_ = cfg::run::choiceCards;
     std::vector<UpgradeKind> taken{choices_[0], UpgradeKind::AddBall};
-    for (int t = 0; t < kChoiceCount - 1; ++t) {
+    for (int t = 0; t < choiceCount_ - 1; ++t) {
         choices_[t + 1] = rollPick(RollSource::Normal, taken);
         taken.push_back(choices_[t + 1]);
     }
@@ -1297,12 +1297,6 @@ void App::devWinWave() {
     world_.devWinWave();
 }
 
-void App::devGrantCores(int n) {
-    if (!devMode()) return;
-    data_.meta.cores += static_cast<std::uint32_t>(std::max(0, n));
-    effects_.flash(theme::accent, 0.3f);
-}
-
 void App::devGrantCurrency() {
     if (!devMode()) return;
     data_.meta.cores = std::max(data_.meta.cores, 999999u);
@@ -1385,6 +1379,7 @@ void App::devOpen(DevOpen what) {
         case DevOpen::Shop:         rollShop(); push(ScreenId::Shop); break;
         case DevOpen::Forge:        equipSrc_ = EquipSource::Forge; equipRef_ = -1; push(ScreenId::Equip); break;
         case DevOpen::Upgrade:      openChoice(RollSource::Normal); break;
+        case DevOpen::PostFight:    openChoice(RollSource::PostFight); break;
         case DevOpen::Elite:        openChoice(RollSource::Elite); break;
         case DevOpen::BossTreasure: openChoice(RollSource::Boss); break;
         case DevOpen::Recruit:      rollRecruitChoices(); push(ScreenId::Choice); break;
@@ -1405,15 +1400,6 @@ void App::devOpen(DevOpen what) {
             openMap();
             break;
     }
-}
-
-void App::devCycleGrant() {
-    if (!devMode() || !data_.run.active) return;
-    const auto k = static_cast<UpgradeKind>(devGrantNext_ % kUpgradeKindCount);
-    devGrantNext_ = (devGrantNext_ + 1) % kUpgradeKindCount;
-    applyUpgradeKind(k);
-    effects_.addLabel(std::string("+ ") + upgradeInfo(k).title, {size().x * 0.5f, size().y * 0.4f},
-                      theme::accent, 22, 1.0f);
 }
 
 void App::openPause() {
@@ -1868,7 +1854,6 @@ void App::render() {
 
     effects_.drawOverlay(w);
     if (fade_ > 0.01f) drawDim(w, size(), fade_ * 0.5f);
-    if (devMode()) drawDevOverlay(w);
     if (!capturePath_.empty()) {   // photo mode: grab the finished frame before it's shown
         sf::Texture shot;
         if (shot.create(w.getSize().x, w.getSize().y)) {
@@ -2112,37 +2097,6 @@ int App::runSnapshots(const std::string& dir) {
     openSound();
     snapFrame(d + "20_sound.png");
     return 0;
-}
-
-// A fixed cheat-sheet of the dev keys, top-right on every screen, so there's no
-// need to remember which key does what. Keys are screen-specific: the "run" ones
-// only do anything on the Play screen, "menu" ones on the game menu.
-void App::drawDevOverlay(sf::RenderWindow& w) const {
-    const bool invuln = world_.devInvuln();
-    const std::array<std::pair<const char*, bool>, 11> lines = {{
-        {"- DEV -", true},
-        {"menu / web:", false},
-        {"  C   +999999 cores & prisms", false},
-        {"in a run:", false},
-        {"  N win wave   H heal core", false},
-        {invuln ? "  G invuln: ON   B add ball" : "  G invuln: off   B add ball", invuln},
-        {"  F1  DEV PANEL (items, spawns, speed)", true},
-        {"  U grant next item   C +25 cores", false},
-        {"  TAB   items taken", false},
-        {"env (on Start):", false},
-        {"  SB_WAVE  SB_BALLS  SB_UPGRADES", false},
-    }};
-    const float right = size().x - theme::margin;
-    float y = theme::margin;
-    for (const auto& [text, hot] : lines) {
-        sf::Text t = makeText(font_, text, theme::fsSmall,
-                              hot ? theme::core : theme::accent);
-        const sf::FloatRect b = t.getLocalBounds();
-        t.setOrigin(b.left + b.width, b.top);
-        t.setPosition(right, y);
-        w.draw(t);
-        y += 16.f;
-    }
 }
 
 int App::run() {

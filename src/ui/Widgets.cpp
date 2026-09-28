@@ -273,6 +273,19 @@ void drawTierFrame(sf::RenderWindow& w, sf::FloatRect r, Tier t, float hover, fl
     draw::brackets(w, r, theme::bracket + 3.f, 2.f, withAlpha(col, (0.45f + 0.3f * hover) * alpha), snap);
 }
 
+void drawKindMark(sf::RenderTarget& w, UpgradeCat cat, sf::Vector2f pos, float size, sf::Color color) {
+    switch (cat) {
+        case UpgradeCat::Item:
+            draw::polygon(w, pos, size * 1.2f, 4, kPi / 4.f, color, color);   // a square
+            break;
+        case UpgradeCat::Ability:  draw::polygon(w, pos, size * 1.25f, 4, 0.f, color, color); break;
+        case UpgradeCat::Element:  draw::polygon(w, pos, size * 1.1f, 6, kPi / 6.f, color, color); break;
+        case UpgradeCat::Relic:    draw::disc(w, pos, size, color, color, {1.f, 1.f}, 20); break;
+        case UpgradeCat::Modifier: draw::polygon(w, pos + sf::Vector2f{0.f, size * 0.15f}, size * 1.25f, 3, -kPi / 2.f, color, color); break;
+        case UpgradeCat::NewBall:  draw::ring(w, pos, size, 2.f, color); break;
+    }
+}
+
 void drawPickCard(sf::RenderWindow& w, const sf::Font& font, sf::FloatRect r, UpgradeKind k,
                   const std::vector<BallLoadout>& balls, const PickCardStyle& st) {
     const float a = st.alpha;
@@ -293,9 +306,14 @@ void drawPickCard(sf::RenderWindow& w, const sf::Font& font, sf::FloatRect r, Up
                   withAlpha(kc, 0.f));
     }
     // What it is.
+    // What it is: its kind's mark (and name, unless a shelf header says it).
     const std::string what = upgradeCatName(cat);
-    if (st.showWhat)
-        drawLabel(w, font, what, 12, {r.left + pad, top}, withAlpha(lerpColor(theme::textLo, catColor(cat), 0.6f), a), -1);
+    const sf::Color kindCol = withAlpha(lerpColor(theme::textLo, catColor(cat), 0.6f), a);
+    float whatX = r.left + pad;
+    if (st.showWhat) {
+        drawKindMark(w, cat, {whatX + 4.f, top}, 4.5f, kindCol);
+        drawLabel(w, font, what, 12, {whatX + 14.f, top}, kindCol, -1);
+    }
     // How rare: pips, filled up to the tier, and the tier's name when it fits.
     const sf::Color tc = tierColor(tier);
     const int rank = static_cast<int>(tier);
@@ -310,7 +328,7 @@ void drawPickCard(sf::RenderWindow& w, const sf::Font& font, sf::FloatRect r, Up
     if (!st.showWhat) {
         drawLabel(w, font, tierName(tier), 12, {r.left + pad, top}, withAlpha(tc, a), -1);
     } else {
-        const float whatW = makeLabel(font, what, 12, theme::textLo).getLocalBounds().width;
+        const float whatW = makeLabel(font, what, 12, theme::textLo).getLocalBounds().width + 14.f;
         const float wordW = makeLabel(font, tierName(tier), 12, tc).getLocalBounds().width;
         if (whatW + wordW + 5.f * kPip + 2.f * pad + 12.f < r.width)
             drawLabel(w, font, tierName(tier), 12, {x - 2.f, top}, withAlpha(tc, a), 1);

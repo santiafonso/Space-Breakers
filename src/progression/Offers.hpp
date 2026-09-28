@@ -84,7 +84,7 @@ inline const char* upgradeCatDesc(UpgradeCat c) {
         case UpgradeCat::NewBall:  return "adds one more ball to the arena";
         case UpgradeCat::Element:  return "goes in the ball's type slot (one element per ball; a new one swaps it). Two balls with different elements hitting the same enemy set off a reaction. Taking it again on the same ball levels it up. Doesn't count toward a class.";
         case UpgradeCat::Ability:  return "a timed active in the ball's ability slot: it fires by itself every few seconds. Taking it again on the same ball levels it up. Doesn't count toward a class.";
-        case UpgradeCat::Item:     return "a unique effect for one ball; takes one of its 4 item slots. Its tag counts toward the ball's class: 2 of a tag = that class, 4 = its ascended form. Taking it again on the same ball levels it up (max level 5).";
+        case UpgradeCat::Item:     return "a unique effect for one ball; takes one of its 4 item slots. Its tag counts toward the ball's class: 2 of a tag = that class, 4 = its ascended form. Taking it again on the same ball levels it up (max level 3, each level a big step).";
         case UpgradeCat::Modifier: return "a stat bump for one ball; no slot, stacks without limit";
         case UpgradeCat::Relic:    return "a passive for the whole run, on every ball";
     }

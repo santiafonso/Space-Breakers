@@ -335,7 +335,6 @@ void LoadoutScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse
             case sf::Keyboard::Up:    moveSelection(app, 0, -1); return;
             case sf::Keyboard::Down:  moveSelection(app, 0, 1);  return;
             case sf::Keyboard::E:     app.buyMetaUnlock(selNode_); return;
-            case sf::Keyboard::C:     if (app.devMode()) { app.devGrantCurrency(); return; } break;
             default: break;
         }
     }
@@ -725,18 +724,7 @@ void PlayScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
         app.usePactAbility();
         return;
     }
-    if (app.devMode() && e.type == sf::Event::KeyPressed) {
-        switch (e.key.code) {
-            case sf::Keyboard::N:        app.devWinWave(); return;
-            case sf::Keyboard::H:        app.devHealCore(); return;
-            case sf::Keyboard::G:        app.devToggleInvuln(); return;
-            case sf::Keyboard::B:        app.devAddBall(); return;
-            case sf::Keyboard::U:        app.devCycleGrant(); return;
-            case sf::Keyboard::F1:       app.devOpenPanel(); return;
-            case sf::Keyboard::C:        app.devGrantCores(25); return;
-            default: break;
-        }
-    }
+    if (app.devMode() && isKey(e, sf::Keyboard::F1)) { app.devOpenPanel(); return; }   // SB_DEV: everything is in the panel
     if (e.type == sf::Event::LostFocus) {   // don't fire a throw on alt-tab
         dropHeld(app);
         return;
@@ -1109,7 +1097,7 @@ void drawLoadoutOverlay(App& app, sf::RenderWindow& w, bool paused, const TabPee
                 hotRelic = &k;
                 draw::box(w, row, 0.f, withAlpha(theme::puGolden, 0.10f), withAlpha(theme::puGolden, 0.03f));
             }
-            draw::box(w, {sideX + 12.f, y - 5.f, 3.f, 10.f}, 0.f, tierColor(upgradeTier(k)), tierColor(upgradeTier(k)));
+            drawKindMark(w, UpgradeCat::Relic, {sideX + 14.f, y}, 3.5f, tierColor(upgradeTier(k)));   // relic = circle, lit by rarity
             sf::Text t = makeText(app.font(), upgradeInfo(k).title, theme::fsSmall, hot ? theme::textHi : theme::puGolden);
             const sf::FloatRect tb = t.getLocalBounds();
             t.setOrigin(tb.left, tb.top + tb.height * 0.5f);

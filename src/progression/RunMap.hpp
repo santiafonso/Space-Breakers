@@ -58,7 +58,7 @@ inline const char* mapNodeDesc(MapNodeType t) {
         case MapNodeType::Shop:    return "buy what's on the shelf: items, abilities, relics, modifiers. Sell one item";
         case MapNodeType::Forge:   return "level up one item a ball already carries";
         case MapNodeType::Rest:    return "no fight: the core is repaired to full";
-        case MapNodeType::Upgrade: return "no fight: a free pick of 1 of 4 (no items)";
+        case MapNodeType::Upgrade: return "no fight: a free pick of 1 of 3 (no items)";
         case MapNodeType::Recruit: return "no fight: a new ball, or a free pick";
         case MapNodeType::Boss:    return "the act's boss";
     }

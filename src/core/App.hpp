@@ -136,12 +136,10 @@ public:
     // ---- dev tools: enabled by the SB_DEV env var, no-ops otherwise -----
     bool devMode() const;
     void devWinWave();
-    void devGrantCores(int n);
     void devGrantCurrency();   // top cores + prisms up to a huge pile (game-menu web testing)
     void devHealCore();
     void devToggleInvuln();
     void devAddBall();
-    void devCycleGrant();  // grant the "next" upgrade in the pool
     // ---- the F1 dev panel (SB_DEV only) ----
     void devOpenPanel();
     void devGrant(UpgradeKind k);            // onto devBall()
@@ -153,7 +151,7 @@ public:
     float devTimeScale() const { return devTimeScale_; }
     int devBall() const { return std::min(devBall_, std::max(0, runBallCount() - 1)); }
     void devSetBall(int b) { devBall_ = b; }
-    enum class DevOpen { Shop, Forge, Upgrade, Elite, BossTreasure, Recruit, JumpToBoss, PactBoss, PactStart, AbilityPick };
+    enum class DevOpen { Shop, Forge, Upgrade, Elite, BossTreasure, Recruit, JumpToBoss, PactBoss, PactStart, AbilityPick, PostFight };
     void devOpen(DevOpen what);
     void devTogglePact(PactId id);   // grant it (or drop it, if the run has it)
     void openPause();
@@ -233,7 +231,6 @@ private:
     void handleEvent(const sf::Event& e);
     void update(float frameDt);
     void render();
-    void drawDevOverlay(sf::RenderWindow& w) const;   // dev key cheat-sheet, always top-right in SB_DEV
     // Dev "photo mode" (SB_SNAPSHOT=<dir>): stage every screen, save a PNG of
     // each and quit - a way to look at the UI without playing.
     int runSnapshots(const std::string& dir);
@@ -262,7 +259,7 @@ private:
     TabPeek peek_;   // TAB over every run screen that doesn't run its own (shop, cards, pickers...)
     bool onOptions() const;                  // the Options (sound) screen is on top
     std::array<UpgradeKind, kChoiceCount> choices_{};
-    int choiceCount_ = kChoiceCount;
+    int choiceCount_ = 3;   // cfg::run::choiceCards until a roll sets it
     int lastRunWave_ = 0;
     int lastRunCores_ = 0;
     int lastRunPrisms_ = 0;
@@ -271,7 +268,6 @@ private:
     int bossIronCores_ = 0;
     bool continueUnlocked_ = false;  // snapshot at newRun: has a run ever been won before?
     bool runBanked_ = false;         // this run's cores/prisms have been paid out
-    int devGrantNext_ = 0;
     int devBall_ = 0;              // dev panel: which ball grants go to
     float devTimeScale_ = 1.f;     // dev panel: simulation speed
     EquipSource equipSrc_ = EquipSource::Choice;

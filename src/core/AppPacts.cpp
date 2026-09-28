@@ -433,7 +433,8 @@ void App::rollShopOffers() {
     for (int k : prepaid) taken.push_back(static_cast<UpgradeKind>(k));
     const int count = cfg::gold::shopOffers;
     std::vector<UpgradeKind> fresh;
-    int items = 0;   // at most cfg::gold::shopMaxItems items on the shelf
+    // At most cfg::gold::shopMaxItems items on the shelf, and on most visits none.
+    int items = rng_.range(0.f, 1.f) < cfg::gold::shopItemChance ? 0 : cfg::gold::shopMaxItems;
     for (int i = 0; i < count; ++i) {
         const UpgradeKind k = items >= cfg::gold::shopMaxItems
             ? rollPick(RollSource::Shop, taken, [](UpgradeKind u) { return upgradeCat(u) != UpgradeCat::Item; })

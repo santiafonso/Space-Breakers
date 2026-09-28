@@ -27,7 +27,7 @@ constexpr int kActSpeed = 400;    // + index into kSpeeds
 constexpr int kActOpen = 500;     // + App::DevOpen
 constexpr int kActPact = 600;     // + PactId: grant / drop that pact
 
-enum Misc { WinWave, KillAll, Heal, Invuln, Gold, AddBall, ClearBall };
+enum Misc { WinWave, KillAll, Heal, Invuln, Gold, AddBall, ClearBall, Currency };
 constexpr float kSpeeds[] = {0.25f, 0.5f, 1.f, 2.f, 4.f};
 
 struct SpawnDef { EnemyKind kind; int count; const char* label; };
@@ -40,11 +40,11 @@ constexpr SpawnDef kSpawns[] = {
 struct OpenDef { App::DevOpen what; const char* label; };
 constexpr OpenDef kOpens[] = {
     {App::DevOpen::Shop, "Shop"},       {App::DevOpen::Forge, "Forge"},
-    {App::DevOpen::Upgrade, "Pick (normal)"}, {App::DevOpen::Elite, "Pick (elite)"},
-    {App::DevOpen::BossTreasure, "Boss treasure"}, {App::DevOpen::Recruit, "Recruit"},
-    {App::DevOpen::JumpToBoss, "Jump to boss"},
+    {App::DevOpen::PostFight, "Pick: after fight"}, {App::DevOpen::Elite, "Pick: elite (items)"},
+    {App::DevOpen::Upgrade, "Pick: Upgrade node"}, {App::DevOpen::Recruit, "Recruit"},
+    {App::DevOpen::BossTreasure, "Boss treasure"}, {App::DevOpen::AbilityPick, "First ability pick"},
     {App::DevOpen::PactBoss, "Pact choice (boss)"}, {App::DevOpen::PactStart, "Pact choice (start)"},
-    {App::DevOpen::AbilityPick, "Ability pick (start)"},
+    {App::DevOpen::JumpToBoss, "Jump to boss"},
 };
 constexpr int kOpenCount = static_cast<int>(sizeof(kOpens) / sizeof(kOpens[0]));
 
@@ -89,7 +89,7 @@ void DevScreen::rebuild(App& app) {
     }
     const std::size_t perCol = (items.size() + 2) / 3;
     for (std::size_t i = 0; i < items.size(); ++i) cols[1 + std::min<std::size_t>(2, i / std::max<std::size_t>(1, perCol))].push_back(items[i]);
-    float col0End = 112.f;
+    float col0End = 112.f, col3End = 112.f, col4End = 112.f;
     for (int c = 0; c < 5; ++c) {
         float y = 112.f;
         for (UpgradeKind k : cols[c]) {
@@ -104,17 +104,24 @@ void DevScreen::rebuild(App& app) {
             y += 25.f;
         }
         if (c == 0) col0End = y;
+        if (c == 3) col3End = y;
+        if (c == 4) col4End = y;
     }
 
-    // ---- pacts, under the first column: click to grant (or drop) one
+    // ---- pacts, two columns under the last item column and the modifiers /
+    // relics one: click to grant (or drop) one
+    (void)col0End;
     {
-        float y = col0End + 34.f;
-        heads_.push_back({{26.f, y - 20.f}, "PACTS (click: grant / drop)"});
+        const float px0 = 24.f + 3.f * 172.f;
+        const float y0 = std::max(col3End, col4End) + 34.f;
+        heads_.push_back({{px0 + 2.f, y0 - 20.f}, "PACTS (click: grant / drop)"});
+        const int rows = (kPactCount + 1) / 2;
         for (int i = 0; i < kPactCount; ++i) {
             const auto id = static_cast<PactId>(i);
             const PactDef& d = pactDef(id);
+            const float y = y0 + static_cast<float>(i % rows) * 24.f;
             Button bt;
-            bt.rect = {24.f, y, 164.f, 22.f};
+            bt.rect = {px0 + static_cast<float>(i / rows) * 172.f, y, 164.f, 21.f};
             bt.label = d.name;
             bt.color = pactColor(d.archetype);
             bt.action = kActPact + i;
@@ -122,7 +129,6 @@ void DevScreen::rebuild(App& app) {
             bt.tipTitle = std::string(d.name) + "  -  " + pactArchetypeName(d.archetype);
             bt.tipDesc = std::string("+ ") + d.gain + ".  - " + d.cost + ".";
             buttons_.push_back(bt);
-            y += 25.f;
         }
     }
 
@@ -149,8 +155,9 @@ void DevScreen::rebuild(App& app) {
         {"Heal core", "core back to full"}, {inv ? "Invulnerable: ON" : "Invulnerable: off", "the core takes no damage"},
         {"+100 gold", "for testing the shop"}, {"Add ball", "one more plain ball"},
         {"Clear target ball", "strip the target ball back to nothing"},
+        {"Cores & prisms", "a huge pile of both, for testing the skill web"},
     };
-    for (int i = 0; i < 7; ++i) {
+    for (int i = 0; i < 8; ++i) {
         add(misc[i].first, kActMisc + i, i == Invuln && inv ? theme::core : theme::textLo, i == Invuln && inv,
             misc[i].second, rx + (i % 2) * 158.f, 150.f);
         if (i % 2 == 1) ry += 30.f;
@@ -218,6 +225,7 @@ void DevScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
                 case Gold:      app.devGold(100); break;
                 case AddBall:   app.devAddBall(); break;
                 case ClearBall: app.devClearBall(); break;
+                case Currency:  app.devGrantCurrency(); break;
                 default: break;
             }
         } else if (a >= kActBall) {

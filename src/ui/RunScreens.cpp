@@ -720,7 +720,10 @@ void ShopScreen::draw(App& app, sf::RenderWindow& w) {
                 const sf::FloatRect a0 = offerRect(app, sh.order[static_cast<std::size_t>(k)]);
                 const sf::FloatRect a1 = offerRect(app, sh.order[static_cast<std::size_t>(e)]);
                 const float hy = a0.top - 34.f;
-                drawLabel(w, f, shelfName(g), 13, {a0.left, hy}, withAlpha(shelfColor(g), ha), -1);
+                const UpgradeCat cats[] = {UpgradeCat::Item, UpgradeCat::Ability, UpgradeCat::Element,
+                                           UpgradeCat::Relic, UpgradeCat::Modifier, UpgradeCat::NewBall};
+                drawKindMark(w, cats[g], {a0.left + 4.f, hy}, 4.5f, withAlpha(shelfColor(g), ha));
+                drawLabel(w, f, shelfName(g), 13, {a0.left + 15.f, hy}, withAlpha(shelfColor(g), ha), -1);
                 draw::line(w, {a0.left, hy + 12.f}, {a1.left + a1.width, hy + 12.f}, 1.f,
                            withAlpha(shelfColor(g), 0.35f * ha));
             }

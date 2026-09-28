@@ -96,6 +96,11 @@ void drawTierFrame(sf::RenderWindow& w, sf::FloatRect r, Tier t, float hover, fl
 void drawClassCardMark(sf::RenderWindow& w, const sf::Font& font, sf::FloatRect r, UpgradeKind k,
                        const std::vector<BallLoadout>& balls, float alpha);
 
+// A pick kind's small mark, the same wherever it's shown: item = square,
+// ability = diamond, element = hexagon, relic = circle, modifier = triangle,
+// new ball = ring. `size` is its radius.
+void drawKindMark(sf::RenderTarget& w, UpgradeCat cat, sf::Vector2f pos, float size, sf::Color color);
+
 // A whole pick card, with its three facts kept apart so they never blur:
 // WHAT it is (item / relic / ability...) = a plain label top-left; HOW RARE =
 // 1..5 pips (and the tier word when it fits) top-right plus the frame's edge;

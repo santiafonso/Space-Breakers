@@ -1776,6 +1776,21 @@ Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
     de su color y dos anillos que se expanden (`Ball::elemPulse`,
     `drawElementPulse`, `KnownClasses::element`).
 
+- **3 cartas, formas por tipo, dev solo F1 (2026-09-27).**
+  - Toda elección reparte **3 cartas** (`cfg::run::choiceCards`, Recruit =
+    pelota + 2); las mejoras que ya daban más (Quartermaster: kit de 4;
+    Calling: 4ª carta en la primera habilidad) siguen igual.
+  - La tienda solo trae item en el **40% de las visitas** (`shopItemChance`).
+    Sonda de reparto (4000 tiradas por origen, SB_DEV=1): post-combate 100%
+    modificadores; Upgrade/Recruit 0 items; élite 100% items; tesoro 80% items.
+  - **Marca de tipo** discreta junto al nombre del tipo (carta, encabezado de
+    la tienda, reliquias del TAB): item = cuadrado, habilidad = rombo,
+    elemento = hexágono, reliquia = círculo, modificador = triángulo, pelota =
+    anillo (`drawKindMark`). Los textos de las cartas se mantienen.
+  - **Modo dev:** solo F1 (panel). Se sacaron la chuleta de teclas y los
+    atajos N/H/G/B/U/C; el panel suma "Cores & prisms", "Pick: after fight",
+    "Pick: elite (items)", "First ability pick", y los pactos en 2 columnas.
+
 - **Fase 2 — Jefe tras la oleada 10.** Da upgrades de pelota (viento/agua/
   piedra). Extiende la run mas alla de 10 en "modo infinito" opcional.
 - **Fase 3 — Variedad.** Repulsor, bumper, rampa. Corredor, tanque, escindido.
