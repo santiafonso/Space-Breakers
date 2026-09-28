@@ -1763,8 +1763,15 @@ Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
   - **Clase = color sólido, a la izquierda.** Lomo grueso + tinte + insignia
     en la carta; en el panel, el item es un chip teñido de su clase con lomo.
     La cabecera del panel muestra solo las clases (ya no el elemento).
-  - **Tipo (elemento) = píldora** de su color (casillero y alrededor del
-    nombre en la carta). **Habilidad = corchetes cian.**
+  - **Tipo (elemento) = píldora** de su color alrededor del nombre en la
+    carta; **habilidad = corchetes cian**.
+  - **Panel de la pelota (TAB / equipar), elegido por la usuaria:** la
+    identidad arriba, el equipo abajo. Cabecera: **tipo = hexágono** de su
+    color a la izquierda (con su nombre), la pelota al medio, **habilidades =
+    rombos cian** a la derecha (1 grande o 2–3 chicos; nivel adentro, nombre
+    debajo si hay una sola y entra), clases debajo. Abajo solo los 4 items
+    como chips. Al equipar, los destinos válidos tienen un halo.
+    (`slotRect`, `kPanelHeadY`, `kPanelItemsTop`, `kPanelH` 272.)
   - **Elemento en la pelota:** borde más grueso con halo; al ganar uno, flash
     de su color y dos anillos que se expanden (`Ball::elemPulse`,
     `drawElementPulse`, `KnownClasses::element`).

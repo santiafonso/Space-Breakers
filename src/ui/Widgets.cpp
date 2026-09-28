@@ -205,20 +205,21 @@ sf::FloatRect slotRect(sf::Vector2f c, int slot, const BallLoadout& L) {
     const float wd = kPanelW - 24.f;
     const float top = c.y - kPanelH * 0.5f;
     if (isItemSlot(slot)) {
-        const float cy = top + 92.f + static_cast<float>(slot) * kSlotStep;
+        const float cy = top + kPanelItemsTop + static_cast<float>(slot) * kSlotStep;
         return {c.x - wd * 0.5f, cy - kSlotH * 0.5f, wd, kSlotH};
     }
-    if (slot == kSlotType) {
-        const float cy = top + 92.f + static_cast<float>(kBallSlots) * kSlotStep + 8.f;
-        return {c.x - wd * 0.5f, cy - kSlotH * 0.5f, wd, kSlotH};
+    const float hy = top + kPanelHeadY;
+    if (slot == kSlotType) {   // a circle left of the ball
+        const float r = 17.f;
+        return {c.x - 58.f - r, hy - r, 2.f * r, 2.f * r};
     }
-    if (isAbilitySlot(slot)) {
+    if (isAbilitySlot(slot)) {   // diamonds right of the ball: 1 big, 2 or 3 smaller side by side
         const int n = abilityBoxes(L);
         const int i = slot - kSlotAbility;
-        const float gap = 4.f;
-        const float bw = (wd - gap * static_cast<float>(n - 1)) / static_cast<float>(n);
-        const float cy = top + 92.f + static_cast<float>(kBallSlots + 1) * kSlotStep + 8.f;
-        return {c.x - wd * 0.5f + static_cast<float>(i) * (bw + gap), cy - kSlotH * 0.5f, bw, kSlotH};
+        const float r = n == 1 ? 16.f : (n == 2 ? 12.5f : 10.f);
+        const float step = n == 1 ? 0.f : (n == 2 ? 27.f : 21.f);
+        const float x = c.x + 58.f + (static_cast<float>(i) - 0.5f * static_cast<float>(n - 1)) * step;
+        return {x - r, hy - r, 2.f * r, 2.f * r};
     }
     return {};
 }
@@ -440,7 +441,7 @@ void drawLoadoutPanel(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f c,
     const int nRoles = L.roles(roles);
     const ItemTag asc = L.ascended();
     const float r = L.hasRole(ItemTag::Guardian) ? 16.f : 13.f;
-    const sf::Vector2f bp{c.x, top + 28.f};
+    const sf::Vector2f bp{c.x, top + kPanelHeadY};
     BallLook look;
     look.roles = L.roleMask();
     look.ascended = roleBit(tagRole(asc));
@@ -482,16 +483,16 @@ void drawLoadoutPanel(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f c,
         sf::Text t = makeText(font, str, fs, withAlpha(col, a));
         const sf::FloatRect b = t.getLocalBounds();
         t.setOrigin(b.left, b.top + b.height * 0.5f);
-        t.setPosition(std::round(x), std::round(top + 60.f));
+        t.setPosition(std::round(x), std::round(top + 84.f));
         w.draw(t);
         x += advance(str, fs);
     }
 
-    // One slot, its kind told by shape and colour, never by words:
-    //  item   = a square chip tinted in its class colour with a solid class
-    //           spine on the left and its rarity as pips on the right;
-    //  type   = a pill in the element's colour;
-    //  ability= cyan corner brackets.
+    // One slot, its kind told by shape, colour and place, never by words:
+    //  item    = a square chip tinted in its class colour with a solid class
+    //            spine on the left and its rarity as pips on the right (below);
+    //  type    = a hexagon of the element's colour (header, left of the ball);
+    //  ability = a cyan diamond (header, right of the ball).
     // Empty slots keep the shape, faint. While a pick is being placed, the
     // slots that take it are lit.
     auto slotBox = [&](int s, const std::string& emptyLabel, bool asleep) {
@@ -504,30 +505,53 @@ void drawLoadoutPanel(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f c,
         const float lit = hot ? 1.f : (takes ? 0.6f : 0.f);
         const unsigned size = sr.width > 90.f ? theme::fsSmall : 11u;
 
-        if (s == kSlotType) {
-            const sf::Color pc = kind >= 0 ? elementColor(L.element()) : theme::textDim;
-            draw::box(w, sr, sr.height * 0.5f, withAlpha(pc, (kind >= 0 ? 0.20f : 0.04f) + 0.1f * lit),
-                      withAlpha(pc, (kind >= 0 ? 0.08f : 0.02f)), withAlpha(pc, (kind >= 0 ? 0.85f : 0.3f + 0.4f * lit) * sa),
-                      1.5f);
+        if (s == kSlotType) {   // the type: a hexagon of the element's colour, its name under it
+            const sf::Vector2f pc{sr.left + sr.width * 0.5f, cy};
+            const float r = sr.width * 0.5f;
+            constexpr float kHexRot = kPi / 6.f;   // flat top
+            if (takes) draw::polygonOutline(w, pc, r + 5.f, 6, kHexRot, 1.5f, withAlpha(theme::accent, 0.7f * sa));
             if (kind < 0) {
-                drawLabel(w, font, emptyLabel, 9, {sr.left + sr.width * 0.5f, cy}, withAlpha(theme::textDim, sa));
+                draw::polygonOutline(w, pc, r, 6, kHexRot, 1.5f, withAlpha(theme::textDim, (0.45f + 0.4f * lit) * sa));
                 return;
             }
-            std::string t = upgradeInfo(static_cast<UpgradeKind>(kind)).title;
-            if (L.levelAt(s) > 1) t += "  Lv" + std::to_string(L.levelAt(s));
-            drawCentered(w, font, t, size, {sr.left + sr.width * 0.5f, cy - 1.f}, withAlpha(lerpColor(pc, sf::Color::White, 0.2f), sa));
+            const sf::Color ecol = elementColor(L.element());
+            draw::polygon(w, pc, r, 6, kHexRot, withAlpha(lerpColor(ecol, theme::bgDeep, 0.35f), 0.95f * sa),
+                          withAlpha(lerpColor(ecol, theme::bgDeep, 0.6f), 0.95f * sa));
+            draw::polygonOutline(w, pc, r, 6, kHexRot, 2.f,
+                                 withAlpha(lerpColor(ecol, sf::Color::White, 0.2f), (0.9f + 0.1f * lit) * sa));
+            if (L.levelAt(s) > 1)
+                drawCentered(w, font, std::to_string(L.levelAt(s)), 12, {pc.x, pc.y - 1.f}, withAlpha(theme::textHi, sa));
+            sf::Text nm = makeText(font, elementName(L.element()), 12, withAlpha(ecol, sa));
+            centerOrigin(nm);
+            nm.setPosition(std::round(pc.x), std::round(pc.y + r + 12.f));
+            w.draw(nm);
             return;
         }
-        if (isAbilitySlot(s)) {
-            draw::box(w, sr, 0.f, withAlpha(theme::ability, 0.05f * lit * sa), withAlpha(theme::ability, 0.02f * sa));
-            draw::brackets(w, sr, 7.f, 1.5f, withAlpha(theme::ability, (kind >= 0 ? 0.85f : 0.3f + 0.4f * lit) * sa));
+        if (isAbilitySlot(s)) {   // an ability: a cyan diamond; its name under it when there's one
+            const sf::Vector2f pc{sr.left + sr.width * 0.5f, cy};
+            const float r = sr.width * 0.5f;
+            if (takes) draw::polygonOutline(w, pc, r * 1.15f + 5.f, 4, 0.f, 1.5f, withAlpha(theme::accent, 0.7f * sa));
             if (kind < 0) {
-                drawLabel(w, font, emptyLabel, 9, {sr.left + sr.width * 0.5f, cy}, withAlpha(theme::textDim, sa));
+                draw::polygonOutline(w, pc, r * 1.15f, 4, 0.f, 1.5f,
+                                     withAlpha(theme::ability, (0.3f + 0.4f * lit) * sa));
                 return;
             }
-            std::string t = upgradeInfo(static_cast<UpgradeKind>(kind)).title;
-            if (L.levelAt(s) > 1) t += (sr.width > 90.f ? "  Lv" : " ") + std::to_string(L.levelAt(s));
-            drawCentered(w, font, t, size, {sr.left + sr.width * 0.5f, cy - 1.f}, withAlpha(theme::ability, sa));
+            draw::polygon(w, pc, r * 1.15f, 4, 0.f, withAlpha(lerpColor(theme::ability, theme::bgDeep, 0.4f), 0.95f * sa),
+                          withAlpha(lerpColor(theme::ability, theme::bgDeep, 0.65f), 0.95f * sa));
+            draw::polygonOutline(w, pc, r * 1.15f, 4, 0.f, 2.f,
+                                 withAlpha(lerpColor(theme::ability, sf::Color::White, 0.25f), (0.9f + 0.1f * lit) * sa));
+            if (L.levelAt(s) > 1)
+                drawCentered(w, font, std::to_string(L.levelAt(s)), r > 12.f ? 12u : 11u, {pc.x, pc.y - 1.f},
+                             withAlpha(theme::textHi, sa));
+            if (abilityBoxes(L) == 1) {
+                sf::Text nm = makeText(font, upgradeInfo(static_cast<UpgradeKind>(kind)).title, 12,
+                                       withAlpha(theme::ability, sa));
+                if (nm.getLocalBounds().width < 70.f) {
+                    centerOrigin(nm);
+                    nm.setPosition(std::round(pc.x), std::round(pc.y + r * 1.15f + 11.f));
+                    w.draw(nm);
+                }
+            }
             return;
         }
         // an item slot
@@ -572,7 +596,7 @@ int panelPartAt(sf::Vector2f c, sf::Vector2f mouse, const BallLoadout& L) {
     for (int s = 0; s < kSlotAbility + abilityBoxes(L); ++s)
         if (slotRect(c, s, L).contains(mouse)) return s;
     const float top = c.y - kPanelH * 0.5f;
-    if (mouse.y < top + 74.f) return kPanelPartBall;
+    if (mouse.y < top + 98.f) return kPanelPartBall;
     if (mouse.y > c.y + kPanelH * 0.5f - 32.f) return kPanelPartMods;
     return -1;
 }

@@ -56,11 +56,16 @@ std::vector<std::string> wrapText(const sf::Font& font, const std::string& str, 
                                   float maxW);
 
 // ---- ball loadout panels: one ball's look, classes, slots, modifiers ----
+// The ball's identity sits in the header - its type as a circle on the left,
+// its abilities as cyan diamonds on the right, the ball between - and its
+// gear below: the 4 item slots as chips.
 inline constexpr float kPanelW = 180.f;
-inline constexpr float kPanelH = 294.f;
+inline constexpr float kPanelH = 272.f;
 inline constexpr float kPanelGap = 16.f;
-inline constexpr float kSlotH = 23.f;
-inline constexpr float kSlotStep = 27.f;
+inline constexpr float kSlotH = 26.f;
+inline constexpr float kSlotStep = 31.f;
+inline constexpr float kPanelHeadY = 32.f;     // header row (type / ball / abilities), from the panel top
+inline constexpr float kPanelItemsTop = 118.f; // first item slot's centre, from the panel top
 
 // How much a row of n loadout panels can be magnified to use the screen
 // (`reserve` = width kept for something beside the row): few balls, big panels.
