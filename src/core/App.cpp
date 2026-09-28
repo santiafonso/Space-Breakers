@@ -16,6 +16,7 @@
 #include "platform/Save.hpp"
 #include "render/Draw.hpp"
 #include "ui/CreedScreen.hpp"
+#include "ui/PactScreen.hpp"
 #include "ui/Screens.hpp"
 #include "ui/SoundScreen.hpp"
 #include "ui/UiSound.hpp"
@@ -156,6 +157,7 @@ WorldParams App::params() const {
         p.elemMult[i + 1] = 1.f + cfg::element::powerPerLevel * static_cast<float>(std::max(0, lvl - 1));
     }
     foldCreeds(p);   // Fase O: the run's creeds
+    foldPacts(p);    // the run's pacts
     return p;
 }
 
@@ -332,6 +334,20 @@ BallSpec App::ballSpec(const BallLoadout& L) const {
 std::vector<BallSpec> App::ballSpecs() const {
     std::vector<BallSpec> v;
     for (const BallLoadout& b : data_.run.balls) v.push_back(ballSpec(b));
+    if (hasPact(PactId::GlassEdge))   // "Glass Edge": every ball crits more
+        for (BallSpec& s : v) s.mods.critChance += cfg::pact::glassCrit;
+    if (hasPact(PactId::Colossus)) {   // "Colossus": one giant, the rest carry less
+        const int big = colossusBall();
+        for (int i = 0; i < static_cast<int>(v.size()); ++i) {
+            BallMods& m = v[static_cast<std::size_t>(i)].mods;
+            if (i == big) {
+                m.damageMult *= cfg::pact::colossusMul;
+                m.radiusMult *= cfg::pact::colossusMul;
+            } else {
+                m.damageMult *= cfg::pact::colossusOthers;
+            }
+        }
+    }
     return v;
 }
 
@@ -469,6 +485,7 @@ std::unique_ptr<Screen> App::makeScreen(ScreenId id) {
         case ScreenId::Creed:    return std::make_unique<CreedScreen>();
         case ScreenId::Sound:   return std::make_unique<SoundScreen>();
         case ScreenId::AbilityPick: return std::make_unique<AbilityPickScreen>();
+        case ScreenId::Altar:   return std::make_unique<PactScreen>();
     }
     return std::make_unique<MenuScreen>();
 }
@@ -483,7 +500,7 @@ void App::replaceStack(ScreenId id) {
 
 void App::push(ScreenId id) {
     switch (id) {   // a soft cue as it opens: cards being dealt, or a plain panel
-        case ScreenId::Choice: case ScreenId::Shop: case ScreenId::Creed: case ScreenId::AbilityPick:
+        case ScreenId::Choice: case ScreenId::Shop: case ScreenId::Creed: case ScreenId::AbilityPick: case ScreenId::Altar:
             audio_.cardsDealt();
             break;
         case ScreenId::Play: case ScreenId::Dev: break;
@@ -927,7 +944,10 @@ void App::applyUpgrade(int idx) {
 
 // ---------------------------------------------------------------- path map
 
-void App::openMap() { push(ScreenId::Map); }
+void App::openMap() {
+    revealAltarPath();   // one step from the boss with the streak earned: the hidden Altar
+    push(ScreenId::Map);
+}
 
 bool App::mapNodeOpen(int node) const {
     const RunState& r = data_.run;
@@ -975,6 +995,13 @@ void App::travelTo(int node) {
             r.wave = wave;
             rollShop();
             push(ScreenId::Shop);
+            break;
+        case MapNodeType::Altar:   // a pact; the hidden one sits on the boss row, so the wave stays put
+            if (n.row < r.map.bossRow()) r.wave = wave;
+            if (!openPactChoice()) {
+                effects_.addLabel("the altar is silent", mid, theme::textLo, 22, 1.2f);
+                openMap();
+            }
             break;
         case MapNodeType::Forge: {
             r.wave = wave;
@@ -1261,6 +1288,14 @@ void App::continuePastBoss() {
     r.mapRow = 0;
     r.phoenixUsedAct = false;
     r.repairedThisAct = false;   // "Iron core": a fresh streak for the new act
+    r.cleanStreak = 0;           // the hidden Altar path starts over
+    r.altarState = 0;
+    r.altarReveal = false;
+    if (hasPact(PactId::Horde) && static_cast<int>(r.balls.size()) < cfg::ball::maxBalls) {   // "Horde": a ball per boss
+        r.balls.push_back(BallLoadout{});
+        syncWorldBalls();
+        effects_.addLabel("HORDE  a new ball joins", {size().x * 0.5f, size().y * 0.18f}, theme::pact, 24, 1.6f);
+    }
     world_.setPhoenix((r.mods.phoenix ? 1 : 0) + r.lastStandLeft);   // "Phoenix" recharges for the new act
     // After act 1 a creed first (Fase O); every boss: the treasure (an Epic /
     // Legendary pick), then the map.
@@ -1405,6 +1440,10 @@ void App::devOpen(DevOpen what) {
         case DevOpen::CreedStart:
             if (!openCreedChoice(what == DevOpen::CreedBoss ? CreedSource::Boss : CreedSource::Start))
                 effects_.addLabel("no creed left to offer", {size().x * 0.5f, size().y * 0.5f}, theme::coreLow, 22, 1.2f);
+            break;
+        case DevOpen::Altar:
+            if (!openPactChoice(false))
+                effects_.addLabel("no pact left to offer", {size().x * 0.5f, size().y * 0.5f}, theme::coreLow, 22, 1.2f);
             break;
         case DevOpen::AbilityPick:  // the first-ability pick, on the first ball, as at the run start
             if (!openAbilityChoice())
@@ -1719,6 +1758,7 @@ void App::processEvents(const FrameEvents& ev) {
                               win ? theme::puGolden : theme::coreLow, 24, 1.3f);
         }
         r.gold += pay;
+        notePactFight(flawless);   // the hidden Altar path
         effects_.addLabel("+" + std::to_string(pay) + " gold", {size().x * 0.5f, size().y * 0.4f},
                           theme::puGolden, 26, 1.2f);
         if (flawless) {
@@ -1801,7 +1841,7 @@ void App::update(float frameDt) {
             const float t = 1.f - waveIntro_ / cfg::app::waveIntroTime;  // 0 -> 1
             simDt *= cfg::app::waveIntroSlow + (1.f - cfg::app::waveIntroSlow) * t;
         }
-        if (aiming_ && aimT_ < cfg::app::aimSlowMax) {   // slingshot aim: bullet time, briefly
+        if (aiming_ && aimSlows() && aimT_ < cfg::app::aimSlowMax) {   // "Heavy Arm" pact: none   // slingshot aim: bullet time, briefly
             aimT_ += frameDt;
             simDt *= cfg::app::aimTimeScale;
         }
@@ -2094,6 +2134,7 @@ int App::runSnapshots(const std::string& dir) {
     snapFrame(d + "13_pause.png");
     openStats();
     snapFrame(d + "14_stats.png");
+    while (stack_.size() > 1 && !simulating()) back();   // close Stats and Pause: back in the fight
 
     // Fase O: the creed choice (Oath: 4 cards), a fight under two creeds, the
     // shop's extras, the sell picker, the map with creeds and the bigger web.
@@ -2109,6 +2150,13 @@ int App::runSnapshots(const std::string& dir) {
     world_.devSpawn(EnemyKind::Brute, 1);
     for (int i = 0; i < 150; ++i) update(1.f / 60.f);
     capturePath_ = d + "11_creed_fight.png";
+    render();
+    for (PactId id : {PactId::VoidWalls, PactId::Mirror, PactId::Frenzy, PactId::Stillness, PactId::LastBreath,
+                      PactId::Colossus, PactId::Elemental, PactId::Horde})
+        grantPact(id);
+    world_.devSpawn(EnemyKind::Grunt, 10);
+    for (int i = 0; i < 240; ++i) update(1.f / 60.f);
+    capturePath_ = d + "23_pact_fight.png";
     render();
 
     r.gold = 240;
@@ -2128,6 +2176,28 @@ int App::runSnapshots(const std::string& dir) {
     tab.type = sf::Event::KeyReleased;
     stack_.back()->handleEvent(*this, tab, {0.f, 0.f});
     back();
+
+    // Pacts: the Altar, then the hidden path opening beside the boss.
+    if (openPactChoice(false)) {
+        snapFrame(d + "21_altar.png");
+        back();
+    }
+    grantPact(PactId::Juggler);
+    {
+        RunState& rr = data_.run;
+        for (int i = 0; i < static_cast<int>(rr.map.nodes.size()); ++i)
+            if (rr.map.nodes[static_cast<std::size_t>(i)].row == mapRows(rr.map.act)) {
+                rr.mapNode = i;
+                rr.mapRow = rr.map.nodes[static_cast<std::size_t>(i)].row;
+                rr.map.nodes[static_cast<std::size_t>(i)].visited = true;
+                break;
+            }
+        rr.altarState = 1;
+        openMap();
+        snapFrame(d + "22a_altar_path.png");   // 1.2 s in: the path is drawing itself
+        snapFrame(d + "22b_altar_open.png");   // done: the Altar is lit
+        back();
+    }
 
     data_.run = RunState{};   // back in the game menu, a well-grown web
     for (int u : {MetaChannel, MetaClassMage, MetaLoreMage, MetaAbilityBulwark, MetaFireItem, MetaVenom, MetaReroll,

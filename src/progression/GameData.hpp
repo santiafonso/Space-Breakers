@@ -7,6 +7,7 @@
 #include "platform/SoundSettings.hpp"
 #include "progression/Offers.hpp"
 #include "progression/Creeds.hpp"
+#include "progression/Pacts.hpp"
 #include "progression/RunMap.hpp"
 
 namespace sb {
@@ -94,6 +95,20 @@ struct RunState {
             if (p == static_cast<int>(id)) return true;
         return false;
     }
+
+    // Pacts (2026-09-28): PactId values, any number. Found at an Altar.
+    std::vector<int> pacts;
+    bool hasPact(PactId id) const {
+        for (int p : pacts)
+            if (p == static_cast<int>(id)) return true;
+        return false;
+    }
+    // The hidden Altar path: flawless fights in a row this act (a fight that
+    // lets anything reach the core resets it; stops in between don't), and
+    // 0 = not earned / 1 = earned, still hidden / 2 = revealed this act.
+    int cleanStreak = 0;
+    int altarState = 0;
+    bool altarReveal = false;         // just revealed: the map plays the "a path opens" animation
 
     int lastStandLeft = 0;            // "Last stand" web node: once-per-run core save still unused
     bool phoenixUsedAct = false;      // the Phoenix relic already fired this act

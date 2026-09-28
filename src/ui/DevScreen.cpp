@@ -26,6 +26,7 @@ constexpr int kActSpawn = 300;    // + EnemyKind
 constexpr int kActSpeed = 400;    // + index into kSpeeds
 constexpr int kActOpen = 500;     // + App::DevOpen
 constexpr int kActCreed = 600;     // + CreedId: grant / drop that creed
+constexpr int kActPact = 700;      // + PactId: grant / drop that pact
 
 enum Misc { WinWave, KillAll, Heal, Invuln, Gold, AddBall, ClearBall, Currency };
 constexpr float kSpeeds[] = {0.25f, 0.5f, 1.f, 2.f, 4.f};
@@ -46,7 +47,7 @@ constexpr OpenDef kOpens[] = {
     {App::DevOpen::Upgrade, "Pick: Upgrade node"}, {App::DevOpen::Recruit, "Recruit"},
     {App::DevOpen::BossTreasure, "Boss treasure"}, {App::DevOpen::AbilityPick, "First ability pick"},
     {App::DevOpen::CreedBoss, "Creed choice (boss)"}, {App::DevOpen::CreedStart, "Creed choice (start)"},
-    {App::DevOpen::JumpToBoss, "Jump to boss"},
+    {App::DevOpen::Altar, "Altar (pacts)"},    {App::DevOpen::JumpToBoss, "Jump to boss"},
 };
 constexpr int kOpenCount = static_cast<int>(sizeof(kOpens) / sizeof(kOpens[0]));
 
@@ -167,6 +168,29 @@ void DevScreen::rebuild(App& app) {
         }
     }
 
+    // ---- pacts, three columns under the first three item columns
+    {
+        float yEnd = 0.f;
+        for (const Button& b : buttons_)
+            if (b.rect.left < 24.f + 2.5f * 172.f) yEnd = std::max(yEnd, b.rect.top + b.rect.height);
+        const float y0 = yEnd + 34.f;
+        heads_.push_back({{26.f, y0 - 20.f}, "PACTS (click: grant / drop)", theme::textDim});
+        const int rows = (kPactCount + 2) / 3;
+        for (int i = 0; i < kPactCount; ++i) {
+            const auto id = static_cast<PactId>(i);
+            const PactDef& d = pactDef(id);
+            Button bt;
+            bt.rect = {24.f + static_cast<float>(i / rows) * 172.f, y0 + static_cast<float>(i % rows) * 24.f, 164.f, 21.f};
+            bt.label = d.name;
+            bt.color = theme::pact;
+            bt.action = kActPact + i;
+            bt.on = app.hasPact(id);
+            bt.tipTitle = std::string("Pact: ") + d.name;
+            bt.tipDesc = std::string("+ ") + d.gain + ".  - " + d.cost + ".";
+            buttons_.push_back(bt);
+        }
+    }
+
     // ---- right column: actions, spawns, speed, screens
     const float rx = s.x - 330.f;
     float ry = 112.f;
@@ -241,6 +265,8 @@ void DevScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
         const int a = b.action;
         if (a < kUpgradeKindCount) {
             app.devGrant(static_cast<UpgradeKind>(a));
+        } else if (a >= kActPact) {
+            app.devTogglePact(static_cast<PactId>(a - kActPact));
         } else if (a >= kActCreed) {
             app.devToggleCreed(static_cast<CreedId>(a - kActCreed));
         } else if (a >= kActOpen) {

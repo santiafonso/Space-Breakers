@@ -199,6 +199,17 @@ private:
     float clock_ = 0.f;
     sf::Vector2f mouse_;
     TabPeek peek_;            // TAB: the same loadout overlay as in a fight
+    // Choosing the way: the link to the node under the pointer lights up and
+    // flows (hoverGlow_ eases in); a click sends a spark along it before the
+    // stop opens (travelTo_ / travelT_).
+    int glowNode_ = -1;
+    float hoverGlow_ = 0.f;
+    int travelTo_ = -1;
+    float travelT_ = 0.f;
+    // The hidden Altar path: revealT_ >= 0 while it draws itself in.
+    int altarNode_ = -1;
+    float revealT_ = -1.f;
+    sf::Vector2f travelFrom(App& app) const;   // where a trip starts: your node, or below row 1
 };
 
 // The F1 dev panel (SB_DEV): grant any pick to a chosen ball, spawn enemy

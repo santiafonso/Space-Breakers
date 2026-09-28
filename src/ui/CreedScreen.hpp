@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string>
+
 #include <SFML/Graphics.hpp>
 
 #include "progression/Creeds.hpp"
@@ -27,6 +29,13 @@ private:
     float clock_ = 0.f;
 };
 
+// A big two-part rule card (creeds, pacts): a coloured cap, a headline and a
+// hint, the name, then GAIN and COST. `a` = alpha, `h` = hover 0..1, `pulse`
+// = the halo's breathing 0..1.
+void drawRuleCard(sf::RenderWindow& w, const sf::Font& f, sf::FloatRect r, sf::Color col, float a, float h,
+                  float pulse, const std::string& head, const std::string& hint, const std::string& name,
+                  const std::string& gain, const std::string& cost);
+
 // Archetype colour: the creed cards, chips and the web's Creeds branch share it.
 sf::Color creedColor(CreedArchetype a);
 
@@ -34,6 +43,7 @@ sf::Color creedColor(CreedArchetype a);
 // when `centered`). Hovering a chip shows what the creed does when `tips`.
 // Returns true if a chip is under the pointer.
 bool drawCreedStrip(App& app, sf::RenderWindow& w, sf::Vector2f pos, bool centered, sf::Vector2f mouse, bool tips);
+float creedStripWidth(App& app);   // how wide that row of chips is
 
 // In a fight: the creed chips bottom-left (+ the Nova charge), UI view.
 void drawCreedHud(App& app, sf::RenderWindow& w, sf::Vector2f mouse, bool tips);

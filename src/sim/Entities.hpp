@@ -9,6 +9,7 @@
 #include "core/Theme.hpp"
 #include "sim/Classes.hpp"
 #include "sim/CreedRules.hpp"
+#include "sim/PactRules.hpp"
 
 namespace sb {
 
@@ -185,6 +186,8 @@ struct Ball {
     float ricochetT = 0.f;   // "Ricochet": seconds of post-wall-bounce damage bonus left
     float catchBonus = 0.f;  // catch reward: the next hit x (1 + this) (0 = unarmed)...
     float catchT = 0.f;      // ...for this many more seconds
+    float sinceThrow = 0.f;  // "Quick Hands" pact: seconds since you last threw it
+    int juggle = 0;          // "Juggler" pact: catches in a row without touching the core
     std::deque<sf::Vector2f> trail;
     std::deque<sf::Vector2f> waterTrail;   // water ball only: the damaging "worm" wake
     int owner = -1;          // index of the (real) ball this is / was copied from - reactions need two owners
@@ -455,6 +458,7 @@ struct WorldParams {
     float markMul = 1.35f;        // any hit vs a Support-marked enemy x this (cfg::role::markDamageMul + web "Rally")
 
     CreedRules creed;               // the run's creeds (sim/CreedRules.hpp); defaults = none
+    PactRules pact;                 // the run's pacts (sim/PactRules.hpp); defaults = none
 };
 
 }  // namespace sb

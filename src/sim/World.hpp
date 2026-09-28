@@ -206,7 +206,15 @@ private:
     void updateCoreZap(float dt, const WorldParams& p, FrameEvents& ev);        // "Living Core" zaps
     void creedWallBump(Ball& b, sf::Vector2f at, const WorldParams& p, FrameEvents& ev);   // "Pinball"
     void creedClack(Ball& a, Ball& b, sf::Vector2f at, const WorldParams& p, FrameEvents& ev);  // "Legion"
-    void creedCoreBounce(Ball& b, const WorldParams& p, FrameEvents& ev);        // "Living Core" overcharge
+    void creedCoreBounce(Ball& b, const WorldParams& p, FrameEvents& ev);
+    // Pacts (sim/WorldPacts.cpp).
+    float pactDamageMul(const Ball& b, const WorldParams& p) const;   // Lead / Stillness / Quick Hands / Juggler / Last Breath
+    bool pactWrap(Ball& b);                                           // "Void Walls": true = it went through an edge
+    void pactWallBump(Ball& b);                                       // "Anchor Walls"
+    void pactCoreBounce(Ball& b);                                     // "Juggler": the streak ends on the core
+    void pactOnGrab(Ball& b);                                         // "Frenzy" / "Juggler"
+    void pactOnThrow(Ball& b);                                        // "Hot Potato" / "Mirror"
+    void pactHeldTick(float dt);                                      // "Hot Potato": the ball slips        // "Living Core" overcharge
     void creedCoreHit(const WorldParams& p, FrameEvents& ev);                    // "Fortress" / "Bloodlust"
 
     // ---- class hooks (sim/WorldClasses.cpp): run every class the ball has ----
@@ -271,6 +279,8 @@ private:
     sf::Vector2f heldGrabOffset_{0.f, 0.f};  // ball pos - cursor at grab, eased to zero
     sf::Vector2f heldPrevVel_{0.f, 0.f};     // velocity before the grab (cancelHeld restores it)
     float heldCatch_ = 0.f;                  // catch reward earned by this grab (0..catchBonusMax)
+    float heldT_ = 0.f;                      // seconds the held ball has been held ("Hot Potato")
+    PactRules pact_;                         // the run's pacts, from WorldParams (each step / wave start)
     float autoFlingTimer_ = 1.f;   // "Clockwork": time to its next throw
 
     int comboStreak_ = 0;

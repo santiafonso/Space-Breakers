@@ -1930,7 +1930,9 @@ Solo gameplay, nada de plata. Lista aprobada:
 - Lead: +60% daño / la pelota va 40% más lenta.
 - Quick hands: premio por atrapar x2 / una pelota que nadie tira pierde 20% de daño.
 - Heavy arm: tiros x1,5 / sin cámara lenta al apuntar.
-- Glass edge: +30% chance de crítico / -1 slot de item en esa pelota.
+- Glass edge: +30% chance de crítico / los golpes que no son crítico pegan 20%
+  menos (antes era "-1 slot de item"; se cambió porque sacar un slot pide elegir
+  pelota y romper equipamiento).
 - Stillness: cuanto más lenta, más daño carga / el tiro rápido pierde potencia.
 - Overflow: +1 pelota / todas -15% daño.
 - Tiny: +80% daño / pelotas a la mitad de tamaño.
@@ -1945,13 +1947,16 @@ Solo gameplay, nada de plata. Lista aprobada:
 - Elemental: elementos x2 / contacto -30%.
 - Frenzy: el combo sube el doble / agarrar corta el combo.
 - Blind: tiros +40% / sin guía de puntería.
-- Swarm: +1 pelota por jefe / +30% enemigos por oleada.
+- Horde (antes "Swarm", chocaba con el arquetipo Swarm de Creed): +1 pelota
+  por jefe / +30% enemigos por oleada.
 
 **Dónde:** nodo **Altar** (1 de 3, o ninguno). Es raro en el mapa. Camino
 secreto: en cada acto, 3 combates seguidos (élite cuenta) sin daño al núcleo
 abren un camino al Altar antes del jefe. Tiendas y descansos no cortan la
 racha; solo la corta recibir daño. La animación del camino que se abre se
-muestra recién cuando estás a 1 nodo del jefe.
+muestra recién cuando estás a 1 nodo del jefe. (Hecho: el Altar oculto
+aparece arriba de donde estás, en la fila del jefe, y lleva al jefe. Los
+Pacts que piden agarrar no se ofrecen con Hunters / Clockwork.)
 
 ### 10.4 Mapa
 - Animación mientras elegís la ruta (hover / avance), para que el camino
@@ -2003,3 +2008,6 @@ slots de habilidad, pero con elementos: con la clase (2 items) la pelota tiene
 sí en la misma pelota. Sinergias: Catalyst, Chain reaction, Primed, el Creed
 Alchemy y los nodos de elemento del árbol. Nombre elegido porque "Alchemist"
 ya es un arquetipo de Creed.
+8. Después de todo esto: estudiar la progresión (qué se desbloquea y cuándo)
+y mejorar el árbol meta (la web). Clases cerradas en 10: las 8 de hoy +
+Slinger + Elementalist; las combinaciones se hacen con los items.

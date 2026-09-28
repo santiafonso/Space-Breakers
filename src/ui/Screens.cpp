@@ -696,7 +696,8 @@ void PlayScreen::release(App& app) {
         const Ball* b = app.world().heldBall();
         const std::optional<sf::Vector2f> target = b ? app.world().nearestTarget(b->pos) : std::nullopt;
         if (b && target && length(*target - b->pos) > 1e-3f) {
-            const float speed = lerpf(cfg::app::slingMinSpeed, cfg::app::slingMaxSpeed, cfg::app::quickThrowPower);
+            const float speed = lerpf(cfg::app::slingMinSpeed, cfg::app::slingMaxSpeed, cfg::app::quickThrowPower) *
+                                app.quickThrowMul();   // "Stillness" pact
             const sf::Vector2f v = normalized(*target - b->pos, {1.f, 0.f}) * speed * k * power;
             app.world().releaseHeld(v);
             app.audio().thrown(clampf(length(v) / 900.f, 0.f, 1.f));
@@ -770,6 +771,12 @@ void PlayScreen::update(App& app, float dt, sf::Vector2f mouse) {
         length(mouse - pressPos_) > cfg::app::quickThrowSlop * app.world().arenaScale())
         commitAim(app);
     if (dragging_ && !sf::Mouse::isButtonPressed(sf::Mouse::Left)) release(app);
+    if (dragging_ && !app.world().heldBall()) {   // "Hot Potato": it slipped out of your hand
+        dragging_ = false;
+        aimCommitted_ = false;
+        app.setAiming(false);
+        app.audio().letGo();
+    }
 }
 
 // Slingshot aim: a band from the ball to the pointer and a dotted line along
@@ -793,7 +800,7 @@ void PlayScreen::drawAim(App& app, sf::RenderWindow& w) const {
         w.draw(r);
     };
     seg(b->pos, worldMouse_, 2.f * as, withAlpha(theme::textLo, live ? 0.5f : 0.25f));   // the band
-    if (!live) return;
+    if (!live || !app.aimGuide()) return;   // "Blind" pact: the band only
 
     const sf::Vector2f dir = pull / len;
     const sf::Vector2f sz = app.world().size();
@@ -964,7 +971,7 @@ struct PeekLayout {
 };
 
 bool peekHasSide(App& app) {
-    return !runRelics(app.data().run.mods).empty() || !app.data().run.creeds.empty();
+    return !runRelics(app.data().run.mods).empty() || !app.data().run.creeds.empty() || !app.data().run.pacts.empty();
 }
 
 PeekLayout peekLayout(App& app) {

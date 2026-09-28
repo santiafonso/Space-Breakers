@@ -472,6 +472,9 @@ inline constexpr int wShopNeutral = 5;
 // Elite waves: tougher and more of them.
 inline constexpr float eliteHpMul = 1.6f;
 inline constexpr float eliteCountMul = 1.3f;
+// Altar (pacts): rare on the map, or down the hidden path before the boss.
+inline constexpr int altarPct = 22;            // % chance an act's map has one Altar (rows 4+, not the pre-boss row)
+inline constexpr int altarStreak = 3;          // flawless fights in a row (per act) that open the hidden path
 }  // namespace map
 
 namespace gold {
@@ -768,6 +771,34 @@ inline constexpr float alchemyDamage = 0.75f;
 // Bloodlust
 inline constexpr float bloodCoreDamage = 1.5f;
 }  // namespace creed
+
+// Pacts (progression/Pacts.hpp): a gift with a price.
+namespace pact {
+inline constexpr int offered = 3;              // cards at an Altar
+inline constexpr float leadDamage = 1.6f, leadCruise = 0.6f;
+inline constexpr float quickCatchMul = 2.f;    // Quick Hands: catch reward x this...
+inline constexpr float quickIdleAfter = 10.f;  // ...a ball not thrown for this long (s)...
+inline constexpr float quickIdleDamage = 0.8f; // ...hits x this
+inline constexpr float heavyArmFling = 1.5f;
+inline constexpr float glassCrit = 0.3f, glassMiss = 0.8f;
+inline constexpr float stillnessMax = 0.6f;    // + damage at a standstill (0 at cruise)
+inline constexpr float stillnessQuick = 0.6f;  // quick throws x this
+inline constexpr float overflowDamage = 0.85f;
+inline constexpr float tinyDamage = 1.8f, tinyRadius = 0.5f;
+inline constexpr float colossusMul = 2.f, colossusOthers = 0.7f;
+inline constexpr float potatoPerSec = 0.25f;   // Hot Potato: first-hit bonus per second held...
+inline constexpr float potatoMax = 3.f;        // ...up to this long, then it slips
+inline constexpr float jugglePer = 0.12f;      // Juggler: + damage per catch in a row...
+inline constexpr int juggleMax = 8;            // ...up to this many
+inline constexpr float juggleCoreChip = 0.03f; // a juggled ball on the core: the core loses this x max HP
+inline constexpr float anchorFling = 2.f;
+inline constexpr float anchorKeep = 0.12f;     // Anchor Walls: speed kept off a wall
+inline constexpr float lastBreathAt = 0.3f, lastBreathMul = 2.f, lastBreathCore = 0.8f;
+inline constexpr float mirrorEnemyHp = 1.2f;
+inline constexpr float elementalMul = 2.f, elementalContact = 0.7f;
+inline constexpr float blindFling = 1.4f;
+inline constexpr float hordeCount = 1.3f;
+}  // namespace pact
 
 // Power-up orbs drift in and buff the balls for a few seconds. Spawn cadence is
 // deliberately slow at baseline; the "Uplink" web node scales p.pickupSpawnMult

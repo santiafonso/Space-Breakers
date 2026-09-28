@@ -33,7 +33,9 @@ float waveEnemySpeed(int wave) {
 World::World(sf::Vector2f size) : baseSize_(size), size_(size) { core_.pos = size_ * 0.5f; }
 
 // The wave's enemy stats, with hard mode on top (cfg::hard).
-float World::enemyHp(int wave) const { return waveEnemyHp(wave) * (hard_ ? cfg::hard::enemyHpMul : 1.f); }
+float World::enemyHp(int wave) const {
+    return waveEnemyHp(wave) * (hard_ ? cfg::hard::enemyHpMul : 1.f) * pact_.enemyHpMul;   // "Mirror" pact
+}
 float World::enemySpeed(int wave) const { return waveEnemySpeed(wave) * (hard_ ? cfg::hard::enemySpeedMul : 1.f); }
 
 // ---------------------------------------------------------------- speeds
@@ -264,11 +266,13 @@ void World::carryBalls(const WorldParams& p) {
     for (const Ball& b : balls_) launchFrom_.push_back(b.pos);
     aegisChargesLeft_ = p.aegisHits;   // "Aegis": the shield recharges each wave
     coreHitThisWave_ = false;          // "Interest": track a damage-free wave
+    for (Ball& b : balls_) b.sinceThrow = 0.f;   // "Quick Hands": every fight starts fresh
     classWaveStart(p);
 }
 
 void World::startWave(int wave, const WorldParams& p, bool elite) {
     hard_ = p.hard;
+    pact_ = p.pact;
     bossWave_ = false;
     boss_ = Boss{};
     coreSlideT_ = 0.f;
@@ -287,6 +291,7 @@ void World::beginWave(int wave, bool elite) {
     toSpawn_ = waveEnemyCount(wave);
     if (elite) toSpawn_ = static_cast<int>(std::lround(static_cast<float>(toSpawn_) * cfg::map::eliteCountMul));
     if (hard_) toSpawn_ = static_cast<int>(std::lround(static_cast<float>(toSpawn_) * cfg::hard::countMul));
+    toSpawn_ = static_cast<int>(std::lround(static_cast<float>(toSpawn_) * pact_.enemyCountMul));   // "Horde" pact
     waveHpMul_ = elite ? cfg::map::eliteHpMul : 1.f;
     eliteWave_ = elite;
     bruteSlots_.clear();
@@ -317,6 +322,7 @@ sf::Vector2f World::wideArenaSize() const {
 // (hard) wave. The core eases from the boss's far-left spot back to the centre.
 void World::startPostBossWave(int wave, const WorldParams& p, bool elite) {
     hard_ = p.hard;
+    pact_ = p.pact;
     bossWave_ = false;
     boss_ = Boss{};
     size_ = wideArenaSize();
@@ -342,6 +348,7 @@ void World::updateCoreSlide(float dt) {
 // core far left, the Orbital finale, and Hive / Warden / Dasher in between.
 void World::startBossWave(int wave, const WorldParams& p) {
     hard_ = p.hard;
+    pact_ = p.pact;
     const int act = cfg::run::actOfWave(wave);
     if (act >= cfg::run::acts) { startFinalBossWave(p); return; }
     if (act == 1) { startChargerWave(p); return; }
@@ -396,6 +403,7 @@ float World::bossHp(float grunts, int wave) const {
 
 void World::startChargerWave(const WorldParams& p) {
     hard_ = p.hard;
+    pact_ = p.pact;
     bossWave_ = true;
     waveHpMul_ = 1.f;
     eliteWave_ = false;
@@ -429,6 +437,7 @@ void World::startChargerWave(const WorldParams& p) {
 // ring of shield enemies spins around it and is topped up while it lives.
 void World::startFinalBossWave(const WorldParams& p) {
     hard_ = p.hard;
+    pact_ = p.pact;
     bossWave_ = true;
     waveHpMul_ = 1.f;
     eliteWave_ = false;
@@ -629,8 +638,10 @@ bool World::grabAt(sf::Vector2f point, float catchRadius) {
         namespace C = cfg::combat;
         const float ratio = length(b.vel) / (cfg::ball::baseCruise * arenaScale());
         const float t = clampf((ratio - C::catchFromRatio) / (C::catchFullRatio - C::catchFromRatio), 0.f, 1.f);
-        heldCatch_ = C::catchBonusMax * t;
+        heldCatch_ = C::catchBonusMax * t * pact_.catchMul;   // "Quick Hands" pact
     }
+    heldT_ = 0.f;
+    pactOnGrab(b);
     b.held = true;
     b.vel = {0.f, 0.f};
     b.trail.clear();
@@ -662,9 +673,12 @@ void World::releaseHeld(sf::Vector2f throwVel) {
     else if (s > cfg::ball::hardSpeedCap * arenaScale())
         b.vel = throwVel * (cfg::ball::hardSpeedCap * arenaScale() / s);
     else b.vel = throwVel;
-    if (s >= cfg::ball::minThrowSpeed && heldCatch_ > 0.f) {   // a real throw carries the catch reward
-        b.catchBonus = heldCatch_;
-        b.catchT = cfg::combat::catchWindow;
+    if (s >= cfg::ball::minThrowSpeed) {
+        if (heldCatch_ > 0.f) {   // a real throw carries the catch reward
+            b.catchBonus = heldCatch_;
+            b.catchT = cfg::combat::catchWindow;
+        }
+        pactOnThrow(b);   // Quick Hands clock, Hot Potato charge, Mirror ghost
     }
     heldCatch_ = 0.f;
     grabbed_ = Grabbed::None;
@@ -742,7 +756,7 @@ void World::forceRelease() {
 
 void World::advanceCombo(float dt, const WorldParams& p) {
     comboCapTier_ = cfg::combo::baseCapTier * (p.overcharge ? cfg::changer::overchargeMul : 1);   // "Overcharge"
-    comboExtra_ = p.creed.bloodlust ? 1 : 0;   // "Bloodlust" creed: climbs twice as fast...
+    comboExtra_ = p.creed.bloodlust || p.pact.frenzy ? 1 : 0;   // "Bloodlust" creed / "Frenzy" pact: twice as fast...
     sinceHit_ += dt;
     if (!p.creed.bloodlust && sinceHit_ > cfg::combo::decayWindow && comboStreak_ > 0) {   // ...and never cools
         comboStreak_ = std::max(0, comboStreak_ - cfg::combo::bouncesPerTier);
@@ -1065,6 +1079,7 @@ bool World::strike(Ball& b, Enemy& e, sf::Vector2f normal, const WorldParams& p,
     if (e.mark > 0.f) dmg *= p.markMul;                     // marked by a Support
     if (e.brittle > 0.f) dmg *= S::brittleMul;                             // Superconductor
     if (m.critChance > 0.f && chance(m.critChance, p)) dmg *= m.critMult;  // "Keen eye"
+    else if (p.pact.glassEdge) dmg *= cfg::pact::glassMiss;                // "Glass Edge" pact: no crit, weaker
     if (m.executeThreshold > 0.f && e.hp < e.maxHp * m.executeThreshold)   // "Executioner"
         dmg *= m.executeMult;
     if (m.hunterMult > 0.f && e.id == b.preyId) dmg *= m.hunterMult;       // "Hunter": its prey
@@ -1379,6 +1394,7 @@ float World::ballDamage(const Ball& b, const WorldParams& p) const {
         dmg *= 1.f + cfg::element::fireDamageBonus * elemPotency(b, p);
     if (b.ricochetT > 0.f) dmg *= b.mods.ricochetMult;   // "Ricochet": fresh off a wall
     if (b.creedCharge > 0.f) dmg *= cfg::creed::coreChargeDamage;   // "Living Core" creed: overcharged
+    dmg *= pactDamageMul(b, p);   // pacts
     return dmg;
 }
 
@@ -1487,6 +1503,7 @@ void World::updateTrail(Ball& b) {
 
 void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev) {
     b.age += dt;
+    b.sinceThrow += dt;   // "Quick Hands" pact
     b.creedCharge = std::max(0.f, b.creedCharge - dt);   // "Living Core" overcharge wears off
     b.radius = ballRadius(b, p);   // role, "Big ball" gear, "Mass" web
     b.resonanceT = std::max(0.f, b.resonanceT - dt);
@@ -1549,7 +1566,8 @@ void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
     for (int s = 0; s < steps; ++s) {
         b.pos += b.vel * h;
 
-        if (collision::Contact c = collision::circleVsBounds(b, size_); c.hit) {
+        if (pactWrap(b)) {   // "Void Walls" pact: no walls, the far edge instead
+        } else if (collision::Contact c = collision::circleVsBounds(b, size_); c.hit) {
             afterBounce(b, c.normal, false);
             aimBounce(b, c.normal, nullptr);
             if (b.mods.ricochetMult > 0.f) {   // "Ricochet": a speed kick and an armed hit
@@ -1561,6 +1579,7 @@ void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
             if (b.mods.railFrac > 0.f) fireRail(b, p, ev);
             creedWallBump(b, c.point, p, ev);   // "Pinball" creed
             classOnWallBounce(b, c.normal, p, ev);
+            pactWallBump(b);   // "Anchor Walls" pact
             pushFx(c);
         }
         // The core is solid: balls bounce off it (no damage to the core).
@@ -1579,6 +1598,7 @@ void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
                 boostSpeed(b, b.mods.boomerangKick, p);
             }
             creedCoreBounce(b, p, ev);   // "Living Core" creed
+            pactCoreBounce(b);           // "Juggler" pact
             classOnCoreBounce(b, c.normal, p, ev);
             pushFx(c);
         }
@@ -2384,6 +2404,7 @@ FrameEvents World::step(float dt, const WorldParams& p) {
         return ev;
     }
 
+    pact_ = p.pact;
     advanceCombo(dt, p);
     updateCoreSlide(dt);
     updateAutoFling(dt, p, ev);
@@ -2395,6 +2416,7 @@ FrameEvents World::step(float dt, const WorldParams& p) {
         b.elemPulse = std::max(0.f, b.elemPulse - dt / 1.2f);                               // element-gain rings
         if (grabbed_ == Grabbed::Ball && static_cast<int>(i) == heldIndex_) {
             b.squash *= std::exp(-cfg::ball::squashDecay * dt);
+            pactHeldTick(dt);   // "Hot Potato": held too long, it slips
             continue;
         }
         if (launchT_ > 0.f && !b.mods.satellite) {   // whirling (updateLaunch): let the last bounce's squash settle

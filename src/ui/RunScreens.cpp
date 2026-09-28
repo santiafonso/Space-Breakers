@@ -89,6 +89,7 @@ sf::Color nodeColor(MapNodeType t) {
         case MapNodeType::Upgrade: return theme::puSurge;
         case MapNodeType::Recruit: return theme::ballMid;
         case MapNodeType::Boss:    return theme::coreLow;
+        case MapNodeType::Altar:   return theme::pact;
     }
     return theme::textLo;
 }
@@ -103,6 +104,7 @@ const char* nodeGlyph(MapNodeType t) {
         case MapNodeType::Upgrade: return "?";
         case MapNodeType::Recruit: return "o";
         case MapNodeType::Boss:    return "B";
+        case MapNodeType::Altar:   return "*";
     }
     return "";
 }
@@ -113,11 +115,12 @@ void drawNode(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f p, MapNode
     // and the boss an octagon, the same silhouette as in the arena.
     const sf::Color col = nodeColor(t);
     const bool boss = t == MapNodeType::Boss;
-    const int sides = boss ? 8 : 4;
-    const float rot = boss ? kPi / 8.f : 0.f;
+    const bool altar = t == MapNodeType::Altar;   // a hexagon: it isn't a stop like the others
+    const int sides = boss ? 8 : (altar ? 6 : 4);
+    const float rot = boss ? kPi / 8.f : (altar ? kPi / 6.f : 0.f);
     const bool elite = t == MapNodeType::Elite;
     const float rr = boss ? r : r * (elite ? 1.4f : 1.2f);   // a diamond needs a longer radius to match a disc's weight
-    if (elite)   // an elite wears a second, outer frame
+    if (elite || altar)   // an elite wears a second, outer frame; an Altar too
         draw::polygonOutline(w, p, rr + 6.f, sides, rot, 1.5f, withAlpha(col, 0.6f * alpha));
     if (filled) {
         draw::polygon(w, p, rr, sides, rot, withAlpha(lerpColor(col, sf::Color::White, 0.15f), 0.9f * alpha),
@@ -127,7 +130,10 @@ void drawNode(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f p, MapNode
                       withAlpha(theme::glassBottom, 0.95f * alpha));
     }
     draw::polygonOutline(w, p, rr, sides, rot, 1.5f, withAlpha(col, 0.95f * alpha));
-    if (t == MapNodeType::Combat) {   // a plain fight: just a small enemy pip
+    if (altar) {   // an Altar: a small hexagon inside the frame
+        draw::polygon(w, p, r * 0.42f, 6, kPi / 6.f, withAlpha(filled ? theme::bg : col, alpha),
+                      withAlpha(filled ? theme::bg : col, alpha));
+    } else if (t == MapNodeType::Combat) {   // a plain fight: just a small enemy pip
         const float d = r * 0.28f;
         draw::polygon(w, p, d * 1.3f, 4, 0.f, withAlpha(filled ? theme::bg : col, alpha),
                       withAlpha(filled ? theme::bg : col, alpha));
@@ -337,6 +343,10 @@ constexpr float kMapBottomPad = 70.f; // row 1's distance from the bottom edge a
 constexpr float kNodeR = 21.f;
 constexpr float kBossR = 36.f;
 constexpr float kStatusY = 52.f;
+constexpr float kTravelTime = 0.42f;   // the spark's trip to a chosen node
+constexpr float kRevealDelay = 0.5f;   // the hidden Altar: a beat, then the path draws itself...
+constexpr float kRevealDraw = 1.3f;    // ...over this long, then the Altar lights up
+constexpr float kRevealPop = 0.6f;
 }  // namespace
 
 float MapScreen::scrollMax(App& app) const {
@@ -362,6 +372,15 @@ sf::Vector2f MapScreen::nodePos(App& app, int node) const {
     return {x, y};
 }
 
+sf::Vector2f MapScreen::travelFrom(App& app) const {
+    const RunState& r = app.data().run;
+    if (r.mapNode >= 0) return nodePos(app, r.mapNode);
+    // The act's start: just under the trunk (row 1).
+    for (int i = 0; i < static_cast<int>(r.map.nodes.size()); ++i)
+        if (r.map.nodes[static_cast<std::size_t>(i)].row == 1) return nodePos(app, i) + sf::Vector2f{0.f, kMapStep * 0.7f};
+    return {app.size().x * 0.5f, app.size().y};
+}
+
 int MapScreen::nodeAt(App& app, sf::Vector2f mouse, bool openOnly) const {
     if (mouse.y < kMapTop) return -1;   // under the pinned status line
     const int count = static_cast<int>(app.data().run.map.nodes.size());
@@ -375,6 +394,12 @@ int MapScreen::nodeAt(App& app, sf::Vector2f mouse, bool openOnly) const {
 }
 
 void MapScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
+    if (travelTo_ >= 0) return;   // on the way: the trip plays out
+    auto go = [&](int node) {     // a spark runs along the link, then the stop opens (update)
+        if (!app.mapNodeOpen(node)) return;
+        travelTo_ = node;
+        travelT_ = 0.f;
+    };
     if (peek_.handle(e)) return;   // TAB loadout peek: the map waits under it
     if (peek_.open) { loadoutDragEvent(app, peek_, e); return; }
     if (isKey(e, sf::Keyboard::Escape)) { app.openPause(); return; }
@@ -402,7 +427,7 @@ void MapScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
         for (int i = 0; i < static_cast<int>(app.data().run.map.nodes.size()); ++i)
             if (app.mapNodeOpen(i)) open.push_back(i);
         const int k = e.key.code - sf::Keyboard::Num1;
-        if (k < static_cast<int>(open.size())) app.travelTo(open[static_cast<std::size_t>(k)]);
+        if (k < static_cast<int>(open.size())) go(open[static_cast<std::size_t>(k)]);
         return;
     }
     // Drag the map up / down; a press on a lit node travels instead.
@@ -417,7 +442,7 @@ void MapScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
     if (!isLeftClick(e)) return;
     const int n = nodeAt(app, mouse);
     if (n >= 0) {
-        app.travelTo(n);
+        go(n);
         return;
     }
     if (mouse.y > kMapTop) {
@@ -437,10 +462,46 @@ void MapScreen::update(App& app, float dt, sf::Vector2f mouse) {
         scroll_ = from;
         scrollTarget_ = scrollFor(app, app.data().run.mapRow + 1);
     }
+    if (app.consumeAltarReveal()) {   // the hidden Altar: show the top of the map and draw its path in
+        const auto& nodes = app.data().run.map.nodes;
+        for (int i = 0; i < static_cast<int>(nodes.size()); ++i)
+            if (nodes[static_cast<std::size_t>(i)].type == MapNodeType::Altar &&
+                nodes[static_cast<std::size_t>(i)].row == app.data().run.map.bossRow())
+                altarNode_ = i;
+        revealT_ = 0.f;
+        scrollTarget_ = scrollMax(app);
+    }
+    if (revealT_ >= 0.f) {
+        const float before = revealT_;
+        revealT_ += dt;
+        const float lit = kRevealDelay + kRevealDraw;
+        if (before < lit && revealT_ >= lit && altarNode_ >= 0) {   // the Altar lights up
+            app.effects().flash(theme::pact, 0.35f);
+            const sf::Vector2f ap = nodePos(app, altarNode_);   // beside it, on the side away from the boss
+            app.effects().addLabel("a hidden path opens", ap + sf::Vector2f{ap.x < app.size().x * 0.5f ? -150.f : 150.f, 0.f},
+                                   theme::pact, 22, 2.2f);
+            app.audio().bossAppear();
+        }
+        if (revealT_ > lit + kRevealPop + 0.2f) revealT_ = -1.f;
+    }
+    if (travelTo_ >= 0) {   // the spark reaches the node: the stop opens
+        travelT_ += dt;
+        if (travelT_ >= kTravelTime) {
+            const int n = travelTo_;
+            travelTo_ = -1;
+            app.travelTo(n);
+            return;   // this screen is closed
+        }
+    }
     scroll_ += (scrollTarget_ - scroll_) * (1.f - std::exp(-9.f * dt));
-    hover_ = peek_.open ? -1 : nodeAt(app, mouse);
+    hover_ = peek_.open || travelTo_ >= 0 || revealT_ >= 0.f ? -1 : nodeAt(app, mouse);
     info_ = peek_.open ? -1 : nodeAt(app, mouse, false);
     uisound::hover(this, hover_);
+    // The lit way follows the pointer and eases in; a trip keeps it on its node.
+    const int want = travelTo_ >= 0 ? travelTo_ : hover_;
+    if (want >= 0 && want != glowNode_) { glowNode_ = want; hoverGlow_ = 0.f; }
+    hoverGlow_ = clampf(hoverGlow_ + dt * (want >= 0 ? 5.f : -5.f), 0.f, 1.f);
+    if (hoverGlow_ <= 0.f) glowNode_ = -1;
 }
 
 void MapScreen::draw(App& app, sf::RenderWindow& w) {
@@ -456,8 +517,15 @@ void MapScreen::draw(App& app, sf::RenderWindow& w) {
         return clampf((y - kMapTop) / 70.f, 0.f, 1.f) * clampf((s.y - 8.f - y) / 50.f, 0.f, 1.f);
     };
 
+    // The hidden Altar drawing itself in: how much of its path shows, and how
+    // lit the Altar is (both 1 once it's done).
+    const float revealDraw = revealT_ < 0.f ? 1.f : clampf((revealT_ - kRevealDelay) / kRevealDraw, 0.f, 1.f);
+    const float altarLit = revealT_ < 0.f ? 1.f : clampf((revealT_ - kRevealDelay - kRevealDraw) / kRevealPop, 0.f, 1.f);
+    const float glow = hoverGlow_ * hoverGlow_ * (3.f - 2.f * hoverGlow_);   // eased
+
     // Links first. The path you walked is bright, the ways open to you are
-    // clear lines, everything else stays faint. Nothing moves.
+    // clear lines, everything else stays faint. The way under the pointer
+    // lights up and flows toward its node.
     for (int i = 0; i < count; ++i) {
         const MapNode& a = nodes[static_cast<std::size_t>(i)];
         for (int j : a.next) {
@@ -475,7 +543,26 @@ void MapScreen::draw(App& app, sf::RenderWindow& w) {
             const float ra = a.type == MapNodeType::Boss ? kBossR : kNodeR * 1.25f;
             const float rb = b.type == MapNodeType::Boss ? kBossR : kNodeR * 1.25f;
             const sf::Vector2f p0 = pa + u * (ra + 6.f), p1 = pb - u * (rb + 6.f);
-            if (open) draw::line(w, p0, p1, 2.f, withAlpha(theme::accent, 0.7f * fa));
+            const bool toAltar = j == altarNode_, fromAltar = i == altarNode_;
+            if (toAltar || fromAltar) {   // the hidden path: in the pact colour, drawn in on its reveal
+                const float k = toAltar ? revealDraw : altarLit;
+                if (k <= 0.f) continue;
+                const sf::Vector2f end = p0 + (p1 - p0) * k;
+                const bool lit = open || walked;
+                draw::line(w, p0, end, 6.f, withAlpha(theme::pact, (0.12f + 0.2f * (1.f - altarLit)) * fa));
+                draw::line(w, p0, end, lit ? 2.5f : 1.5f, withAlpha(theme::pact, (lit ? 0.85f : 0.45f) * fa));
+                if (toAltar && k < 1.f) draw::disc(w, end, 4.f, theme::textHi, theme::pact, {1.f, 1.f}, 12);   // the tip
+                if (!(open && j == glowNode_)) continue;
+            }
+            if (open && j == glowNode_ && glow > 0.f) {   // the way you're about to take
+                const sf::Color c = lerpColor(theme::accent, theme::textHi, 0.25f);
+                draw::line(w, p0, p1, 2.f + 5.f * glow, withAlpha(theme::accent, 0.16f * glow * fa));
+                draw::line(w, p0, p1, 2.f + 1.f * glow, withAlpha(c, (0.7f + 0.3f * glow) * fa));
+                for (int k = 0; k < 3; ++k) {   // sparks flowing toward the node
+                    const float t = std::fmod(clock_ * 0.9f + static_cast<float>(k) / 3.f, 1.f);
+                    draw::disc(w, p0 + (p1 - p0) * t, 2.5f, theme::textHi, c, {1.f, 1.f}, 10);
+                }
+            } else if (open) draw::line(w, p0, p1, 2.f, withAlpha(theme::accent, (0.7f - 0.35f * glow) * fa));
             else draw::line(w, p0, p1, walked ? 2.5f : 1.f,
                             withAlpha(walked ? theme::textLo : theme::grid, (walked ? 0.7f : 0.22f) * fa));
         }
@@ -492,13 +579,42 @@ void MapScreen::draw(App& app, sf::RenderWindow& w) {
         const bool here = i == r.mapNode;
         const bool past = n.row <= r.mapRow && !here;
         float rad = n.type == MapNodeType::Boss ? kBossR : kNodeR;
-        if (open && hover_ == i) rad *= 1.12f;
+        if (open && glowNode_ == i) rad *= 1.f + 0.14f * glow;
         // Ahead: plain but readable. Open: full. Behind: only the path you took.
-        const float a = cp * fade * (open || here ? 1.f : (past ? (n.visited ? 0.55f : 0.14f) : 0.5f));
-        drawNode(w, app.font(), p, n.type, rad, a, open && hover_ == i);
+        float a = cp * fade * (open || here ? 1.f : (past ? (n.visited ? 0.55f : 0.14f) : 0.5f));
+        if (i == altarNode_) {   // the hidden Altar: pops in at the end of its path, then breathes
+            if (altarLit <= 0.f) continue;
+            a *= altarLit;
+            rad *= 1.f + 0.5f * (1.f - altarLit) * altarLit;   // a swell as it lights
+            const float br = 0.5f + 0.5f * std::sin(clock_ * 2.2f);
+            draw::polygonOutline(w, p, rad * 1.2f + 12.f + 4.f * br, 6, kPi / 6.f, 1.5f,
+                                 withAlpha(theme::pact, (0.2f + 0.2f * br) * a));
+            if (altarLit < 1.f)   // the flare as it lights
+                draw::ring(w, p, rad * (1.5f + 3.f * altarLit), 2.f, withAlpha(theme::pact, 0.8f * (1.f - altarLit)));
+        }
+        drawNode(w, app.font(), p, n.type, rad, a, open && glowNode_ == i && glow > 0.5f);
         if (here) {   // you are here: still brackets around the node
             const float h = rad * 1.25f + 10.f;
             draw::brackets(w, {p.x - h, p.y - h, 2.f * h, 2.f * h}, 8.f, 2.f, withAlpha(theme::textHi, 0.8f * cp * fade));
+        }
+    }
+
+    // A trip: a spark runs from where you stand to the chosen node, which
+    // flares as it arrives.
+    if (travelTo_ >= 0) {
+        const float t = clampf(travelT_ / kTravelTime, 0.f, 1.f);
+        const float e = t * t * (3.f - 2.f * t);
+        const sf::Vector2f a = travelFrom(app), b = nodePos(app, travelTo_);
+        const sf::Color c = nodeColor(nodes[static_cast<std::size_t>(travelTo_)].type);
+        for (int k = 1; k <= 4; ++k) {   // a short fading tail
+            const float te = std::max(0.f, e - 0.05f * static_cast<float>(k));
+            draw::disc(w, a + (b - a) * te, 6.f - static_cast<float>(k), withAlpha(theme::textHi, 0.5f - 0.1f * static_cast<float>(k)),
+                       withAlpha(c, 0.4f - 0.08f * static_cast<float>(k)), {1.f, 1.f}, 12);
+        }
+        draw::disc(w, a + (b - a) * e, 7.f, theme::textHi, c, {1.f, 1.f}, 16);
+        if (t > 0.6f) {
+            const float f2 = (t - 0.6f) / 0.4f;
+            draw::ring(w, b, kNodeR * (1.3f + 1.2f * f2), 2.f, withAlpha(c, 0.9f * (1.f - f2)));
         }
     }
 
@@ -530,8 +646,8 @@ void MapScreen::draw(App& app, sf::RenderWindow& w) {
 
     // The run's creeds, top-right under the header (hover a chip for its rule).
     bool creedHover = false;
-    if (!r.creeds.empty())
-        creedHover = drawCreedStrip(app, w, {s.x - theme::margin - 160.f, kMapTop + 24.f}, false, mouse_,
+    if (!r.creeds.empty() || !r.pacts.empty())
+        creedHover = drawCreedStrip(app, w, {s.x - theme::margin - creedStripWidth(app), kMapTop + 24.f}, false, mouse_,
                                   info_ < 0 && !peek_.open);
 
     if (peek_.open) {   // the loadout peek covers the map; its own hover help only

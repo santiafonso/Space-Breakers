@@ -71,6 +71,36 @@ sf::Color creedColor(CreedArchetype a) {
     return theme::textHi;
 }
 
+void drawRuleCard(sf::RenderWindow& w, const sf::Font& f, sf::FloatRect r, sf::Color col, float a, float h,
+                  float pulse, const std::string& head, const std::string& hint, const std::string& name,
+                  const std::string& gain, const std::string& cost) {
+    // Breathing halo in the card's colour, stronger under the pointer.
+    const float grow = 4.f + 5.f * pulse + 4.f * h;
+    draw::box(w, {r.left - grow, r.top - grow, r.width + 2.f * grow, r.height + 2.f * grow}, theme::corner,
+              withAlpha(col, (0.04f + 0.06f * h) * a), withAlpha(col, 0.f),
+              withAlpha(col, (0.16f + 0.2f * pulse * (0.5f + h)) * a), 2.f);
+    draw::box(w, r, theme::corner, withAlpha(lerpColor(theme::bg, col, 0.20f + 0.12f * h), 0.98f * a),
+              withAlpha(lerpColor(theme::bg, col, 0.04f), 0.98f * a), withAlpha(col, (0.55f + 0.4f * h) * a), 2.f);
+    draw::box(w, {r.left, r.top, r.width, 4.f}, theme::corner, withAlpha(col, a), withAlpha(col, a));   // colour cap
+
+    const float cx = r.left + r.width * 0.5f;
+    drawCentered(w, f, head, theme::fsSmall, {cx, r.top + 22.f}, withAlpha(col, a));
+    drawCentered(w, f, hint, theme::fsSmall, {cx, r.top + 40.f}, withAlpha(theme::textDim, a));
+    drawCentered(w, f, name, theme::fsTitle, {cx, r.top + 80.f}, withAlpha(theme::textHi, a));
+    seg(w, {r.left + 24.f, r.top + 112.f}, {r.left + r.width - 24.f, r.top + 112.f}, 1.f, withAlpha(col, 0.35f * a));
+
+    const float x = r.left + 20.f, tw = r.width - 40.f;
+    sf::Text gh = makeText(f, "GAIN", theme::fsSmall, withAlpha(theme::core, a));
+    gh.setPosition(x, r.top + 126.f);
+    w.draw(gh);
+    float y = paragraph(w, f, gain, theme::fsBody, x, r.top + 146.f, tw, withAlpha(theme::textHi, a), 21.f);
+    y += 12.f;
+    sf::Text ch = makeText(f, "COST", theme::fsSmall, withAlpha(theme::coreLow, a));
+    ch.setPosition(x, y);
+    w.draw(ch);
+    paragraph(w, f, cost, theme::fsBody, x, y + 20.f, tw, withAlpha(lerpColor(theme::coreLow, theme::textHi, 0.35f), a), 21.f);
+}
+
 // ================================================================ CreedScreen
 
 sf::FloatRect CreedScreen::cardRect(App& app, int i) const {
@@ -146,35 +176,9 @@ void CreedScreen::draw(App& app, sf::RenderWindow& w) {
         const float h = hover_[i];
         sf::FloatRect r = cardRect(app, i);
         r.top += (1.f - a) * 50.f - 12.f * h;
-
-        // Breathing halo in the archetype colour, stronger under the pointer.
         const float pulse = 0.5f + 0.5f * std::sin(clock_ * 2.4f + static_cast<float>(i));
-        const float grow = 4.f + 5.f * pulse + 4.f * h;
-        draw::box(w, {r.left - grow, r.top - grow, r.width + 2.f * grow, r.height + 2.f * grow}, theme::corner,
-                  withAlpha(col, (0.04f + 0.06f * h) * a), withAlpha(col, 0.f),
-                  withAlpha(col, (0.16f + 0.2f * pulse * (0.5f + h)) * a), 2.f);
-        draw::box(w, r, theme::corner, withAlpha(lerpColor(theme::bg, col, 0.20f + 0.12f * h), 0.98f * a),
-                  withAlpha(lerpColor(theme::bg, col, 0.04f), 0.98f * a), withAlpha(col, (0.55f + 0.4f * h) * a), 2.f);
-        draw::box(w, {r.left, r.top, r.width, 4.f}, theme::corner, withAlpha(col, a), withAlpha(col, a));   // colour cap
-
-        const float cx = r.left + r.width * 0.5f;
-        drawCentered(w, f, std::to_string(i + 1) + "   " + creedArchetypeName(d.archetype), theme::fsSmall,
-                     {cx, r.top + 22.f}, withAlpha(col, a));
-        drawCentered(w, f, creedArchetypeHint(d.archetype), theme::fsSmall, {cx, r.top + 40.f},
-                     withAlpha(theme::textDim, a));
-        drawCentered(w, f, d.name, theme::fsTitle, {cx, r.top + 80.f}, withAlpha(theme::textHi, a));
-        seg(w, {r.left + 24.f, r.top + 112.f}, {r.left + r.width - 24.f, r.top + 112.f}, 1.f, withAlpha(col, 0.35f * a));
-
-        const float x = r.left + 20.f, tw = r.width - 40.f;
-        sf::Text gh = makeText(f, "GAIN", theme::fsSmall, withAlpha(theme::core, a));
-        gh.setPosition(x, r.top + 126.f);
-        w.draw(gh);
-        float y = paragraph(w, f, d.gain, theme::fsBody, x, r.top + 146.f, tw, withAlpha(theme::textHi, a), 21.f);
-        y += 12.f;
-        sf::Text ch = makeText(f, "COST", theme::fsSmall, withAlpha(theme::coreLow, a));
-        ch.setPosition(x, y);
-        w.draw(ch);
-        paragraph(w, f, d.cost, theme::fsBody, x, y + 20.f, tw, withAlpha(lerpColor(theme::coreLow, theme::textHi, 0.35f), a), 21.f);
+        drawRuleCard(w, f, r, col, a, h, pulse, std::to_string(i + 1) + "   " + creedArchetypeName(d.archetype),
+                     creedArchetypeHint(d.archetype), d.name, d.gain, d.cost);
     }
 
     // Refuse: all of them, for a little gold.
@@ -200,41 +204,62 @@ void CreedScreen::draw(App& app, sf::RenderWindow& w) {
 
 // ================================================================ chips
 
+float creedStripWidth(App& app) {
+    constexpr float kPad = 9.f, kGap = 6.f;
+    float total = -kGap;
+    auto add = [&](const char* name) {
+        total += makeText(app.font(), name, theme::fsSmall, theme::textHi).getLocalBounds().width + 2.f * kPad + kGap;
+    };
+    for (int id : app.data().run.creeds) add(creedDef(static_cast<CreedId>(id)).name);
+    for (int id : app.data().run.pacts) add(pactDef(static_cast<PactId>(id)).name);
+    return std::max(0.f, total);
+}
+
 bool drawCreedStrip(App& app, sf::RenderWindow& w, sf::Vector2f pos, bool centered, sf::Vector2f mouse, bool tips) {
-    const auto& ids = app.data().run.creeds;
-    if (ids.empty()) return false;
+    // The run's creeds, then its pacts (in the pact colour).
+    struct Chip { std::string name, tipTitle, tip; sf::Color col; };
+    std::vector<Chip> chips;
+    for (int id : app.data().run.creeds) {
+        const CreedDef& d = creedDef(static_cast<CreedId>(id));
+        chips.push_back({d.name, std::string("Creed: ") + d.name, creedTip(d), creedColor(d.archetype)});
+    }
+    for (int id : app.data().run.pacts) {
+        const PactDef& d = pactDef(static_cast<PactId>(id));
+        chips.push_back({d.name, std::string("Pact: ") + d.name, std::string("+ ") + d.gain + ".   - " + d.cost + ".",
+                         theme::pact});
+    }
+    if (chips.empty()) return false;
     const sf::Font& f = app.font();
     constexpr float kH = 22.f, kPad = 9.f, kGap = 6.f;
     std::vector<float> widths;
     float total = 0.f;
-    for (int id : ids) {
-        sf::Text t = makeText(f, creedDef(static_cast<CreedId>(id)).name, theme::fsSmall, theme::textHi);
+    for (const Chip& c : chips) {
+        sf::Text t = makeText(f, c.name, theme::fsSmall, theme::textHi);
         widths.push_back(t.getLocalBounds().width + 2.f * kPad);
         total += widths.back() + kGap;
     }
     total -= kGap;
     float x = centered ? pos.x - total * 0.5f : pos.x;
     int hot = -1;
-    for (std::size_t i = 0; i < ids.size(); ++i) {
-        const CreedDef& d = creedDef(static_cast<CreedId>(ids[i]));
-        const sf::Color col = creedColor(d.archetype);
+    for (std::size_t i = 0; i < chips.size(); ++i) {
+        const sf::Color col = chips[i].col;
         const sf::FloatRect r{x, pos.y, widths[i], kH};
         const bool h = r.contains(mouse);
         if (h) hot = static_cast<int>(i);
         draw::box(w, r, theme::corner, withAlpha(lerpColor(theme::bg, col, h ? 0.4f : 0.24f), 0.95f),
                   withAlpha(lerpColor(theme::bg, col, 0.08f), 0.95f), withAlpha(col, h ? 0.95f : 0.6f), 1.f);
-        drawCentered(w, f, d.name, theme::fsSmall, {r.left + r.width * 0.5f, r.top + kH * 0.5f - 1.f}, theme::textHi);
+        drawCentered(w, f, chips[i].name, theme::fsSmall, {r.left + r.width * 0.5f, r.top + kH * 0.5f - 1.f}, theme::textHi);
         x += widths[i] + kGap;
     }
     if (hot >= 0 && tips) {
-        const CreedDef& d = creedDef(static_cast<CreedId>(ids[static_cast<std::size_t>(hot)]));
-        drawTooltip(w, f, mouse, app.size(), std::string("Creed: ") + d.name, creedTip(d), creedColor(d.archetype));
+        const Chip& c = chips[static_cast<std::size_t>(hot)];
+        drawTooltip(w, f, mouse, app.size(), c.tipTitle, c.tip, c.col);
     }
     return hot >= 0;
 }
 
 void drawCreedHud(App& app, sf::RenderWindow& w, sf::Vector2f mouse, bool tips) {
-    if (app.data().run.creeds.empty()) return;
+    if (app.data().run.creeds.empty() && app.data().run.pacts.empty()) return;
     const sf::Vector2f s = app.size();
     const float y = s.y - theme::margin - 92.f;
     bool shown = drawCreedStrip(app, w, {theme::margin, y}, false, mouse, tips);

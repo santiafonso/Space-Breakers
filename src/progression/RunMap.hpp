@@ -17,8 +17,8 @@ namespace sb {
 // move however long the map is; a non-combat node just skips that row's fight.
 // From the node you're on you may step to any node it links to in the next row.
 
-enum class MapNodeType { Combat, Elite, Shop, Forge, Rest, Upgrade, Recruit, Boss };
-inline constexpr int kMapNodeTypeCount = 8;
+enum class MapNodeType { Combat, Elite, Shop, Forge, Rest, Upgrade, Recruit, Boss, Altar };
+inline constexpr int kMapNodeTypeCount = 9;
 
 struct MapNode {
     MapNodeType type = MapNodeType::Combat;
@@ -47,6 +47,7 @@ inline const char* mapNodeName(MapNodeType t) {
         case MapNodeType::Upgrade: return "Upgrade";
         case MapNodeType::Recruit: return "Recruit";
         case MapNodeType::Boss:    return "Boss";
+        case MapNodeType::Altar:   return "Altar";
     }
     return "";
 }
@@ -61,6 +62,7 @@ inline const char* mapNodeDesc(MapNodeType t) {
         case MapNodeType::Upgrade: return "no fight: a free pick of 1 of 3 (no items)";
         case MapNodeType::Recruit: return "no fight: a new ball, or a free pick";
         case MapNodeType::Boss:    return "the act's boss";
+        case MapNodeType::Altar:   return "no fight: a pact - a gift with a price. Take one of three, or walk away";
     }
     return "";
 }
@@ -332,6 +334,18 @@ inline RunMap generateMap(Rng& rng, int act) {
     }
     for (int a : rowNodes.back()) link(a, bossId);
     for (auto& n : m.nodes) std::sort(n.next.begin(), n.next.end());
+
+    // Now and then an act hides an Altar on its map: a stop on a path (row 4
+    // up, not the pre-boss row) turns into one.
+    if (rng.irange(0, 99) < cfg::map::altarPct) {
+        std::vector<MapNode*> spots;
+        for (MapNode& n : m.nodes)
+            if (n.row >= 4 && n.row < R &&
+                (n.type == MapNodeType::Upgrade || n.type == MapNodeType::Forge || n.type == MapNodeType::Rest))
+                spots.push_back(&n);
+        if (!spots.empty()) spots[static_cast<std::size_t>(rng.irange(0, static_cast<int>(spots.size()) - 1))]->type =
+            MapNodeType::Altar;
+    }
     return m;
 }
 

@@ -17,7 +17,7 @@
 
 namespace sb {
 
-enum class ScreenId { Menu, Loadout, Play, Choice, Pause, Stats, HowTo, BossWin, Map, Shop, Equip, Dev, Creed, Sound, AbilityPick };
+enum class ScreenId { Menu, Loadout, Play, Choice, Pause, Stats, HowTo, BossWin, Map, Shop, Equip, Dev, Creed, Sound, AbilityPick, Altar };
 
 // Who opened the ball / slot picker, and so what confirming it does.
 // ShopForge / Sell are the shop's paid forge and its "sell an item" counter.
@@ -124,6 +124,16 @@ public:
     bool canGrab() const;              // "Hunters" / "Clockwork" take the balls out of your hands
     float flingPower() const;          // throw speed multiplier (Strong arm, Hot Hands, Pinball)
     void useCreedAbility();             // "Nova" (SPACE / right-click in a fight)
+    // ---- pacts (2026-09-28, core/AppPacts.cpp) ----
+    const std::vector<PactId>& pactChoices() const { return pactChoices_; }
+    void choosePact(int idx);           // Altar screen: take card idx
+    void refusePacts();                 // Altar screen: walk away
+    bool hasPact(PactId id) const { return data_.run.hasPact(id); }
+    bool aimSlows() const { return !hasPact(PactId::HeavyArm); }   // "Heavy Arm": no bullet time
+    bool aimGuide() const { return !hasPact(PactId::Blind); }      // "Blind": no dotted guide
+    float quickThrowMul() const;        // "Stillness": weaker quick throws
+    bool consumeAltarReveal();          // the map: play the "a path opens" animation once
+    void devTogglePact(PactId id);      // SB_DEV: grant it (or drop the rule)
     float novaCooldown() const { return novaCd_; }
     std::string choiceTitle() const;   // Choice screen heading
     // ---- "Calling": the starting ball's class, picked in the run intro ----
@@ -151,7 +161,7 @@ public:
     float devTimeScale() const { return devTimeScale_; }
     int devBall() const { return std::min(devBall_, std::max(0, runBallCount() - 1)); }
     void devSetBall(int b) { devBall_ = b; }
-    enum class DevOpen { Shop, Forge, Upgrade, Elite, BossTreasure, Recruit, JumpToBoss, CreedBoss, CreedStart, AbilityPick, PostFight };
+    enum class DevOpen { Shop, Forge, Upgrade, Elite, BossTreasure, Recruit, JumpToBoss, CreedBoss, CreedStart, AbilityPick, PostFight, Altar };
     void devOpen(DevOpen what);
     void devToggleCreed(CreedId id);   // grant it (or drop it, if the run has it)
     void openPause();
@@ -211,6 +221,13 @@ private:
     bool openCreedChoice(CreedSource src);   // false = nothing to offer (caller moves on)
     void continueAfterCreed();
     void grantCreed(CreedId id);
+    // Pacts.
+    void foldPacts(WorldParams& p) const;
+    bool openPactChoice(bool fromMap = true);   // false = nothing to offer (caller moves on)
+    void grantPact(PactId id);
+    void notePactFight(bool flawless);  // the hidden Altar path's streak
+    void revealAltarPath();             // on the pre-boss row with the streak: the hidden Altar appears
+    int colossusBall() const;           // "Colossus": the most built-up ball (-1 = none)
     void applyDuet();
     void applyLegion();
     int randomItemFor(const BallLoadout& b, Tier maxTier);   // a random unlocked item that fits (-1 none)
@@ -277,6 +294,8 @@ private:
     RollSource rollSource_ = RollSource::Normal;   // what the current Choice was rolled from (rerolls keep it)
     std::string choiceTitle_;                      // custom Choice heading ("Starter kit ..."), empty = default
     std::vector<CreedId> creedChoices_;
+    std::vector<PactId> pactChoices_;
+    bool pactFromMap_ = true;   // the Altar was a map stop: closing it goes back to the map
     std::vector<UpgradeKind> abilityChoices_;   // the first-ability pick's cards
     CreedSource creedSrc_ = CreedSource::Boss;
     bool abilityAfterFight_ = false;   // the ability pick came from postFight: its pick follows
