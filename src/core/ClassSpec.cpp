@@ -146,11 +146,45 @@ bool foldJester(UpgradeKind k, int level, BallMods& m) {
     }
 }
 
+// ==================================================================== Slinger
+bool foldSlinger(UpgradeKind k, int level, BallMods& m) {
+    namespace S = cfg::slinger;
+    const float n = static_cast<float>(level - 1);
+    SlingerMods& s = m.cls.slinger;
+    // Its items act on any ball you throw: the hooks run with one item too
+    // (the role's own catch / throw bonus still needs the class).
+    if (itemTag(k) == ItemTag::Slinger) m.cls.loose |= roleBit(BallRole::Slinger);
+    switch (k) {
+        case UpgradeKind::Coil:
+            s.coil = S::coilThrow + S::coilThrowPerLevel * n;
+            s.coilDrag = std::max(0.15f, S::coilDrag + S::coilDragPerLevel * n);
+            return true;
+        case UpgradeKind::CatchRelease:
+            s.releasePer = S::releasePer + S::releasePerPerLevel * n;
+            s.releaseMax = S::releaseMax;
+            return true;
+        case UpgradeKind::Afterburner:
+            s.burnFrac = S::burnFrac + S::burnFracPerLevel * n;
+            s.burnTime = S::burnTime + S::burnTimePerLevel * n;
+            return true;
+        case UpgradeKind::Momentum:   s.momentum = S::momentum + S::momentumPerLevel * n; return true;
+        case UpgradeKind::Grip:
+            s.gripTurn = S::gripTurn + S::gripTurnPerLevel * n;
+            s.gripRange = S::gripRange + S::gripRangePerLevel * n;
+            return true;
+        case UpgradeKind::Ambush:     s.ambush = S::ambush + S::ambushPerLevel * n; return true;
+        case UpgradeKind::TrickShot:  s.trick = S::trick + S::trickPerLevel * n; return true;
+        case UpgradeKind::DoubleDown: s.doubleDown = S::doubleWin + S::doubleWinPerLevel * n; return true;
+        case UpgradeKind::ExecutionThrow: s.execution = S::execution + S::executionPerLevel * n; return true;
+        default: return false;
+    }
+}
+
 }  // namespace
 
 bool foldClassItem(UpgradeKind k, int level, BallMods& m) {
     return foldMage(k, level, m) || foldShooter(k, level, m) || foldAssassin(k, level, m) ||
-           foldSummoner(k, level, m) || foldJester(k, level, m);
+           foldSummoner(k, level, m) || foldJester(k, level, m) || foldSlinger(k, level, m);
 }
 
 }  // namespace sb

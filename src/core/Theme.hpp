@@ -81,6 +81,7 @@ inline const sf::Color classShooter = soften({255, 156, 100});
 inline const sf::Color classAssassin = soften({232, 84, 112});
 inline const sf::Color classSummoner = soften({150, 226, 120});
 inline const sf::Color classJester = soften({255, 124, 214});
+inline const sf::Color classSlinger = soften({86, 214, 255});
 inline const sf::Color ability = soften({120, 216, 255});   // ability picks and slots
 inline const sf::Color pact = soften({206, 74, 146});       // pacts and the Altar: a gift with a price
 

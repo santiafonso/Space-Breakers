@@ -754,6 +754,7 @@ void PlayScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
 
 void PlayScreen::update(App& app, float dt, sf::Vector2f mouse) {
     worldMouse_ = mouse;
+    app.world().setPointer(mouse);   // "Grip" bends balls toward it
     sceneIn_ += dt;
     peek_.update(dt);
     if (peek_.open) return;   // paused: the stage banner and drag sampling wait too

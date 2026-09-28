@@ -44,9 +44,9 @@ sf::Color elementColor(Element e);
 // Guardian: big, shoves, staggers, aims its bounces; Support: marks enemies +
 // a stronger element (see cfg::role). The other five are built per class in
 // sim/Classes.hpp + sim/WorldClasses.cpp.
-enum class BallRole { Normal, Striker, Guardian, Support, Mage, Shooter, Assassin, Summoner, Jester };
-inline constexpr int kBallRoleCount = 9;
-inline constexpr int kClassCount = 8;   // every role but Normal
+enum class BallRole { Normal, Striker, Guardian, Support, Mage, Shooter, Assassin, Summoner, Jester, Slinger };
+inline constexpr int kBallRoleCount = 10;
+inline constexpr int kClassCount = 9;   // every role but Normal
 
 // A set of classes, one bit per BallRole (Normal has no bit).
 using RoleMask = unsigned;

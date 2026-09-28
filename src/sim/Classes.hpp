@@ -253,6 +253,44 @@ struct JesterWorld {
     float popCd = 0.f;
 };
 
+// ==================================================================== Slinger
+// The class of your hands: throwing and catching (2026-09-28). Its items act
+// on your throws and catches (World::classOnGrab / classOnThrow) and work on
+// any ball that carries one (ClassMods::loose).
+struct SlingerMods {
+    float coil = 0.f;          // "Coil": your throw x this (0 = off); left alone it coasts to a stop...
+    float coilDrag = 0.f;      // ...losing speed this fast (per s)
+    float releasePer = 0.f;    // "Catch & release": + damage per stack...
+    int releaseMax = 0;        // ...up to this many
+    float burnFrac = 0.f;      // "Afterburner": flame damage/s x the ball's hit (0 = off)...
+    float burnTime = 0.f;      // ...for this long after your throw
+    float momentum = 0.f;      // "Momentum": + damage per cruise of speed above its cruise
+    float gripTurn = 0.f;      // "Grip": rad/s toward your pointer...
+    float gripRange = 0.f;     // ...within this
+    float ambush = 0.f;        // "Ambush": the thrown first hit blinks on and hits the next enemy x this (0 = off)
+    float trick = 1.f;         // "Trick shot": chances x this until the thrown first hit
+    float doubleDown = 0.f;    // "Double down": the won hit x this (0 = off)
+    float execution = 0.f;     // "Execution throw": thrown first hit on an unhurt enemy x this (0 = off)
+};
+struct SlingerState {
+    float sinceThrow = 99.f;   // seconds since you threw it ("Catch & release", "Double down")
+    bool armed = false;        // you threw it and its first hit hasn't landed...
+    float armedT = 0.f;        // ...for this much longer
+    int stacks = 0;            // "Catch & release"
+    bool doubleDown = false;   // "Double down": the next hit rolls double or nothing
+    float burnT = 0.f;         // "Afterburner": seconds of flames left...
+    float flameT = 0.f;        // ...to the next flame
+};
+struct SlingerWorld {
+    struct Flame {             // "Afterburner": a patch of fire left along the throw
+        sf::Vector2f pos;
+        float life = 0.f, maxLife = 1.f;
+        float dps = 0.f;
+        int owner = -1;
+    };
+    std::vector<Flame> flames;
+};
+
 // ---------------------------------------------------------------- bundles
 // (no class logic below this line)
 
@@ -266,6 +304,7 @@ struct ClassMods {
     AssassinMods assassin;
     SummonerMods summoner;
     JesterMods jester;
+    SlingerMods slinger;
     // Classes (RoleMask bits) whose hooks also run for a ball that carries
     // their items without having the class (a single item). A class opts in
     // from its own fold (core/ClassSpec.cpp); its hooks must then check
@@ -283,6 +322,7 @@ struct ClassState {
     AssassinState assassin;
     SummonerState summoner;
     JesterState jester;
+    SlingerState slinger;
 };
 
 // On World (`World::classWorld()`): state a class owns outside the balls.
@@ -296,6 +336,7 @@ struct ClassWorldState {
     AssassinWorld assassin;
     SummonerWorld summoner;
     JesterWorld jester;
+    SlingerWorld slinger;
 };
 
 }  // namespace sb

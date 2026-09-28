@@ -2158,6 +2158,29 @@ int App::runSnapshots(const std::string& dir) {
     for (int i = 0; i < 240; ++i) update(1.f / 60.f);
     capturePath_ = d + "23_pact_fight.png";
     render();
+    {   // Slinger: a thrown ball with Coil, Afterburner, Ambush and Momentum
+        data_.run.pacts.clear();
+        BallLoadout& L = data_.run.balls[0];
+        const UpgradeKind ks[] = {UpgradeKind::Coil, UpgradeKind::Afterburner, UpgradeKind::Ambush, UpgradeKind::Momentum};
+        for (int sl = 0; sl < 4; ++sl) {
+            L.gear[sl] = static_cast<int>(ks[sl]);
+            L.gearLvl[sl] = 1;
+        }
+        syncWorldBalls();
+        world_.devSpawn(EnemyKind::Grunt, 10);
+        for (int i = 0; i < 120; ++i) update(1.f / 60.f);   // Coil: it coasts down
+        capturePath_ = d + "24a_slinger_coil.png";
+        render();
+        const sf::Vector2f at = world_.balls()[0].pos;
+        if (world_.grabAt(at, 40.f)) {
+            const std::optional<sf::Vector2f> t = world_.nearestTarget(at);
+            const sf::Vector2f dir = t ? normalized(*t - at, {1.f, 0.f}) : sf::Vector2f{1.f, 0.f};
+            world_.releaseHeld(dir * 700.f * world_.arenaScale());
+        }
+        for (int i = 0; i < 16; ++i) update(1.f / 60.f);
+        capturePath_ = d + "24b_slinger_throw.png";
+        render();
+    }
 
     r.gold = 240;
     rollShop();

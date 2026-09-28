@@ -1152,6 +1152,150 @@ template <> struct ClassHooks<BallRole::Jester> : NoClassHooks {
     }
 };
 
+// ==================================================================== Slinger
+// The class of your hands. Base: catching it pays more (World::grabAt) and the
+// first hit after your throw lands harder. Its items (Coil in regulateSpeed /
+// releaseHeld, the rest here) work on any ball, even without the class
+// (ClassMods::loose). Master Slinger: every catch recharges its abilities and
+// the thrown hit is bigger.
+template <> struct ClassHooks<BallRole::Slinger> : NoClassHooks {
+    static void tick(World& w, Ball& b, float dt, const WorldParams& p, FrameEvents&) {
+        namespace S = cfg::slinger;
+        SlingerState& st = b.cls.slinger;
+        const SlingerMods& m = b.mods.cls.slinger;
+        st.sinceThrow += dt;
+        if (st.armed && (st.armedT -= dt) <= 0.f) st.armed = false;   // the thrown hit went unused
+        // "Afterburner": fire along the throw while it's still flying fast.
+        if (st.burnT > 0.f) {
+            st.burnT -= dt;
+            st.flameT -= dt;
+            if (st.flameT <= 0.f && m.burnFrac > 0.f && length(b.vel) > w.ballCruise(b, p)) {
+                st.flameT = S::flameEvery;
+                auto& fl = w.classWorld_.slinger.flames;
+                if (static_cast<int>(fl.size()) >= S::maxFlames) fl.erase(fl.begin());
+                fl.push_back({b.pos, S::flameLife, S::flameLife, w.ballDamage(b, p) * m.burnFrac, b.owner});
+            }
+        }
+        // "Grip": close to your pointer, it bends toward it.
+        if (m.gripTurn > 0.f && w.hasPointer_ && !b.held) {
+            const sf::Vector2f to = w.pointer_ - b.pos;
+            const float sp = length(b.vel);
+            if (sp > 1e-3f && length(to) < m.gripRange * w.arenaScale()) {
+                const float cur = std::atan2(b.vel.y, b.vel.x);
+                const float want = std::atan2(to.y, to.x);
+                const float d = clampf(std::remainder(want - cur, 2.f * kPi), -m.gripTurn * dt, m.gripTurn * dt);
+                b.vel = sf::Vector2f{std::cos(cur + d), std::sin(cur + d)} * sp;
+            }
+        }
+    }
+
+    static void onGrab(World&, Ball& b) {
+        namespace S = cfg::slinger;
+        SlingerState& st = b.cls.slinger;
+        const SlingerMods& m = b.mods.cls.slinger;
+        const bool quick = st.sinceThrow < S::releaseWindow;   // caught back soon after your throw
+        if (m.releaseMax > 0) st.stacks = quick ? std::min(st.stacks + 1, m.releaseMax) : 0;   // "Catch & release"
+        if (m.doubleDown > 0.f && quick) st.doubleDown = true;                                // "Double down"
+        if (b.isAscended(BallRole::Slinger))   // Master Slinger: a catch recharges its abilities
+            for (int i = 0; i < kMaxAbilitySlots; ++i)
+                if (b.abilities[i].id != Ability::None)
+                    b.abilityCd[i] = std::max(0.f, b.abilityCd[i] - S::masterRecharge *
+                                                   abilityCooldown(b.abilities[i].id, b.abilities[i].level));
+    }
+
+    static void onThrow(World&, Ball& b) {
+        SlingerState& st = b.cls.slinger;
+        st.sinceThrow = 0.f;
+        st.armed = true;
+        st.armedT = cfg::slinger::armedTime;
+        st.burnT = b.mods.cls.slinger.burnTime;   // "Afterburner" (0 without it)
+        st.flameT = 0.f;
+    }
+
+    static float damageMul(const World& w, const Ball& b, const WorldParams& p) {
+        const SlingerMods& m = b.mods.cls.slinger;
+        float k = 1.f + m.releasePer * static_cast<float>(b.cls.slinger.stacks);   // "Catch & release"
+        if (m.momentum > 0.f) {   // "Momentum": every cruise over its own adds up, no cap
+            const float over = length(b.vel) / std::max(1.f, w.ballCruise(b, p)) - 1.f;
+            if (over > 0.f) k *= 1.f + m.momentum * over;
+        }
+        return k;
+    }
+
+    static float preHit(World& w, Ball& b, const Enemy& e, const WorldParams& p) {
+        namespace S = cfg::slinger;
+        SlingerState& st = b.cls.slinger;
+        const SlingerMods& m = b.mods.cls.slinger;
+        float k = 1.f;
+        if (st.doubleDown) {   // "Double down": double or nothing, luck on the win
+            st.doubleDown = false;
+            k *= w.chance(S::doubleChance, p) ? m.doubleDown : 0.f;
+        }
+        if (!st.armed) return k;
+        if (b.hasRole(BallRole::Slinger))   // the class: your throw's first hit lands harder
+            k *= b.isAscended(BallRole::Slinger) ? S::masterThrownHit : S::thrownHit;
+        if (m.execution > 0.f && e.hp >= e.maxHp) k *= m.execution;   // "Execution throw"
+        return k;
+    }
+
+    static void onHit(World& w, Ball& b, Enemy& e, float dmg, bool, const WorldParams& p, FrameEvents& ev) {
+        SlingerState& st = b.cls.slinger;
+        if (!st.armed) return;
+        st.armed = false;   // the thrown first hit is spent
+        const float amb = b.mods.cls.slinger.ambush;
+        if (amb <= 0.f || b.ghost) return;
+        // "Ambush": blink on to the nearest other enemy and strike it.
+        Enemy* t = nullptr;
+        float best = cfg::slinger::ambushRange * w.arenaScale();
+        best *= best;
+        for (Enemy& o : w.enemies_) {
+            if (&o == &e || o.hp <= 0.f) continue;
+            const float d2 = dot(o.pos - b.pos, o.pos - b.pos);
+            if (d2 < best) { best = d2; t = &o; }
+        }
+        if (!t) return;
+        const sf::Vector2f from = b.pos;
+        const sf::Vector2f dir = normalized(from - t->pos, {1.f, 0.f});
+        b.pos = t->pos + dir * (t->radius + b.radius + 2.f);
+        b.pos.x = clampf(b.pos.x, b.radius, w.size_.x - b.radius);
+        b.pos.y = clampf(b.pos.y, b.radius, w.size_.y - b.radius);
+        const float sp = std::max(length(b.vel), w.ballCruise(b, p));
+        b.vel = dir * sp;   // it bounces off the one it hit
+        b.trail.clear();
+        w.damageEnemy(*t, dmg * amb);
+        ClassHooks<BallRole::Assassin>::addFx(w, from, b.pos, b.radius, true);
+        ev.bursts.push_back({t->pos, t->radius * 2.2f, theme::classSlinger, nullptr});
+    }
+
+    // "Afterburner": the flames burn what stands in them - the Fire element
+    // for real: its reactions, Ember's burn, the element nodes' potency.
+    static void worldTick(World& w, float dt, const WorldParams& p, FrameEvents& ev) {
+        namespace S = cfg::slinger;
+        auto& fl = w.classWorld_.slinger.flames;
+        if (fl.empty()) return;
+        const float r = S::flameRadius * w.arenaScale();
+        const float pot = p.elemMult[static_cast<int>(Element::Fire)];
+        for (Enemy& e : w.enemies_) {
+            if (e.hp <= 0.f) continue;
+            const SlingerWorld::Flame* in = nullptr;
+            for (const SlingerWorld::Flame& f : fl)
+                if (dot(e.pos - f.pos, e.pos - f.pos) < (r + e.radius) * (r + e.radius) && (!in || f.dps > in->dps)) in = &f;
+            if (!in) continue;
+            w.damageEnemy(e, in->dps * dt);
+            if (p.emberLevel > 0) {   // "Ember": the same burn a fire ball leaves
+                e.burn = std::max(e.burn, cfg::element::burnDuration);
+                e.burnDps = std::max(e.burnDps, cfg::element::burnDps * pot *
+                                                    (1.f + cfg::element::burnPerEmberLevel * static_cast<float>(p.emberLevel - 1)));
+            }
+            if (e.elem != Element::Fire) w.applyElement(e, Element::Fire, in->owner, in->dps, p, ev);   // reactions
+        }
+        for (SlingerWorld::Flame& f : fl) f.life -= dt;
+        fl.erase(std::remove_if(fl.begin(), fl.end(), [](const SlingerWorld::Flame& f) { return f.life <= 0.f; }), fl.end());
+    }
+
+    static void waveStart(World& w, const WorldParams&) { w.classWorld_.slinger.flames.clear(); }
+};
+
 // ---------------------------------------------------------------- dispatch
 // (no class logic below this line)
 
@@ -1168,6 +1312,7 @@ void eachClass(RoleMask m, Fn&& fn) {
     if (m & roleBit(BallRole::Assassin)) fn(ClassHooks<BallRole::Assassin>{});
     if (m & roleBit(BallRole::Summoner)) fn(ClassHooks<BallRole::Summoner>{});
     if (m & roleBit(BallRole::Jester))   fn(ClassHooks<BallRole::Jester>{});
+    if (m & roleBit(BallRole::Slinger))  fn(ClassHooks<BallRole::Slinger>{});
 }
 
 constexpr RoleMask kAllClasses = ~0u;
@@ -1210,6 +1355,20 @@ void World::classWorldTick(float dt, const WorldParams& p, FrameEvents& ev) {
 
 void World::classWaveStart(const WorldParams& p) {
     eachClass(kAllClasses, [&](auto h) { decltype(h)::waveStart(*this, p); });
+}
+
+void World::classOnGrab(Ball& b) {
+    eachClass(hookMask(b), [&](auto h) { decltype(h)::onGrab(*this, b); });
+}
+
+void World::classOnThrow(Ball& b) {
+    eachClass(hookMask(b), [&](auto h) { decltype(h)::onThrow(*this, b); });
+}
+
+float World::classPreHit(Ball& b, const Enemy& e, const WorldParams& p) {
+    float m = 1.f;
+    eachClass(hookMask(b), [&](auto h) { m *= decltype(h)::preHit(*this, b, e, p); });
+    return m;
 }
 
 }  // namespace sb

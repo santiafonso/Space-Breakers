@@ -32,6 +32,12 @@ struct NoClassHooks {
     static void worldTick(World&, float /*dt*/, const WorldParams&, FrameEvents&) {}
     // A new wave starts (the balls carry over; ghosts are gone).
     static void waveStart(World&, const WorldParams&) {}
+    // You picked it up / threw it (a real throw, click or slingshot).
+    static void onGrab(World&, Ball&) {}
+    static void onThrow(World&, Ball&) {}
+    // Right before one of its hits lands on `e`: a multiplier for that hit
+    // (it may roll or spend state - it runs once per hit).
+    static float preHit(World&, Ball&, const Enemy&, const WorldParams&) { return 1.f; }
 };
 template <BallRole R> struct ClassHooks;
 
@@ -79,6 +85,7 @@ public:
 
     // ---- grab / throw: knock a ball off its orbit -------------------
     bool grabAt(sf::Vector2f point, float catchRadius);
+    void setPointer(sf::Vector2f p) { pointer_ = p; hasPointer_ = true; }   // the play screen, every frame
     float heldCatch() const { return heldCatch_; }   // the grab just made: its catch reward (0 = none)
     bool hasHeld() const { return grabbed_ != Grabbed::None; }
     Grabbed grabbedKind() const { return grabbed_; }
@@ -226,6 +233,9 @@ private:
     float classDamageMul(const Ball& b, const WorldParams& p) const;
     void classWorldTick(float dt, const WorldParams& p, FrameEvents& ev);
     void classWaveStart(const WorldParams& p);
+    void classOnGrab(Ball& b);
+    void classOnThrow(Ball& b);
+    float classPreHit(Ball& b, const Enemy& e, const WorldParams& p);
 
     // ---- abilities (sim/WorldAbilities.cpp) ----
     void updateAbilities(Ball& b, float dt, const WorldParams& p, FrameEvents& ev);
@@ -280,6 +290,9 @@ private:
     sf::Vector2f heldPrevVel_{0.f, 0.f};     // velocity before the grab (cancelHeld restores it)
     float heldCatch_ = 0.f;                  // catch reward earned by this grab (0..catchBonusMax)
     float heldT_ = 0.f;                      // seconds the held ball has been held ("Hot Potato")
+    sf::Vector2f pointer_{0.f, 0.f};         // your pointer in the arena ("Grip")
+    bool hasPointer_ = false;
+    float trickLuck_ = 1.f;                  // "Trick shot": every chance x this while its hit resolves
     PactRules pact_;                         // the run's pacts, from WorldParams (each step / wave start)
     float autoFlingTimer_ = 1.f;   // "Clockwork": time to its next throw
 

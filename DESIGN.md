@@ -1986,7 +1986,12 @@ solo pero cuidando el núcleo.
   **Trick shot** (chances x3 hasta el primer golpe tras un tiro), **Double
   down** (atrapar una pelota que tiraste vos = próximo golpe doble o nada),
   **Execution throw** (primer golpe de tiro a enemigo con vida llena = crítico).
-  Ascendida: cada atrapada recarga algo (a definir al hacerla).
+  Clase (2 items): atraparla paga 50% más de premio y el primer golpe tras tu
+  tiro pega +25%. Ascendida "Master Slinger" (4 items): cada atrapada recarga
+  35% de sus habilidades y el golpe tirado pega +50%. Sus items funcionan con
+  1 solo item en cualquier pelota (como Jester). Sin nodo en la web por ahora
+  (siempre disponible, como Striker) hasta rehacer la progresión.
+  Ballast (modificador) pasa al paso 6, con los modificadores nuevos.
 - Las demás clases solo suman items que escalan con la velocidad:
   Guardian **Anchor**, **Plow**; Shooter **Slug** (más lenta = más cadencia y
   rango), **Strafe**; Assassin **Lurk**, **Blur**; Jester **Sleight**, **Wild

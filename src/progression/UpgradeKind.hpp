@@ -111,6 +111,17 @@ enum class UpgradeKind {
     ChaosBounce,       // wall bounces fly off at random, arming a harder hit [Jester]
     Jackpot,           // a kill may hit the jackpot: gold and a big blast [Jester]
 
+    // ---- Slinger items (the class of throwing and catching, 2026-09-28) ----
+    Coil,              // coasts to a stop; thrown by you it flies twice as fast [Slinger]
+    CatchRelease,      // caught soon after your throw: stacks damage         [Slinger]
+    Afterburner,       // thrown by you, it leaves a trail of real fire        [Slinger]
+    Momentum,          // the faster it flies, the harder it hits (no cap)     [Slinger]
+    Grip,              // curves toward your pointer when it's near            [Slinger]
+    Ambush,            // a thrown ball's first hit blinks it onto the next enemy [Slinger]
+    TrickShot,         // until the first hit after a throw, every chance x3   [Slinger]
+    DoubleDown,        // catch a ball you threw: its next hit is double or nothing [Slinger]
+    ExecutionThrow,    // a thrown ball's first hit on an unhurt enemy crits   [Slinger]
+
     // ---- relics (keep CoreSpring first and Overcharge last) ----
     CoreSpring,        // balls ricochet off the core faster
     CoreSlowField,     // a zone around the core slows enemies inside it
@@ -139,7 +150,7 @@ inline constexpr int kTierCount = 5;
 
 // ---- item tags: a ball's classes come from them -----------------------------
 // Same order as BallRole (sim/Entities.hpp), None = Normal.
-enum class ItemTag { None, Striker, Guardian, Support, Mage, Shooter, Assassin, Summoner, Jester };
+enum class ItemTag { None, Striker, Guardian, Support, Mage, Shooter, Assassin, Summoner, Jester, Slinger };
 
 // Everything the UI and the roll need to know about one class item. The five
 // newer classes describe their items with these (ClassItems.hpp); the older

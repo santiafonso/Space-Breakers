@@ -139,9 +139,46 @@ inline const ItemDef* jesterItemDef(UpgradeKind k) {
     return findItemDef(defs, k);
 }
 
+// ==================================================================== Slinger
+inline const ItemDef* slingerItemDef(UpgradeKind k) {
+    static const std::vector<ItemDef> defs = {
+        // Every Slinger item acts on your throws and catches, so it works on
+        // any ball you like to handle.
+        {UpgradeKind::Momentum, "Momentum", "Momentum",
+         "the faster it flies, the harder it hits: +35% per cruise of speed above its own, no cap",
+         "+10% per cruise", Tier::Common, ItemTag::Slinger},
+        {UpgradeKind::Grip, "Grip", "Grip",
+         "when it's near your pointer it curves toward it - easier to catch",
+         "turns harder, from further", Tier::Common, ItemTag::Slinger},
+        {UpgradeKind::CatchRelease, "CatchRelease", "Catch & release",
+         "catch it within 2.5 s of your throw: +15% damage, stacking up to 5 (a slow catch drops the stacks)",
+         "+4% per stack", Tier::Common, ItemTag::Slinger},
+        {UpgradeKind::Coil, "Coil", "Coil",
+         "left alone it slows down to a stop - but when you throw it, it flies twice as fast",
+         "throws +20% faster, coasts longer", Tier::Uncommon, ItemTag::Slinger},
+        {UpgradeKind::Afterburner, "Afterburner", "Afterburner",
+         "for 1.4 s after your throw, while it flies fast, it leaves a trail of fire: it burns (60% of its hit per s) and sets off fire reactions",
+         "hotter (+15%) and longer (+0.2 s)", Tier::Uncommon, ItemTag::Slinger},
+        {UpgradeKind::ExecutionThrow, "ExecutionThrow", "Execution throw",
+         "the first hit after your throw, on an enemy at full health, deals x2.2",
+         "+0.3x", Tier::Uncommon, ItemTag::Slinger},
+        {UpgradeKind::Ambush, "Ambush", "Ambush",
+         "the first hit after your throw blinks it on to the nearest other enemy, striking it for x1.5",
+         "+0.2x", Tier::Rare, ItemTag::Slinger},
+        {UpgradeKind::TrickShot, "TrickShot", "Trick shot",
+         "from your throw until its first hit, every chance it has (crits, echoes, zaps, Jester rolls) is x3",
+         "x0.5 more", Tier::Rare, ItemTag::Slinger},
+        {UpgradeKind::DoubleDown, "DoubleDown", "Double down",
+         "catch it within 2.5 s of your throw and its next hit is double or nothing: x2.5 or a miss (luck favours the win)",
+         "the win +0.3x", Tier::Epic, ItemTag::Slinger},
+    };
+    return findItemDef(defs, k);
+}
+
 // ---------------------------------------------------------------- lookup
 inline const ItemDef* classItemDef(UpgradeKind k) {
-    for (const ItemDef* (*f)(UpgradeKind) : {mageItemDef, shooterItemDef, assassinItemDef, summonerItemDef, jesterItemDef})
+    for (const ItemDef* (*f)(UpgradeKind) : {mageItemDef, shooterItemDef, assassinItemDef, summonerItemDef, jesterItemDef,
+                                             slingerItemDef})
         if (const ItemDef* d = f(k)) return d;
     return nullptr;
 }

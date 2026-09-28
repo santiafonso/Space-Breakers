@@ -191,6 +191,29 @@ void worldSummoner(sf::RenderTarget& t, const World& world) {
     }
 }
 
+// ==================================================================== Slinger
+// A chevron pointing where it flies: the ball you throw.
+void markSlinger(sf::RenderTarget& t, sf::Vector2f p, float r, float heading, float a) {
+    const sf::Vector2f f{std::cos(heading), std::sin(heading)};
+    const sf::Vector2f s{-f.y, f.x};
+    const sf::Vector2f tip = p + f * (r * 0.42f);
+    const sf::Vector2f back = p - f * (r * 0.05f);
+    draw::line(t, tip, back + s * (r * 0.36f), 2.f, white(0.75f * a));
+    draw::line(t, tip, back - s * (r * 0.36f), 2.f, white(0.75f * a));
+}
+// "Afterburner": the fire left along a throw - small embers that shrink as
+// they burn out.
+void worldSlinger(sf::RenderTarget& t, const World& world) {
+    const float k = world.arenaScale();
+    for (const SlingerWorld::Flame& f : world.classWorld().slinger.flames) {
+        const float life = clampf(f.life / f.maxLife, 0.f, 1.f);
+        const float r = cfg::slinger::flameRadius * k * (0.45f + 0.55f * life);
+        draw::disc(t, f.pos, r, withAlpha(theme::ember, 0.35f * life), withAlpha(theme::elemFire, 0.f), {1.f, 1.f}, 16);
+        draw::disc(t, f.pos, r * 0.35f, withAlpha(sf::Color(255, 220, 160), 0.6f * life),
+                   withAlpha(theme::ember, 0.2f * life), {1.f, 1.f}, 10);
+    }
+}
+
 // ==================================================================== Jester
 void markJester(sf::RenderTarget& t, sf::Vector2f p, float r, float, float a) {
     for (float side : {-1.f, 1.f})
@@ -304,6 +327,7 @@ void drawClassMark(sf::RenderTarget& t, BallRole role, sf::Vector2f pos, float r
         case BallRole::Assassin: markAssassin(t, pos, r, heading, alpha); break;
         case BallRole::Summoner: markSummoner(t, pos, r, heading, alpha); break;
         case BallRole::Jester:   markJester(t, pos, r, heading, alpha); break;
+        case BallRole::Slinger:  markSlinger(t, pos, r, heading, alpha); break;
     }
 }
 
@@ -313,6 +337,7 @@ void drawClassWorld(sf::RenderTarget& t, const World& world) {
     worldAssassin(t, world);
     worldSummoner(t, world);
     worldJester(t, world);
+    worldSlinger(t, world);
 }
 
 }  // namespace sb

@@ -232,4 +232,48 @@ inline constexpr float jackpotRadius = 150.f;
 inline constexpr int jackpotGold = 10, jackpotGoldPerLevel = 5;
 }  // namespace jester
 
+// ==================================================================== Slinger
+namespace slinger {
+// Role (2 items): catching it pays more, your throw's first hit lands harder.
+inline constexpr float catchMul = 1.5f;        // catch reward x this
+inline constexpr float thrownHit = 1.25f;      // the first hit after your throw x this...
+inline constexpr float armedTime = 3.f;        // ...if it lands within this long
+// Master Slinger (4 items): every catch recharges its abilities; a bigger thrown hit.
+inline constexpr float masterRecharge = 0.35f; // share of each ability's cooldown
+inline constexpr float masterThrownHit = 1.5f;
+
+// "Coil": left alone it coasts down to a stop; your throw x this.
+inline constexpr float coilThrow = 2.f, coilThrowPerLevel = 0.2f;
+inline constexpr float coilDrag = 0.45f;       // speed lost per s (exponential), slower each level
+inline constexpr float coilDragPerLevel = -0.05f;
+// "Catch & release": caught within window s of your throw, +per damage (up to max).
+inline constexpr float releaseWindow = 2.5f;
+inline constexpr float releasePer = 0.15f, releasePerPerLevel = 0.04f;
+inline constexpr int releaseMax = 5;
+// "Afterburner": after your throw, while faster than its cruise, it leaves
+// fire - the Fire element for real (reactions, Ember's burn, element nodes).
+inline constexpr float burnFrac = 0.6f, burnFracPerLevel = 0.15f;   // flame damage/s x the ball's hit
+inline constexpr float burnTime = 1.4f, burnTimePerLevel = 0.2f;
+inline constexpr float flameEvery = 0.05f;     // s between flames
+inline constexpr float flameLife = 1.2f;
+inline constexpr float flameRadius = 22.f;
+inline constexpr int maxFlames = 90;
+// "Momentum": + damage per cruise of speed over its cruise.
+inline constexpr float momentum = 0.35f, momentumPerLevel = 0.1f;
+// "Grip": bends toward your pointer when it's close.
+inline constexpr float gripTurn = 2.2f, gripTurnPerLevel = 0.4f;   // rad/s
+inline constexpr float gripRange = 230.f, gripRangePerLevel = 25.f;
+// "Ambush": the thrown first hit blinks on to the nearest other enemy and hits it x this.
+inline constexpr float ambush = 1.5f, ambushPerLevel = 0.2f;
+inline constexpr float ambushRange = 420.f;
+// "Trick shot": every chance x this until the thrown first hit lands.
+inline constexpr float trick = 3.f, trickPerLevel = 0.5f;
+// "Double down": catch a ball you threw (within releaseWindow): its next hit
+// is doubled-and-more or nothing (heads x luck).
+inline constexpr float doubleWin = 2.5f, doubleWinPerLevel = 0.3f;
+inline constexpr float doubleChance = 0.5f;
+// "Execution throw": thrown first hit on an enemy at full health x this.
+inline constexpr float execution = 2.2f, executionPerLevel = 0.3f;
+}  // namespace slinger
+
 }  // namespace sb::cfg

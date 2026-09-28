@@ -640,8 +640,10 @@ bool World::grabAt(sf::Vector2f point, float catchRadius) {
         const float t = clampf((ratio - C::catchFromRatio) / (C::catchFullRatio - C::catchFromRatio), 0.f, 1.f);
         heldCatch_ = C::catchBonusMax * t * pact_.catchMul;   // "Quick Hands" pact
     }
+    if (b.hasRole(BallRole::Slinger)) heldCatch_ *= cfg::slinger::catchMul;   // Slinger: made for catching
     heldT_ = 0.f;
     pactOnGrab(b);
+    classOnGrab(b);
     b.held = true;
     b.vel = {0.f, 0.f};
     b.trail.clear();
@@ -667,6 +669,7 @@ void World::releaseHeld(sf::Vector2f throwVel) {
     heldGrabOffset_ = {0.f, 0.f};
     if (b.hasRole(BallRole::Striker)) throwVel *= cfg::role::strikerFlingMult;   // built to be flung
     if (b.mods.cometFling > 0.f) throwVel *= b.mods.cometFling;                 // "Comet"
+    if (b.mods.cls.slinger.coil > 0.f) throwVel *= b.mods.cls.slinger.coil;     // "Coil"
     b.homing = false;
     const float s = length(throwVel);
     if (s < cfg::ball::minThrowSpeed) b.vel = rng_.direction() * cfg::ball::nudgeSpeed;
@@ -678,6 +681,7 @@ void World::releaseHeld(sf::Vector2f throwVel) {
             b.catchBonus = heldCatch_;
             b.catchT = cfg::combat::catchWindow;
         }
+        classOnThrow(b);  // Slinger: armed first hit, Afterburner
         pactOnThrow(b);   // Quick Hands clock, Hot Potato charge, Mirror ghost
     }
     heldCatch_ = 0.f;
@@ -1053,7 +1057,7 @@ void World::resonate(Ball& b, float dmg, const WorldParams& p, FrameEvents& ev) 
 // ---------------------------------------------------------------- synergies
 
 bool World::chance(float base, const WorldParams& p) {
-    return rng_.range(0.f, 1.f) < std::min(base * p.luck, cfg::synergy::chanceCap);
+    return rng_.range(0.f, 1.f) < std::min(base * p.luck * trickLuck_, cfg::synergy::chanceCap);   // "Trick shot"
 }
 
 void World::damageEnemy(Enemy& e, float dmg) {
@@ -1072,7 +1076,11 @@ bool World::strike(Ball& b, Enemy& e, sf::Vector2f normal, const WorldParams& p,
                    bool allowEcho) {
     namespace S = cfg::synergy;
     const BallMods& m = b.mods;
+    // "Trick shot": until a thrown ball's first hit is done, its chances are up.
+    struct Restore { float& v; float old; ~Restore() { v = old; } } restoreTrick{trickLuck_, trickLuck_};
+    if (b.cls.slinger.armed && m.cls.slinger.trick > 1.f) trickLuck_ = m.cls.slinger.trick;
     float dmg = ballDamage(b, p);   // fire / ricochet / Glutton / role bonuses are baked in
+    dmg *= classPreHit(b, e, p);    // Slinger: the thrown first hit, Execution throw, Double down
     const bool afflicted = e.poison > 0.f || e.frozen > 0.f || e.burn > 0.f;
     if (p.primed && afflicted) dmg *= cfg::combat::primedMult;             // "Primed"
     if (m.shatterMult > 0.f && e.frozen > 0.f) dmg *= m.shatterMult;       // "Shatter"
@@ -1481,6 +1489,11 @@ void World::regulateSpeed(Ball& b, float dt, const WorldParams& p) {
     const float vMax = ballMaxSpeed(b, p);
 
     const float sp = length(b.vel);
+    if (const float drag = b.mods.cls.slinger.coilDrag; drag > 0.f) {   // "Coil": coasts down to a stop
+        b.vel *= std::exp(-drag * dt);
+        if (length(b.vel) < cfg::ball::nudgeSpeed * 0.1f) b.vel = {0.f, 0.f};
+        return;
+    }
     if (sp < 1e-3f) {
         b.vel = rng_.direction() * cruiseS;
         return;
