@@ -65,10 +65,10 @@ constexpr float kWebCenterY = 0.53f;  // * size.y
 constexpr int   kBackRings = 7;       // faint rings drawn behind the web
 constexpr float kZoomMin = 0.45f, kZoomMax = 1.9f;
 // The legend lists the routes clockwise from the top, like the web.
-constexpr MetaBranch kLegend[] = {MetaBranch::Striker,  MetaBranch::Shooter, MetaBranch::Jester,
+constexpr MetaBranch kLegend[] = {MetaBranch::Striker,  MetaBranch::Slinger, MetaBranch::Shooter, MetaBranch::Jester,
                                   MetaBranch::Assassin, MetaBranch::Creeds,   MetaBranch::Summoner,
                                   MetaBranch::Support,  MetaBranch::Mage,    MetaBranch::Guardian};
-constexpr int kLegendCount = 9;
+constexpr int kLegendCount = 10;
 constexpr float kLegendRow = 21.f;
 
 const sf::Color kPrismColor = theme::puSurge;   // violet - distinct from the core-blue accent
@@ -86,7 +86,7 @@ sf::Color branchColor(MetaBranch b) {
 float nodeRing(int i) { return metaUnlockDef(i).ring; }
 
 // The node that unlocks a class (drawn bigger, its name always shown).
-bool isClassNode(int i) { return i >= MetaClassSupport && i <= MetaClassJester; }
+bool isClassNode(int i) { return (i >= MetaClassSupport && i <= MetaClassJester) || i == MetaClassSlinger; }
 
 const char* branchLabel(MetaBranch b) {
     switch (b) {

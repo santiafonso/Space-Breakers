@@ -776,13 +776,16 @@ enum MetaUnlock {
     MetaArchive,      // Archive        - Mage balls recharge faster still
     MetaLoreGuardian, // Guardian lore                                                    (Guardian)
     MetaStonewall,    // Stonewall      - Guardian balls patch the core on core bounces
+    // ---- 2026-09-28 append (never reorder): the Slinger route ----
+    MetaClassSlinger, // Slinger        - Slinger items can appear                        (Slinger)
+    MetaLoreSlinger,  // Slinger lore
     MetaUnlockCount
 };
 
 // A route = a class (same order as ItemTag: Striker = 1 ... Jester = 8), plus
 // the root and the Creeds branch. Not saved.
-enum class MetaBranch { Root, Striker, Guardian, Support, Mage, Shooter, Assassin, Summoner, Jester, Creeds };
-inline constexpr int kMetaBranchCount = 10;
+enum class MetaBranch { Root, Striker, Guardian, Support, Mage, Shooter, Assassin, Summoner, Jester, Slinger, Creeds };
+inline constexpr int kMetaBranchCount = 11;
 inline ItemTag metaBranchTag(MetaBranch b) {   // the class a route leads to (None: root / Creeds)
     return b == MetaBranch::Root || b == MetaBranch::Creeds ? ItemTag::None : static_cast<ItemTag>(static_cast<int>(b));
 }
@@ -978,6 +981,10 @@ inline const MetaUnlockDef& metaUnlockDef(int u) {
                          10u, 2, B::Guardian, C, 52, 324.f, 4.f},
         /* Stonewall */ {"Stonewall", "balls with the Guardian class patch the core up by 0.5 per level on every core bounce",
                          12u, 2, B::Guardian, C, 52, 336.f, 4.f},
+        /* Slinger   */ {"Slinger",   "unlocks the Slinger class: its items can appear (throwing and catching)",
+                         18u, 1, B::Slinger,  C, MetaSling, 12.f, 3.f},
+        /* SlingerLore*/{"Slinger lore","Slinger items show up 50% more often per level",
+                         10u, 2, B::Slinger,  C, MetaClassSlinger, 12.f, 4.f},
     };
     return defs[u];
 }
@@ -993,6 +1000,7 @@ inline int classLoreNode(ItemTag t) {
         case ItemTag::Assassin: return MetaLoreAssassin;
         case ItemTag::Summoner: return MetaLoreSummoner;
         case ItemTag::Jester:   return MetaLoreJester;
+        case ItemTag::Slinger:  return MetaLoreSlinger;
         default:                return -1;
     }
 }
@@ -1042,6 +1050,7 @@ inline int classUnlockNode(ItemTag t) {
         case ItemTag::Assassin: return MetaClassAssassin;
         case ItemTag::Summoner: return MetaClassSummoner;
         case ItemTag::Jester:   return MetaClassJester;
+        case ItemTag::Slinger:  return MetaClassSlinger;
         default:                return -1;
     }
 }
