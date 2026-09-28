@@ -2,11 +2,11 @@
 
 namespace sb {
 
-// The slice of the run's pacts (progression/Pacts.hpp) the simulation has to
+// The slice of the run's creeds (progression/Creeds.hpp) the simulation has to
 // know about. Everything that is just a number on existing params (damage,
 // cruise, luck, ball count, core HP) is folded in by App instead, so this stays
-// small. All defaults = no pact. The hooks live in sim/WorldPacts.cpp.
-struct PactRules {
+// small. All defaults = no creed. The hooks live in sim/WorldCreeds.cpp.
+struct CreedRules {
     // Thrower
     float speedCeilMul = 1.f;    // Hot Hands: a ball's top speed x this (flings can go far past cruise)
     float flingHold = 1.f;       // Hot Hands: fling-speed decay x this (< 1 keeps a throw fast longer)

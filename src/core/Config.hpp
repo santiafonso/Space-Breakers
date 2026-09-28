@@ -141,7 +141,7 @@ inline constexpr float tierShiftPerPoint = 0.035f;
 inline constexpr float tierShiftCap = 0.6f;
 inline constexpr int cloverPoints = 6;        // "Lucky clover" relic (chances x1.48)
 inline constexpr int luckyStarPerLevel = 2;   // "Lucky star" web node, per level
-inline constexpr int dicePoints = 12;         // "Loaded Dice" pact (chances x1.96)
+inline constexpr int dicePoints = 12;         // "Loaded Dice" creed (chances x1.96)
 }  // namespace luck
 
 // Synergies (Fase I): procs, element reactions, ascended classes and the big
@@ -401,7 +401,7 @@ namespace run {
 inline constexpr int choiceCards = 3;  // every pick deals 3 cards (Quartermaster's starter pick and Calling's
                                        // first-ability pick are the upgrades that deal more)
 inline constexpr float newBallCardWeight = 0.3f;   // an "Extra ball" card weighs this vs 1 for other picks of its tier
-inline constexpr int startBalls = 1;   // every run starts with one ball (more come from picks / pacts)
+inline constexpr int startBalls = 1;   // every run starts with one ball (more come from picks / creeds)
 // Five acts of 10 difficulty waves each; wave 10 of every act is its boss
 // (Charger, Hive, Warden, Dasher, Orbital). "Continue" carries the run past
 // each boss once a run has been won before.
@@ -701,12 +701,12 @@ inline constexpr float stonewallPerLevel = 0.5f;     // "Stonewall": core HP per
 inline constexpr int abilityPickCards = 3;           // the run's first-ability pick (+1 with "Calling")
 }  // namespace meta
 
-// Pacts (Fase O): run-defining rules picked after the act-1 boss (and at the
-// run start with "Covenant"). Definitions in progression/Pacts.hpp, sim hooks
-// in sim/WorldPacts.cpp.
-namespace pact {
-inline constexpr int offered = 3;            // cards per pact choice ("Oath": +1)
-inline constexpr int refuseGold = 40;        // turning every pact down pays this
+// Creeds (Fase O): run-defining rules picked after the act-1 boss (and at the
+// run start with "Covenant"). Definitions in progression/Creeds.hpp, sim hooks
+// in sim/WorldCreeds.cpp.
+namespace creed {
+inline constexpr int offered = 3;            // cards per creed choice ("Oath": +1)
+inline constexpr int refuseGold = 40;        // turning every creed down pays this
 // Hot Hands
 inline constexpr float hotFling = 1.7f;      // throw speed x this
 inline constexpr float hotCeil = 3.0f;       // top speed x this (so the throw isn't clipped)
@@ -760,7 +760,7 @@ inline constexpr float alchemyChance = 0.5f;
 inline constexpr float alchemyDamage = 0.75f;
 // Bloodlust
 inline constexpr float bloodCoreDamage = 1.5f;
-}  // namespace pact
+}  // namespace creed
 
 // Power-up orbs drift in and buff the balls for a few seconds. Spawn cadence is
 // deliberately slow at baseline; the "Uplink" web node scales p.pickupSpawnMult

@@ -1,6 +1,6 @@
-// Pact hooks (Fase O). Everything a pact does inside the simulation lives here,
-// kept apart from World.cpp: each function is a no-op unless its pact is on
-// (WorldParams::pact), and World.cpp only calls into them from one line each.
+// Creed hooks (Fase O). Everything a creed does inside the simulation lives here,
+// kept apart from World.cpp: each function is a no-op unless its creed is on
+// (WorldParams::creed), and World.cpp only calls into them from one line each.
 
 #include <algorithm>
 #include <cmath>
@@ -33,7 +33,7 @@ void World::trimBalls(int n) {
 
 // "Nova": every ball is thrown out of the core at once, fanned evenly around
 // it, and the core shoves back whatever was pressing on it.
-void World::pactNova(const WorldParams& p) {
+void World::creedNova(const WorldParams& p) {
     forceRelease();
     std::vector<Ball*> movers;
     for (Ball& b : balls_)
@@ -45,17 +45,17 @@ void World::pactNova(const WorldParams& p) {
         const float a = off + 2.f * kPi * static_cast<float>(i) / static_cast<float>(std::max(1, n));
         const sf::Vector2f dir{std::cos(a), std::sin(a)};
         b.pos = core_.pos + dir * (core_.radius + b.radius + 6.f);
-        b.vel = dir * std::min(ballCruise(b, p) * cfg::pact::novaSpeed, ballMaxSpeed(b, p));
+        b.vel = dir * std::min(ballCruise(b, p) * cfg::creed::novaSpeed, ballMaxSpeed(b, p));
         b.trail.clear();
         b.squash = 1.f;
         b.squashAxis = dir;
     }
-    const float R = cfg::pact::novaRadius * arenaScale();
+    const float R = cfg::creed::novaRadius * arenaScale();
     for (Enemy& e : enemies_) {
         if (e.hp <= 0.f || e.orbiter) continue;
         const sf::Vector2f d = e.pos - core_.pos;
         if (length(d) > R + e.radius) continue;
-        e.vel += normalized(d, {1.f, 0.f}) * cfg::pact::novaKnock * e.knockTaken;
+        e.vel += normalized(d, {1.f, 0.f}) * cfg::creed::novaKnock * e.knockTaken;
         e.stagger = std::max(e.stagger, 0.6f);
     }
 }
@@ -64,7 +64,7 @@ void World::pactNova(const WorldParams& p) {
 // chasing, closest to the core - and bends hard toward it until it dies. It
 // bounces off on contact and swings straight back in, pecking at it.
 void World::updateHunters(float dt, const WorldParams& p) {
-    if (!p.pact.hunters) {
+    if (!p.creed.hunters) {
         huntPrey_.clear();
         huntHas_.clear();
         return;
@@ -72,7 +72,7 @@ void World::updateHunters(float dt, const WorldParams& p) {
     const std::size_t n = balls_.size();
     huntPrey_.resize(n, {0.f, 0.f});
     huntHas_.resize(n, 0);
-    const float keep = cfg::pact::huntKeep * arenaScale();
+    const float keep = cfg::creed::huntKeep * arenaScale();
     const bool bossOpen = boss_.alive && boss_.intro <= 0.f;
 
     // Follow each prey from where it was last step (enemies don't have ids;
@@ -116,9 +116,9 @@ void World::updateHunters(float dt, const WorldParams& p) {
         if (sp < 1e-3f) continue;
         const float cur = std::atan2(b.vel.y, b.vel.x);
         const float want = std::atan2(huntPrey_[i].y - b.pos.y, huntPrey_[i].x - b.pos.x);
-        const float maxTurn = cfg::pact::huntTurn * dt;
+        const float maxTurn = cfg::creed::huntTurn * dt;
         const float diff = clampf(std::remainder(want - cur, 2.f * kPi), -maxTurn, maxTurn);
-        sp = std::min(std::max(sp, ballCruise(b, p) * cfg::pact::huntMinSpeed), ballMaxSpeed(b, p));
+        sp = std::min(std::max(sp, ballCruise(b, p) * cfg::creed::huntMinSpeed), ballMaxSpeed(b, p));
         b.vel = sf::Vector2f{std::cos(cur + diff), std::sin(cur + diff)} * sp;
     }
 }
@@ -126,11 +126,11 @@ void World::updateHunters(float dt, const WorldParams& p) {
 // "Living Core": the core zaps the nearest enemy on a timer.
 void World::updateCoreZap(float dt, const WorldParams& p, FrameEvents& ev) {
     (void)ev;
-    if (!p.pact.livingCore || !waveRunning_) return;
+    if (!p.creed.livingCore || !waveRunning_) return;
     coreZapT_ -= dt;
     if (coreZapT_ > 0.f) return;
     Enemy* t = nullptr;
-    float best = cfg::pact::coreZapRange * arenaScale();
+    float best = cfg::creed::coreZapRange * arenaScale();
     best *= best;
     for (Enemy& e : enemies_) {
         if (e.hp <= 0.f || e.orbiter) continue;
@@ -141,20 +141,20 @@ void World::updateCoreZap(float dt, const WorldParams& p, FrameEvents& ev) {
         coreZapT_ = 0.15f;   // nothing in reach: look again soon
         return;
     }
-    damageEnemy(*t, plainEnemyHp(wave_) * cfg::pact::coreZapHpFrac * p.damageMult);
+    damageEnemy(*t, plainEnemyHp(wave_) * cfg::creed::coreZapHpFrac * p.damageMult);
     if (static_cast<int>(bolts_.size()) < cfg::element::maxBolts)
         bolts_.push_back(Bolt{core_.pos, t->pos, cfg::element::boltLife * 1.5f, cfg::element::boltLife * 1.5f});
-    coreZapT_ = cfg::pact::coreZapEvery;
+    coreZapT_ = cfg::creed::coreZapEvery;
 }
 
 // "Pinball": a wall is a bumper - speed, combo, and a spark on anything near.
-void World::pactWallBump(Ball& b, sf::Vector2f at, const WorldParams& p, FrameEvents& ev) {
-    if (!p.pact.pinball) return;
-    boostSpeed(b, cfg::pact::pinBoost, p);
+void World::creedWallBump(Ball& b, sf::Vector2f at, const WorldParams& p, FrameEvents& ev) {
+    if (!p.creed.pinball) return;
+    boostSpeed(b, cfg::creed::pinBoost, p);
     comboStreak_ += 1;
     sinceHit_ = 0.f;
-    const float R = cfg::pact::pinSparkRadius * arenaScale();
-    const float dmg = ballDamage(b, p) * cfg::pact::pinSparkFrac;
+    const float R = cfg::creed::pinSparkRadius * arenaScale();
+    const float dmg = ballDamage(b, p) * cfg::creed::pinSparkFrac;
     bool any = false;
     for (Enemy& e : enemies_) {
         if (e.hp <= 0.f || length(e.pos - at) > R + e.radius) continue;
@@ -165,12 +165,12 @@ void World::pactWallBump(Ball& b, sf::Vector2f at, const WorldParams& p, FrameEv
 }
 
 // "Legion": two balls clacking together throw sparks.
-void World::pactClack(Ball& a, Ball& b, sf::Vector2f at, const WorldParams& p, FrameEvents& ev) {
-    if (!p.pact.legion) return;
+void World::creedClack(Ball& a, Ball& b, sf::Vector2f at, const WorldParams& p, FrameEvents& ev) {
+    if (!p.creed.legion) return;
     comboStreak_ += 2;
     sinceHit_ = 0.f;
-    const float R = cfg::pact::legionSparkRadius * arenaScale();
-    const float dmg = 0.5f * (ballDamage(a, p) + ballDamage(b, p)) * cfg::pact::legionSparkFrac;
+    const float R = cfg::creed::legionSparkRadius * arenaScale();
+    const float dmg = 0.5f * (ballDamage(a, p) + ballDamage(b, p)) * cfg::creed::legionSparkFrac;
     bool any = false;
     for (Enemy& e : enemies_) {
         if (e.hp <= 0.f || length(e.pos - at) > R + e.radius) continue;
@@ -181,26 +181,26 @@ void World::pactClack(Ball& a, Ball& b, sf::Vector2f at, const WorldParams& p, F
 }
 
 // "Living Core": a ball bouncing off the core leaves overcharged.
-void World::pactCoreBounce(Ball& b, const WorldParams& p, FrameEvents& ev) {
-    if (!p.pact.livingCore) return;
-    b.pactCharge = cfg::pact::coreChargeTime;
-    boostSpeed(b, cfg::pact::coreChargeBoost, p);
+void World::creedCoreBounce(Ball& b, const WorldParams& p, FrameEvents& ev) {
+    if (!p.creed.livingCore) return;
+    b.creedCharge = cfg::creed::coreChargeTime;
+    boostSpeed(b, cfg::creed::coreChargeBoost, p);
     ev.bursts.push_back({core_.pos, core_.radius + 22.f, theme::core, nullptr});
 }
 
 // Something reached the core. "Bloodlust" loses its combo; "Fortress" blows
 // the attacker's friends away.
-void World::pactCoreHit(const WorldParams& p, FrameEvents& ev) {
-    if (p.pact.bloodlust) comboStreak_ = 0;
-    if (!p.pact.fortress) return;
-    const float R = cfg::pact::fortressBlastRadius * arenaScale();
-    const float dmg = plainEnemyHp(wave_) * cfg::pact::fortressBlastHpFrac * p.damageMult;
+void World::creedCoreHit(const WorldParams& p, FrameEvents& ev) {
+    if (p.creed.bloodlust) comboStreak_ = 0;
+    if (!p.creed.fortress) return;
+    const float R = cfg::creed::fortressBlastRadius * arenaScale();
+    const float dmg = plainEnemyHp(wave_) * cfg::creed::fortressBlastHpFrac * p.damageMult;
     for (Enemy& e : enemies_) {
         if (e.hp <= 0.f || e.orbiter) continue;
         const sf::Vector2f d = e.pos - core_.pos;
         if (length(d) > R + e.radius) continue;
         damageEnemy(e, dmg);
-        e.vel += normalized(d, {1.f, 0.f}) * cfg::pact::novaKnock * e.knockTaken;
+        e.vel += normalized(d, {1.f, 0.f}) * cfg::creed::novaKnock * e.knockTaken;
         e.stagger = std::max(e.stagger, 0.7f);
     }
     ev.bursts.push_back({core_.pos, R, theme::core, nullptr});

@@ -12,7 +12,7 @@
 #include "core/Config.hpp"
 #include "core/Theme.hpp"
 #include "render/Draw.hpp"
-#include "ui/PactScreen.hpp"
+#include "ui/CreedScreen.hpp"
 #include "ui/UiSound.hpp"
 #include "ui/Widgets.hpp"
 
@@ -66,18 +66,18 @@ constexpr int   kBackRings = 7;       // faint rings drawn behind the web
 constexpr float kZoomMin = 0.45f, kZoomMax = 1.9f;
 // The legend lists the routes clockwise from the top, like the web.
 constexpr MetaBranch kLegend[] = {MetaBranch::Striker,  MetaBranch::Shooter, MetaBranch::Jester,
-                                  MetaBranch::Assassin, MetaBranch::Pacts,   MetaBranch::Summoner,
+                                  MetaBranch::Assassin, MetaBranch::Creeds,   MetaBranch::Summoner,
                                   MetaBranch::Support,  MetaBranch::Mage,    MetaBranch::Guardian};
 constexpr int kLegendCount = 9;
 constexpr float kLegendRow = 21.f;
 
 const sf::Color kPrismColor = theme::puSurge;   // violet - distinct from the core-blue accent
 
-// A route takes its class's colour; Pacts stay a pale bone (a bargain, no class).
+// A route takes its class's colour; Creeds stay a pale bone (a bargain, no class).
 sf::Color branchColor(MetaBranch b) {
     switch (b) {
         case MetaBranch::Root:  return theme::textHi;
-        case MetaBranch::Pacts: return sf::Color(206, 192, 170);
+        case MetaBranch::Creeds: return sf::Color(206, 192, 170);
         default:                return tagColor(metaBranchTag(b));
     }
 }
@@ -91,7 +91,7 @@ bool isClassNode(int i) { return i >= MetaClassSupport && i <= MetaClassJester; 
 const char* branchLabel(MetaBranch b) {
     switch (b) {
         case MetaBranch::Root:  return "Core";
-        case MetaBranch::Pacts: return "Pacts";
+        case MetaBranch::Creeds: return "Creeds";
         default:                return itemTagName(metaBranchTag(b));
     }
 }
@@ -400,7 +400,7 @@ void LoadoutScreen::drawInfoCard(App& app, sf::RenderWindow& w, int node) const 
     name.setPosition(o.x + 14.f, o.y + 8.f);
     w.draw(name);
 
-    drawLabel(w, app.font(), d.branch == MetaBranch::Root || d.branch == MetaBranch::Pacts
+    drawLabel(w, app.font(), d.branch == MetaBranch::Root || d.branch == MetaBranch::Creeds
                                  ? std::string(branchLabel(d.branch))
                                  : std::string(branchLabel(d.branch)) + " route",
               10, {o.x + cw - 14.f, o.y + 46.f}, col, 1);   // on the level line: long names need the width
@@ -612,7 +612,7 @@ void LoadoutScreen::draw(App& app, sf::RenderWindow& w) {
 
     if (hoverNode_ >= 0 || selUsed_) drawInfoCard(app, w, selNode_);
 
-    // Route legend, bottom-left: one row per class route (and the Pacts).
+    // Route legend, bottom-left: one row per class route (and the Creeds).
     // Hovering a row lights that route alone.
     {
         const float la = clampf(introPop(it, 0.2f), 0.f, 1.f);
@@ -653,7 +653,7 @@ void PlayScreen::onEnter(App&) {
 }
 
 void PlayScreen::grab(App& app, sf::Vector2f mouse) {
-    if (!app.canGrab()) return;   // "Hunters" / "Clockwork" pacts: hands off
+    if (!app.canGrab()) return;   // "Hunters" / "Clockwork" creeds: hands off
     // The wide arena is framed by a pulled-back camera: scale the reach with it
     // so a grab covers the same on screen as in act 1.
     if (app.world().grabAt(mouse, cfg::app::catchRadius * app.world().arenaScale())) {
@@ -682,7 +682,7 @@ void PlayScreen::dropHeld(App& app) {
 // flies at the nearest enemy; press and pull to aim it with the slingshot.
 void PlayScreen::release(App& app) {
     if (!dragging_) return;
-    const float power = app.flingPower();   // Strong arm, Hot Hands / Pinball pacts
+    const float power = app.flingPower();   // Strong arm, Hot Hands / Pinball creeds
     const float k = app.world().arenaScale();
     if (!aimCommitted_ && length(worldMouse_ - pressPos_) > cfg::app::quickThrowSlop * k)
         commitAim(app);   // a fast pull that ended between frames still aims
@@ -733,9 +733,9 @@ void PlayScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
     }
     if (isKey(e, sf::Keyboard::Escape)) { app.openPause(); return; }
     if (isKey(e, sf::Keyboard::Q)) { app.useReserve(); return; }   // "Stockpile" reserve power-up
-    if (isKey(e, sf::Keyboard::Space) ||                               // "Nova" pact
+    if (isKey(e, sf::Keyboard::Space) ||                               // "Nova" creed
         (e.type == sf::Event::MouseButtonPressed && e.mouseButton.button == sf::Mouse::Right)) {
-        app.usePactAbility();
+        app.useCreedAbility();
         return;
     }
     if (app.devMode() && isKey(e, sf::Keyboard::F1)) { app.devOpenPanel(); return; }   // SB_DEV: everything is in the panel
@@ -808,7 +808,7 @@ void PlayScreen::drawAim(App& app, sf::RenderWindow& w) const {
 void PlayScreen::draw(App& app, sf::RenderWindow& w) {
     app.useWorldView();
     renderer_.draw(w, app.world());
-    drawPactWorld(app, w);   // Hunters tethers, Living Core overcharge
+    drawCreedWorld(app, w);   // Hunters tethers, Living Core overcharge
     app.effects().drawRings(w);
     if (dragging_ && aimCommitted_) drawAim(app, w);
     app.useUiView();
@@ -829,7 +829,7 @@ void PlayScreen::draw(App& app, sf::RenderWindow& w) {
     }
     drawTabHint(app, w, {theme::margin, tally.top});
 
-    drawPactHud(app, w, app.uiMouse(), !peek_.open && !dragging_);
+    drawCreedHud(app, w, app.uiMouse(), !peek_.open && !dragging_);
 
     if (peek_.open) {
         drawLoadoutOverlay(app, w, true, peek_);
@@ -950,10 +950,10 @@ std::vector<UpgradeKind> runRelics(const RunMods& m) {
 }
 
 namespace {
-constexpr float kPeekSideW = 210.f;   // the relics / pacts column on the right of the peek
+constexpr float kPeekSideW = 210.f;   // the relics / creeds column on the right of the peek
 
 // Where the peek's pieces go, in its zoomed units: the balls' row, and the
-// relics / pacts column on the right - only when the run has any.
+// relics / creeds column on the right - only when the run has any.
 struct PeekLayout {
     sf::Vector2f s;   // the zoomed canvas
     bool side;
@@ -961,7 +961,7 @@ struct PeekLayout {
 };
 
 bool peekHasSide(App& app) {
-    return !runRelics(app.data().run.mods).empty() || !app.data().run.pacts.empty();
+    return !runRelics(app.data().run.mods).empty() || !app.data().run.creeds.empty();
 }
 
 PeekLayout peekLayout(App& app) {
@@ -1048,7 +1048,7 @@ void drawLoadoutOverlay(App& app, sf::RenderWindow& w, bool paused, const TabPee
     const RunState& r = app.data().run;
     const sf::Vector2f um = app.uiMouse() / zoom;
 
-    // The balls in a row; the run-wide passives (relics, pacts) in a column on
+    // The balls in a row; the run-wide passives (relics, creeds) in a column on
     // the right when there are any. How to drag / close is on hover only.
     constexpr float kSideW = kPeekSideW;
     const float sideX = lay.sideX;
@@ -1091,10 +1091,10 @@ void drawLoadoutOverlay(App& app, sf::RenderWindow& w, bool paused, const TabPee
         }
     }
 
-    // ---- side column: relics, then pacts - each section only when it has any
+    // ---- side column: relics, then creeds - each section only when it has any
     const std::vector<UpgradeKind> relics = runRelics(r.mods);
     const UpgradeKind* hotRelic = nullptr;
-    bool pactTip = false;
+    bool creedTip = false;
     if (lay.side) {
         const float colTop = rowY - kPanelH * 0.5f;
         draw::panel(w, {sideX, colTop, kSideW, kPanelH}, theme::puGolden, 0.9f);
@@ -1119,11 +1119,11 @@ void drawLoadoutOverlay(App& app, sf::RenderWindow& w, bool paused, const TabPee
             w.draw(t);
             y += kRelicStep;
         }
-        if (!r.pacts.empty()) {
+        if (!r.creeds.empty()) {
             if (!relics.empty()) y += 12.f;
-            drawLabel(w, app.font(), "pacts", 12, {sideX + 14.f, y}, withAlpha(sf::Color(226, 70, 84), 0.9f), -1);
+            drawLabel(w, app.font(), "creeds", 12, {sideX + 14.f, y}, withAlpha(sf::Color(226, 70, 84), 0.9f), -1);
             y += 18.f;
-            pactTip = drawPactStrip(app, w, {sideX + 12.f, y}, false, um, !dragging);
+            creedTip = drawCreedStrip(app, w, {sideX + 12.f, y}, false, um, !dragging);
         }
     }
     if (dragging) {   // the chip in hand, over everything; no hover help meanwhile
@@ -1140,7 +1140,7 @@ void drawLoadoutOverlay(App& app, sf::RenderWindow& w, bool paused, const TabPee
                      pickColor(k));
         return;
     }
-    if (pactTip) return;
+    if (creedTip) return;
 
     // Hover help on the panels and the relics.
     for (int i = 0; i < n; ++i) {
@@ -1445,7 +1445,7 @@ void BossWinScreen::draw(App& app, sf::RenderWindow& w) {
 
     if (goingOn) {
         const int next = cfg::run::actOfWave(app.data().run.wave) + 1;
-        const std::string on = next == 2 ? "the run goes on: seal a pact, take the boss treasure, on to act 2"
+        const std::string on = next == 2 ? "the run goes on: seal a creed, take the boss treasure, on to act 2"
                                          : "the run goes on: take the boss treasure, on to act " + std::to_string(next) +
                                                " of " + std::to_string(cfg::run::acts);
         drawCenteredPop(w, app.font(), on, theme::fsBody,

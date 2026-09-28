@@ -17,14 +17,14 @@
 
 namespace sb {
 
-enum class ScreenId { Menu, Loadout, Play, Choice, Pause, Stats, HowTo, BossWin, Map, Shop, Equip, Dev, Pact, Sound, AbilityPick };
+enum class ScreenId { Menu, Loadout, Play, Choice, Pause, Stats, HowTo, BossWin, Map, Shop, Equip, Dev, Creed, Sound, AbilityPick };
 
 // Who opened the ball / slot picker, and so what confirming it does.
 // ShopForge / Sell are the shop's paid forge and its "sell an item" counter.
 enum class EquipSource { Choice, Shop, Forge, ShopForge, Sell };
 
-// Where a pact choice comes from: the run start ("Covenant") or the act-1 boss.
-enum class PactSource { Start, Boss };
+// Where a creed choice comes from: the run start ("Covenant") or the act-1 boss.
+enum class CreedSource { Start, Boss };
 
 // Top-level application: owns the window, subsystems and the screen stack, runs
 // the loop (fixed-step simulation, per-frame render) and wires the flow:
@@ -114,16 +114,16 @@ public:
     void continuePastBoss();  // BossWin card "Continue" -> resume at wave 11
     bool bossWinCanContinue() const;  // true when the BossWin card should offer "Continue"
 
-    // ---- pacts (Fase O) ----
-    const std::vector<PactId>& pactChoices() const { return pactChoices_; }
-    PactSource pactSource() const { return pactSrc_; }
-    void choosePact(int idx);          // Pact screen: take card idx
-    void refusePacts();                // Pact screen: turn them all down for gold
-    bool hasPact(PactId id) const { return data_.run.hasPact(id); }
+    // ---- creeds (Fase O) ----
+    const std::vector<CreedId>& creedChoices() const { return creedChoices_; }
+    CreedSource creedSource() const { return creedSrc_; }
+    void chooseCreed(int idx);          // Creed screen: take card idx
+    void refuseCreeds();                // Creed screen: turn them all down for gold
+    bool hasCreed(CreedId id) const { return data_.run.hasCreed(id); }
     int luck() const;   // the run's luck, in points (Lucky clover, Lucky star, Loaded Dice, Lucky charm)
     bool canGrab() const;              // "Hunters" / "Clockwork" take the balls out of your hands
     float flingPower() const;          // throw speed multiplier (Strong arm, Hot Hands, Pinball)
-    void usePactAbility();             // "Nova" (SPACE / right-click in a fight)
+    void useCreedAbility();             // "Nova" (SPACE / right-click in a fight)
     float novaCooldown() const { return novaCd_; }
     std::string choiceTitle() const;   // Choice screen heading
     // ---- "Calling": the starting ball's class, picked in the run intro ----
@@ -151,9 +151,9 @@ public:
     float devTimeScale() const { return devTimeScale_; }
     int devBall() const { return std::min(devBall_, std::max(0, runBallCount() - 1)); }
     void devSetBall(int b) { devBall_ = b; }
-    enum class DevOpen { Shop, Forge, Upgrade, Elite, BossTreasure, Recruit, JumpToBoss, PactBoss, PactStart, AbilityPick, PostFight };
+    enum class DevOpen { Shop, Forge, Upgrade, Elite, BossTreasure, Recruit, JumpToBoss, CreedBoss, CreedStart, AbilityPick, PostFight };
     void devOpen(DevOpen what);
-    void devTogglePact(PactId id);   // grant it (or drop it, if the run has it)
+    void devToggleCreed(CreedId id);   // grant it (or drop it, if the run has it)
     void openPause();
     void openStats();
     void openSound();       // the Sound settings screen (main menu / pause)
@@ -198,7 +198,7 @@ private:
     bool autoTarget(UpgradeKind k, int& ball, int& slot) const;   // first ball / free slot it fits
     void finishChoice();                                          // after a pick: fx, close, next wave
     void afterChoice();       // a Choice closed: back to the map, or on with the run intro
-    // Run intro (newRun): Covenant pact -> Calling class pick -> Quartermaster starter pick -> map.
+    // Run intro (newRun): Covenant creed -> Calling class pick -> Quartermaster starter pick -> map.
     void advanceRunIntro();
     bool openStarterChoice();
     std::vector<UpgradeKind> starterPool(Tier want);          // Starter kit candidates, nearest tier first
@@ -206,11 +206,11 @@ private:
     void afterFightPick();   // an Elite's pick, else the map
     bool openAbilityChoice();                                 // the run's first ability (false = nothing to pick)
     void grantMageMissiles();                                 // a Mage ball gets Magic missile in a free slot
-    // Pacts.
-    void foldPacts(WorldParams& p) const;  // the run's pacts into the sim params
-    bool openPactChoice(PactSource src);   // false = nothing to offer (caller moves on)
-    void continueAfterPact();
-    void grantPact(PactId id);
+    // Creeds.
+    void foldCreeds(WorldParams& p) const;  // the run's creeds into the sim params
+    bool openCreedChoice(CreedSource src);   // false = nothing to offer (caller moves on)
+    void continueAfterCreed();
+    void grantCreed(CreedId id);
     void applyDuet();
     void applyLegion();
     int randomItemFor(const BallLoadout& b, Tier maxTier);   // a random unlocked item that fits (-1 none)
@@ -276,12 +276,12 @@ private:
     int equipRef_ = -1;       // Choice card / shop offer being placed
     RollSource rollSource_ = RollSource::Normal;   // what the current Choice was rolled from (rerolls keep it)
     std::string choiceTitle_;                      // custom Choice heading ("Starter kit ..."), empty = default
-    std::vector<PactId> pactChoices_;
+    std::vector<CreedId> creedChoices_;
     std::vector<UpgradeKind> abilityChoices_;   // the first-ability pick's cards
-    PactSource pactSrc_ = PactSource::Boss;
+    CreedSource creedSrc_ = CreedSource::Boss;
     bool abilityAfterFight_ = false;   // the ability pick came from postFight: its pick follows
-    int introStep_ = -1;      // >= 0 while the run intro (pact / starter pick) is still running
-    float novaCd_ = 0.f;      // "Nova" pact cooldown (s)
+    int introStep_ = -1;      // >= 0 while the run intro (creed / starter pick) is still running
+    float novaCd_ = 0.f;      // "Nova" creed cooldown (s)
 public:
     bool choiceIsBossTreasure() const { return rollSource_ == RollSource::Boss; }
 private:

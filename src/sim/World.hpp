@@ -60,9 +60,9 @@ public:
     void addCoreMaxHp(float delta);                  // raise the core's max HP mid-run
     void useReserve(const WorldParams& p);           // "Stockpile": fire the held reserve power-up
 
-    // ---- pacts (sim/WorldPacts.cpp) -----------------------------------
+    // ---- creeds (sim/WorldCreeds.cpp) -----------------------------------
     void trimBalls(int n);                     // "Duet": drop every ball past the first n
-    void pactNova(const WorldParams& p);       // "Nova": burst every ball out of the core in a ring
+    void creedNova(const WorldParams& p);       // "Nova": burst every ball out of the core in a ring
     // "Hunters": each ball's current prey (valid where huntHas()[i] is set).
     const std::vector<sf::Vector2f>& huntPrey() const { return huntPrey_; }
     const std::vector<char>& huntHas() const { return huntHas_; }
@@ -200,13 +200,13 @@ private:
     // Guardian (or any ball when `force`): bounce toward the threat.
     void aimBounce(Ball& b, sf::Vector2f normal, const Enemy* skip, bool force = false);
 
-    // ---- pact hooks (sim/WorldPacts.cpp): each is a no-op without its pact ----
+    // ---- creed hooks (sim/WorldCreeds.cpp): each is a no-op without its creed ----
     void updateHunters(float dt, const WorldParams& p);                         // "Hunters" homing
     void updateCoreZap(float dt, const WorldParams& p, FrameEvents& ev);        // "Living Core" zaps
-    void pactWallBump(Ball& b, sf::Vector2f at, const WorldParams& p, FrameEvents& ev);   // "Pinball"
-    void pactClack(Ball& a, Ball& b, sf::Vector2f at, const WorldParams& p, FrameEvents& ev);  // "Legion"
-    void pactCoreBounce(Ball& b, const WorldParams& p, FrameEvents& ev);        // "Living Core" overcharge
-    void pactCoreHit(const WorldParams& p, FrameEvents& ev);                    // "Fortress" / "Bloodlust"
+    void creedWallBump(Ball& b, sf::Vector2f at, const WorldParams& p, FrameEvents& ev);   // "Pinball"
+    void creedClack(Ball& a, Ball& b, sf::Vector2f at, const WorldParams& p, FrameEvents& ev);  // "Legion"
+    void creedCoreBounce(Ball& b, const WorldParams& p, FrameEvents& ev);        // "Living Core" overcharge
+    void creedCoreHit(const WorldParams& p, FrameEvents& ev);                    // "Fortress" / "Bloodlust"
 
     // ---- class hooks (sim/WorldClasses.cpp): run every class the ball has ----
     void classTick(Ball& b, float dt, const WorldParams& p, FrameEvents& ev);
@@ -307,7 +307,7 @@ private:
     bool hasReserve_ = false;
     float reserveTimer_ = cfg::powerup::reserveFillTime;
 
-    // pacts
+    // creeds
     std::vector<sf::Vector2f> huntPrey_;   // "Hunters": per ball, where its prey was last seen
     std::vector<char> huntHas_;            // ...and whether it has one
     float coreZapT_ = 0.f;                 // "Living Core": time to the next zap

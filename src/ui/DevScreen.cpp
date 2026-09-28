@@ -10,7 +10,7 @@
 #include "core/App.hpp"
 #include "core/Theme.hpp"
 #include "render/Draw.hpp"
-#include "ui/PactScreen.hpp"
+#include "ui/CreedScreen.hpp"
 #include "ui/Screens.hpp"
 #include "ui/UiSound.hpp"
 #include "ui/Widgets.hpp"
@@ -25,7 +25,7 @@ constexpr int kActMisc = 200;     // + one of the Misc entries
 constexpr int kActSpawn = 300;    // + EnemyKind
 constexpr int kActSpeed = 400;    // + index into kSpeeds
 constexpr int kActOpen = 500;     // + App::DevOpen
-constexpr int kActPact = 600;     // + PactId: grant / drop that pact
+constexpr int kActCreed = 600;     // + CreedId: grant / drop that creed
 
 enum Misc { WinWave, KillAll, Heal, Invuln, Gold, AddBall, ClearBall, Currency };
 constexpr float kSpeeds[] = {0.25f, 0.5f, 1.f, 2.f, 4.f};
@@ -45,7 +45,7 @@ constexpr OpenDef kOpens[] = {
     {App::DevOpen::PostFight, "Pick: after fight"}, {App::DevOpen::Elite, "Pick: elite (items)"},
     {App::DevOpen::Upgrade, "Pick: Upgrade node"}, {App::DevOpen::Recruit, "Recruit"},
     {App::DevOpen::BossTreasure, "Boss treasure"}, {App::DevOpen::AbilityPick, "First ability pick"},
-    {App::DevOpen::PactBoss, "Pact choice (boss)"}, {App::DevOpen::PactStart, "Pact choice (start)"},
+    {App::DevOpen::CreedBoss, "Creed choice (boss)"}, {App::DevOpen::CreedStart, "Creed choice (start)"},
     {App::DevOpen::JumpToBoss, "Jump to boss"},
 };
 constexpr int kOpenCount = static_cast<int>(sizeof(kOpens) / sizeof(kOpens[0]));
@@ -139,29 +139,29 @@ void DevScreen::rebuild(App& app) {
         if (c == 0) col0End = y;
         if (c == 4) col4End = y;
     }
-    for (const Button& b : buttons_)   // where the last item column ends (the pacts go under it)
+    for (const Button& b : buttons_)   // where the last item column ends (the creeds go under it)
         if (b.rect.left > 24.f + 2.5f * 172.f && b.rect.left < 24.f + 3.5f * 172.f)
             col3End = std::max(col3End, b.rect.top + kRowH);
 
-    // ---- pacts, two columns under the last item column and the modifiers /
+    // ---- creeds, two columns under the last item column and the modifiers /
     // relics one: click to grant (or drop) one
     (void)col0End;
     {
         const float px0 = 24.f + 3.f * 172.f;
         const float y0 = std::max(col3End, col4End) + 34.f;
-        heads_.push_back({{px0 + 2.f, y0 - 20.f}, "PACTS (click: grant / drop)", theme::textDim});
-        const int rows = (kPactCount + 1) / 2;
-        for (int i = 0; i < kPactCount; ++i) {
-            const auto id = static_cast<PactId>(i);
-            const PactDef& d = pactDef(id);
+        heads_.push_back({{px0 + 2.f, y0 - 20.f}, "CREEDS (click: grant / drop)", theme::textDim});
+        const int rows = (kCreedCount + 1) / 2;
+        for (int i = 0; i < kCreedCount; ++i) {
+            const auto id = static_cast<CreedId>(i);
+            const CreedDef& d = creedDef(id);
             const float y = y0 + static_cast<float>(i % rows) * 24.f;
             Button bt;
             bt.rect = {px0 + static_cast<float>(i / rows) * 172.f, y, 164.f, 21.f};
             bt.label = d.name;
-            bt.color = pactColor(d.archetype);
-            bt.action = kActPact + i;
-            bt.on = app.hasPact(id);
-            bt.tipTitle = std::string(d.name) + "  -  " + pactArchetypeName(d.archetype);
+            bt.color = creedColor(d.archetype);
+            bt.action = kActCreed + i;
+            bt.on = app.hasCreed(id);
+            bt.tipTitle = std::string(d.name) + "  -  " + creedArchetypeName(d.archetype);
             bt.tipDesc = std::string("+ ") + d.gain + ".  - " + d.cost + ".";
             buttons_.push_back(bt);
         }
@@ -241,8 +241,8 @@ void DevScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
         const int a = b.action;
         if (a < kUpgradeKindCount) {
             app.devGrant(static_cast<UpgradeKind>(a));
-        } else if (a >= kActPact) {
-            app.devTogglePact(static_cast<PactId>(a - kActPact));
+        } else if (a >= kActCreed) {
+            app.devToggleCreed(static_cast<CreedId>(a - kActCreed));
         } else if (a >= kActOpen) {
             app.devOpen(static_cast<App::DevOpen>(a - kActOpen));
             return;   // this screen is gone

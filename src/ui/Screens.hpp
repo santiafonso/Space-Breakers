@@ -31,7 +31,7 @@ private:
 // The game menu: a radial skill web. Spend cores (and prisms on a few key
 // nodes) to unlock permanent buffs, then start a run. The centre node is
 // "Calling"; around it one route per class radiates outward, each class near
-// the end of its own route (plus the Pacts) - and each node stays locked until
+// the end of its own route (plus the Creeds) - and each node stays locked until
 // the node that gates it toward the centre has a level. Routes are tinted by
 // their class; hovering one in the legend lights it alone.
 class LoadoutScreen : public Screen {
@@ -69,7 +69,7 @@ private:
     float glow_[MetaUnlockCount] = {};    // 0 = idle, 1 = lit; only the active node rises
 };
 
-// The peek itself: every ball's loadout, the relics and the pacts, dimming
+// The peek itself: every ball's loadout, the relics and the creeds, dimming
 // whatever is underneath. `paused` adds the fight's "paused" note.
 void drawLoadoutOverlay(App& app, sf::RenderWindow& w, bool paused, const TabPeek& peek);
 // Mouse input while the peek is open: press on a filled slot picks it up,
@@ -107,7 +107,7 @@ private:
 
     WorldRenderer renderer_;
     bool dragging_ = false;
-    TabPeek peek_;             // TAB: the balls' loadouts + relics + pacts
+    TabPeek peek_;             // TAB: the balls' loadouts + relics + creeds
     sf::Vector2f worldMouse_;  // pointer in arena units (enemy hover help)
     sf::Vector2f anchor_;      // slingshot: where the held ball sits
     bool aimCommitted_ = false; // the pointer moved off the ball: aiming by hand

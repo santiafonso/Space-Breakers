@@ -6,7 +6,7 @@
 #include "core/Config.hpp"
 #include "platform/SoundSettings.hpp"
 #include "progression/Offers.hpp"
-#include "progression/Pacts.hpp"
+#include "progression/Creeds.hpp"
 #include "progression/RunMap.hpp"
 
 namespace sb {
@@ -87,10 +87,10 @@ struct RunState {
     int shopRerolls = 0;              // paid rerolls at this shop (each costs more)
     int shopSells = 0;                // items sold at this shop
 
-    // Pacts (Fase O): PactId values, at most kMaxPacts.
-    std::vector<int> pacts;
-    bool hasPact(PactId id) const {
-        for (int p : pacts)
+    // Creeds (Fase O): CreedId values, at most kMaxCreeds.
+    std::vector<int> creeds;
+    bool hasCreed(CreedId id) const {
+        for (int p : creeds)
             if (p == static_cast<int>(id)) return true;
         return false;
     }

@@ -1,4 +1,4 @@
-// App: pacts, the run intro and the shop extras (Fase O). Split from App.cpp
+// App: creeds, the run intro and the shop extras (Fase O). Split from App.cpp
 // so the run-flow additions sit in one place.
 
 #include <algorithm>
@@ -8,94 +8,94 @@
 #include "core/App.hpp"
 #include "core/Config.hpp"
 #include "core/Theme.hpp"
-#include "ui/PactScreen.hpp"
+#include "ui/CreedScreen.hpp"
 #include "ui/Widgets.hpp"
 
 namespace sb {
 
-// ---------------------------------------------------------------- pacts: params
+// ---------------------------------------------------------------- creeds: params
 
-void App::foldPacts(WorldParams& p) const {
-    namespace P = cfg::pact;
-    for (int raw : data_.run.pacts) {
-        switch (static_cast<PactId>(raw)) {
-            case PactId::HotHands:
+void App::foldCreeds(WorldParams& p) const {
+    namespace P = cfg::creed;
+    for (int raw : data_.run.creeds) {
+        switch (static_cast<CreedId>(raw)) {
+            case CreedId::HotHands:
                 p.cruiseMult *= P::hotCruise;
-                p.pact.speedCeilMul *= P::hotCeil;
-                p.pact.flingHold *= P::hotHold;
+                p.creed.speedCeilMul *= P::hotCeil;
+                p.creed.flingHold *= P::hotHold;
                 break;
-            case PactId::Nova: break;   // an active ability (usePactAbility) + a smaller core
-            case PactId::Hunters:
-                p.pact.hunters = true;
+            case CreedId::Nova: break;   // an active ability (useCreedAbility) + a smaller core
+            case CreedId::Hunters:
+                p.creed.hunters = true;
                 p.damageMult *= P::huntDamage;
                 break;
-            case PactId::Clockwork:
-                p.pact.autoFlingEvery = P::clockEvery;
-                p.pact.autoFlingSpeed = P::clockSpeed;
+            case CreedId::Clockwork:
+                p.creed.autoFlingEvery = P::clockEvery;
+                p.creed.autoFlingSpeed = P::clockSpeed;
                 p.damageMult *= P::clockDamage;
                 break;
-            case PactId::Pinball: p.pact.pinball = true; break;
-            case PactId::Duet:
+            case CreedId::Pinball: p.creed.pinball = true; break;
+            case CreedId::Duet:
                 p.damageMult *= P::duetDamage;
                 p.ballRadiusMult *= P::duetRadius;
                 break;
-            case PactId::Legion:
-                p.pact.legion = true;
+            case CreedId::Legion:
+                p.creed.legion = true;
                 p.damageMult *= P::legionDamage;
                 break;
-            case PactId::LivingCore:
-                p.pact.livingCore = true;
-                p.pact.enemySpeedMul *= P::coreEnemySpeed;
+            case CreedId::LivingCore:
+                p.creed.livingCore = true;
+                p.creed.enemySpeedMul *= P::coreEnemySpeed;
                 break;
-            case PactId::Fortress: p.pact.fortress = true; break;
-            case PactId::LoadedDice: break;   // its luck is counted in App::luck
-            case PactId::Alchemy:
-                p.pact.alchemy = true;
+            case CreedId::Fortress: p.creed.fortress = true; break;
+            case CreedId::LoadedDice: break;   // its luck is counted in App::luck
+            case CreedId::Alchemy:
+                p.creed.alchemy = true;
                 p.damageMult *= P::alchemyDamage;
                 break;
-            case PactId::Bloodlust:
-                p.pact.bloodlust = true;
-                p.pact.coreDamageMul *= P::bloodCoreDamage;
+            case CreedId::Bloodlust:
+                p.creed.bloodlust = true;
+                p.creed.coreDamageMul *= P::bloodCoreDamage;
                 break;
         }
     }
 }
 
-bool App::canGrab() const { return !hasPact(PactId::Hunters) && !hasPact(PactId::Clockwork); }
+bool App::canGrab() const { return !hasCreed(CreedId::Hunters) && !hasCreed(CreedId::Clockwork); }
 
 float App::flingPower() const {
     float k = data_.run.mods.strongArm ? cfg::combat::flingPowerBoost : 1.f;
-    if (hasPact(PactId::HotHands)) k *= cfg::pact::hotFling;
-    if (hasPact(PactId::Pinball)) k *= cfg::pact::pinFling;
+    if (hasCreed(CreedId::HotHands)) k *= cfg::creed::hotFling;
+    if (hasCreed(CreedId::Pinball)) k *= cfg::creed::pinFling;
     k *= 1.f + cfg::meta::slingPerLevel * static_cast<float>(data_.meta.unlock[MetaSling]);   // web "Sling"
     return k;
 }
 
-void App::usePactAbility() {
-    if (!hasPact(PactId::Nova) || !data_.run.active || !simulating() || novaCd_ > 0.f) return;
-    world_.pactNova(params());
-    novaCd_ = cfg::pact::novaCooldown;
-    effects_.addBurst(world_.core().pos, cfg::pact::novaRadius * world_.arenaScale(), theme::accent);
+void App::useCreedAbility() {
+    if (!hasCreed(CreedId::Nova) || !data_.run.active || !simulating() || novaCd_ > 0.f) return;
+    world_.creedNova(params());
+    novaCd_ = cfg::creed::novaCooldown;
+    effects_.addBurst(world_.core().pos, cfg::creed::novaRadius * world_.arenaScale(), theme::accent);
     effects_.flash(theme::accent, 0.35f);
     camKick_ = std::max(camKick_, 6.f);
     audio_.thrown(1.f);
 }
 
-// ---------------------------------------------------------------- pacts: flow
+// ---------------------------------------------------------------- creeds: flow
 
-bool App::openPactChoice(PactSource src) {
+bool App::openCreedChoice(CreedSource src) {
     const RunState& r = data_.run;
     const int* u = data_.meta.unlock;
-    if (static_cast<int>(r.pacts.size()) >= kMaxPacts) return false;
+    if (static_cast<int>(r.creeds.size()) >= kMaxCreeds) return false;
 
-    std::vector<PactId> pool;
-    for (int i = 0; i < kPactCount; ++i) {
-        const auto id = static_cast<PactId>(i);
-        const PactDef& d = pactDef(id);
+    std::vector<CreedId> pool;
+    for (int i = 0; i < kCreedCount; ++i) {
+        const auto id = static_cast<CreedId>(i);
+        const CreedDef& d = creedDef(id);
         if (d.unlockNode >= 0 && u[d.unlockNode] == 0) continue;   // still behind its web node
-        bool ok = !r.hasPact(id);
-        for (int have : r.pacts)
-            if (pactsConflict(id, static_cast<PactId>(have))) ok = false;
+        bool ok = !r.hasCreed(id);
+        for (int have : r.creeds)
+            if (creedsConflict(id, static_cast<CreedId>(have))) ok = false;
         if (ok) pool.push_back(id);
     }
     if (pool.empty()) return false;
@@ -104,70 +104,70 @@ bool App::openPactChoice(PactSource src) {
 
     // Spread the offer over different archetypes first, so the three cards
     // are three different ways to play; fill up from the rest after.
-    const int want = cfg::pact::offered + (u[MetaOath] > 0 ? 1 : 0);
-    pactChoices_.clear();
-    for (PactId id : pool) {
-        if (static_cast<int>(pactChoices_.size()) >= want) break;
+    const int want = cfg::creed::offered + (u[MetaOath] > 0 ? 1 : 0);
+    creedChoices_.clear();
+    for (CreedId id : pool) {
+        if (static_cast<int>(creedChoices_.size()) >= want) break;
         bool fresh = true;
-        for (PactId c : pactChoices_)
-            if (pactDef(c).archetype == pactDef(id).archetype) fresh = false;
-        if (fresh) pactChoices_.push_back(id);
+        for (CreedId c : creedChoices_)
+            if (creedDef(c).archetype == creedDef(id).archetype) fresh = false;
+        if (fresh) creedChoices_.push_back(id);
     }
-    for (PactId id : pool) {
-        if (static_cast<int>(pactChoices_.size()) >= want) break;
-        if (std::find(pactChoices_.begin(), pactChoices_.end(), id) == pactChoices_.end()) pactChoices_.push_back(id);
+    for (CreedId id : pool) {
+        if (static_cast<int>(creedChoices_.size()) >= want) break;
+        if (std::find(creedChoices_.begin(), creedChoices_.end(), id) == creedChoices_.end()) creedChoices_.push_back(id);
     }
-    pactSrc_ = src;
+    creedSrc_ = src;
     world_.forceRelease();
     setAiming(false);
-    push(ScreenId::Pact);
+    push(ScreenId::Creed);
     return true;
 }
 
-void App::continueAfterPact() {
-    if (pactSrc_ == PactSource::Boss) openChoice(RollSource::Boss);   // then the boss treasure
+void App::continueAfterCreed() {
+    if (creedSrc_ == CreedSource::Boss) openChoice(RollSource::Boss);   // then the boss treasure
     else if (introStep_ >= 0) advanceRunIntro();
 }
 
-void App::choosePact(int idx) {
-    if (idx < 0 || idx >= static_cast<int>(pactChoices_.size())) return;
-    const PactId id = pactChoices_[static_cast<std::size_t>(idx)];
+void App::chooseCreed(int idx) {
+    if (idx < 0 || idx >= static_cast<int>(creedChoices_.size())) return;
+    const CreedId id = creedChoices_[static_cast<std::size_t>(idx)];
     audio_.cardPick();
-    back();   // close the pact screen
-    grantPact(id);
-    continueAfterPact();
+    back();   // close the creed screen
+    grantCreed(id);
+    continueAfterCreed();
     save();
 }
 
-void App::refusePacts() {
+void App::refuseCreeds() {
     back();
-    data_.run.gold += cfg::pact::refuseGold;
-    effects_.addLabel("+" + std::to_string(cfg::pact::refuseGold) + " gold", {size().x * 0.5f, size().y * 0.4f},
+    data_.run.gold += cfg::creed::refuseGold;
+    effects_.addLabel("+" + std::to_string(cfg::creed::refuseGold) + " gold", {size().x * 0.5f, size().y * 0.4f},
                       theme::puGolden, 26, 1.2f);
     audio_.purchase();
-    continueAfterPact();
+    continueAfterCreed();
 }
 
-void App::grantPact(PactId id) {
+void App::grantCreed(CreedId id) {
     RunState& r = data_.run;
-    if (r.hasPact(id)) return;
-    r.pacts.push_back(static_cast<int>(id));
+    if (r.hasCreed(id)) return;
+    r.creeds.push_back(static_cast<int>(id));
     switch (id) {
-        case PactId::Nova:
-            world_.addCoreMaxHp(-world_.core().maxHp * (1.f - cfg::pact::novaCoreHp));
+        case CreedId::Nova:
+            world_.addCoreMaxHp(-world_.core().maxHp * (1.f - cfg::creed::novaCoreHp));
             novaCd_ = 0.f;
             break;
-        case PactId::Fortress:
-            world_.addCoreMaxHp(world_.core().maxHp * (cfg::pact::fortressHp - 1.f));
+        case CreedId::Fortress:
+            world_.addCoreMaxHp(world_.core().maxHp * (cfg::creed::fortressHp - 1.f));
             break;
-        case PactId::Duet:   applyDuet(); break;
-        case PactId::Legion: applyLegion(); break;
+        case CreedId::Duet:   applyDuet(); break;
+        case CreedId::Legion: applyLegion(); break;
         default: break;
     }
     syncWorldBalls();
-    const sf::Color col = pactColor(pactDef(id).archetype);
+    const sf::Color col = creedColor(creedDef(id).archetype);
     effects_.flash(col, 0.8f);
-    effects_.addLabel(std::string("PACT  ") + pactDef(id).name, {size().x * 0.5f, size().y * 0.1f}, col, 34, 1.8f);
+    effects_.addLabel(std::string("CREED  ") + creedDef(id).name, {size().x * 0.5f, size().y * 0.1f}, col, 34, 1.8f);
     audio_.comboUp(cfg::combo::baseCapTier);
 }
 
@@ -176,7 +176,7 @@ void App::grantPact(PactId id) {
 void App::applyDuet() {
     RunState& r = data_.run;
     const int n = static_cast<int>(r.balls.size());
-    const int keepN = cfg::pact::duetBalls;
+    const int keepN = cfg::creed::duetBalls;
     if (n <= keepN) return;
     auto score = [](const BallLoadout& L) {
         int s = 0;
@@ -210,7 +210,7 @@ void App::applyDuet() {
                         keep[static_cast<std::size_t>(b)].levelAt(s2) <
                             maxLevelOf(static_cast<UpgradeKind>(keep[static_cast<std::size_t>(b)].kindAt(s2))))
                         spots.push_back({b, s2});
-            if (spots.empty()) { gold += cfg::pact::duetMeltGold; continue; }
+            if (spots.empty()) { gold += cfg::creed::duetMeltGold; continue; }
             const auto [b, s2] = spots[static_cast<std::size_t>(rng_.irange(0, static_cast<int>(spots.size()) - 1))];
             keep[static_cast<std::size_t>(b)].levelUp(s2);
             ++levels;
@@ -228,7 +228,7 @@ void App::applyDuet() {
 // stacks instead.
 void App::applyLegion() {
     RunState& r = data_.run;
-    for (int k = 0; k < cfg::pact::legionBalls; ++k) {
+    for (int k = 0; k < cfg::creed::legionBalls; ++k) {
         if (static_cast<int>(r.balls.size()) < cfg::ball::maxBalls) {
             BallLoadout L;
             const int item = randomItemFor(L, Tier::Rare);
@@ -254,17 +254,17 @@ int App::randomItemFor(const BallLoadout& b, Tier maxTier) {
     return pool[static_cast<std::size_t>(rng_.irange(0, static_cast<int>(pool.size()) - 1))];
 }
 
-void App::devTogglePact(PactId id) {
+void App::devToggleCreed(CreedId id) {
     if (!devMode() || !data_.run.active) return;
-    auto& v = data_.run.pacts;
+    auto& v = data_.run.creeds;
     const auto it = std::find(v.begin(), v.end(), static_cast<int>(id));
     if (it != v.end()) {   // dev only: drops the rule, one-off effects (balls, core HP) stay
         v.erase(it);
         syncWorldBalls();
-        effects_.addLabel(std::string("- ") + pactDef(id).name, {size().x * 0.5f, size().y * 0.9f}, theme::textLo, 18, 0.9f);
+        effects_.addLabel(std::string("- ") + creedDef(id).name, {size().x * 0.5f, size().y * 0.9f}, theme::textLo, 18, 0.9f);
         return;
     }
-    grantPact(id);
+    grantCreed(id);
 }
 
 // ---------------------------------------------------------------- run intro
@@ -290,7 +290,7 @@ void App::advanceRunIntro() {
     const int* u = data_.meta.unlock;
     if (introStep_ == 0) {
         introStep_ = 1;
-        if (u[MetaCovenant] > 0 && openPactChoice(PactSource::Start)) return;   // "Covenant"
+        if (u[MetaCovenant] > 0 && openCreedChoice(CreedSource::Start)) return;   // "Covenant"
     }
     if (introStep_ == 1) introStep_ = 2;   // (the first ability now comes after the first fight - postFight)
     if (introStep_ == 2) {

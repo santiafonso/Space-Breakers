@@ -61,7 +61,7 @@ inline const sf::Color elemIce{158, 192, 204};
 inline const sf::Color elemStone{154, 142, 126};
 inline const sf::Color elemElectric{152, 122, 204};
 
-// Vivid warm / green hues for things that aren't elements (pact archetypes,
+// Vivid warm / green hues for things that aren't elements (creed archetypes,
 // a web branch, coins) - they used to borrow the old element colours.
 inline const sf::Color ember = soften({255, 148, 66});
 inline const sf::Color venom = soften({150, 214, 96});

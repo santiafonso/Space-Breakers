@@ -15,7 +15,7 @@
 #include "platform/Paths.hpp"
 #include "platform/Save.hpp"
 #include "render/Draw.hpp"
-#include "ui/PactScreen.hpp"
+#include "ui/CreedScreen.hpp"
 #include "ui/Screens.hpp"
 #include "ui/SoundScreen.hpp"
 #include "ui/UiSound.hpp"
@@ -155,7 +155,7 @@ WorldParams App::params() const {
         const int lvl = u[kElemNode[i]];
         p.elemMult[i + 1] = 1.f + cfg::element::powerPerLevel * static_cast<float>(std::max(0, lvl - 1));
     }
-    foldPacts(p);   // Fase O: the run's pacts
+    foldCreeds(p);   // Fase O: the run's creeds
     return p;
 }
 
@@ -171,7 +171,7 @@ BallSpec App::ballSpec(const BallLoadout& L) const {
     s.roles = L.roleMask();   // from its item tags: 2 = the class, 4 = ascended
     s.primary = tagRole(L.leadTag());
     if (const ItemTag asc = L.ascended(); asc != ItemTag::None) s.ascended = roleBit(tagRole(asc));
-    if (hasPact(PactId::Duet)) s.ascended = s.roles;   // "Duet": every class it has is ascended
+    if (hasCreed(CreedId::Duet)) s.ascended = s.roles;   // "Duet": every class it has is ascended
     s.element = L.element();
     BallMods& m = s.mods;
     // The type slot: the element's own level makes it stronger.
@@ -429,7 +429,7 @@ void App::grantMageMissiles() {
     }
 }
 
-int App::startBallCount() const { return cfg::run::startBalls; }   // one ball: more come from picks and pacts
+int App::startBallCount() const { return cfg::run::startBalls; }   // one ball: more come from picks and creeds
 
 float App::startCoreHp() const {
     return cfg::core::baseHp +
@@ -466,7 +466,7 @@ std::unique_ptr<Screen> App::makeScreen(ScreenId id) {
         case ScreenId::Shop:    return std::make_unique<ShopScreen>();
         case ScreenId::Equip:   return std::make_unique<EquipScreen>();
         case ScreenId::Dev:     return std::make_unique<DevScreen>();
-        case ScreenId::Pact:    return std::make_unique<PactScreen>();
+        case ScreenId::Creed:    return std::make_unique<CreedScreen>();
         case ScreenId::Sound:   return std::make_unique<SoundScreen>();
         case ScreenId::AbilityPick: return std::make_unique<AbilityPickScreen>();
     }
@@ -483,7 +483,7 @@ void App::replaceStack(ScreenId id) {
 
 void App::push(ScreenId id) {
     switch (id) {   // a soft cue as it opens: cards being dealt, or a plain panel
-        case ScreenId::Choice: case ScreenId::Shop: case ScreenId::Pact: case ScreenId::AbilityPick:
+        case ScreenId::Choice: case ScreenId::Shop: case ScreenId::Creed: case ScreenId::AbilityPick:
             audio_.cardsDealt();
             break;
         case ScreenId::Play: case ScreenId::Dev: break;
@@ -588,7 +588,7 @@ void App::newRun() {
     r.wave = startWave - 1;
     replaceStack(ScreenId::Play);
     introStep_ = 0;
-    advanceRunIntro();   // Covenant pact, Quartermaster pick, then the map
+    advanceRunIntro();   // Covenant creed, Quartermaster pick, then the map
     save();
 }
 
@@ -596,7 +596,7 @@ void App::startWaveAt(int wave, bool elite) {
     data_.run.wave = wave;
     data_.run.eliteWave = elite;
     waveIntro_ = cfg::app::waveIntroTime;   // ease the sim in instead of snapping
-    if (!hasPact(PactId::Fortress) && !data_.run.hard)   // "Fortress" pact / hard mode: no free healing before a fight
+    if (!hasCreed(CreedId::Fortress) && !data_.run.hard)   // "Fortress" creed / hard mode: no free healing before a fight
         world_.repairCore(cfg::core::waveHeal +
                           cfg::core::mendPerLevel * static_cast<float>(data_.meta.unlock[MetaMend]));
     if (const int bastion = data_.meta.unlock[MetaBastion]; bastion > 0)   // "Bastion": max HP grows each wave
@@ -618,7 +618,7 @@ UpgradeCtx App::buildUpgradeCtx() const {
     const RunState& r = data_.run;
     UpgradeCtx c;
     c.balls = &r.balls;
-    c.maxBalls = hasPact(PactId::Duet) ? cfg::pact::duetBalls : cfg::ball::maxBalls;   // "Duet": two, ever
+    c.maxBalls = hasCreed(CreedId::Duet) ? cfg::creed::duetBalls : cfg::ball::maxBalls;   // "Duet": two, ever
     static const int kElemNode[kElementItemCount] = {MetaFireItem, MetaVenom, MetaTide,
                                                      MetaFrost, MetaQuarry, MetaArc};
     for (int i = 0; i < kElementItemCount; ++i)
@@ -655,7 +655,7 @@ UpgradeCtx App::buildUpgradeCtx() const {
 int App::luck() const {
     int l = cfg::luck::luckyStarPerLevel * data_.meta.unlock[MetaLuckyStar];
     if (data_.run.mods.luckyClover) l += cfg::luck::cloverPoints;
-    if (hasPact(PactId::LoadedDice)) l += cfg::luck::dicePoints;
+    if (hasCreed(CreedId::LoadedDice)) l += cfg::luck::dicePoints;
     // ---- Jester: every "Lucky charm" on every ball adds its points.
     for (const BallLoadout& b : data_.run.balls)
         for (int i = 0; i < kBallSlots; ++i)
@@ -882,7 +882,7 @@ void App::applyUpgradeKind(UpgradeKind k, int ball, int slot) {
 
 // "Repair core" button on the Item screen: heal to full, but forfeit the pick.
 void App::repairCoreSkipItem() {
-    playerRepair(hasPact(PactId::Fortress) ? world_.core().maxHp * cfg::pact::fortressRestHeal : 1e9f);
+    playerRepair(hasCreed(CreedId::Fortress) ? world_.core().maxHp * cfg::creed::fortressRestHeal : 1e9f);
     if (const int prospector = data_.meta.unlock[MetaProspector]; prospector > 0)
         data_.run.rerollsLeft += prospector;   // "Prospector": skipping refunds reroll charges
     audio_.purchase();
@@ -956,10 +956,10 @@ void App::travelTo(int node) {
             break;
         case MapNodeType::Rest:
             r.wave = wave;
-            playerRepair(hasPact(PactId::Fortress) ? world_.core().maxHp * cfg::pact::fortressRestHeal : 1e9f);
+            playerRepair(hasCreed(CreedId::Fortress) ? world_.core().maxHp * cfg::creed::fortressRestHeal : 1e9f);
             audio_.purchase();
             effects_.flash(theme::core, 0.5f);
-            effects_.addLabel(hasPact(PactId::Fortress) ? "Core half repaired" : "Core repaired", mid, theme::core, 26, 1.2f);
+            effects_.addLabel(hasCreed(CreedId::Fortress) ? "Core half repaired" : "Core repaired", mid, theme::core, 26, 1.2f);
             openMap();
             break;
         case MapNodeType::Upgrade:
@@ -1262,9 +1262,9 @@ void App::continuePastBoss() {
     r.phoenixUsedAct = false;
     r.repairedThisAct = false;   // "Iron core": a fresh streak for the new act
     world_.setPhoenix((r.mods.phoenix ? 1 : 0) + r.lastStandLeft);   // "Phoenix" recharges for the new act
-    // After act 1 a pact first (Fase O); every boss: the treasure (an Epic /
+    // After act 1 a creed first (Fase O); every boss: the treasure (an Epic /
     // Legendary pick), then the map.
-    if (act != 2 || !openPactChoice(PactSource::Boss)) openChoice(RollSource::Boss);
+    if (act != 2 || !openCreedChoice(CreedSource::Boss)) openChoice(RollSource::Boss);
 }
 
 // "Back to menu" on the BossWin card. If the run wasn't banked yet (miniboss just
@@ -1401,10 +1401,10 @@ void App::devOpen(DevOpen what) {
         case DevOpen::Elite:        openChoice(RollSource::Elite); break;
         case DevOpen::BossTreasure: openChoice(RollSource::Boss); break;
         case DevOpen::Recruit:      rollRecruitChoices(); push(ScreenId::Choice); break;
-        case DevOpen::PactBoss:     // the pact choice; after it the boss treasure / map follow as usual
-        case DevOpen::PactStart:
-            if (!openPactChoice(what == DevOpen::PactBoss ? PactSource::Boss : PactSource::Start))
-                effects_.addLabel("no pact left to offer", {size().x * 0.5f, size().y * 0.5f}, theme::coreLow, 22, 1.2f);
+        case DevOpen::CreedBoss:     // the creed choice; after it the boss treasure / map follow as usual
+        case DevOpen::CreedStart:
+            if (!openCreedChoice(what == DevOpen::CreedBoss ? CreedSource::Boss : CreedSource::Start))
+                effects_.addLabel("no creed left to offer", {size().x * 0.5f, size().y * 0.5f}, theme::coreLow, 22, 1.2f);
             break;
         case DevOpen::AbilityPick:  // the first-ability pick, on the first ball, as at the run start
             if (!openAbilityChoice())
@@ -1511,7 +1511,7 @@ void App::handleEvent(const sf::Event& e) {
             return;
         }
         // Esc anywhere in a live run opens the pause menu (options, abandon,
-        // quit) over whatever is up - a card, the map, the shop, a pact. Resume
+        // quit) over whatever is up - a card, the map, the shop, a creed. Resume
         // comes back to it. The pause menu and what it opens handle their own
         // Esc (back); the TAB overlay's Esc just closes it.
         if (e.type == sf::Event::KeyPressed && e.key.code == sf::Keyboard::Escape && data_.run.active && !peek_.open && !onPauseMenus()) {
@@ -1712,7 +1712,7 @@ void App::processEvents(const FrameEvents& ev) {
         if (r.eliteWave)
             pay = static_cast<int>(std::lround(static_cast<float>(pay * cfg::gold::elitePerRowMul) *
                 (1.f + cfg::meta::eliteSpoilsPerLevel * static_cast<float>(data_.meta.unlock[MetaEliteSpoils]))));
-        if (hasPact(PactId::LoadedDice)) {   // "Loaded Dice": double or nothing
+        if (hasCreed(CreedId::LoadedDice)) {   // "Loaded Dice": double or nothing
             const bool win = rng_.range(0.f, 1.f) < 0.5f;
             pay = win ? pay * 2 : 0;
             effects_.addLabel(win ? "DOUBLE!" : "NOTHING", {size().x * 0.5f, size().y * 0.4f - 36.f},
@@ -1806,7 +1806,7 @@ void App::update(float frameDt) {
             simDt *= cfg::app::aimTimeScale;
         }
         simDt *= devTimeScale_;   // dev panel: slow motion / fast forward
-        novaCd_ = std::max(0.f, novaCd_ - frameDt);   // "Nova" pact recharges while you fight
+        novaCd_ = std::max(0.f, novaCd_ - frameDt);   // "Nova" creed recharges while you fight
         if (hitstop_ > 0.f) {  // an impact landed: hold the frame, no catch-up after
             hitstop_ = std::max(0.f, hitstop_ - frameDt);
             simDt = 0.f;
@@ -2095,20 +2095,20 @@ int App::runSnapshots(const std::string& dir) {
     openStats();
     snapFrame(d + "14_stats.png");
 
-    // Fase O: the pact choice (Oath: 4 cards), a fight under two pacts, the
-    // shop's extras, the sell picker, the map with pacts and the bigger web.
-    for (int u : {MetaOath, MetaCovenant, MetaPactHunters, MetaPactLegion, MetaPactDice, MetaPactAlchemy})
+    // Fase O: the creed choice (Oath: 4 cards), a fight under two creeds, the
+    // shop's extras, the sell picker, the map with creeds and the bigger web.
+    for (int u : {MetaOath, MetaCovenant, MetaCreedHunters, MetaCreedLegion, MetaCreedDice, MetaCreedAlchemy})
         data_.meta.unlock[u] = 1;
-    if (openPactChoice(PactSource::Boss)) {
-        snapFrame(d + "10_pact.png");
+    if (openCreedChoice(CreedSource::Boss)) {
+        snapFrame(d + "10_creed.png");
         back();
     }
-    grantPact(PactId::Hunters);
-    grantPact(PactId::LivingCore);
+    grantCreed(CreedId::Hunters);
+    grantCreed(CreedId::LivingCore);
     world_.devSpawn(EnemyKind::Grunt, 8);
     world_.devSpawn(EnemyKind::Brute, 1);
     for (int i = 0; i < 150; ++i) update(1.f / 60.f);
-    capturePath_ = d + "11_pact_fight.png";
+    capturePath_ = d + "11_creed_fight.png";
     render();
 
     r.gold = 240;
@@ -2121,7 +2121,7 @@ int App::runSnapshots(const std::string& dir) {
     back();
 
     openMap();
-    snapFrame(d + "14_map_pacts.png");
+    snapFrame(d + "14_map_creeds.png");
     tab.type = sf::Event::KeyPressed;   // the TAB loadout peek, on the map
     stack_.back()->handleEvent(*this, tab, {0.f, 0.f});
     snapFrame(d + "14_map_tab.png");
@@ -2138,13 +2138,13 @@ int App::runSnapshots(const std::string& dir) {
     openLoadout();
     snapFrame(d + "15_web_grown.png");
 
-    // The run intro: Covenant pact -> Quartermaster starter pick -> the map.
+    // The run intro: Covenant creed -> Quartermaster starter pick -> the map.
     data_.meta.unlock[MetaQuartermaster] = 1;
     data_.meta.unlock[MetaStarterKit] = 1;
     newRun();
-    snapFrame(d + "16_start_pact.png");
-    choosePact(0);
-    snapFrame(d + "17_start_ability.png");   // the first-ability pick comes between the pact and the starter item
+    snapFrame(d + "16_start_creed.png");
+    chooseCreed(0);
+    snapFrame(d + "17_start_ability.png");   // the first-ability pick comes between the creed and the starter item
     chooseAbility(1);
     if (introStep_ >= 0) {   // the Quartermaster pick is up (it needs 4 items to choose from)
         snapFrame(d + "17_starter_pick.png");

@@ -112,7 +112,7 @@ void Effects::flash(sf::Color color, float strength) {
 
 void Effects::classBanner(const std::string& caption, const std::string& from, const std::string& to,
                           sf::Color color, bool ascended) {
-    if (banners_.size() >= 4) return;   // a flood (a pact handing out balls) keeps the first few
+    if (banners_.size() >= 4) return;   // a flood (a creed handing out balls) keeps the first few
     Banner b;
     b.caption = caption;
     b.from = from;

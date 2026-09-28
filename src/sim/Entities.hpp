@@ -8,7 +8,7 @@
 #include "core/Math.hpp"
 #include "core/Theme.hpp"
 #include "sim/Classes.hpp"
-#include "sim/PactRules.hpp"
+#include "sim/CreedRules.hpp"
 
 namespace sb {
 
@@ -201,7 +201,7 @@ struct Ball {
     int gluttonStacks = 0;   // "Glutton": kills this wave
     float tetherT = 0.f;     // "Tether": time to the next damage tick
     float resonanceT = 0.f;  // "Resonance": cooldown
-    float pactCharge = 0.f;  // "Living Core" pact: seconds left overcharged after a core bounce
+    float creedCharge = 0.f;  // "Living Core" creed: seconds left overcharged after a core bounce
     // abilities (sim/WorldAbilities.cpp)
     AbilitySpec abilities[kMaxAbilitySlots];
     float abilityCd[kMaxAbilitySlots] = {};   // seconds until each can fire again
@@ -409,7 +409,7 @@ struct FrameEvents {
     bool bossSummon = false;              // the boss just called in a Brute
     bool bossShock = false;               // the Charger's shockwave went off
     bool launched = false;                // the fight-opening whirl just let the balls fly
-    bool autoFlung = false;               // the "Clockwork" pact launched a ball
+    bool autoFlung = false;               // the "Clockwork" creed launched a ball
     int midasGold = 0;                    // extra gold from kills by Midas balls
     bool phoenix = false;                 // the Phoenix relic just saved the core
     bool bossHit = false;                 // a ball landed on the miniboss this step
@@ -452,7 +452,7 @@ struct WorldParams {
     float pickupDurMult = 1.f;    // scales how long a power-up lasts
     float markMul = 1.35f;        // any hit vs a Support-marked enemy x this (cfg::role::markDamageMul + web "Rally")
 
-    PactRules pact;               // the run's pacts (sim/PactRules.hpp); defaults = none
+    CreedRules creed;               // the run's creeds (sim/CreedRules.hpp); defaults = none
 };
 
 }  // namespace sb

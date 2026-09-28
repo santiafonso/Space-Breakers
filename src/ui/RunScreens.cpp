@@ -10,7 +10,7 @@
 #include "core/Config.hpp"
 #include "core/Theme.hpp"
 #include "render/Draw.hpp"
-#include "ui/PactScreen.hpp"
+#include "ui/CreedScreen.hpp"
 #include "ui/Screens.hpp"
 #include "ui/UiSound.hpp"
 #include "ui/Widgets.hpp"
@@ -528,10 +528,10 @@ void MapScreen::draw(App& app, sf::RenderWindow& w) {
 
     drawTabHint(app, w, {theme::margin, s.y - theme::margin - keyCapSize(app.font(), "tab").y});
 
-    // The run's pacts, top-right under the header (hover a chip for its rule).
-    bool pactHover = false;
-    if (!r.pacts.empty())
-        pactHover = drawPactStrip(app, w, {s.x - theme::margin - 160.f, kMapTop + 24.f}, false, mouse_,
+    // The run's creeds, top-right under the header (hover a chip for its rule).
+    bool creedHover = false;
+    if (!r.creeds.empty())
+        creedHover = drawCreedStrip(app, w, {s.x - theme::margin - 160.f, kMapTop + 24.f}, false, mouse_,
                                   info_ < 0 && !peek_.open);
 
     if (peek_.open) {   // the loadout peek covers the map; its own hover help only
@@ -546,13 +546,13 @@ void MapScreen::draw(App& app, sf::RenderWindow& w) {
         if (!app.mapNodeOpen(info_) && info_ != r.mapNode)
             d += n.row <= r.mapRow ? "  (behind you)" : "  (not reachable from here yet)";
         drawTooltip(w, app.font(), mouse_, s, mapNodeName(n.type), d, nodeColor(n.type));
-    } else if (!pactHover && app.ironCoreAlive() && std::fabs(mouse_.y - kStatusY) < 10.f &&
+    } else if (!creedHover && app.ironCoreAlive() && std::fabs(mouse_.y - kStatusY) < 10.f &&
                mouse_.x > ironX - 4.f && mouse_.x < ironX + 90.f) {
         drawTooltip(w, app.font(), mouse_, s, "Iron core",
                     "no repairs yet this act. Beat the boss without resting, buying a repair or skipping a pick "
                     "to repair, and the run banks +" + std::to_string(cfg::meta::ironCoreCores) +
                         " cores. The heal before each fight doesn't count.", theme::core);
-    } else if (!pactHover && std::fabs(mouse_.y - kStatusY) < 12.f && std::fabs(mouse_.x - s.x * 0.5f) < 220.f) {
+    } else if (!creedHover && std::fabs(mouse_.y - kStatusY) < 12.f && std::fabs(mouse_.x - s.x * 0.5f) < 220.f) {
         drawTooltip(w, app.font(), mouse_, s, "Gold, core and luck",
                     "gold buys things in shops; the core must survive - rests and shops repair it. Luck (" +
                         std::to_string(app.luck()) + "): each point makes every chance " +
@@ -729,7 +729,7 @@ void ShopScreen::draw(App& app, sf::RenderWindow& w) {
 
     drawCenteredPop(w, f, "Shop", theme::fsTitle, {s.x * 0.5f, s.y * 0.09f}, theme::puGolden, introPop(it, 0.f, 0.3f));
     drawRunStatus(app, w, s.y * 0.09f + 40.f);
-    drawPactStrip(app, w, {s.x * 0.5f, s.y * 0.09f + 60.f}, true, mouse_, hover_ < 0);
+    drawCreedStrip(app, w, {s.x * 0.5f, s.y * 0.09f + 60.f}, true, mouse_, hover_ < 0);
 
     const int offers = static_cast<int>(r.shopOffers.size());
     {   // a coloured header over each group of the shelf

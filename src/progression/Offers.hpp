@@ -666,7 +666,7 @@ inline bool classHasItems(ItemTag t) {
 //   Shooter  (upper right) ball speed, speed power-ups
 //   Jester   (right)       gold, cores, rerolls, luck
 //   Assassin (lower right) crits, elite kills, execute
-//   Pacts    (bottom)      its own branch, no class
+//   Creeds    (bottom)      its own branch, no class
 //   Summoner (bottom)      copies, recruits, the starter kit, Gemini
 //   Support  (lower left)  power-ups, marks
 //   Mage     (left)        abilities (unlocked here) and elements
@@ -728,13 +728,13 @@ enum MetaUnlock {
     MetaHaggler,      // Haggler      - shop prices drop
     MetaStarterKit,   // Starter kit  - start the run with a free item
     MetaEliteSpoils,  // Elite spoils - elites pay more gold
-    // ---- v13 append (indices 41+, never reorder): the Pacts branch + shop / start nodes ----
-    MetaOath,         // Oath          - the boss offers 4 pacts instead of 3        (Pacts hub)
-    MetaCovenant,     // Covenant      - start every run by choosing a pact
-    MetaPactHunters,  // Hunters       - the Hunters pact can be offered
-    MetaPactLegion,   // Legion        - the Legion pact can be offered
-    MetaPactDice,     // Loaded dice   - the Loaded Dice pact can be offered
-    MetaPactAlchemy,  // Alchemy       - the Alchemy pact can be offered
+    // ---- v13 append (indices 41+, never reorder): the Creeds branch + shop / start nodes ----
+    MetaOath,         // Oath          - the boss offers 4 creeds instead of 3        (Creeds hub)
+    MetaCovenant,     // Covenant      - start every run by choosing a creed
+    MetaCreedHunters,  // Hunters       - the Hunters creed can be offered
+    MetaCreedLegion,   // Legion        - the Legion creed can be offered
+    MetaCreedDice,     // Loaded dice   - the Loaded Dice creed can be offered
+    MetaCreedAlchemy,  // Alchemy       - the Alchemy creed can be offered
     MetaMerchant,     // Merchant      - shops stock more and their sale is deeper
     MetaTreasury,     // Treasury      - start each run with gold
     MetaQuartermaster,// Quartermaster - choose the Starter kit item from 4 cards
@@ -780,11 +780,11 @@ enum MetaUnlock {
 };
 
 // A route = a class (same order as ItemTag: Striker = 1 ... Jester = 8), plus
-// the root and the Pacts branch. Not saved.
-enum class MetaBranch { Root, Striker, Guardian, Support, Mage, Shooter, Assassin, Summoner, Jester, Pacts };
+// the root and the Creeds branch. Not saved.
+enum class MetaBranch { Root, Striker, Guardian, Support, Mage, Shooter, Assassin, Summoner, Jester, Creeds };
 inline constexpr int kMetaBranchCount = 10;
-inline ItemTag metaBranchTag(MetaBranch b) {   // the class a route leads to (None: root / Pacts)
-    return b == MetaBranch::Root || b == MetaBranch::Pacts ? ItemTag::None : static_cast<ItemTag>(static_cast<int>(b));
+inline ItemTag metaBranchTag(MetaBranch b) {   // the class a route leads to (None: root / Creeds)
+    return b == MetaBranch::Root || b == MetaBranch::Creeds ? ItemTag::None : static_cast<ItemTag>(static_cast<int>(b));
 }
 enum class MetaCurrency { Cores, Prisms };
 
@@ -886,18 +886,18 @@ inline const MetaUnlockDef& metaUnlockDef(int u) {
                          14u, 2, B::Summoner, C, MetaBrood, 164.f, 2.3f},
         /* EliteSpoils*/{"Elite spoils","elite fights pay +50% gold per level",
                          12u, 2, B::Assassin, C, MetaKeenInstinct, 115.f, 2.f},
-        /* Oath      */ {"Oath",      "after the act-1 boss, choose from 4 pacts instead of 3. Opens the Pacts.",
-                         14u, 1, B::Pacts,    C,  0, 145.f, 1.f},
-        /* Covenant  */ {"Covenant",  "start every run by choosing a pact (1 of 3) - with the boss's, a run can hold two",
-                         3u,  1, B::Pacts,    P, 41, 145.f, 2.f},
-        /* Hunters   */ {"Hunters",   "the Hunters pact can be offered: every ball chases its own prey, hands off",
-                         2u,  1, B::Pacts,    P, 41, 136.f, 2.6f},
-        /* Legion    */ {"Legion",    "the Legion pact can be offered: two more balls at once, clacks throw sparks",
-                         2u,  1, B::Pacts,    P, 41, 154.f, 2.6f},
-        /* Dice      */ {"Loaded dice","the Loaded Dice pact can be offered: +12 luck, fight gold is double or nothing",
-                         3u,  1, B::Pacts,    P, 43, 138.f, 3.6f},
-        /* Alchemy   */ {"Alchemy",   "the Alchemy pact can be offered: random extra elements, a ball reacts with itself",
-                         3u,  1, B::Pacts,    P, 44, 152.f, 3.6f},
+        /* Oath      */ {"Oath",      "after the act-1 boss, choose from 4 creeds instead of 3. Opens the Creeds.",
+                         14u, 1, B::Creeds,    C,  0, 145.f, 1.f},
+        /* Covenant  */ {"Covenant",  "start every run by choosing a creed (1 of 3) - with the boss's, a run can hold two",
+                         3u,  1, B::Creeds,    P, 41, 145.f, 2.f},
+        /* Hunters   */ {"Hunters",   "the Hunters creed can be offered: every ball chases its own prey, hands off",
+                         2u,  1, B::Creeds,    P, 41, 136.f, 2.6f},
+        /* Legion    */ {"Legion",    "the Legion creed can be offered: two more balls at once, clacks throw sparks",
+                         2u,  1, B::Creeds,    P, 41, 154.f, 2.6f},
+        /* Dice      */ {"Loaded dice","the Loaded Dice creed can be offered: +12 luck, fight gold is double or nothing",
+                         3u,  1, B::Creeds,    P, 43, 138.f, 3.6f},
+        /* Alchemy   */ {"Alchemy",   "the Alchemy creed can be offered: random extra elements, a ball reacts with itself",
+                         3u,  1, B::Creeds,    P, 44, 152.f, 3.6f},
         /* Merchant  */ {"Merchant",  "you may reroll the shop's stock once per level, and its sale gets 15% deeper",
                          12u, 2, B::Jester,   C, 38,  88.f, 4.f},
         /* Treasury  */ {"Treasury",  "start every run with +20 gold per level",
