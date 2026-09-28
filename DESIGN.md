@@ -1992,6 +1992,10 @@ solo pero cuidando el núcleo.
   1 solo item en cualquier pelota (como Jester). En la web: ruta propia que
   sale del centro (entre Striker y Shooter): nodo "Slinger" (18 cores) y
   "Slinger lore". Regla por ahora: toda rama de la web sale del centro.
+  Striker también es una clase a desbloquear (nodo "Striker", 12 cores, en su
+  ruta tras Heft y Sling). Mientras no tengas ninguna clase comprada, Striker
+  queda abierta como clase de arranque (si no, una partida nueva no tendría
+  items).
   Ballast (modificador) pasa al paso 6, con los modificadores nuevos.
 - Las demás clases solo suman items que escalan con la velocidad:
   Guardian **Anchor**, **Plow**; Shooter **Slug** (más lenta = más cadencia y

@@ -86,7 +86,9 @@ sf::Color branchColor(MetaBranch b) {
 float nodeRing(int i) { return metaUnlockDef(i).ring; }
 
 // The node that unlocks a class (drawn bigger, its name always shown).
-bool isClassNode(int i) { return (i >= MetaClassSupport && i <= MetaClassJester) || i == MetaClassSlinger; }
+bool isClassNode(int i) {
+    return (i >= MetaClassSupport && i <= MetaClassJester) || i == MetaClassSlinger || i == MetaClassStriker;
+}
 
 const char* branchLabel(MetaBranch b) {
     switch (b) {

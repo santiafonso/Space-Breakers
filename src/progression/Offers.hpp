@@ -779,6 +779,7 @@ enum MetaUnlock {
     // ---- 2026-09-28 append (never reorder): the Slinger route ----
     MetaClassSlinger, // Slinger        - Slinger items can appear (its own route, from the centre)
     MetaLoreSlinger,  // Slinger lore
+    MetaClassStriker, // Striker        - Striker items can appear (the starter class until any class is bought)
     MetaUnlockCount
 };
 
@@ -928,9 +929,9 @@ inline const MetaUnlockDef& metaUnlockDef(int u) {
         /* Sling     */ {"Sling",     "every throw flies 8% faster per level",
                          8u,  3, B::Striker,  C, 11,   0.f, 2.f},
         /* Momentum  */ {"Momentum",  "balls with the Striker class hit 10% harder per level",
-                         12u, 2, B::Striker,  C, 58,   0.f, 3.f},
+                         12u, 2, B::Striker,  C, MetaClassStriker, 0.f, 4.f},
         /* StrikerLore*/{"Striker lore","Striker items show up 50% more often per level",
-                         10u, 2, B::Striker,  C, 59,   0.f, 4.f},
+                         10u, 2, B::Striker,  C, 59,   0.f, 5.f},
         /* Velocity  */ {"Velocity",  "every ball cruises 5% faster per level",
                          8u,  2, B::Shooter,  C,  0,  27.f, 1.f},
         /* ShooterLore*/{"Shooter lore","Shooter items show up 50% more often per level",
@@ -985,6 +986,8 @@ inline const MetaUnlockDef& metaUnlockDef(int u) {
                          18u, 1, B::Slinger,  C,  0,  13.f, 2.f},
         /* SlingerLore*/{"Slinger lore","Slinger items show up 50% more often per level",
                          10u, 2, B::Slinger,  C, MetaClassSlinger, 13.f, 3.f},
+        /* Striker   */ {"Striker",   "unlocks the Striker class: its items can appear (hits far harder when flung). Until you own any class, Striker is your free starter",
+                         12u, 1, B::Striker,  C, MetaSling, 0.f, 3.f},
     };
     return defs[u];
 }
@@ -1040,9 +1043,10 @@ inline bool metaUnlockAvailable(int u, const int* levels) {
     return p < 0 || levels[p] > 0;
 }
 
-// The web node that unlocks a class; -1 for Striker (always open).
+// The web node that unlocks a class.
 inline int classUnlockNode(ItemTag t) {
     switch (t) {
+        case ItemTag::Striker:  return MetaClassStriker;
         case ItemTag::Support:  return MetaClassSupport;
         case ItemTag::Guardian: return MetaClassGuardian;
         case ItemTag::Mage:     return MetaClassMage;
@@ -1057,7 +1061,13 @@ inline int classUnlockNode(ItemTag t) {
 
 inline bool classUnlocked(ItemTag t, const int* levels) {
     const int n = classUnlockNode(t);
-    return n < 0 || levels[n] > 0;
+    if (n < 0 || levels[n] > 0) return true;
+    // Striker is the starter: open until any class node is bought, so a fresh
+    // save still has items to find.
+    if (t != ItemTag::Striker) return false;
+    for (int i = 1; i < static_cast<int>(ItemTag::Slinger) + 1; ++i)
+        if (const int c = classUnlockNode(static_cast<ItemTag>(i)); c >= 0 && levels[c] > 0) return false;
+    return true;
 }
 
 }  // namespace sb

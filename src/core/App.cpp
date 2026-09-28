@@ -2250,7 +2250,7 @@ int App::runSnapshots(const std::string& dir) {
 
     data_.run = RunState{};   // back in the game menu, a well-grown web
     for (int u : {MetaChannel, MetaClassMage, MetaLoreMage, MetaAbilityBulwark, MetaFireItem, MetaVenom, MetaReroll,
-                  MetaLuckyStar, MetaClassJester, MetaSling, MetaClassSlinger, MetaTreasury, MetaHaggler, MetaCharged, MetaClassSupport, MetaRally,
+                  MetaLuckyStar, MetaClassJester, MetaSling, MetaClassSlinger, MetaHeft, MetaClassStriker, MetaTreasury, MetaHaggler, MetaCharged, MetaClassSupport, MetaRally,
                   MetaKinetics, MetaClassShooter, MetaBrood, MetaMend, MetaAegis, MetaMomentum, MetaKeenInstinct})
         data_.meta.unlock[u] = 1;
     replaceStack(ScreenId::Menu);
