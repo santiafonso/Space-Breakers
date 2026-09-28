@@ -214,6 +214,17 @@ private:
     void creedWallBump(Ball& b, sf::Vector2f at, const WorldParams& p, FrameEvents& ev);   // "Pinball"
     void creedClack(Ball& a, Ball& b, sf::Vector2f at, const WorldParams& p, FrameEvents& ev);  // "Legion"
     void creedCoreBounce(Ball& b, const WorldParams& p, FrameEvents& ev);
+    // Speed items of the older classes (sim/WorldStyle.cpp).
+    float styleStill(const Ball& b, const WorldParams& p) const;   // 0 at cruise .. 1 stopped
+    float styleFast(const Ball& b, const WorldParams& p) const;    // 0 at cruise .. 1 well past it
+    bool styleBlurring(const Ball& b, const WorldParams& p) const; // "Blur": passing through right now
+    void styleTick(Ball& b, float dt, const WorldParams& p, FrameEvents& ev);
+    void styleWorldTick(float dt, const WorldParams& p);
+    void styleEnemyDrag(Enemy& e, float& edt, float dt);          // "Anchor"
+    float stylePreHit(Ball& b, Enemy& e, const WorldParams& p, FrameEvents& ev);   // Beacon / Pass charge
+    void styleOnHit(Ball& b, Enemy& e, const WorldParams& p);      // "Blur" marks
+    void stylePass(const Ball& a, Ball& o, const WorldParams& p);  // "Pass"
+    void styleOnCast(Ball& b, const WorldParams& p, FrameEvents& ev);   // "Leyline"
     // Pacts (sim/WorldPacts.cpp).
     float pactDamageMul(const Ball& b, const WorldParams& p) const;   // Lead / Stillness / Quick Hands / Juggler / Last Breath
     bool pactWrap(Ball& b);                                           // "Void Walls": true = it went through an edge

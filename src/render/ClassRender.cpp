@@ -214,6 +214,33 @@ void worldSlinger(sf::RenderTarget& t, const World& world) {
     }
 }
 
+// ==================================================================== speed items
+// Anchor / Beacon: a faint aura that fills in as the ball slows. Wake: a
+// dotted trail. Leyline: small runes waiting for the next cast.
+void worldStyle(sf::RenderTarget& t, const World& world) {
+    const float k = world.arenaScale();
+    for (const Ball& b : world.balls()) {
+        const float still = b.cls.mage.still;
+        if (still <= 0.05f) continue;
+        const ClassMods& c = b.mods.cls;
+        if (c.guardian.anchor > 0.f)
+            draw::ring(t, b.pos, c.guardian.anchorRadius * k, 1.5f * k, withAlpha(theme::core, 0.25f * still));
+        if (c.support.beacon > 0.f) {
+            const float R = c.support.beaconRadius * k * (0.4f + 0.6f * still);
+            draw::disc(t, b.pos, R, withAlpha(theme::puSurge, 0.07f * still), withAlpha(theme::puSurge, 0.f), {1.f, 1.f}, 32);
+            draw::ring(t, b.pos, R, 1.5f * k, withAlpha(theme::puSurge, 0.3f * still));
+        }
+    }
+    for (const SupportWorld::WakePoint& w : world.classWorld().support.wake) {
+        const float a = clampf(w.life / cfg::style::wakeLife, 0.f, 1.f);
+        draw::disc(t, w.pos, 3.f * k, withAlpha(theme::puSurge, 0.45f * a), withAlpha(theme::puSurge, 0.f), {1.f, 1.f}, 8);
+    }
+    for (const MageWorld::Rune& r : world.classWorld().mage.runes) {
+        const float a = clampf(r.life / 1.f, 0.f, 1.f);
+        draw::polygonOutline(t, r.pos, 7.f * k, 4, 0.f, 1.5f * k, withAlpha(theme::classMage, 0.7f * a));
+    }
+}
+
 // ==================================================================== Jester
 void markJester(sf::RenderTarget& t, sf::Vector2f p, float r, float, float a) {
     for (float side : {-1.f, 1.f})
@@ -338,6 +365,7 @@ void drawClassWorld(sf::RenderTarget& t, const World& world) {
     worldSummoner(t, world);
     worldJester(t, world);
     worldSlinger(t, world);
+    worldStyle(t, world);
 }
 
 }  // namespace sb

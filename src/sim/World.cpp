@@ -682,6 +682,10 @@ void World::releaseHeld(sf::Vector2f throwVel) {
             b.catchT = cfg::combat::catchWindow;
         }
         classOnThrow(b);  // Slinger: armed first hit, Afterburner
+        if (b.mods.cls.summoner.drop > 0.f) {   // "Drop turret": planted on its next tick (it needs the params)
+            b.cls.summoner.dropPending = true;
+            b.cls.summoner.dropAt = b.pos;
+        }
         pactOnThrow(b);   // Quick Hands clock, Hot Potato charge, Mirror ghost
     }
     heldCatch_ = 0.f;
@@ -1081,6 +1085,7 @@ bool World::strike(Ball& b, Enemy& e, sf::Vector2f normal, const WorldParams& p,
     if (b.cls.slinger.armed && m.cls.slinger.trick > 1.f) trickLuck_ = m.cls.slinger.trick;
     float dmg = ballDamage(b, p);   // fire / ricochet / Glutton / role bonuses are baked in
     dmg *= classPreHit(b, e, p);    // Slinger: the thrown first hit, Execution throw, Double down
+    dmg *= stylePreHit(b, e, p, ev);   // a Beacon / Pass charge
     const bool afflicted = e.poison > 0.f || e.frozen > 0.f || e.burn > 0.f;
     if (p.primed && afflicted) dmg *= cfg::combat::primedMult;             // "Primed"
     if (m.shatterMult > 0.f && e.frozen > 0.f) dmg *= m.shatterMult;       // "Shatter"
@@ -1167,6 +1172,7 @@ bool World::strike(Ball& b, Enemy& e, sf::Vector2f normal, const WorldParams& p,
     }
     if (m.resonanceFrac > 0.f) resonate(b, dmg, p, ev);   // "Resonance"
     classOnHit(b, e, dmg, kill, p, ev);                   // its classes (mark, stagger, ascended forms...)
+    styleOnHit(b, e, p);                                  // "Blur" marks
     if (kill) onKill(b, e, dmg, p, ev);
     if (!kill && allowEcho && m.echoChance > 0.f && e.hp > 0.f && chance(m.echoChance, p))   // "Echo"
         return strike(b, e, normal, p, ev, false);
@@ -1523,6 +1529,7 @@ void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
     b.overclockT = std::max(0.f, b.overclockT - dt);
     if (!b.ghost) updateAbilities(b, dt, p, ev);   // copies don't fire abilities
     classTick(b, dt, p, ev);
+    styleTick(b, dt, p, ev);   // the older classes' speed items
     if (b.mods.stormFrac > 0.f) updateStorm(b, dt, p, ev);
     if (b.mods.satellite) {
         advanceSatellite(b, dt, p, ev);
@@ -1615,7 +1622,8 @@ void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
             classOnCoreBounce(b, c.normal, p, ev);
             pushFx(c);
         }
-        if (b.mods.piercing) {   // "Piercing": no bounce - every enemy on the path takes the hit
+        const bool passThrough = b.mods.piercing || styleBlurring(b, p);   // "Piercing" / "Blur"
+        if (passThrough) {   // "Piercing": no bounce - every enemy on the path takes the hit
             for (Enemy& e : enemies_) {
                 if (e.hp <= 0.f || e.pierceCd > 0.f) continue;
                 const sf::Vector2f d = b.pos - e.pos;
@@ -1629,7 +1637,7 @@ void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
             }
         }
         for (Enemy& e : enemies_) {
-            if (b.mods.piercing) break;
+            if (passThrough) break;
             if (e.hp <= 0.f) continue;   // already dead this frame (not swept yet) - don't re-hit / double-splash
             // "Comet": flying hot it plows through instead of bouncing.
             const sf::Vector2f v0 = b.vel;
@@ -1703,6 +1711,8 @@ void World::resolveBallPairs(FrameEvents& ev, const WorldParams& p) {
             };
             bump(b, a.mods.bumperBoost);
             bump(a, b.mods.bumperBoost);
+            stylePass(a, b, p);   // "Pass"
+            stylePass(b, a, p);
 
             const sf::Vector2f n = normalized(b.pos - a.pos);
             a.squash = b.squash = 1.f;
@@ -1865,6 +1875,7 @@ void World::updateEnemies(float dt, const WorldParams& p, FrameEvents& ev) {
             if (p.slowField && dl < cfg::combat::slowFieldRadius) edt *= cfg::combat::slowFieldMul;
             if (p.timeDilation) edt *= cfg::changer::timeDilation;   // "Time dilation"
             edt *= p.creed.enemySpeedMul;                              // "Living Core" creed's cost
+            styleEnemyDrag(e, edt, dt);                                // "Anchor" balls
 
             e.vel += (steer - e.vel) * (1.f - std::exp(-8.f * edt));
             e.pos += e.vel * edt;
@@ -2451,6 +2462,7 @@ FrameEvents World::step(float dt, const WorldParams& p) {
     pendingGhosts_.clear();
 
     classWorldTick(dt, p, ev);   // bullets, summons... (WorldClasses.cpp)
+    styleWorldTick(dt, p);       // Wake trails, Leyline runes
     resolveBallPairs(ev, p);
     updateTethers(dt, p, ev);
     updateBlackHoles(dt, p, ev);

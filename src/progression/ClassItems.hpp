@@ -175,10 +175,62 @@ inline const ItemDef* slingerItemDef(UpgradeKind k) {
     return findItemDef(defs, k);
 }
 
+// ==================================================================== speed items
+// The other classes' speed items (2026-09-28): a "still" one grows as the
+// ball slows (full at a standstill), a "moving" one as it speeds up. None is
+// on / off - a slow ball just leans into it.
+inline const ItemDef* styleItemDef(UpgradeKind k) {
+    static const std::vector<ItemDef> defs = {
+        {UpgradeKind::Anchor, "Anchor", "Anchor",
+         "the slower it moves, the more the enemies near it are slowed (up to 55%) and drawn toward it",
+         "+8% slow, wider, a stronger pull", Tier::Uncommon, ItemTag::Guardian},
+        {UpgradeKind::Plow, "Plow", "Plow",
+         "flying faster than its cruise, it shoves aside every enemy it passes and hits it for 30% of its hit",
+         "a harder shove, +10% of its hit", Tier::Uncommon, ItemTag::Guardian},
+        {UpgradeKind::Slug, "Slug", "Slug",
+         "the slower it moves, the faster it fires (up to x2.2) and the further it reaches",
+         "+30% fire rate at a standstill", Tier::Common, ItemTag::Shooter},
+        {UpgradeKind::Strafe, "Strafe", "Strafe",
+         "flying faster than its cruise, it fires volleys out to both sides (60% of a bullet)",
+         "+12% of a bullet", Tier::Uncommon, ItemTag::Shooter},
+        {UpgradeKind::Lurk, "Lurk", "Lurk",
+         "staying slow charges its next hit after a blink: up to +150% after 2.5 s nearly still",
+         "+30% at full charge", Tier::Uncommon, ItemTag::Assassin},
+        {UpgradeKind::Blur, "Blur", "Blur",
+         "well above its cruise it passes through enemies instead of bouncing, marking every one it cuts",
+         "marks last longer", Tier::Rare, ItemTag::Assassin},
+        {UpgradeKind::Sleight, "Sleight", "Sleight",
+         "the slower it moves, the sooner it vanishes and reappears on a random enemy, striking it for x1.4",
+         "sooner, +0.2x", Tier::Uncommon, ItemTag::Jester},
+        {UpgradeKind::Meditate, "Meditate", "Meditate",
+         "the slower it moves, the faster its abilities recharge (twice as fast at a standstill)",
+         "+25% at a standstill", Tier::Common, ItemTag::Mage},
+        {UpgradeKind::Leyline, "Leyline", "Leyline",
+         "moving, it drops runes (up to 6); each ability it casts bursts every rune for 80% of its hit, with its element",
+         "+20% of its hit", Tier::Uncommon, ItemTag::Mage},
+        {UpgradeKind::Beacon, "Beacon", "Beacon",
+         "the slower it moves, the wider its glow: balls passing through it hit +30% harder next and leave its element (reactions!)",
+         "+8% harder, wider", Tier::Uncommon, ItemTag::Support},
+        {UpgradeKind::Wake, "Wake", "Wake",
+         "flying fast, it leaves a trail: any other ball crossing it is sped up x1.25",
+         "+5% speed", Tier::Common, ItemTag::Support},
+        {UpgradeKind::Pass, "Pass", "Pass",
+         "a ball it clacks into is launched x1.5, its next hit +20% with this ball's element - billiards",
+         "+15% launch", Tier::Rare, ItemTag::Support},
+        {UpgradeKind::Kennel, "Kennel", "Kennel",
+         "the slower it moves, the more often it lets loose a homing wisp (50% of its hit), every 3.5 s at a standstill",
+         "sooner, +12% of its hit", Tier::Uncommon, ItemTag::Summoner},
+        {UpgradeKind::DropTurret, "DropTurret", "Drop turret",
+         "when you throw it, a turret is left where you let go (6 s, 35% of its hit per shot)",
+         "+10% of its hit", Tier::Common, ItemTag::Summoner},
+    };
+    return findItemDef(defs, k);
+}
+
 // ---------------------------------------------------------------- lookup
 inline const ItemDef* classItemDef(UpgradeKind k) {
     for (const ItemDef* (*f)(UpgradeKind) : {mageItemDef, shooterItemDef, assassinItemDef, summonerItemDef, jesterItemDef,
-                                             slingerItemDef})
+                                             slingerItemDef, styleItemDef})
         if (const ItemDef* d = f(k)) return d;
     return nullptr;
 }

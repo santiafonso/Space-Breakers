@@ -276,4 +276,50 @@ inline constexpr float doubleChance = 0.5f;
 inline constexpr float execution = 2.2f, executionPerLevel = 0.3f;
 }  // namespace slinger
 
+// ==================================================================== speed items
+// The other classes' speed items (sim/WorldStyle.cpp): "still" ones scale with
+// slowness (0 at cruise, 1 stopped), "moving" ones with speed over cruise.
+namespace style {
+inline constexpr float fastFull = 1.f;          // "moving" items at full strength this far over cruise (x cruise)
+// Guardian
+inline constexpr float anchor = 0.55f, anchorPerLevel = 0.08f;          // enemy slow at a standstill
+inline constexpr float anchorRadius = 150.f, anchorRadiusPerLevel = 20.f;
+inline constexpr float anchorPull = 45.f, anchorPullPerLevel = 10.f;   // px/s toward it
+inline constexpr float plow = 260.f, plowPerLevel = 50.f;              // sideways shove (px/s)
+inline constexpr float plowFrac = 0.3f, plowFracPerLevel = 0.1f;
+inline constexpr float plowReach = 2.4f;                                // x its radius
+inline constexpr float plowStagger = 0.35f;
+// Shooter
+inline constexpr float slug = 1.2f, slugPerLevel = 0.3f;
+inline constexpr float strafe = 0.6f, strafePerLevel = 0.12f;           // x a bullet
+inline constexpr float strafeEvery = 0.45f;
+// Assassin
+inline constexpr float lurk = 1.5f, lurkPerLevel = 0.3f;
+inline constexpr float lurkFill = 2.5f;                                 // s at a standstill to charge fully
+inline constexpr float blur = 1.f, blurPerLevel = 0.3f;                 // mark length x this
+inline constexpr float blurAt = 1.4f;                                   // x cruise to pass through
+// Jester
+inline constexpr float sleight = 1.4f, sleightPerLevel = 0.2f;
+inline constexpr float sleightEvery = 3.2f, sleightEveryPerLevel = -0.3f;
+// Mage
+inline constexpr float meditate = 1.f, meditatePerLevel = 0.25f;       // + recharge speed at a standstill
+inline constexpr float leyline = 0.8f, leylinePerLevel = 0.2f;
+inline constexpr float runeEvery = 0.35f, runeLife = 8.f, runeRadius = 70.f;
+inline constexpr int runesPerBall = 6;
+// Support
+inline constexpr float beacon = 0.3f, beaconPerLevel = 0.08f;
+inline constexpr float beaconRadius = 140.f, beaconRadiusPerLevel = 15.f;
+inline constexpr float beaconTime = 2.5f;
+inline constexpr float wake = 1.25f, wakePerLevel = 0.05f;
+inline constexpr float wakeEvery = 0.06f, wakeLife = 1.5f, wakeRadius = 26.f, wakeCd = 0.8f;
+inline constexpr int maxWake = 120;
+inline constexpr float pass = 1.5f, passPerLevel = 0.15f;
+inline constexpr float passCharge = 1.2f;                               // the launched ball's next hit x this
+// Summoner
+inline constexpr float kennel = 3.5f, kennelPerLevel = -0.4f;           // s between wisps at a standstill
+inline constexpr float kennelFrac = 0.5f, kennelFracPerLevel = 0.12f;
+inline constexpr float drop = 0.35f, dropPerLevel = 0.1f;               // turret shot x its hit
+inline constexpr float dropLife = 6.f, dropRate = 1.4f;
+}  // namespace style
+
 }  // namespace sb::cfg

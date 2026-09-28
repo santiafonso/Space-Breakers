@@ -2181,6 +2181,23 @@ int App::runSnapshots(const std::string& dir) {
         capturePath_ = d + "24b_slinger_throw.png";
         render();
     }
+    {   // speed items: a still ball (Coil) with Anchor / Beacon / Kennel, a Shooter
+        // with Slug / Strafe / Leyline, a fast one with Wake / Pass / Plow / Blur
+        using K = UpgradeKind;
+        const K sets[3][4] = {{K::Coil, K::Anchor, K::Beacon, K::Kennel},
+                              {K::Slug, K::Strafe, K::Meditate, K::Leyline},
+                              {K::Wake, K::Pass, K::Plow, K::Blur}};
+        for (int i = 0; i < 3 && i < static_cast<int>(data_.run.balls.size()); ++i)
+            for (int sl = 0; sl < 4; ++sl) {
+                data_.run.balls[static_cast<std::size_t>(i)].gear[sl] = static_cast<int>(sets[i][sl]);
+                data_.run.balls[static_cast<std::size_t>(i)].gearLvl[sl] = 2;
+            }
+        syncWorldBalls();
+        world_.devSpawn(EnemyKind::Grunt, 14);
+        for (int i = 0; i < 200; ++i) update(1.f / 60.f);
+        capturePath_ = d + "25_speed_items.png";
+        render();
+    }
 
     r.gold = 240;
     rollShop();

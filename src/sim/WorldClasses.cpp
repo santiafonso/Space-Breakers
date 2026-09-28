@@ -164,7 +164,9 @@ template <> struct ClassHooks<BallRole::Mage> : NoClassHooks {
     }
 };
 
-float World::mageCastRate(const Ball& b) const { return 1.f + b.mods.cls.mage.focus; }   // "Focus", Channel, Archive
+float World::mageCastRate(const Ball& b) const {   // "Focus", Channel, Archive; "Meditate" when still
+    return 1.f + b.mods.cls.mage.focus + b.mods.cls.mage.meditate * b.cls.mage.still;
+}
 
 // `count` missiles at the nearest enemies (spread over them, nearest first),
 // each for `frac` x the ball's hit. False when nothing is in range.
@@ -206,6 +208,7 @@ bool World::mageMissiles(Ball& b, int count, float frac, const WorldParams& p) {
 void World::mageOnCast(Ball& b, int slot, bool echo, const WorldParams& p, FrameEvents& ev) {
     using H = ClassHooks<BallRole::Mage>;
     const MageMods& g = b.mods.cls.mage;
+    styleOnCast(b, p, ev);   // "Leyline": its runes burst
     // "Barrage": any other ability looses a magic missile too
     if (g.barrage > 0 && b.abilities[slot].id != Ability::MagicMissile) mageMissiles(b, 1, g.barrageFrac, p);
     if (b.isAscended(BallRole::Mage)) H::arcaneNova(*this, b, p, ev);
@@ -316,11 +319,25 @@ template <> struct ClassHooks<BallRole::Shooter> : NoClassHooks {
         const ShooterMods& m = b.mods.cls.shooter;
         st.burstCd = std::max(0.f, st.burstCd - dt);
         if (!w.waveRunning_) { st.fireT = S::firstDelay; return; }
-        const float speedRate = clampf(length(b.vel) / std::max(1.f, w.ballCruise(b, p)), S::rateMin, S::rateMax);
+        const float still = b.cls.mage.still;
+        if (m.strafe > 0.f) {   // "Strafe": fast, volleys out to both sides
+            const float fast = w.styleFast(b, p);
+            if (fast > 0.f && (st.strafeT -= dt * (0.5f + fast)) <= 0.f) {
+                st.strafeT = cfg::style::strafeEvery;
+                const sf::Vector2f h = normalized(b.vel, {1.f, 0.f});
+                const sf::Vector2f side{-h.y, h.x};
+                const float d = w.ballDamage(b, p) * S::bulletFrac * m.strafe;
+                fire(w, b, side, d, p);
+                fire(w, b, -side, d, p);
+            }
+        }
+        float speedRate = clampf(length(b.vel) / std::max(1.f, w.ballCruise(b, p)), S::rateMin, S::rateMax);
+        if (m.slug > 0.f) speedRate = std::max(speedRate, 1.f) * (1.f + m.slug * still);   // "Slug": slow = fast fire
         st.fireT -= dt * speedRate * m.rate;
         if (st.fireT > 0.f) return;
         sf::Vector2f at;
-        if (!aimAt(w, b.pos, S::range * w.arenaScale(), -1, at)) { st.fireT = 0.f; return; }   // wait, loaded
+        const float range = S::range * w.arenaScale() * (1.f + 0.5f * m.slug * still);   // "Slug" reaches further
+        if (!aimAt(w, b.pos, range, -1, at)) { st.fireT = 0.f; return; }   // wait, loaded
         st.fireT += S::fireInterval;
         if (st.fireT < 0.f) st.fireT = 0.f;
         const sf::Vector2f dir = normalized(at - b.pos, {1.f, 0.f});
@@ -562,6 +579,7 @@ template <> struct ClassHooks<BallRole::Assassin> : NoClassHooks {
             ev.bursts.push_back({dest, R, el == Element::Plain ? theme::classAssassin : elementColor(el), nullptr});
         }
         if (m.backstab > 0.f) s.armedT = A::backstabWindow;
+        s.blinked = true;   // "Lurk": the next hit spends the charge
         if (m.spreePer > 0.f) {
             s.spree = std::min(s.spree + 1, m.spreeMax);
             s.spreeT = A::spreeWindow;
@@ -591,6 +609,10 @@ template <> struct ClassHooks<BallRole::Assassin> : NoClassHooks {
 
     static void onHit(World& w, Ball& b, Enemy& e, float dmg, bool kill, const WorldParams& p, FrameEvents& ev) {
         b.cls.assassin.armedT = 0.f;   // "Backstab" is spent
+        if (b.cls.assassin.blinked) {  // "Lurk" too
+            b.cls.assassin.blinked = false;
+            b.cls.assassin.lurk = 0.f;
+        }
         const float cull = b.mods.cls.assassin.cull;   // "Cull": finish it off (the kill blinks on)
         if (!kill && cull > 0.f && e.hp > 0.f && e.hp < e.maxHp * cull) {
             w.damageEnemy(e, e.hp);
@@ -603,6 +625,7 @@ template <> struct ClassHooks<BallRole::Assassin> : NoClassHooks {
         const AssassinState& s = b.cls.assassin;
         float k = 1.f + m.spreePer * static_cast<float>(s.spree);   // "Killing spree"
         if (s.armedT > 0.f && m.backstab > 0.f) k *= m.backstab;    // "Backstab"
+        if (s.blinked && m.lurk > 0.f) k *= 1.f + m.lurk * s.lurk;  // "Lurk": charged while slow
         return k;
     }
 
@@ -737,6 +760,37 @@ template <> struct ClassHooks<BallRole::Summoner> : NoClassHooks {
         const int elem = static_cast<int>(b.element);
         const bool fighting = !w.enemies_.empty() || (w.boss_.alive && w.boss_.intro <= 0.f);
         SummonerWorld& sw = w.classWorld_.summoner;
+
+        // "Kennel": the slower it moves, the sooner a wisp.
+        if (m.kennel > 0.f && fighting && !b.ghost && (s.kennelT += dt * b.cls.mage.still) >= m.kennel &&
+            static_cast<int>(sw.shots.size()) < S::maxShots) {
+            s.kennelT = 0.f;
+            SummonShot q;
+            q.pos = b.pos;
+            q.vel = w.rng_.direction() * S::wispSpeed * 0.6f;
+            q.dmg = w.ballDamage(b, p) * m.kennelFrac * pw;
+            q.life = S::wispLife * pw;
+            q.elem = elem;
+            q.owner = b.owner;
+            q.wisp = true;
+            sw.shots.push_back(q);
+        }
+        // "Drop turret": you let go of it here.
+        if (s.dropPending) {
+            s.dropPending = false;
+            if (static_cast<int>(sw.turrets.size()) < S::maxTurrets) {
+                SummonTurret t;
+                t.pos = {std::clamp(s.dropAt.x, S::turretInset, w.size_.x - S::turretInset),
+                         std::clamp(s.dropAt.y, S::turretInset, w.size_.y - S::turretInset)};
+                t.life = t.maxLife = cfg::style::dropLife * pw;
+                t.rate = cfg::style::dropRate;
+                t.dmg = w.ballDamage(b, p) * m.drop * pw;
+                t.aim = std::atan2(w.core_.pos.y - t.pos.y, w.core_.pos.x - t.pos.x);
+                t.elem = elem;
+                t.owner = b.owner;
+                sw.turrets.push_back(t);
+            }
+        }
 
         // The class: spritelings.
         if (role && fighting && (s.spriteT -= dt) <= 0.f) {
@@ -1125,6 +1179,35 @@ template <> struct ClassHooks<BallRole::Jester> : NoClassHooks {
         w.areaDamage(e.pos, cfg::jester::jackpotRadius, dmg * j.jackpotBlast, &e);   // "Jackpot"
         ev.midasGold += j.jackpotGold;
         ev.bursts.push_back({e.pos, cfg::jester::jackpotRadius, theme::puGolden, "JACKPOT"});
+    }
+
+    // "Sleight": the slower it moves, the sooner it vanishes and reappears on
+    // a random enemy, striking it.
+    static void tick(World& w, Ball& b, float dt, const WorldParams& p, FrameEvents& ev) {
+        const JesterMods& m = b.mods.cls.jester;
+        if (m.sleight <= 0.f || b.ghost || b.held || !w.waveRunning_) return;
+        JesterState& s = b.cls.jester;
+        s.sleightT = std::min(m.sleightEvery, s.sleightT + dt * b.cls.mage.still);
+        if (s.sleightT < m.sleightEvery) return;
+        int alive = 0;
+        for (const Enemy& e : w.enemies_) alive += e.hp > 0.f && !e.orbiter ? 1 : 0;
+        if (alive == 0) return;
+        int pick = w.rng_.irange(0, alive - 1);
+        Enemy* t = nullptr;
+        for (Enemy& e : w.enemies_)
+            if (e.hp > 0.f && !e.orbiter && pick-- == 0) { t = &e; break; }
+        if (!t) return;
+        s.sleightT = 0.f;
+        const sf::Vector2f from = b.pos;
+        const sf::Vector2f dir = normalized(from - t->pos, {1.f, 0.f});
+        b.pos = t->pos + dir * (t->radius + b.radius + 2.f);
+        b.pos.x = clampf(b.pos.x, b.radius, w.size_.x - b.radius);
+        b.pos.y = clampf(b.pos.y, b.radius, w.size_.y - b.radius);
+        b.trail.clear();
+        w.damageEnemy(*t, w.ballDamage(b, p) * m.sleight);
+        pop(w, t->pos);
+        ClassHooks<BallRole::Assassin>::addFx(w, from, b.pos, b.radius, false);
+        ev.bursts.push_back({t->pos, t->radius * 2.f, theme::classJester, nullptr});
     }
 
     // "Chaos bounce": off the wall at a random angle, next hit armed.

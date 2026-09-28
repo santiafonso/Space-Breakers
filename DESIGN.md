@@ -1999,6 +1999,13 @@ solo pero cuidando el núcleo.
   **Link**; Summoner **Kennel**, **Pack**, **Familiar**, **Drop turret**.
   (Landslide, Recoil, Spellsling, Mark throw, Roulette quedan en reserva:
   si hacen falta, van a Slinger.)
+  **Hecho (2026-09-28):** 14 items: Anchor, Plow, Slug, Strafe, Lurk, Blur,
+  Sleight, Meditate, Leyline, Beacon, Wake, Pass, Kennel, Drop turret.
+  Quedaron afuera por repetir algo que ya existe: Link (= Tether), Wild ride
+  (= Chaos bounce); Pack y Familiar (Summoner "en pareja") para más adelante.
+  Beacon y Pass le pasan el elemento de una pelota a otra: dos dueños
+  distintos, así que reaccionan (sinergia con elementos / Catalyst).
+  Todo lo "quieta" combina con Coil, Lead y Stillness.
 
 ### 10.6 Orden de trabajo
 1. Renombre Pact -> Creed.  2. Premio por atrapar.  3. Pacts + Altar + camino

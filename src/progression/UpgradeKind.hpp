@@ -122,6 +122,23 @@ enum class UpgradeKind {
     DoubleDown,        // catch a ball you threw: its next hit is double or nothing [Slinger]
     ExecutionThrow,    // a thrown ball's first hit on an unhurt enemy crits   [Slinger]
 
+    // ---- speed items for the other classes (2026-09-28): "still" ones grow
+    // as the ball slows, "moving" ones as it speeds up - never on / off ----
+    Anchor,            // slow: enemies near it are slowed and drawn in       [Guardian]
+    Plow,              // fast: shoves and hits the enemies it passes         [Guardian]
+    Slug,              // slow: fires faster and further                      [Shooter]
+    Strafe,            // fast: fires side volleys                            [Shooter]
+    Lurk,              // slow: charges its next hit after a blink            [Assassin]
+    Blur,              // fast: passes through enemies, marking them          [Assassin]
+    Sleight,           // slow: now and then teleports onto an enemy and hits [Jester]
+    Meditate,          // slow: abilities recharge faster                     [Mage]
+    Leyline,           // moving: drops runes that burst on each cast         [Mage]
+    Beacon,            // slow: balls passing near it hit harder with its element [Support]
+    Wake,              // fast: its trail speeds up the balls that cross it   [Support]
+    Pass,              // a ball it clacks is launched with its element       [Support]
+    Kennel,            // slow: lets loose homing wisps                       [Summoner]
+    DropTurret,        // your throw leaves a turret where you let go         [Summoner]
+
     // ---- relics (keep CoreSpring first and Overcharge last) ----
     CoreSpring,        // balls ricochet off the core faster
     CoreSlowField,     // a zone around the core slows enemies inside it

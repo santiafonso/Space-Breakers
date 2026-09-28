@@ -29,14 +29,44 @@ struct StrikerState {};
 struct StrikerWorld {};
 
 // ==================================================================== Guardian
-struct GuardianMods {};
+// Its speed items (2026-09-28, sim/WorldStyle.cpp): "Anchor" grows as it
+// slows, "Plow" as it speeds up.
+struct GuardianMods {
+    float anchor = 0.f;        // "Anchor": enemies near it slowed by up to this share (at a standstill)...
+    float anchorRadius = 0.f;  // ...this close...
+    float anchorPull = 0.f;    // ...and drawn toward it (px/s at a standstill)
+    float plow = 0.f;          // "Plow": fast, it shoves enemies it passes (knock x this, 0 = off)...
+    float plowFrac = 0.f;      // ...and hits them for this x its hit
+};
 struct GuardianState {};
 struct GuardianWorld {};
 
 // ==================================================================== Support
-struct SupportMods {};
-struct SupportState {};
-struct SupportWorld {};
+// Its speed items (sim/WorldStyle.cpp): "Beacon" (slow), "Wake" (fast),
+// "Pass" (a clack launches the other ball).
+struct SupportMods {
+    float beacon = 0.f;        // "Beacon": balls passing near it hit + this harder (at a standstill)...
+    float beaconRadius = 0.f;  // ...within this (full size when still)
+    float wake = 0.f;          // "Wake": balls crossing its trail are sped up x this (0 = off)
+    float pass = 0.f;          // "Pass": a ball it clacks is launched x this with its element (0 = off)
+};
+struct SupportState {
+    float beaconT = 0.f;       // a Beacon / Pass charge on THIS ball: its next hit x beaconMul...
+    float beaconMul = 1.f;
+    int beaconElem = 0;        // ...and leaves this element (Element; 0 = none)...
+    int beaconOwner = -1;      // ...from this ball (so it reacts with its own)
+    float wakeCd = 0.f;        // "Wake": can't be boosted again yet
+    float wakeT = 0.f;         // "Wake" owner: to the next trail point
+};
+struct SupportWorld {
+    struct WakePoint {
+        sf::Vector2f pos;
+        float life = 0.f;
+        float boost = 1.f;
+        int owner = -1;
+    };
+    std::vector<WakePoint> wake;
+};
 
 // ==================================================================== Mage
 // More ability slots (see abilitySlotCount in progression/Offers.hpp). Its
@@ -50,10 +80,14 @@ struct MageMods {
     float power = 1.f;          // Attunement: ability damage x this
     float twincast = 0.f;       // Twincast: chance a cast fires again
     float manaSpring = 0.f;     // Mana spring: a cast charges its other abilities this share
+    float meditate = 0.f;       // "Meditate": abilities recharge up to this much faster at a standstill
+    float leyline = 0.f;        // "Leyline": runes it drops moving burst on each cast for this x its hit (0 = off)
 };
 struct MageState {
     int echoSlot = -1;          // Twincast: the ability slot about to fire again...
     float echoT = 0.f;          // ...in this long
+    float still = 0.f;          // how still it is right now (0 at cruise, 1 stopped) - "Meditate"
+    float runeT = 0.f;          // "Leyline": to the next rune
 };
 struct MageWorld {
     // Magic missiles in flight (the ability and Barrage). They home in on
@@ -70,6 +104,12 @@ struct MageWorld {
         float trailT = 0.f;
     };
     std::vector<Missile> missiles;
+    struct Rune {               // "Leyline": waits where it was dropped for its ball's next cast
+        sf::Vector2f pos;
+        float life = 0.f;
+        int owner = -1;
+    };
+    std::vector<Rune> runes;
 };
 
 // ==================================================================== Shooter
@@ -85,11 +125,14 @@ struct ShooterMods {
     int burst = 0;            // "Hair trigger": bullets fired when the ball lands a hit
     float burstFrac = 1.f;    // ...each one's damage x this
     float dmgMul = 1.f;       // bullet damage from Tracer / Drill levels
+    float slug = 0.f;         // "Slug": fire rate + this (and range + half) at a standstill
+    float strafe = 0.f;       // "Strafe": fast, it fires side volleys at this x a bullet (0 = off)
 };
 struct ShooterState {
     float fireT = 0.f;        // s to the next volley
     float burstCd = 0.f;      // "Hair trigger" cooldown
     int volleys = 0;          // Deadeye: every Nth one is a rail shot
+    float strafeT = 0.f;      // "Strafe": to the next side volley
 };
 struct ShooterBullet {
     sf::Vector2f pos;
@@ -123,6 +166,8 @@ struct AssassinMods {
     float smokeFrac = 0.f;    // "Smoke bomb": burst on arrival, x its hit...
     float smokeRadius = 0.f;  // ...this wide, leaving its element
     float phantomLife = 0.f;  // "Phantom": a shadow copy stays behind this long (0 = off)
+    float lurk = 0.f;         // "Lurk": the first hit after a blink + up to this, charged by staying slow
+    float blur = 0.f;         // "Blur": fast, it passes through enemies and marks them (mark x this, 0 = off)
 };
 struct AssassinState {
     float cd = 0.f;           // seconds until it can blink again
@@ -131,6 +176,8 @@ struct AssassinState {
     float armedT = 0.f;       // "Backstab": seconds the next hit stays the big one
     int spree = 0;            // "Killing spree": blinks in the current chain
     float spreeT = 0.f;       // ...seconds before the chain breaks
+    float lurk = 0.f;         // "Lurk": charge 0..1 (grows while slow)
+    bool blinked = false;     // it blinked and hasn't hit since
 };
 struct AssassinWorld {
     // A blink's fading line (from where it left to where it landed) for the
@@ -165,6 +212,9 @@ struct SummonerMods {
     float dragonFrac = 0.f;
     float dragonCone = 0.f;
     float bond = 1.f;          // web "Bond": every summon hits harder and lasts longer by this
+    float kennel = 0.f;        // "Kennel": s between wisps at a standstill (0 = off; slower = sooner)...
+    float kennelFrac = 0.f;    // ...each x its hit
+    float drop = 0.f;          // "Drop turret": your throw leaves a turret this strong (x its hit, 0 = off)
 };
 inline constexpr int kMaxWardens = 4;
 struct SummonerState {
@@ -179,6 +229,9 @@ struct SummonerState {
     float wardenAng = 0.f;
     float wardenRest[kMaxWardens] = {};
     sf::Vector2f prevVel{0.f, 0.f};   // last step's heading (a wall bounce flips it)
+    float kennelT = 0.f;       // "Kennel": charge toward the next wisp
+    bool dropPending = false;  // "Drop turret": you just let go of it here...
+    sf::Vector2f dropAt{0.f, 0.f};
 };
 // Where a ball's i-th of n Warden spirits is (the sim and the renderer agree).
 inline sf::Vector2f summonerWardenPos(sf::Vector2f core, float ang, int owner, int i, int n, float orbit) {
@@ -239,10 +292,13 @@ struct JesterMods {
     float jackpotChance = 0.f; // "Jackpot"
     float jackpotBlast = 0.f;
     int jackpotGold = 0;
+    float sleight = 0.f;       // "Sleight": the teleport-strike hits x this (0 = off)...
+    float sleightEvery = 0.f;  // ...charged this long at a standstill (slower = sooner)
 };
 struct JesterState {
     float coinMul = 1.f;       // this hit's coin, flipped after the last one
     bool chaosArmed = false;   // off a chaos bounce: the next hit is armed
+    float sleightT = 0.f;      // "Sleight": charge toward the next trick
 };
 struct JesterWorld {
     struct Pop {               // a small outcome pip over an enemy (a double)
