@@ -90,7 +90,11 @@ sf::Color roleColor(BallRole r) {
     return theme::textLo;
 }
 
-sf::Color ballHue(const Ball& b) { return roleColor(b.leadRole()); }
+// Its class colour; with two classes, the mix of both.
+sf::Color ballHue(const Ball& b) {
+    const BallRole second = b.secondRole();
+    return second == BallRole::Normal ? roleColor(b.leadRole()) : theme::mixHues(roleColor(b.leadRole()), roleColor(second));
+}
 
 const char* enemyName(EnemyKind k) {
     switch (k) {

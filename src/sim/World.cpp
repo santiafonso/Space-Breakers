@@ -146,7 +146,7 @@ void World::pulseClass(int idx, bool ascended) {
 sf::Color World::ballTint(const Ball& b, float speed, const WorldParams& p) const {
     const BallRole lead = b.leadRole();
     if (lead == BallRole::Normal) return theme::speedColor(speed, cruiseBase(p));
-    return theme::hueSpeedColor(roleColor(lead), speed, cruiseBase(p), b.isAscended(lead));
+    return theme::hueSpeedColor(ballHue(b), speed, cruiseBase(p), b.isAscended(lead));
 }
 
 void World::repairCore(float amount) {

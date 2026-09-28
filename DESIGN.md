@@ -1791,6 +1791,11 @@ Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
     atajos N/H/G/B/U/C; el panel suma "Cores & prisms", "Pick: after fight",
     "Pick: elite (items)", "First ability pick", y los pactos en 2 columnas.
 
+- **Pelota de dos clases = mezcla de colores (2026-09-27).** `ballHue` /
+  `World::ballTint` / el panel usan `theme::mixHues` (mitad y mitad, con un
+  poco más de saturación para que no quede barroso). El arco de la segunda
+  clase dentro del borde se mantiene.
+
 - **Fase 2 — Jefe tras la oleada 10.** Da upgrades de pelota (viento/agua/
   piedra). Extiende la run mas alla de 10 en "modo infinito" opcional.
 - **Fase 3 — Variedad.** Repulsor, bumper, rampa. Corredor, tanque, escindido.

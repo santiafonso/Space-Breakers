@@ -466,7 +466,9 @@ void drawLoadoutPanel(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f c,
     look.lead = nRoles > 0 ? tagRole(roles[0]) : BallRole::Normal;
     look.second = nRoles > 1 ? tagRole(roles[1]) : BallRole::Normal;
     look.element = el;
-    const sf::Color bc = nRoles > 0 ? theme::hueSpeedColor(tagColor(roles[0]), 1.f, 1.f, roles[0] == asc)
+    const sf::Color hue = nRoles > 1 ? theme::mixHues(tagColor(roles[0]), tagColor(roles[1]))
+                                     : (nRoles > 0 ? tagColor(roles[0]) : theme::textLo);   // two classes: their mix
+    const sf::Color bc = nRoles > 0 ? theme::hueSpeedColor(hue, 1.f, 1.f, roles[0] == asc)
                                     : theme::speedColor(1.f, 1.f);
     draw::glow(w, bp, r * (asc != ItemTag::None ? 2.f : 1.6f), bc, (asc != ItemTag::None ? 0.11f : 0.06f) * a);
     draw::disc(w, bp, r, withAlpha(lerpColor(bc, sf::Color::White, 0.2f), a),
