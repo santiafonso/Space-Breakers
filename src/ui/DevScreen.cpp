@@ -19,15 +19,17 @@ namespace sb {
 
 namespace {
 
-// Button action codes.
-constexpr int kActBall = 100;     // + ball index: set the target ball
-constexpr int kActMisc = 200;     // + one of the Misc entries
-constexpr int kActSpawn = 300;    // + EnemyKind
-constexpr int kActSpeed = 400;    // + index into kSpeeds
-constexpr int kActOpen = 500;     // + App::DevOpen
-constexpr int kActCreed = 600;     // + CreedId: grant / drop that creed
-constexpr int kActPact = 700;      // + PactId: grant / drop that pact
-constexpr int kActPage = 800;      // + page: switch the panel's page
+// Button action codes: below kMaxUpgradeKinds a code is an UpgradeKind to
+// grant, so every other action starts above it.
+constexpr int kActBall = 1000;    // + ball index: set the target ball
+constexpr int kActMisc = 1100;    // + one of the Misc entries
+constexpr int kActSpawn = 1200;   // + EnemyKind
+constexpr int kActSpeed = 1300;   // + index into kSpeeds
+constexpr int kActOpen = 1400;    // + App::DevOpen
+constexpr int kActCreed = 1500;   // + CreedId: grant / drop that creed
+constexpr int kActPact = 1600;    // + PactId: grant / drop that pact
+constexpr int kActPage = 1700;    // + page: switch the panel's page
+static_assert(kActBall >= kMaxUpgradeKinds, "dev action codes must not overlap the pick codes");
 int gDevPage = 0;                  // the page shown (kept between openings)
 
 enum Misc { WinWave, KillAll, Heal, Invuln, Gold, AddBall, ClearBall, Currency };
