@@ -462,7 +462,9 @@ struct BallLoadout {
         return n;
     }
     bool hasRole(ItemTag t) const { return t != ItemTag::None && tagCount(t) >= 2; }
-    // Its classes (at most 2), in slot order: the class of the earliest item first.
+    // Its classes, lead first. The lead - the ball's body colour - is the
+    // class it has put the most item levels into; on a tie, the one whose item
+    // sits higher in the slots (so dragging items in TAB picks the colour).
     int roles(ItemTag out[2]) const {
         int n = 0;
         for (int g : gear) {
@@ -471,7 +473,14 @@ struct BallLoadout {
             if (!hasRole(t) || (n == 1 && out[0] == t)) continue;
             out[n++] = t;
         }
+        if (n == 2 && tagLevels(out[1]) > tagLevels(out[0])) std::swap(out[0], out[1]);
         return n;
+    }
+    int tagLevels(ItemTag t) const {   // total item levels of that class's items
+        int sum = 0;
+        for (int i = 0; i < kBallSlots; ++i)
+            if (gear[i] >= 0 && itemTag(static_cast<UpgradeKind>(gear[i])) == t) sum += std::max(1, gearLvl[i]);
+        return sum;
     }
     RoleMask roleMask() const {
         ItemTag r[2];

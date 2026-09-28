@@ -224,18 +224,28 @@ BallLook ballLook(const Ball& b) {
 
 void drawBallIdentity(sf::RenderTarget& t, const BallLook& look, sf::Vector2f pos, float r, float heading,
                       float alpha, bool held) {
-    // Rim: the element as a clear band just outside the edge (with a faint
-    // halo of its colour); plain = a faint white hairline.
+    // Layers, inside out, each told apart by shape and place (not only hue -
+    // a Shooter's orange and fire's orange must still read as two things):
+    //  body          = the lead class's colour (the disc itself);
+    //  second class  = a thick SOLID band just inside the edge, its colour pure;
+    //  element       = a thin DASHED ring outside the edge, past a dark gap.
+    if (look.second != BallRole::Normal) {
+        const float band = std::max(2.2f, r * 0.2f);   // thin enough that the body (the lead class) still dominates
+        draw::ring(t, pos, r - band * 0.5f, band,
+                   withAlpha(lerpColor(roleColor(look.second), sf::Color::White, 0.08f), 0.97f * alpha));
+        draw::ring(t, pos, r - band - 0.4f, 1.f, withAlpha(theme::bgDeep, 0.35f * alpha));   // seam against the body
+    }
     draw::ring(t, pos, r, 1.5f, withAlpha(sf::Color::White, (held ? 0.85f : 0.22f) * alpha));
     if (look.element != Element::Plain) {
         const sf::Color ec = lerpColor(elementColor(look.element), sf::Color::White, 0.12f);
-        draw::ring(t, pos, r + 2.2f, 2.6f, withAlpha(ec, 0.95f * alpha));
-        draw::ring(t, pos, r + 5.f, 1.f, withAlpha(ec, 0.28f * alpha));
+        const float er = r + 4.f;
+        constexpr int kDashes = 10;
+        for (int k = 0; k < kDashes; ++k) {
+            const float a0 = static_cast<float>(k) * 2.f * kPi / kDashes;
+            draw::ring(t, pos, er, 2.4f, withAlpha(ec, 0.95f * alpha), a0, a0 + 0.62f * 2.f * kPi / kDashes, 6);
+        }
+        draw::ring(t, pos, er + 3.f, 1.f, withAlpha(ec, 0.2f * alpha));   // a faint halo of its colour
     }
-    // A second class: its colour along the lower half of the rim, inside.
-    if (look.second != BallRole::Normal)
-        draw::ring(t, pos, r - 1.8f, 3.f, withAlpha(lerpColor(roleColor(look.second), sf::Color::White, 0.1f), 0.95f * alpha),
-                   0.25f, kPi - 0.25f, 32);
     for (int i = 0; i < kClassCount; ++i) {
         const BallRole c = classAt(i);
         if ((look.roles & roleBit(c)) == 0) continue;

@@ -116,10 +116,6 @@ inline sf::Color vivify(sf::Color c, float sat, float lift) {
     return sf::Color(ch(c.r), ch(c.g), ch(c.b), c.a);
 }
 
-// Two classes: the ball wears an even mix of both colours, pushed back up in
-// saturation so the blend doesn't go muddy.
-inline sf::Color mixHues(sf::Color a, sf::Color b) { return vivify(lerpColor(a, b, 0.5f), 0.25f, 6.f); }
-
 // A class ball keeps its class hue at every speed: a duller, greyer version
 // below cruise, and MORE of its colour - deeper, punchier - the faster it goes
 // (a fast Striker reads as vivid gold, not washed-out white). `rich` = the

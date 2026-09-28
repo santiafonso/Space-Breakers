@@ -1791,10 +1791,17 @@ Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
     atajos N/H/G/B/U/C; el panel suma "Cores & prisms", "Pick: after fight",
     "Pick: elite (items)", "First ability pick", y los pactos en 2 columnas.
 
-- **Pelota de dos clases = mezcla de colores (2026-09-27).** `ballHue` /
-  `World::ballTint` / el panel usan `theme::mixHues` (mitad y mitad, con un
-  poco más de saturación para que no quede barroso). El arco de la segunda
-  clase dentro del borde se mantiene.
+- **Pelota de dos clases (2026-09-27).** Se probó mezclar los colores y se
+  descartó (colores barrosos, rompe "color = clase"). Ahora, de adentro a
+  afuera: **cuerpo** = color de la clase principal; **segunda clase** = banda
+  **sólida** de su color justo dentro del borde (~20% del radio); **elemento**
+  = anillo **punteado** fino afuera, tras un hilo oscuro, con halo tenue
+  (`drawBallIdentity`). Así Shooter (naranja) + fuego (naranja) se leen como
+  dos cosas por forma y lugar.
+  - **Clase principal (cuerpo):** la clase con más **niveles de item**
+    sumados; empate → la del item más arriba en los casilleros (arrastrar en
+    TAB elige el color). Una ascendida (4 items) siempre es la principal.
+    (`BallLoadout::roles` / `tagLevels`.)
 
 - **Fase 2 — Jefe tras la oleada 10.** Da upgrades de pelota (viento/agua/
   piedra). Extiende la run mas alla de 10 en "modo infinito" opcional.
