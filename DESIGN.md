@@ -1968,35 +1968,31 @@ donde más sentido tiene tirar (Striker, Assassin, Jester) llevan más items de
 tiro/atrapada; el reparto final se equilibra en cada tanda. Guardian juega
 solo pero cuidando el núcleo.
 
-- Sin clase: **Ballast** (modificador que se apila: -15% velocidad, +20% daño),
-  **Grip** (se curva un poco hacia el cursor cerca de él).
-- Striker: **Coil** (frena hasta 0; tirada por vos sale al doble), **Afterburner**
-  (tirada deja estela de fuego), **Catch & release** (atraparla poco después de
-  tirarla apila daño), **Wind-up** (cuanto más lenta, más daño carga; lo
-  descarga al golpear), **Momentum** (más rápido = más daño, sin techo).
-- Guardian: **Anchor** (cuanto más lenta, más frena y atrae enemigos), **Landslide**
-  (primer golpe de un tiro = onda según velocidad), **Plow** (rápida empuja lo que
-  cruza).
-- Support: **Pass** (billar: la pelota golpeada sale x1,5 con su elemento),
-  **Beacon** (cuanto más lenta, más fuerte el aura de elemento/daño), **Wake**
-  (estela que acelera), **Link** (rayo con otra pelota, comparten efectos).
-- Mage: **Spellsling** (tirarla dispara su habilidad si tiene >50%), **Meditate**
-  (más lenta = carga más rápido), **Leyline** (moviéndose deja runas).
-- Shooter: **Recoil** (al tirarla, ráfaga para atrás), **Slug** (cuanto más lenta,
-  más cadencia y más rango), **Strafe** (dispara a los costados al moverse).
-- Assassin: **Ambush** (tirada: blink al primer golpe + Backstab), **Mark throw**
-  (marca al enemigo más cercano al tiro; matarlo recarga el blink), **Execution
-  throw** (primer golpe de tiro a enemigo con vida llena = crítico), **Lurk** (más
-  lenta = más invisible, blink siguiente crítico), **Blur** (rápida atraviesa y marca).
-- Summoner: **Kennel** (más lenta = larga espíritus más seguido), **Drop turret**
-  (torreta donde soltás la gomera), **Pack** (espíritus la siguen), **Familiar**
-  (mascota de otra pelota, dispara donde esa apunta).
-- Jester: **Trick shot** (chances x3 hasta el primer golpe tras un tiro), **Double
-  down** (atrapar una pelota tirada por vos = próximo golpe doble o nada),
-  **Roulette** (cada tiro activa un item suyo al doble), **Sleight** (más lenta =
-  se teletransporta más seguido y golpea), **Wild ride** (rápida: rebotes locos
-  con golpe armado).
+- Sin clase: **Ballast** (modificador que se apila: -15% velocidad, +20% daño).
+- **Clase nueva: Slinger** (la clase de tirar y atrapar; así no se tocan las
+  demás y combina con Striker / Assassin / Jester en la misma pelota). Nombre
+  elegido porque "Thrower" es un arquetipo de Creed y "Juggler" es un Pact.
+  Items: **Coil** (frena hasta 0; tirada por vos sale al doble), **Catch &
+  release** (atraparla poco después de tirarla apila daño), **Afterburner**
+  (tirada rápida deja estela de fuego que aplica el elemento Fuego de verdad:
+  mismo estado, reacciones y nodos del árbol que una pelota de fuego),
+  **Momentum** (más rápido = más daño), **Grip** (se curva hacia el cursor
+  cerca de él), **Ambush** (tirada: blink al primer golpe + golpe de Backstab),
+  **Trick shot** (chances x3 hasta el primer golpe tras un tiro), **Double
+  down** (atrapar una pelota que tiraste vos = próximo golpe doble o nada),
+  **Execution throw** (primer golpe de tiro a enemigo con vida llena = crítico).
+  Ascendida: cada atrapada recarga algo (a definir al hacerla).
+- Las demás clases solo suman items que escalan con la velocidad:
+  Guardian **Anchor**, **Plow**; Shooter **Slug** (más lenta = más cadencia y
+  rango), **Strafe**; Assassin **Lurk**, **Blur**; Jester **Sleight**, **Wild
+  ride**; Mage **Meditate**, **Leyline**; Support **Beacon**, **Wake**, **Pass**,
+  **Link**; Summoner **Kennel**, **Pack**, **Familiar**, **Drop turret**.
+  (Landslide, Recoil, Spellsling, Mark throw, Roulette quedan en reserva:
+  si hacen falta, van a Slinger.)
 
 ### 10.6 Orden de trabajo
 1. Renombre Pact -> Creed.  2. Premio por atrapar.  3. Pacts + Altar + camino
-secreto + animaciones de mapa.  4. Items, clase por clase.
+secreto + animaciones de mapa.  4. Clase Slinger.  5. Items de velocidad en las otras clases, por tandas.
+6. Después: repasar los elementos (quedaron desactualizados) y sumar muchos
+modificadores pasivos nuevos (hoy son solo Heavy impact / Big ball / Swift y
+siempre se eligen los mismos 3).

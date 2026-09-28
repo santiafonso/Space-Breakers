@@ -79,6 +79,7 @@ public:
 
     // ---- grab / throw: knock a ball off its orbit -------------------
     bool grabAt(sf::Vector2f point, float catchRadius);
+    float heldCatch() const { return heldCatch_; }   // the grab just made: its catch reward (0 = none)
     bool hasHeld() const { return grabbed_ != Grabbed::None; }
     Grabbed grabbedKind() const { return grabbed_; }
     void moveHeld(sf::Vector2f target, float dt);
@@ -269,6 +270,7 @@ private:
     int heldIndex_ = -1;
     sf::Vector2f heldGrabOffset_{0.f, 0.f};  // ball pos - cursor at grab, eased to zero
     sf::Vector2f heldPrevVel_{0.f, 0.f};     // velocity before the grab (cancelHeld restores it)
+    float heldCatch_ = 0.f;                  // catch reward earned by this grab (0..catchBonusMax)
     float autoFlingTimer_ = 1.f;   // "Clockwork": time to its next throw
 
     int comboStreak_ = 0;

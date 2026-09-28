@@ -183,6 +183,8 @@ struct Ball {
     sf::Vector2f squashAxis{1.f, 0.f};
     sf::Color color = theme::ballSlow;
     float ricochetT = 0.f;   // "Ricochet": seconds of post-wall-bounce damage bonus left
+    float catchBonus = 0.f;  // catch reward: the next hit x (1 + this) (0 = unarmed)...
+    float catchT = 0.f;      // ...for this many more seconds
     std::deque<sf::Vector2f> trail;
     std::deque<sf::Vector2f> waterTrail;   // water ball only: the damaging "worm" wake
     int owner = -1;          // index of the (real) ball this is / was copied from - reactions need two owners

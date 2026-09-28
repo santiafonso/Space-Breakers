@@ -624,6 +624,13 @@ bool World::grabAt(sf::Vector2f point, float catchRadius) {
     // the pointer on grab - moveHeld eases this offset out.
     heldGrabOffset_ = b.pos - point;
     heldPrevVel_ = b.vel;
+    // Catch reward: the faster it was flying, the harder the throw's first hit.
+    {
+        namespace C = cfg::combat;
+        const float ratio = length(b.vel) / (cfg::ball::baseCruise * arenaScale());
+        const float t = clampf((ratio - C::catchFromRatio) / (C::catchFullRatio - C::catchFromRatio), 0.f, 1.f);
+        heldCatch_ = C::catchBonusMax * t;
+    }
     b.held = true;
     b.vel = {0.f, 0.f};
     b.trail.clear();
@@ -655,6 +662,11 @@ void World::releaseHeld(sf::Vector2f throwVel) {
     else if (s > cfg::ball::hardSpeedCap * arenaScale())
         b.vel = throwVel * (cfg::ball::hardSpeedCap * arenaScale() / s);
     else b.vel = throwVel;
+    if (s >= cfg::ball::minThrowSpeed && heldCatch_ > 0.f) {   // a real throw carries the catch reward
+        b.catchBonus = heldCatch_;
+        b.catchT = cfg::combat::catchWindow;
+    }
+    heldCatch_ = 0.f;
     grabbed_ = Grabbed::None;
     heldIndex_ = -1;
 }
@@ -664,6 +676,7 @@ void World::cancelHeld() {
     Ball& b = balls_[heldIndex_];
     b.held = false;
     b.vel = heldPrevVel_;
+    heldCatch_ = 0.f;
     heldGrabOffset_ = {0.f, 0.f};
     grabbed_ = Grabbed::None;
     heldIndex_ = -1;
@@ -1059,6 +1072,12 @@ bool World::strike(Ball& b, Enemy& e, sf::Vector2f normal, const WorldParams& p,
         if (m.boomerangHit > 0.f) dmg *= m.boomerangHit;
         b.charged = false;
     }
+    if (b.catchBonus > 0.f) {   // catch reward: the throw's first hit
+        dmg *= 1.f + b.catchBonus;
+        ev.bursts.push_back({e.pos, e.radius * (1.6f + 2.f * b.catchBonus), theme::textHi, nullptr});
+        b.catchBonus = 0.f;
+        b.catchT = 0.f;
+    }
     if (m.berserkPerHit > 0.f) {   // "Berserk": hits in a row stack up until a wall
         dmg *= 1.f + m.berserkPerHit * static_cast<float>(b.berserkStacks);
         b.berserkStacks = std::min(b.berserkStacks + 1, m.berserkMax);
@@ -1314,6 +1333,7 @@ void World::spawnMitosis(const Ball& parent, const WorldParams& p) {
     g.age = 0.f;
     g.held = false;
     g.charged = false;
+    g.catchBonus = 0.f;   // a copy doesn't inherit the catch reward
     g.homing = false;
     g.gluttonStacks = 0;
     g.trail.clear();
@@ -1624,6 +1644,7 @@ void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
     }
 
     b.ricochetT = std::max(0.f, b.ricochetT - dt);   // "Ricochet" window ticks down
+    if (b.catchT > 0.f && (b.catchT -= dt) <= 0.f) b.catchBonus = 0.f;   // the catch reward went unused
     emitElement(b, dt, p, ev);
     regulateSpeed(b, dt, p);
     b.color = ballTint(b, length(b.vel), p);

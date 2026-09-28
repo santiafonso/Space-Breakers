@@ -658,6 +658,9 @@ void PlayScreen::grab(App& app, sf::Vector2f mouse) {
     // so a grab covers the same on screen as in act 1.
     if (app.world().grabAt(mouse, cfg::app::catchRadius * app.world().arenaScale())) {
         app.audio().grab();
+        if (const float c = app.world().heldCatch(); c > 0.f)   // caught in flight: a flash that grows with the reward
+            if (const Ball* b = app.world().heldBall())
+                app.effects().addBurst(b->pos, b->radius * (1.5f + 3.f * c), theme::textHi);
         dragging_ = true;
         aimCommitted_ = false;   // a click until the pointer moves (see update)
         pressPos_ = mouse;

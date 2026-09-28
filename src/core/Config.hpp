@@ -84,6 +84,13 @@ inline constexpr float massPerLevel = 0.10f;      // "Mass" web node: + this rad
 inline constexpr float slowFieldRadius = 210.f;   // "Slow field": zone around the core...
 inline constexpr float slowFieldMul = 0.55f;      // ...enemies inside move at this fraction of speed
 
+// Catch reward: grabbing a ball in flight arms its next hit. The bonus grows
+// with how fast it was going (on-screen, x the base cruise) when caught.
+inline constexpr float catchFromRatio = 1.1f;   // no bonus at or under this speed...
+inline constexpr float catchFullRatio = 2.6f;   // ...full bonus from this speed up
+inline constexpr float catchBonusMax = 0.5f;    // first hit of the throw x (1 + this) at most
+inline constexpr float catchWindow = 2.5f;      // s after the throw the armed hit stays armed
+
 // Item numbers at level 1, then + perLevel for each level past it.
 inline constexpr float ricochetWindow = 0.6f;     // "Ricochet": a wall bounce arms a damage bonus for this long...
 inline constexpr float ricochetMult = 1.5f, ricochetMultPerLevel = 0.25f;     // ...contact damage x this while armed
