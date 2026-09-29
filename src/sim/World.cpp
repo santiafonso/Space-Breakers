@@ -59,7 +59,7 @@ float World::ballBaseCruise(const Ball& b, const WorldParams& p) const {
 float World::ballCruise(const Ball& b, const WorldParams& p) const {
     return cruiseSpeed(p) * b.mods.cruiseMult *
            (b.hasRole(BallRole::Guardian) ? cfg::role::guardianCruiseMul : 1.f) *
-           (b.element == Element::Stone ? cfg::element::stoneCruise : 1.f) *   // stone: the heavy one
+           (b.hasElement(Element::Stone) ? cfg::element::stoneCruise : 1.f) *   // stone: the heavy one
            (b.overclockT > 0.f ? cfg::ability::overclockCruise : 1.f);   // "Overclock" ability
 }
 
@@ -103,7 +103,13 @@ void World::applySpec(Ball& b, const BallSpec& spec) {
     b.roles = spec.roles;
     b.ascended = spec.ascended;
     b.primary = spec.primary;
-    b.element = spec.element;
+    const bool sameElems = b.elemN == spec.elemN && std::equal(b.elems, b.elems + b.elemN, spec.elems);
+    if (!sameElems) {   // a new set of elements: start over on the first
+        b.element = spec.element;
+        b.elemTurn = 0;
+    }
+    std::copy(spec.elems, spec.elems + kMaxElements, b.elems);
+    b.elemN = spec.elemN;
     b.mods = spec.mods;
     for (int i = 0; i < kMaxAbilitySlots; ++i) {
         const AbilitySpec& a = spec.abilities[i];
@@ -134,7 +140,7 @@ void World::syncBalls(const std::vector<BallSpec>& specs, const WorldParams& p) 
             continue;
         }
         Ball& b = balls_[i];
-        if (b.element != specs[i].element) {
+        if (b.elems[0] != specs[i].elems[0] || b.elemN != specs[i].elemN) {
             b.waterTrail.clear();
             b.cooldown = 0.f;
         }
@@ -1079,6 +1085,29 @@ void World::areaDamage(sf::Vector2f at, float radius, float dmg, const Enemy* sk
     }
 }
 
+// An element's own touch on a hit enemy: poison stacks, ice freezes, fire
+// burns, water soaks, stone cracks. (Electric and water's wake act on their
+// own: emitElement.)
+void World::touchElement(Enemy& e, Element el, float pot, const BallMods& m, const WorldParams& p) {
+    if (el == Element::Poison) {
+        e.poison = cfg::element::poisonDuration;
+        e.poisonDps = std::min(e.poisonDps + cfg::element::poisonDpsPerHit * pot,
+                               cfg::element::poisonDpsMax * pot);
+    } else if (el == Element::Ice) {
+        e.frozen = std::max(e.frozen, cfg::element::freezeDuration * pot *
+                                          (e.soak > 0.f ? cfg::element::soakFreeze : 1.f));   // soaked: freezes solid
+    } else if (el == Element::Fire) {   // every hit sets it alight, a little hotter each time
+        const float k = pot * (1.f + cfg::element::emberPerLevel * static_cast<float>(p.emberLevel));   // "Ember"
+        e.burn = cfg::element::burnDuration;
+        e.burnDps = std::min(e.burnDps + cfg::element::burnPerHit * k, cfg::element::burnMax * k);
+    } else if (el == Element::Water) {   // soaks it
+        e.soak = std::max(e.soak, cfg::element::soakDuration * pot);
+    } else if (el == Element::Stone) {   // cracks it ("Bedrock": longer, deeper)
+        const bool bed = m.bedrockLife > 0.f;
+        crack(e, 1, cfg::element::crackTime * pot * (bed ? m.bedrockLife : 1.f), cfg::element::crackMax + (bed ? 2 : 0));
+    }
+}
+
 bool World::strike(Ball& b, Enemy& e, sf::Vector2f normal, const WorldParams& p, FrameEvents& ev,
                    bool allowEcho) {
     namespace S = cfg::synergy;
@@ -1140,31 +1169,32 @@ bool World::strike(Ball& b, Enemy& e, sf::Vector2f normal, const WorldParams& p,
     const float knock = cfg::combat::knockback * m.knockMult *   // Big ball / Bumper
                         (b.hasRole(BallRole::Guardian) ? cfg::role::guardianKnockMul : 1.f) *
                         (m.rampartKnock > 0.f ? m.rampartKnock : 1.f) *   // "Rampart"
-                        (b.element == Element::Stone ? cfg::element::stoneKnock : 1.f) *   // stone shoves
+                        (b.hasElement(Element::Stone) ? cfg::element::stoneKnock : 1.f) *   // stone shoves
                         (e.soak > 0.f ? cfg::element::soakKnock : 1.f);   // a soaked enemy flies further
     e.vel += -normal * knock * e.knockTaken;
     // (the Support mark and the Guardian stagger are their class hooks: WorldClasses.cpp)
     if (m.rampartStagger > 0.f) e.stagger = std::max(e.stagger, cfg::role::staggerDuration * m.rampartStagger);
 
-    const float pot = elemPotency(b, p);
-    if (b.element == Element::Poison) {
-        e.poison = cfg::element::poisonDuration;
-        e.poisonDps = std::min(e.poisonDps + cfg::element::poisonDpsPerHit * pot,
-                               cfg::element::poisonDpsMax * pot);
-    } else if (b.element == Element::Ice) {
-        e.frozen = std::max(e.frozen, cfg::element::freezeDuration * pot *
-                                          (e.soak > 0.f ? cfg::element::soakFreeze : 1.f));   // soaked: freezes solid
-    } else if (b.element == Element::Fire) {   // every hit sets it alight, a little hotter each time
-        const float k = pot * (1.f + cfg::element::emberPerLevel * static_cast<float>(p.emberLevel));   // "Ember"
-        e.burn = cfg::element::burnDuration;
-        e.burnDps = std::min(e.burnDps + cfg::element::burnPerHit * k, cfg::element::burnMax * k);
-    } else if (b.element == Element::Water) {   // soaks it
-        e.soak = std::max(e.soak, cfg::element::soakDuration * pot);
-    } else if (b.element == Element::Stone) {   // cracks it ("Bedrock": longer, deeper)
-        const bool bed = m.bedrockLife > 0.f;
-        crack(e, 1, cfg::element::crackTime * pot * (bed ? m.bedrockLife : 1.f), cfg::element::crackMax + (bed ? 2 : 0));
+    // An Alchemist's elements take turns hit by hit ("Prism": now and then
+    // all at once); the reactions it sets off carry its items (reactBall_).
+    bool allElems = false;
+    if (b.elemN > 1) {
+        const int pr = m.cls.alchemist.prism;
+        allElems = pr > 0 && ++b.cls.alchemist.hits % pr == 0;
+        b.element = b.elems[b.elemTurn++ % b.elemN];
     }
-    applyElement(e, hitElement(b, p), b.owner, dmg, p, ev);   // a different ball's element waiting -> reaction
+    struct RestoreBall { Ball*& v; Ball* old; ~RestoreBall() { v = old; } } restoreBall{reactBall_, reactBall_};
+    reactBall_ = &b;
+    const float pot = elemPotency(b, p);
+    if (allElems) {
+        for (int i = 0; i < b.elemN; ++i) {
+            touchElement(e, b.elems[i], pot, m, p);
+            applyElement(e, b.elems[i], b.owner, dmg, p, ev);
+        }
+    } else {
+        touchElement(e, b.element, pot, m, p);
+        applyElement(e, hitElement(b, p), b.owner, dmg, p, ev);   // a different element waiting -> reaction
+    }
 
     // ---- procs
     if (m.teslaChance > 0.f && chance(m.teslaChance, p)) {   // "Tesla": zap the nearest few
@@ -1231,7 +1261,8 @@ Element World::hitElement(const Ball& b, const WorldParams& p) {
 void World::applyElement(Enemy& e, Element el, int owner, float hitDmg, const WorldParams& p, FrameEvents& ev) {
     if (el == Element::Plain) return;
     if (e.elemT > 0.f && e.elem != Element::Plain && e.elem != el &&
-        (e.elemOwner != owner || p.creed.alchemy)) {   // "Alchemy" creed: a ball can react with itself
+        (e.elemOwner != owner || p.creed.alchemy ||   // "Alchemy" creed: a ball can react with itself...
+         (reactBall_ && reactBall_->owner == owner && reactBall_->hasRole(BallRole::Alchemist)))) {   // ...an Alchemist too
         const Element prev = e.elem;
         e.elem = Element::Plain;
         e.elemT = 0.f;
@@ -1257,8 +1288,15 @@ void World::triggerReaction(Element x, Element y, Enemy& e, float hitDmg, const 
                             FrameEvents& ev, int depth) {
     namespace S = cfg::synergy;
     auto has = [&](Element q) { return x == q || y == q; };
-    const float mul = p.catalyst ? S::catalystDamage : 1.f;
-    const float rm = p.catalyst ? S::catalystRadius : 1.f;
+    float mul = p.catalyst ? S::catalystDamage : 1.f;
+    float rm = p.catalyst ? S::catalystRadius : 1.f;
+    Ball* rb = reactBall_;   // an Alchemist's hit: its items shape the reaction
+    const AlchemistMods* am = rb ? &rb->mods.cls.alchemist : nullptr;
+    if (am) {
+        mul *= am->crucible;   // "Crucible" (1 without it)
+        rm *= am->crucibleRadius;
+        if (rb->isAscended(BallRole::Alchemist)) mul *= cfg::alchemist::archReaction;
+    }
     const sf::Vector2f at = e.pos;
     BurstFx fx;
     fx.pos = at;
@@ -1300,7 +1338,7 @@ void World::triggerReaction(Element x, Element y, Enemy& e, float hitDmg, const 
         fx = {at, S::electrocuteRadius * rm, theme::elemElectric, "ELECTROCUTE"};
         areaDamage(at, fx.radius, hitDmg * S::electrocuteFrac * mul, nullptr);
         for (const Ball& wb : balls_) {
-            if (wb.element != Element::Water) continue;
+            if (!wb.hasElement(Element::Water)) continue;
             for (Enemy& o : enemies_) {
                 if (o.hp <= 0.f || length(o.pos - at) < fx.radius + o.radius) continue;   // already hit
                 for (const sf::Vector2f& pt : wb.waterTrail)
@@ -1358,6 +1396,35 @@ void World::triggerReaction(Element x, Element y, Enemy& e, float hitDmg, const 
         areaDamage(at, fx.radius, hitDmg * S::clashFrac * mul, nullptr);
     }
     ev.bursts.push_back(fx);
+
+    if (am && am->aftershock > 0.f && rb->element != Element::Plain) {   // "Aftershock": prime the pack
+        const float R = am->aftershock * arenaScale();
+        for (Enemy& o : enemies_) {
+            if (&o == &e || o.hp <= 0.f || o.elemT > 0.f || length(o.pos - at) > R + o.radius) continue;
+            o.elem = rb->element;
+            o.elemOwner = rb->owner;
+            o.elemT = S::reactWindow;
+        }
+    }
+    if (am && am->flux > 0.f)   // "Flux": each reaction recharges its abilities
+        for (int i = 0; i < kMaxAbilitySlots; ++i)
+            if (rb->abilities[i].id != Ability::None)
+                rb->abilityCd[i] = std::max(0.f, rb->abilityCd[i] - am->flux *
+                                                     abilityCooldown(rb->abilities[i].id, rb->abilities[i].level));
+    if (am && am->conflux && depth == 0) {   // "Conflux": it leaps once to another enemy carrying an element
+        Enemy* next = nullptr;
+        float best = S::chainRange * S::chainRange;
+        for (Enemy& o : enemies_) {
+            if (&o == &e || o.hp <= 0.f || o.elemT <= 0.f) continue;
+            const float d2 = dot(o.pos - at, o.pos - at);
+            if (d2 < best) { best = d2; next = &o; }
+        }
+        if (next) {
+            if (static_cast<int>(bolts_.size()) < cfg::element::maxBolts)
+                bolts_.push_back(Bolt{at, next->pos, cfg::element::boltLife, cfg::element::boltLife});
+            triggerReaction(x, y, *next, hitDmg, p, ev, depth + 1);
+        }
+    }
 
     // "Chain reaction": it can go off again on another afflicted enemy - and again.
     if (p.chainReaction && depth < S::chainMaxDepth && chance(S::chainChance, p)) {
@@ -1445,7 +1512,7 @@ float World::ballDamage(const Ball& b, const WorldParams& p) const {
     if (b.mods.satellite) dmg *= b.mods.satelliteDamage;   // "Satellite" grinds
     if (b.mods.piercing) dmg *= b.mods.pierceMult;         // "Piercing" levels
     dmg *= 1.f + b.mods.gluttonDamage * static_cast<float>(b.gluttonStacks);   // "Glutton"
-    if (b.element == Element::Fire)   // fire is a heavier hit; the burn DoT is the "Ember" node
+    if (b.element == Element::Fire)   // fire is a heavier hit (the burn comes on contact, see touchElement)
         dmg *= 1.f + cfg::element::fireDamageBonus * elemPotency(b, p);
     if (b.ricochetT > 0.f) dmg *= b.mods.ricochetMult;   // "Ricochet": fresh off a wall
     if (b.creedCharge > 0.f) dmg *= cfg::creed::coreChargeDamage;   // "Living Core" creed: overcharged
@@ -1456,23 +1523,23 @@ float World::ballDamage(const Ball& b, const WorldParams& p) const {
 // Fire / poison / ice act on contact (see advanceBall); water, stone and
 // electric emit into the world on a per-ball timer.
 void World::emitElement(Ball& b, float dt, const WorldParams& p, FrameEvents& ev) {
-    switch (b.element) {
-        case Element::Water: {
+    // Water and electric act on their own (fire, poison, ice and stone act on
+    // contact, see strike). An Alchemist can carry both: each keeps its timer.
+    if (b.hasElement(Element::Water)) {
             // Lay down another point of the "worm" wake behind the ball. The
             // tail drops off once the worm is at full length; damage is done in
             // updateWaterTrails.
-            b.cooldown -= dt;
-            if (b.cooldown > 0.f) break;
+        b.cooldown -= dt;
+        if (b.cooldown <= 0.f) {
             b.cooldown = cfg::element::waterInterval;
             b.waterTrail.push_back(b.pos);
             while (static_cast<int>(b.waterTrail.size()) > cfg::element::waterTrailPoints)
                 b.waterTrail.pop_front();
-            break;
         }
-        case Element::Stone: break;   // stone works on contact now (cracks, see strike)
-        case Element::Electric: {
-            b.cooldown -= dt;
-            if (b.cooldown > 0.f) break;
+    }
+    if (b.hasElement(Element::Electric)) [&] {
+            b.zapT -= dt;
+            if (b.zapT > 0.f) return;
             Enemy* target = nullptr;
             float bestD2 = cfg::element::boltRadius * cfg::element::boltRadius;
             for (Enemy& e : enemies_) {
@@ -1480,14 +1547,14 @@ void World::emitElement(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
                 if (d2 < bestD2) { bestD2 = d2; target = &e; }
             }
             if (!target) {
-                b.cooldown = 0.15f;   // nothing in range: check again soon
-                break;
+                b.zapT = 0.15f;   // nothing in range: check again soon
+                return;
             }
             const float zap = cfg::element::boltDamage * p.damageMult * b.mods.damageMult *
                               elemPotency(b, p);
             damageEnemy(*target, zap * (target->mark > 0.f ? p.markMul : 1.f));
             target->hitFlash = 1.f;
-            applyElement(*target, b.element, b.owner, ballDamage(b, p), p, ev);   // zaps can set off reactions too
+            applyElement(*target, Element::Electric, b.owner, ballDamage(b, p), p, ev);   // zaps can set off reactions too
             if (static_cast<int>(bolts_.size()) < cfg::element::maxBolts)
                 bolts_.push_back(Bolt{b.pos, target->pos,
                                       cfg::element::boltLife, cfg::element::boltLife});
@@ -1511,12 +1578,8 @@ void World::emitElement(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
                     bolts_.push_back(Bolt{from->pos, next->pos, cfg::element::boltLife, cfg::element::boltLife});
                 chain.push_back(next);
             }
-            b.cooldown = cfg::element::boltInterval;
-            break;
-        }
-        default:
-            break;
-    }
+            b.zapT = cfg::element::boltInterval;
+    }();
 }
 
 void World::regulateSpeed(Ball& b, float dt, const WorldParams& p) {
@@ -1775,7 +1838,7 @@ void World::updateBolts(float dt) {
 // to nothing at the tail.
 void World::updateWaterTrails(float dt, const WorldParams& p, FrameEvents& ev) {
     for (const Ball& b : balls_) {
-        if (b.element != Element::Water) continue;
+        if (!b.hasElement(Element::Water)) continue;
         const float w0 = cfg::element::waterTrailWidth * elemPotency(b, p);
         const auto& pts = b.waterTrail;
         const int n = static_cast<int>(pts.size());
@@ -1796,7 +1859,7 @@ void World::updateWaterTrails(float dt, const WorldParams& p, FrameEvents& ev) {
                         e.pos += seg / std::sqrt(len2) * cfg::element::waterCurrent * elemPotency(b, p) *
                                  arenaScale() * taper * dt;
                     e.soak = std::max(e.soak, cfg::element::soakDuration * 0.5f);
-                    applyElement(e, b.element, b.owner, ballDamage(b, p), p, ev);   // wading into a wake soaks it
+                    applyElement(e, Element::Water, b.owner, ballDamage(b, p), p, ev);   // wading into a wake soaks it
                     break;   // one segment's worth per enemy per step
                 }
             }

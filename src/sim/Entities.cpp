@@ -87,6 +87,7 @@ sf::Color roleColor(BallRole r) {
         case BallRole::Summoner: return theme::classSummoner;
         case BallRole::Jester:   return theme::classJester;
         case BallRole::Slinger:  return theme::classSlinger;
+        case BallRole::Alchemist: return theme::classAlchemist;
     }
     return theme::textLo;
 }
@@ -159,6 +160,7 @@ const char* roleName(BallRole r) {
         case BallRole::Summoner: return "Summoner";
         case BallRole::Jester:   return "Jester";
         case BallRole::Slinger:  return "Slinger";
+        case BallRole::Alchemist: return "Alchemist";
     }
     return "Normal";
 }
@@ -175,6 +177,7 @@ const char* roleDesc(BallRole r) {
         case BallRole::Summoner: return "calls a small spriteling ball every few seconds; all its summons hit harder and last longer";
         case BallRole::Jester:   return "plays on chance: each hit may land twice, spark to another enemy or leave a random element (luck helps)";
         case BallRole::Slinger:  return "made for your hands: catching it pays 50% more, and the first hit after you throw it lands 25% harder";
+        case BallRole::Alchemist: return "carries 2 elements and switches between them hit by hit - its own elements react with each other";
     }
     return "";
 }
@@ -191,6 +194,7 @@ const char* ascendedName(BallRole r) {
         case BallRole::Summoner: return "Archsummoner";
         case BallRole::Jester:   return "Grand Jester";
         case BallRole::Slinger:  return "Master Slinger";
+        case BallRole::Alchemist: return "Archalchemist";
     }
     return "Normal";
 }
@@ -207,6 +211,7 @@ const char* ascendedDesc(BallRole r) {
         case BallRole::Summoner: return "spritelings twice as often, carrying its items; summons stronger and leave their full element";
         case BallRole::Jester:   return "every Jester roll is taken twice and the best kept; its doubles triple";
         case BallRole::Slinger:  return "every catch recharges its abilities by 35%, and its thrown first hit lands 50% harder";
+        case BallRole::Alchemist: return "a 3rd element, and its reactions hit 30% harder";
     }
     return "";
 }

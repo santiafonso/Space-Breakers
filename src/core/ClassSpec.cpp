@@ -221,11 +221,34 @@ bool foldStyle(UpgradeKind k, int level, BallMods& m) {
     }
 }
 
+// ==================================================================== Alchemist
+bool foldAlchemist(UpgradeKind k, int level, BallMods& m) {
+    namespace A = cfg::alchemist;
+    const float n = static_cast<float>(level - 1);
+    AlchemistMods& a = m.cls.alchemist;
+    switch (k) {
+        case UpgradeKind::Attune:     m.elemMult *= 1.f + A::attune + A::attunePerLevel * n; return true;
+        case UpgradeKind::Crucible:
+            a.crucible *= A::crucible + A::cruciblePerLevel * n;
+            a.crucibleRadius = A::crucibleRadius;
+            return true;
+        case UpgradeKind::Aftershock: a.aftershock = A::aftershock + A::aftershockPerLevel * n; return true;
+        case UpgradeKind::Flux:       a.flux = A::flux + A::fluxPerLevel * n; return true;
+        case UpgradeKind::PrismHit:   a.prism = std::max(2, A::prismEvery - (level - 1) / 2); return true;
+        case UpgradeKind::Conflux:
+            a.conflux = true;
+            a.crucible *= 1.f + 0.1f * n;
+            return true;
+        default: return false;
+    }
+}
+
 }  // namespace
 
 bool foldClassItem(UpgradeKind k, int level, BallMods& m) {
     return foldMage(k, level, m) || foldShooter(k, level, m) || foldAssassin(k, level, m) ||
-           foldSummoner(k, level, m) || foldJester(k, level, m) || foldSlinger(k, level, m) || foldStyle(k, level, m);
+           foldSummoner(k, level, m) || foldJester(k, level, m) || foldSlinger(k, level, m) || foldStyle(k, level, m) ||
+           foldAlchemist(k, level, m);
 }
 
 }  // namespace sb

@@ -499,7 +499,7 @@ void WorldRenderer::draw(sf::RenderWindow& window, const World& world) const {
     draw::radar(window, world.core().pos, length(sz) * 0.6f, 120.f * as, 12, theme::grid, 0.10f);
 
     for (const Ball& b : world.balls())
-        if (b.element == Element::Water) drawWaterTrail(window, b);
+        if (b.hasElement(Element::Water)) drawWaterTrail(window, b);
     for (const Obstacle& o : world.obstacles()) drawObstacle(window, o);
     for (const Pool& q : world.pools()) {   // stone reactions: lava / mud / toxic dust, fading out
         const float f = clampf(q.life / std::max(0.01f, q.maxLife), 0.f, 1.f);

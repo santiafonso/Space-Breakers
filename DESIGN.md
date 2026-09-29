@@ -2032,6 +2032,16 @@ siempre se eligen los mismos 3).
   Polvo tóxico (nube de veneno), Esquirlas (explosión que agrieta x2), Imán
   (junta a los enemigos).
 
+**Clase Alchemist (hecho 2026-09-28; se llamaba "Elementalist" en el plan):**
+con la clase (2 items) la pelota lleva 2 elementos que se turnan golpe a golpe
+y reaccionan entre sí (una sola pelota ya genera reacciones); ascendida
+"Archalchemist" (4): un 3er elemento y reacciones +30%. Agua y eléctrico
+actúan solos si están entre sus elementos. Los extra se guardan al lado del
+slot de tipo (hexágonos chicos) y comparten su nivel. Items: Attune, Crucible,
+Aftershock, Flux, Prism, Conflux. Su ruta de la web sale del centro y tiene
+los 6 elementos (más Ember y Prism core); el arquetipo de Creed "Alchemist"
+pasó a decir "ALCHEMY".
+
 7. **Clase nueva: Elementalist** (va junto con el repaso de elementos). Cada
 clase se trata de algo; esta es sacarle más a los tipos. Como el Mage con los
 slots de habilidad, pero con elementos: con la clase (2 items) la pelota tiene

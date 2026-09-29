@@ -67,8 +67,8 @@ constexpr float kZoomMin = 0.45f, kZoomMax = 1.9f;
 // The legend lists the routes clockwise from the top, like the web.
 constexpr MetaBranch kLegend[] = {MetaBranch::Striker,  MetaBranch::Slinger, MetaBranch::Shooter, MetaBranch::Jester,
                                   MetaBranch::Assassin, MetaBranch::Creeds,   MetaBranch::Summoner,
-                                  MetaBranch::Support,  MetaBranch::Mage,    MetaBranch::Guardian};
-constexpr int kLegendCount = 10;
+                                  MetaBranch::Support,  MetaBranch::Mage,    MetaBranch::Alchemist, MetaBranch::Guardian};
+constexpr int kLegendCount = 11;
 constexpr float kLegendRow = 21.f;
 
 const sf::Color kPrismColor = theme::puSurge;   // violet - distinct from the core-blue accent
@@ -87,7 +87,8 @@ float nodeRing(int i) { return metaUnlockDef(i).ring; }
 
 // The node that unlocks a class (drawn bigger, its name always shown).
 bool isClassNode(int i) {
-    return (i >= MetaClassSupport && i <= MetaClassJester) || i == MetaClassSlinger || i == MetaClassStriker;
+    return (i >= MetaClassSupport && i <= MetaClassJester) || i == MetaClassSlinger || i == MetaClassStriker ||
+           i == MetaClassAlchemist;
 }
 
 const char* branchLabel(MetaBranch b) {

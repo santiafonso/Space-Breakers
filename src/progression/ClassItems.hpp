@@ -227,10 +227,35 @@ inline const ItemDef* styleItemDef(UpgradeKind k) {
     return findItemDef(defs, k);
 }
 
+// ==================================================================== Alchemist
+inline const ItemDef* alchemistItemDef(UpgradeKind k) {
+    static const std::vector<ItemDef> defs = {
+        {UpgradeKind::Attune, "Attune", "Attune",
+         "its elements are 25% stronger (burns, soaks, cracks, freezes, poison, zaps)",
+         "+10%", Tier::Common, ItemTag::Alchemist},
+        {UpgradeKind::Crucible, "Crucible", "Crucible",
+         "the reactions it sets off hit 40% harder and 20% wider",
+         "+12% harder", Tier::Uncommon, ItemTag::Alchemist},
+        {UpgradeKind::Aftershock, "Aftershock", "Aftershock",
+         "a reaction it sets off leaves its element on every enemy around - the next hit reacts again",
+         "reaches further", Tier::Uncommon, ItemTag::Alchemist},
+        {UpgradeKind::Flux, "Flux", "Flux",
+         "each reaction it sets off recharges its abilities by 15%",
+         "+5%", Tier::Uncommon, ItemTag::Alchemist},
+        {UpgradeKind::PrismHit, "Prism", "Prism",
+         "every 4th hit carries all its elements at once",
+         "one hit sooner every 2 levels", Tier::Rare, ItemTag::Alchemist},
+        {UpgradeKind::Conflux, "Conflux", "Conflux",
+         "every reaction it sets off leaps once to the nearest other enemy carrying an element",
+         "its reactions +10% harder", Tier::Epic, ItemTag::Alchemist},
+    };
+    return findItemDef(defs, k);
+}
+
 // ---------------------------------------------------------------- lookup
 inline const ItemDef* classItemDef(UpgradeKind k) {
     for (const ItemDef* (*f)(UpgradeKind) : {mageItemDef, shooterItemDef, assassinItemDef, summonerItemDef, jesterItemDef,
-                                             slingerItemDef, styleItemDef})
+                                             slingerItemDef, styleItemDef, alchemistItemDef})
         if (const ItemDef* d = f(k)) return d;
     return nullptr;
 }

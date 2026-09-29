@@ -52,7 +52,7 @@ inline const char* creedArchetypeName(CreedArchetype a) {
         case CreedArchetype::Swarm:     return "SWARM";
         case CreedArchetype::Core:      return "CORE";
         case CreedArchetype::Gambler:   return "GAMBLER";
-        case CreedArchetype::Alchemist: return "ALCHEMIST";
+        case CreedArchetype::Alchemist: return "ALCHEMY";
         case CreedArchetype::Berserker: return "BERSERKER";
     }
     return "";

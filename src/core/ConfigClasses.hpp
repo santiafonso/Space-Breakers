@@ -276,6 +276,16 @@ inline constexpr float doubleChance = 0.5f;
 inline constexpr float execution = 2.2f, executionPerLevel = 0.3f;
 }  // namespace slinger
 
+// ==================================================================== Alchemist
+namespace alchemist {
+inline constexpr float archReaction = 1.3f;    // Archalchemist: its reactions x this
+inline constexpr float attune = 0.25f, attunePerLevel = 0.1f;          // + element potency
+inline constexpr float crucible = 1.4f, crucibleRadius = 1.2f, cruciblePerLevel = 0.12f;
+inline constexpr float aftershock = 90.f, aftershockPerLevel = 15.f;  // reach (px)
+inline constexpr float flux = 0.15f, fluxPerLevel = 0.05f;
+inline constexpr int prismEvery = 4;                                  // -1 per 2 levels, down to 2
+}  // namespace alchemist
+
 // ==================================================================== speed items
 // The other classes' speed items (sim/WorldStyle.cpp): "still" ones scale with
 // slowness (0 at cruise, 1 stopped), "moving" ones with speed over cruise.

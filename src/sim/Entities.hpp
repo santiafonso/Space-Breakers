@@ -44,9 +44,10 @@ sf::Color elementColor(Element e);
 // Guardian: big, shoves, staggers, aims its bounces; Support: marks enemies +
 // a stronger element (see cfg::role). The other five are built per class in
 // sim/Classes.hpp + sim/WorldClasses.cpp.
-enum class BallRole { Normal, Striker, Guardian, Support, Mage, Shooter, Assassin, Summoner, Jester, Slinger };
-inline constexpr int kBallRoleCount = 10;
-inline constexpr int kClassCount = 9;   // every role but Normal
+enum class BallRole { Normal, Striker, Guardian, Support, Mage, Shooter, Assassin, Summoner, Jester, Slinger, Alchemist };
+inline constexpr int kBallRoleCount = 11;
+inline constexpr int kClassCount = 10;   // every role but Normal
+inline constexpr int kMaxElements = 3;   // elements one ball can carry (the Alchemist: 2, its ascended form 3)
 
 // A set of classes, one bit per BallRole (Normal has no bit).
 using RoleMask = unsigned;
@@ -160,6 +161,8 @@ struct BallSpec {
     BallRole primary = BallRole::Normal;   // its first class (slot order): the body colour
     RoleMask ascended = 0;     // classes it has in ascended form (4 items of a tag)
     Element element = Element::Plain;
+    Element elems[kMaxElements] = {};   // every element it carries (elems[0] = element); an Alchemist holds more
+    int elemN = 0;
     BallMods mods;
     AbilitySpec abilities[kMaxAbilitySlots];   // active ability slots only
 };
@@ -177,9 +180,18 @@ struct Ball {
     float classPulse = 0.f;  // 1 -> 0: it just gained a class, a flare in its class colour
     float elemPulse = 0.f;   // 1 -> 0: it just took an element, rings in the element's colour
     bool pulseAscend = false;   // ...and that gain was the ascended form (a bigger flare)
-    Element element = Element::Plain;
+    Element element = Element::Plain;   // the element of its next hit (an Alchemist's turns over hit by hit)
+    Element elems[kMaxElements] = {};   // every element it carries; elems[0] is its own
+    int elemN = 0;
+    int elemTurn = 0;                   // Alchemist: whose turn it is
+    bool hasElement(Element e) const {
+        for (int i = 0; i < elemN; ++i)
+            if (elems[i] == e) return true;
+        return false;
+    }
     BallMods mods;          // this ball's items + modifiers
-    float cooldown = 0.f;   // water drip / stone drop / electric zap timer
+    float cooldown = 0.f;   // water wake timer
+    float zapT = 0.f;       // electric zap timer
     float squash = 0.f;
     sf::Vector2f squashAxis{1.f, 0.f};
     sf::Color color = theme::ballSlow;

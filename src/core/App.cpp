@@ -174,7 +174,8 @@ BallSpec App::ballSpec(const BallLoadout& L) const {
     s.primary = tagRole(L.leadTag());
     if (const ItemTag asc = L.ascended(); asc != ItemTag::None) s.ascended = roleBit(tagRole(asc));
     if (hasCreed(CreedId::Duet)) s.ascended = s.roles;   // "Duet": every class it has is ascended
-    s.element = L.element();
+    s.elemN = L.elements(s.elems);   // an Alchemist carries more than one
+    s.element = s.elemN > 0 ? s.elems[0] : Element::Plain;
     BallMods& m = s.mods;
     // The type slot: the element's own level makes it stronger.
     if (L.type >= 0)
@@ -852,8 +853,9 @@ void App::applyUpgradeKind(UpgradeKind k, int ball, int slot) {
         if (const int mi = modifierIndex(k); mi >= 0) {
             ++b.mods[mi];
         } else if (upgradeLevelsUp(k, b)) {
-            // A duplicate levels up the copy the ball already has.
-            const int lvl = b.levelUp(b.slotOf(k));
+            // A duplicate levels up the copy the ball already has (an
+            // Alchemist's extra elements share the type slot's level).
+            const int lvl = b.levelUp(b.has(k) ? b.slotOf(k) : kSlotType);
             audio_.levelUp(lvl);
             effects_.addLabel(std::string(upgradeInfo(k).title) + "  Lv " + std::to_string(lvl),
                               {size().x * 0.5f, size().y * 0.36f}, tierColor(upgradeTier(k)), 26, 1.3f);
@@ -861,7 +863,18 @@ void App::applyUpgradeKind(UpgradeKind k, int ball, int slot) {
             // Items go in an item slot, an element in the type slot (swapping
             // the old one), an ability in an open ability slot.
             if (!slotAccepts(k, slot, b)) slot = defaultSlot(k, b);
-            b.setSlot(slot, static_cast<int>(k), 1);
+            Element have[kMaxElements];
+            const int nEl = b.elements(have);
+            if (upgradeCat(k) == UpgradeCat::Element && b.type >= 0 && nEl < b.elementCap()) {
+                // An Alchemist with room: a new element joins the ones it has.
+                int kept[kMaxElements - 1] = {-1, -1}, m = 0;   // close any gaps, then append
+                for (int x : b.extraType)
+                    if (x >= 0) kept[m++] = x;
+                std::copy(kept, kept + kMaxElements - 1, b.extraType);
+                b.extraType[nEl - 1] = static_cast<int>(k);   // right after the ones that count
+            } else {
+                b.setSlot(slot, static_cast<int>(k), 1);
+            }
         }
         syncWorldBalls();
         return;
@@ -2223,6 +2236,28 @@ int App::runSnapshots(const std::string& dir) {
         capturePath_ = d + "26_elements.png";
         render();
     }
+    {   // an Archalchemist: fire + water + stone taking turns, reacting with itself
+        using K = UpgradeKind;
+        data_.run.balls.resize(1);
+        BallLoadout& L = data_.run.balls[0];
+        const K items[4] = {K::Attune, K::Crucible, K::Aftershock, K::PrismHit};
+        for (int sl = 0; sl < 4; ++sl) { L.gear[sl] = static_cast<int>(items[sl]); L.gearLvl[sl] = 1; }
+        L.type = static_cast<int>(K::ElemFire);
+        L.typeLvl = 1;
+        L.extraType[0] = static_cast<int>(K::ElemWater);
+        L.extraType[1] = static_cast<int>(K::ElemStone);
+        world_.trimBalls(1);
+        syncWorldBalls();
+        world_.devSpawn(EnemyKind::Grunt, 14);
+        for (int i = 0; i < 220; ++i) update(1.f / 60.f);
+        capturePath_ = d + "27_alchemist.png";
+        render();
+        tab.type = sf::Event::KeyPressed;   // its loadout: the extra elements beside the type slot
+        stack_.back()->handleEvent(*this, tab, {0.f, 0.f});
+        snapFrame(d + "27b_alchemist_tab.png");
+        tab.type = sf::Event::KeyReleased;
+        stack_.back()->handleEvent(*this, tab, {0.f, 0.f});
+    }
 
     r.gold = 240;
     rollShop();
@@ -2266,7 +2301,7 @@ int App::runSnapshots(const std::string& dir) {
 
     data_.run = RunState{};   // back in the game menu, a well-grown web
     for (int u : {MetaChannel, MetaClassMage, MetaLoreMage, MetaAbilityBulwark, MetaFireItem, MetaVenom, MetaReroll,
-                  MetaLuckyStar, MetaClassJester, MetaSling, MetaClassSlinger, MetaHeft, MetaClassStriker, MetaTreasury, MetaHaggler, MetaCharged, MetaClassSupport, MetaRally,
+                  MetaLuckyStar, MetaClassJester, MetaSling, MetaClassSlinger, MetaHeft, MetaClassStriker, MetaVenom, MetaClassAlchemist, MetaTreasury, MetaHaggler, MetaCharged, MetaClassSupport, MetaRally,
                   MetaKinetics, MetaClassShooter, MetaBrood, MetaMend, MetaAegis, MetaMomentum, MetaKeenInstinct})
         data_.meta.unlock[u] = 1;
     replaceStack(ScreenId::Menu);

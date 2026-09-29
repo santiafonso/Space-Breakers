@@ -214,6 +214,12 @@ void worldSlinger(sf::RenderTarget& t, const World& world) {
     }
 }
 
+// ==================================================================== Alchemist
+// A small triangle: the old sign for the elements.
+void markAlchemist(sf::RenderTarget& t, sf::Vector2f p, float r, float, float a) {
+    draw::polygonOutline(t, p, r * 0.34f, 3, -kPi / 2.f, 1.5f, white(0.75f * a));
+}
+
 // ==================================================================== speed items
 // Anchor / Beacon: a faint aura that fills in as the ball slows. Wake: a
 // dotted trail. Leyline: small runes waiting for the next cast.
@@ -355,6 +361,7 @@ void drawClassMark(sf::RenderTarget& t, BallRole role, sf::Vector2f pos, float r
         case BallRole::Summoner: markSummoner(t, pos, r, heading, alpha); break;
         case BallRole::Jester:   markJester(t, pos, r, heading, alpha); break;
         case BallRole::Slinger:  markSlinger(t, pos, r, heading, alpha); break;
+        case BallRole::Alchemist: markAlchemist(t, pos, r, heading, alpha); break;
     }
 }
 

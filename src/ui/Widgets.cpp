@@ -543,6 +543,15 @@ void drawLoadoutPanel(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f c,
             centerOrigin(nm);
             nm.setPosition(std::round(pc.x), std::round(pc.y + r + 12.f));
             w.draw(nm);
+            Element els[kMaxElements];   // an Alchemist's other elements: small hexagons beside it
+            const int ne = L.elements(els);
+            for (int i = 1; i < ne; ++i) {
+                const sf::Color c2 = elementColor(els[i]);
+                const sf::Vector2f q{pc.x - r - 4.f - 11.f * static_cast<float>(i), pc.y - r * 0.55f + 13.f * static_cast<float>(i - 1)};
+                draw::polygon(w, q, 6.f, 6, kHexRot, withAlpha(lerpColor(c2, theme::bgDeep, 0.3f), 0.95f * sa),
+                              withAlpha(lerpColor(c2, theme::bgDeep, 0.55f), 0.95f * sa));
+                draw::polygonOutline(w, q, 6.f, 6, kHexRot, 1.2f, withAlpha(c2, 0.95f * sa));
+            }
             return;
         }
         if (isAbilitySlot(s)) {   // an ability: a cyan diamond; its name under it when there's one
@@ -628,7 +637,7 @@ bool loadoutTooltip(const BallLoadout& L, int part, std::string& title, std::str
                 desc = "items go here (4 per ball); 2 items of one tag give the ball that class, 4 its ascended form";
             } else if (part == kSlotType) {
                 title = "Type slot";
-                desc = "the ball's element goes here - one per ball; a new one swaps it. It doesn't count toward a class.";
+                desc = "the ball's element goes here - one per ball (an Alchemist holds 2, 3 ascended); a new one swaps it. It doesn't count toward a class.";
             } else if (part - kSlotAbility < abilitySlotCount(L)) {
                 title = "Ability slot";
                 desc = "an ability goes here: it fires by itself every few seconds. It doesn't count toward a class.";
@@ -641,6 +650,11 @@ bool loadoutTooltip(const BallLoadout& L, int part, std::string& title, std::str
         const auto k = static_cast<UpgradeKind>(kind);
         const UpgradeInfo info = upgradeInfo(k);
         title = info.title;
+        if (part == kSlotType) {   // an Alchemist's other elements
+            Element els[kMaxElements];
+            const int ne = L.elements(els);
+            for (int i = 1; i < ne; ++i) title += std::string(" + ") + elementName(els[i]);
+        }
         title += "  Lv " + std::to_string(L.levelAt(part)) + "/" + std::to_string(maxLevelOf(k));
         desc = info.desc;
         if (isAbilitySlot(part) && part - kSlotAbility >= abilitySlotCount(L))

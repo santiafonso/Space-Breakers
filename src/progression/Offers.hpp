@@ -82,7 +82,7 @@ inline const char* upgradeCatName(UpgradeCat c) {
 inline const char* upgradeCatDesc(UpgradeCat c) {
     switch (c) {
         case UpgradeCat::NewBall:  return "adds one more ball to the arena";
-        case UpgradeCat::Element:  return "goes in the ball's type slot (one element per ball; a new one swaps it). Two balls with different elements hitting the same enemy set off a reaction. Taking it again on the same ball levels it up. Doesn't count toward a class.";
+        case UpgradeCat::Element:  return "goes in the ball's type slot (one element per ball, a new one swaps it; an Alchemist holds 2, 3 ascended). Two different elements meeting on an enemy set off a reaction - from two balls, or one Alchemist. Taking it again on the same ball levels it up. Doesn't count toward a class.";
         case UpgradeCat::Ability:  return "a timed active in the ball's ability slot: it fires by itself every few seconds. Taking it again on the same ball levels it up. Doesn't count toward a class.";
         case UpgradeCat::Item:     return "a unique effect for one ball; takes one of its 4 item slots. Its tag counts toward the ball's class: 2 of a tag = that class, 4 = its ascended form. Taking it again on the same ball levels it up (max level 3, each level a big step).";
         case UpgradeCat::Modifier: return "a stat bump for one ball; no slot, stacks without limit";
@@ -407,6 +407,10 @@ struct BallLoadout {
     int gearLvl[kBallSlots] = {0, 0, 0, 0};    // item level: 1 once equipped, up to kMaxItemLevel
     int type = -1;                             // element pick in the type slot, -1 = none (Plain)
     int typeLvl = 0;
+    // An Alchemist's extra elements (element picks, -1 = none), in the order
+    // it got them. Not slots of their own: they sit beside the type slot and
+    // share its level. Only as many count as the ball can hold (elementCap).
+    int extraType[kMaxElements - 1] = {-1, -1};
     int ability[kMaxAbilitySlots] = {-1, -1, -1};   // ability picks, -1 = empty
     int abilityLvl[kMaxAbilitySlots] = {0, 0, 0};
     int mods[kModifierCount] = {};             // stacks per modifier (modifierIndex)
@@ -452,6 +456,26 @@ struct BallLoadout {
     Element element() const {
         return type < 0 ? Element::Plain
                         : static_cast<Element>(elementItemSlot(static_cast<UpgradeKind>(type)) + 1);
+    }
+
+    // How many elements it can hold: 1, 2 as an Alchemist, 3 ascended.
+    int elementCap() const {
+        const int n = tagCount(ItemTag::Alchemist);
+        return n >= 4 ? 3 : (n >= 2 ? 2 : 1);
+    }
+    // Every element it carries right now (the type slot first), up to its cap.
+    int elements(Element out[kMaxElements]) const {
+        int n = 0;
+        if (type >= 0) out[n++] = element();
+        for (int i = 0; i < kMaxElements - 1 && n < elementCap(); ++i)
+            if (extraType[i] >= 0) out[n++] = static_cast<Element>(elementItemSlot(static_cast<UpgradeKind>(extraType[i])) + 1);
+        return n;
+    }
+    bool carriesElement(UpgradeKind k) const {
+        if (type == static_cast<int>(k)) return true;
+        for (int i = 0; i < kMaxElements - 1; ++i)
+            if (extraType[i] == static_cast<int>(k)) return true;
+        return false;
     }
 
     // ---- classes
@@ -525,7 +549,7 @@ inline bool upgradeNeedsTarget(UpgradeKind k) {
 // Taking `k` on this ball levels up the copy it already has (instead of
 // filling a slot).
 inline bool upgradeLevelsUp(UpgradeKind k, const BallLoadout& b) {
-    return upgradeTakesSlot(k) && b.has(k);
+    return upgradeTakesSlot(k) && (b.has(k) || (upgradeCat(k) == UpgradeCat::Element && b.carriesElement(k)));
 }
 
 // Can pick `k` go into slot `s` of this ball? Items: an item slot. Elements:
@@ -550,8 +574,8 @@ inline bool upgradeFitsBall(UpgradeKind k, const BallLoadout& b) {
             return !b.has(k) || b.levelOf(k) < kMaxItemLevel;
         case UpgradeCat::Item:
             if (b.has(k)) return b.levelOf(k) < kMaxGearLevel;
-            if (k == UpgradeKind::Conductor) return b.element() == Element::Electric;
-            if (k == UpgradeKind::Bedrock) return b.element() == Element::Stone;
+            if (k == UpgradeKind::Conductor) return b.carriesElement(UpgradeKind::ElemElectric);
+            if (k == UpgradeKind::Bedrock) return b.carriesElement(UpgradeKind::ElemStone);
             return true;
         default: return false;
     }
@@ -669,7 +693,8 @@ inline bool classHasItems(ItemTag t) {
 //   Creeds    (bottom)      its own branch, no class
 //   Summoner (bottom)      copies, recruits, the starter kit, Gemini
 //   Support  (lower left)  power-ups, marks
-//   Mage     (left)        abilities (unlocked here) and elements
+//   Mage     (left)        abilities (unlocked here)
+//   Alchemist(left, low)   the six elements, Ember, Prism core
 //   Guardian (upper left)  the core: health, heals, shields
 // Past each class node: "<Class> lore" (its items show up more often) and one
 // class-flavoured perk. A node can only be bought once the node that gates it
@@ -780,13 +805,15 @@ enum MetaUnlock {
     MetaClassSlinger, // Slinger        - Slinger items can appear (its own route, from the centre)
     MetaLoreSlinger,  // Slinger lore
     MetaClassStriker, // Striker        - Striker items can appear (the starter class until any class is bought)
+    MetaClassAlchemist, // Alchemist    - Alchemist items can appear; its route holds the six elements
+    MetaLoreAlchemist,  // Alchemist lore
     MetaUnlockCount
 };
 
 // A route = a class (same order as ItemTag: Striker = 1 ... Jester = 8), plus
 // the root and the Creeds branch. Not saved.
-enum class MetaBranch { Root, Striker, Guardian, Support, Mage, Shooter, Assassin, Summoner, Jester, Slinger, Creeds };
-inline constexpr int kMetaBranchCount = 11;
+enum class MetaBranch { Root, Striker, Guardian, Support, Mage, Shooter, Assassin, Summoner, Jester, Slinger, Alchemist, Creeds };
+inline constexpr int kMetaBranchCount = 12;
 inline ItemTag metaBranchTag(MetaBranch b) {   // the class a route leads to (None: root / Creeds)
     return b == MetaBranch::Root || b == MetaBranch::Creeds ? ItemTag::None : static_cast<ItemTag>(static_cast<int>(b));
 }
@@ -815,17 +842,17 @@ inline const MetaUnlockDef& metaUnlockDef(int u) {
         /* Mend      */ {"Mend",      "the core heals +3 more between waves",
                          12u, 3, B::Guardian, C,  1, 316.f, 2.f},
         /* Ignition  */ {"Ignition",  "the fire element can appear; higher levels burn hotter",
-                         2u,  3, B::Mage,     P, MetaAbilityMissile, 294.f, 2.f},
+                         2u,  3, B::Alchemist, P,  0, 299.f, 1.f},
         /* Venom     */ {"Venom",     "the poison element can appear; higher levels stack faster",
-                         2u,  3, B::Mage,     P,  3, 294.f, 3.f},
+                         2u,  3, B::Alchemist, P,  3, 299.f, 2.f},
         /* Tide      */ {"Tide",      "the water element can appear; higher levels soak longer and sweep harder",
-                         3u,  3, B::Mage,     P,  4, 294.f, 4.f},
+                         3u,  3, B::Alchemist, P, MetaClassAlchemist, 292.f, 4.f},
         /* Frost     */ {"Frost",     "the ice element can appear; higher levels freeze for longer",
-                         3u,  3, B::Mage,     P,  5, 294.f, 5.f},
+                         3u,  3, B::Alchemist, P,  5, 292.f, 5.f},
         /* Quarry    */ {"Quarry",    "the stone element can appear; higher levels keep the cracks open longer",
-                         4u,  3, B::Mage,     P,  6, 294.f, 6.f},
+                         4u,  3, B::Alchemist, P, MetaClassAlchemist, 306.f, 4.f},
         /* Arc       */ {"Static",    "the electric element can appear; higher levels zap harder",
-                         4u,  3, B::Mage,     P,  7, 294.f, 7.f},
+                         4u,  3, B::Alchemist, P,  7, 306.f, 5.f},
         /* Fortune   */ {"Fortune",   "earn cores for every enemy you kill",
                          6u,  3, B::Jester,   C,  0,  72.f, 1.f},
         /* Windfall  */ {"Windfall",  "20% chance a cleared run pays a 2nd prism",
@@ -871,7 +898,7 @@ inline const MetaUnlockDef& metaUnlockDef(int u) {
         /* Charged   */ {"Charged",   "power-ups arrive with part of their duration already charged",
                          10u, 2, B::Support,  C, 14, 222.f, 3.f},
         /* Ember     */ {"Ember",     "fire burns 35% hotter per level (with Ignition's level on top)",
-                         2u,  3, B::Mage,     P,  3, 303.f, 3.f},
+                         2u,  3, B::Alchemist, P,  3, 308.f, 2.f},
         /* Armory    */ {"Armory",    "Epic picks turn up more often (+50% odds per level)",
                          2u,  2, B::Jester,   P, 47,  88.f, 5.f},
         /* Satellite */ {"Satellite", "the Satellite legendary can appear: a ball that orbits the core",
@@ -881,7 +908,7 @@ inline const MetaUnlockDef& metaUnlockDef(int u) {
         /* Twins     */ {"Twins",     "the Gemini legendary can appear: a permanent ghost twin",
                          3u,  1, B::Summoner, P, MetaBrood, 192.f, 2.3f},
         /* Prism     */ {"Prism",     "the Prism core legendary relic can appear: reactions everywhere",
-                         4u,  1, B::Mage,     P,  5, 303.f, 4.6f},
+                         4u,  1, B::Alchemist, P,  6, 292.f, 6.f},
         /* Lucky star*/ {"Lucky star","+2 luck per level: higher chances and rarer cards",
                          12u, 3, B::Jester,   C, 20,  72.f, 3.f},
         /* Haggler   */ {"Haggler",   "shop prices drop 10% per level, and you may sell one more item per shop",
@@ -988,6 +1015,10 @@ inline const MetaUnlockDef& metaUnlockDef(int u) {
                          10u, 2, B::Slinger,  C, MetaClassSlinger, 14.f, 4.f},
         /* Striker   */ {"Striker",   "unlocks the Striker class: its items can appear (hits far harder when flung). Until you own any class, Striker is your free starter",
                          12u, 1, B::Striker,  C, MetaSling, 0.f, 3.f},
+        /* Alchemist */ {"Alchemist", "unlocks the Alchemist class: its items can appear (2 elements per ball that react with each other). Its route holds the elements",
+                         18u, 1, B::Alchemist, C, 4, 299.f, 3.f},
+        /* AlchLore  */ {"Alchemist lore", "Alchemist items show up 50% more often per level",
+                         10u, 2, B::Alchemist, C, MetaClassAlchemist, 299.f, 5.5f},
     };
     return defs[u];
 }
@@ -1004,6 +1035,7 @@ inline int classLoreNode(ItemTag t) {
         case ItemTag::Summoner: return MetaLoreSummoner;
         case ItemTag::Jester:   return MetaLoreJester;
         case ItemTag::Slinger:  return MetaLoreSlinger;
+        case ItemTag::Alchemist: return MetaLoreAlchemist;
         default:                return -1;
     }
 }
@@ -1055,6 +1087,7 @@ inline int classUnlockNode(ItemTag t) {
         case ItemTag::Summoner: return MetaClassSummoner;
         case ItemTag::Jester:   return MetaClassJester;
         case ItemTag::Slinger:  return MetaClassSlinger;
+        case ItemTag::Alchemist: return MetaClassAlchemist;
         default:                return -1;
     }
 }
@@ -1065,7 +1098,7 @@ inline bool classUnlocked(ItemTag t, const int* levels) {
     // Striker is the starter: open until any class node is bought, so a fresh
     // save still has items to find.
     if (t != ItemTag::Striker) return false;
-    for (int i = 1; i < static_cast<int>(ItemTag::Slinger) + 1; ++i)
+    for (int i = 1; i < static_cast<int>(ItemTag::Alchemist) + 1; ++i)
         if (const int c = classUnlockNode(static_cast<ItemTag>(i)); c >= 0 && levels[c] > 0) return false;
     return true;
 }

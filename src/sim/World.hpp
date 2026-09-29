@@ -271,6 +271,7 @@ private:
     void damageEnemy(Enemy& e, float dmg);            // any damage source; applies "brittle"
     void areaDamage(sf::Vector2f at, float radius, float dmg, const Enemy* skip);
     void applyElement(Enemy& e, Element el, int owner, float hitDmg, const WorldParams& p, FrameEvents& ev);
+    void touchElement(Enemy& e, Element el, float pot, const BallMods& m, const WorldParams& p);
     Element hitElement(const Ball& b, const WorldParams& p);   // its element, or a random one under "Prism core"
     void triggerReaction(Element x, Element y, Enemy& e, float hitDmg, const WorldParams& p,
                          FrameEvents& ev, int depth);
@@ -310,6 +311,7 @@ private:
     sf::Vector2f pointer_{0.f, 0.f};         // your pointer in the arena ("Grip")
     bool hasPointer_ = false;
     float trickLuck_ = 1.f;                  // "Trick shot": every chance x this while its hit resolves
+    Ball* reactBall_ = nullptr;              // the ball whose hit is resolving (Alchemist reactions)
     PactRules pact_;                         // the run's pacts, from WorldParams (each step / wave start)
     float autoFlingTimer_ = 1.f;   // "Clockwork": time to its next throw
 

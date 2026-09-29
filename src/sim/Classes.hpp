@@ -347,6 +347,23 @@ struct SlingerWorld {
     std::vector<Flame> flames;
 };
 
+// ==================================================================== Alchemist
+// The class of elements (2026-09-28): 2 elements (3 ascended) that take turns
+// hit by hit and react with each other. Its items shape its reactions
+// (World::strike / triggerReaction read them through World::reactBall_).
+struct AlchemistMods {
+    float crucible = 1.f;      // "Crucible": its reactions' damage x this...
+    float crucibleRadius = 1.f;// ...and reach x this
+    float aftershock = 0.f;    // "Aftershock": its reactions leave its element this far around (0 = off)
+    float flux = 0.f;          // "Flux": each reaction recharges its abilities this share
+    int prism = 0;             // "Prism": every Nth hit carries all its elements (0 = off)
+    bool conflux = false;      // "Conflux": its reactions leap once to another afflicted enemy
+};
+struct AlchemistState {
+    int hits = 0;              // "Prism": hits so far
+};
+struct AlchemistWorld {};
+
 // ---------------------------------------------------------------- bundles
 // (no class logic below this line)
 
@@ -361,6 +378,7 @@ struct ClassMods {
     SummonerMods summoner;
     JesterMods jester;
     SlingerMods slinger;
+    AlchemistMods alchemist;
     // Classes (RoleMask bits) whose hooks also run for a ball that carries
     // their items without having the class (a single item). A class opts in
     // from its own fold (core/ClassSpec.cpp); its hooks must then check
@@ -379,6 +397,7 @@ struct ClassState {
     SummonerState summoner;
     JesterState jester;
     SlingerState slinger;
+    AlchemistState alchemist;
 };
 
 // On World (`World::classWorld()`): state a class owns outside the balls.
@@ -393,6 +412,7 @@ struct ClassWorldState {
     SummonerWorld summoner;
     JesterWorld jester;
     SlingerWorld slinger;
+    AlchemistWorld alchemist;
 };
 
 }  // namespace sb

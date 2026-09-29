@@ -139,6 +139,14 @@ enum class UpgradeKind {
     Kennel,            // slow: lets loose homing wisps                       [Summoner]
     DropTurret,        // your throw leaves a turret where you let go         [Summoner]
 
+    // ---- Alchemist items (the class of elements, 2026-09-28) ----
+    Attune,            // its elements are stronger                          [Alchemist]
+    Crucible,          // its reactions hit harder and wider                 [Alchemist]
+    Aftershock,        // its reactions leave its element on the pack        [Alchemist]
+    Flux,              // each of its reactions recharges its abilities      [Alchemist]
+    PrismHit,          // "Prism": every 4th hit carries all its elements    [Alchemist]
+    Conflux,           // its reactions leap once to another afflicted enemy [Alchemist]
+
     // ---- relics (keep CoreSpring first and Overcharge last) ----
     CoreSpring,        // balls ricochet off the core faster
     CoreSlowField,     // a zone around the core slows enemies inside it
@@ -167,7 +175,7 @@ inline constexpr int kTierCount = 5;
 
 // ---- item tags: a ball's classes come from them -----------------------------
 // Same order as BallRole (sim/Entities.hpp), None = Normal.
-enum class ItemTag { None, Striker, Guardian, Support, Mage, Shooter, Assassin, Summoner, Jester, Slinger };
+enum class ItemTag { None, Striker, Guardian, Support, Mage, Shooter, Assassin, Summoner, Jester, Slinger, Alchemist };
 
 // Everything the UI and the roll need to know about one class item. The five
 // newer classes describe their items with these (ClassItems.hpp); the older
