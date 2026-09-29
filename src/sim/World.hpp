@@ -106,6 +106,7 @@ public:
     const std::vector<Bolt>& bolts() const { return bolts_; }
     const std::vector<Obstacle>& obstacles() const { return obstacles_; }
     const std::vector<Pool>& pools() const { return pools_; }
+    const std::vector<Wave>& waves() const { return waves_; }
     const std::vector<BlackHole>& blackHoles() const { return blackHoles_; }   // "Black hole"
     const ClassWorldState& classWorld() const { return classWorld_; }          // per-class world state (bullets, summons...)
     const std::vector<TetherBeam>& tethers() const { return tethers_; }        // "Tether" lasers, this step
@@ -194,7 +195,8 @@ private:
     void emitElement(Ball& b, float dt, const WorldParams& p, FrameEvents& ev);
     void resolveBallPairs(FrameEvents& ev, const WorldParams& p);
     void updateBolts(float dt);
-    void updateWaterTrails(float dt, const WorldParams& p, FrameEvents& ev);
+    void updateWaves(float dt, const WorldParams& p, FrameEvents& ev);
+    bool inWave(const Enemy& e) const;       // under a rolling wave's crest (Electrocution)
     void updateObstacles(float dt);
     void updatePools(float dt);
     void addPool(sf::Vector2f at, float radius, float power, PoolKind kind);
@@ -293,6 +295,7 @@ private:
     std::vector<Bolt> bolts_;
     std::vector<Obstacle> obstacles_;
     std::vector<Pool> pools_;                // stone reactions: lava, mud, toxic dust
+    std::vector<Wave> waves_;                // water balls' waves
     std::vector<BlackHole> blackHoles_;
     std::vector<TetherBeam> tethers_;
     ClassWorldState classWorld_;        // per-class world state (sim/Classes.hpp)

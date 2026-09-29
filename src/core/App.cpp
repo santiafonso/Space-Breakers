@@ -2262,6 +2262,7 @@ int App::runSnapshots(const std::string& dir) {
         L.typeLvl = 1;
         L.extraType[0] = static_cast<int>(K::ElemWater);
         L.extraType[1] = static_cast<int>(K::ElemStone);
+        for (int mi = 0; mi < 8; ++mi) L.mods[mi] = 1 + mi % 3;   // plenty of modifiers: the panel line shrinks to fit
         world_.trimBalls(1);
         syncWorldBalls();
         world_.devSpawn(EnemyKind::Grunt, 14);

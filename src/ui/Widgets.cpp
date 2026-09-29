@@ -224,17 +224,40 @@ sf::FloatRect slotRect(sf::Vector2f c, int slot, const BallLoadout& L) {
     return {};
 }
 
-// "DMG 2  SPD 1" - a ball's stacked modifiers, compact.
-std::string modifierLine(const BallLoadout& L) {
-    static const char* kShort[kModifierCount] = {"DMG", "SIZE", "SPD", "HEAVY", "CRIT", "REACH",
-                                                 "ELEM", "SPIN", "LEECH", "MIND", "THROW", "BOUNCE"};
-    std::string out;
-    for (int i = 0; i < kModifierCount; ++i) {
-        if (L.mods[i] <= 0) continue;
-        if (!out.empty()) out += "  ";
-        out += std::string(kShort[i]) + " " + std::to_string(L.mods[i]);
+// A ball's stacked modifiers, compact: "DMG 2  SPD 1". The more kinds it
+// has, the shorter each gets - word, then three letters, then one - and if
+// even that won't fit `maxW`, the rest go as "+N" (the hover lists them all).
+std::string modifierLine(const BallLoadout& L, const sf::Font* font, unsigned size, float maxW) {
+    static const char* kWord[kModifierCount] = {"DMG", "SIZE", "SPD", "HEAVY", "CRIT", "REACH",
+                                                "ELEM", "SPIN", "LEECH", "MIND", "THROW", "BOUNCE"};
+    static const char* kMid[kModifierCount] = {"DMG", "SIZ", "SPD", "BAL", "CRT", "RCH",
+                                               "ELM", "SPN", "LCH", "MND", "THR", "BNC"};
+    static const char* kOne[kModifierCount] = {"D", "Z", "S", "W", "C", "R", "E", "N", "L", "M", "T", "B"};
+    auto build = [&](const char* const* names, const char* gap, const char* sep, int limit) {
+        std::string out;
+        int shown = 0, hidden = 0;
+        for (int i = 0; i < kModifierCount; ++i) {
+            if (L.mods[i] <= 0) continue;
+            if (shown >= limit) { ++hidden; continue; }
+            if (!out.empty()) out += sep;
+            out += std::string(names[i]) + gap + std::to_string(L.mods[i]);
+            ++shown;
+        }
+        if (hidden > 0) out += std::string(sep) + "+" + std::to_string(hidden);
+        return out;
+    };
+    auto fits = [&](const std::string& str) {
+        return !font || makeLabel(*font, str, size, theme::textHi).getLocalBounds().width <= maxW;
+    };
+    std::string line = build(kWord, " ", "  ", kModifierCount);
+    if (fits(line)) return line;
+    line = build(kMid, "", " ", kModifierCount);
+    if (fits(line)) return line;
+    for (int limit = kModifierCount; limit >= 1; --limit) {
+        line = build(kOne, "", " ", limit);
+        if (fits(line)) return line;
     }
-    return out;
+    return line;
 }
 
 sf::Color tagColor(ItemTag t) { return roleColor(tagRole(t)); }   // ItemTag::None -> Normal: grey
@@ -612,7 +635,7 @@ void drawLoadoutPanel(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f c,
     const int open = abilitySlotCount(L);
     for (int i = 0; i < abilityBoxes(L); ++i) slotBox(kSlotAbility + i, "ability", i >= open);
 
-    const std::string ml = modifierLine(L);
+    const std::string ml = modifierLine(L, &font, 11, kPanelW - 28.f);
     draw::line(w, {c.x - kPanelW * 0.5f + 14.f, c.y + kPanelH * 0.5f - 34.f},
                {c.x + kPanelW * 0.5f - 14.f, c.y + kPanelH * 0.5f - 34.f}, 1.f, withAlpha(theme::arenaEdge, 0.8f * a));
     drawLabel(w, font, ml.empty() ? "no modifiers" : ml, 11, {c.x, c.y + kPanelH * 0.5f - 18.f},

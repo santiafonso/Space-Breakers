@@ -378,13 +378,20 @@ inline constexpr float fireSpreadKeep = 0.7f;     // ...at this share of its bur
 inline constexpr float fireSpreadBlast = 1.2f;    // ...and hits them for this x its burn dps
 inline constexpr float fireSpreadMin = 0.4f;      // a burn weaker than this dps doesn't spread
 // water (2026-09-28): soaks and sweeps. A hit soaks the enemy (slower, flies
-// further when hit, freezes twice as long); the wake is a current that sweeps
-// enemies along the ball's path.
+// further when hit, freezes twice as long), and every so often the ball sends
+// out a wave: an arc ahead of it that rolls outward, growing wider, shoving
+// and soaking every enemy it crosses (no damage of its own).
 inline constexpr float soakDuration = 3.f;        // x potency
 inline constexpr float soakSlow = 0.7f;           // a soaked enemy moves at this x speed
 inline constexpr float soakKnock = 1.5f;          // ...and takes knockback x this
 inline constexpr float soakFreeze = 2.f;          // ...and stays frozen x this
-inline constexpr float waterCurrent = 280.f;      // px/s the wake sweeps enemies along (x potency)
+inline constexpr float waveEvery = 1.5f;          // s between waves
+inline constexpr float waveSpeed = 340.f;         // px/s it rolls out
+inline constexpr float waveReach = 330.f;         // how far it rolls (x (0.8 + 0.2 potency))
+inline constexpr float waveArc = 0.55f;           // half-angle of the arc (rad): it widens as it rolls
+inline constexpr float waveThick = 10.f, waveThickGrow = 20.f;   // crest half-thickness, + this by the end
+inline constexpr float wavePush = 300.f;          // knock (px/s) on each enemy it crosses (x potency)
+inline constexpr int maxWaves = 10;
 // stone (2026-09-28): the heavy ball that cracks. Every hit cracks the enemy:
 // each crack makes it take more from EVERY source. Slower, shoves harder.
 inline constexpr float crackDamage = 0.12f;       // + damage taken per crack...
@@ -409,11 +416,6 @@ inline constexpr float freezeDuration = 1.3f;
 // fire's burn: refreshed by every fire hit (see burnPerHit above); the "Ember"
 // web node heats it (emberPerLevel), Ignition's level scales it (potency).
 inline constexpr float burnDuration = 3.f;
-// water: drags a wake (a current, see waterCurrent) that follows the ball's
-// path and tapers from head to tail
-inline constexpr float waterInterval = 0.035f;    // time between trail points laid down
-inline constexpr int   waterTrailPoints = 30;     // worm length (~1s of travel)
-inline constexpr float waterTrailWidth = 20.f;    // current half-width at the head; tapers toward the tail
 // electric: zaps the nearest enemy inside an (invisible) radius, on a timer
 inline constexpr float boltRadius = 190.f;
 inline constexpr float boltInterval = 0.7f;

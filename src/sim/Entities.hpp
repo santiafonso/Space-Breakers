@@ -207,7 +207,7 @@ struct Ball {
     float sinceThrow = 0.f;  // "Quick Hands" pact: seconds since you last threw it
     int juggle = 0;          // "Juggler" pact: catches in a row without touching the core
     std::deque<sf::Vector2f> trail;
-    std::deque<sf::Vector2f> waterTrail;   // water ball only: its wake, a current that sweeps enemies
+    std::deque<sf::Vector2f> waterTrail;   // (unused since water sends waves - kept for the copies' clears)
     int owner = -1;          // index of the (real) ball this is / was copied from - reactions need two owners
     bool ghost = false;      // "Split shot" / "Mitosis" copy: temporary, fades out
     float ghostLife = 0.f;
@@ -315,6 +315,19 @@ struct Obstacle {
     float radius = cfg::element::obstacleRadius;
     float life = cfg::element::obstacleLife;
     float maxLife = cfg::element::obstacleLife;
+};
+
+// A water ball's wave: an arc rolling out from where it was sent, growing
+// wider, shoving and soaking each enemy it crosses once.
+struct Wave {
+    sf::Vector2f origin;
+    float dir = 0.f;        // heading (rad)
+    float r = 0.f;          // how far it has rolled
+    float reach = 300.f;    // ...and how far it goes
+    float push = 0.f;       // knock on each enemy it crosses
+    float hitDmg = 0.f;     // the ball's hit, for reactions
+    int owner = -1;
+    std::vector<int> hit;   // Enemy::ids it already crossed
 };
 
 // A patch of ground left by a stone reaction: lava burns, mud slows, toxic

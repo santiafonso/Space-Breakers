@@ -288,7 +288,7 @@ inline UpgradeInfo upgradeInfo(UpgradeKind k) {
         case UpgradeKind::AddBall:       return {"Extra ball", "one more ball in the arena"};
         case UpgradeKind::ElemFire:      return {"Fire", "the ball turns fire: every hit sets the enemy alight, hotter each time; a burning enemy that dies sets the ones around it on fire"};
         case UpgradeKind::ElemPoison:    return {"Poison", "the ball turns poison: hits stack damage over time"};
-        case UpgradeKind::ElemWater:     return {"Water", "the ball turns water: hits soak enemies (slower, knocked further, frozen twice as long) and its wake is a current that sweeps them along"};
+        case UpgradeKind::ElemWater:     return {"Water", "the ball turns water: hits soak enemies (slower, knocked further, frozen twice as long), and every 1.5 s it sends out a wave ahead of it that grows as it rolls, shoving and soaking everything it crosses"};
         case UpgradeKind::ElemIce:       return {"Ice", "the ball turns ice: hits freeze enemies in place"};
         case UpgradeKind::ElemStone:     return {"Stone", "the ball turns stone: heavier and slower, and every hit cracks the enemy - each crack makes it take 12% more from every ball (up to 5)"};
         case UpgradeKind::ElemElectric:  return {"Electric", "the ball turns electric: zaps nearby enemies"};
@@ -866,7 +866,7 @@ inline const MetaUnlockDef& metaUnlockDef(int u) {
                          2u,  3, B::Alchemist, P,  0, 299.f, 1.f},
         /* Venom     */ {"Venom",     "the poison element can appear; higher levels stack faster",
                          2u,  3, B::Alchemist, P,  3, 299.f, 2.f},
-        /* Tide      */ {"Tide",      "the water element can appear; higher levels soak longer and sweep harder",
+        /* Tide      */ {"Tide",      "the water element can appear; higher levels soak longer and send bigger waves",
                          3u,  3, B::Alchemist, P, MetaClassAlchemist, 292.f, 4.f},
         /* Frost     */ {"Frost",     "the ice element can appear; higher levels freeze for longer",
                          3u,  3, B::Alchemist, P,  5, 292.f, 5.f},

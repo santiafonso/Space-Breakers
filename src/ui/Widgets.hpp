@@ -78,7 +78,7 @@ sf::Vector2f panelCenter(sf::Vector2f size, int i, int n, float cy, float cx = -
 // panel. The ability row splits into abilityBoxes(L) boxes.
 sf::FloatRect slotRect(sf::Vector2f panelCentre, int slot, const BallLoadout& L);
 int abilityBoxes(const BallLoadout& L);   // open ability slots + any filled closed ones
-std::string modifierLine(const BallLoadout& L);
+std::string modifierLine(const BallLoadout& L, const sf::Font* font = nullptr, unsigned size = 11, float maxW = 0.f);
 sf::Color catColor(UpgradeCat c);
 sf::Color tagColor(ItemTag t);   // a class's colour (its items, its name)
 sf::Color tierColor(Tier t);     // Common grey .. Legendary gold

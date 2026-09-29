@@ -2026,9 +2026,10 @@ siempre se eligen los mismos 3).
   (sin necesitar Ember); un enemigo que muere quemándose explota y prende a
   los de al lado. Ember: +35% de quemadura por nivel. Golpe +25% (antes +60%).
 - Agua = mojar y empujar: el golpe empapa (camina 30% más lento, sale 50% más
-  lejos al ser golpeado, se congela el doble); la estela es una corriente que
-  arrastra enemigos en la dirección de la pelota (ya no daña). Se dibuja como
-  corriente: banda tenue con rayitas que fluyen hacia la pelota.
+  lejos al ser golpeado, se congela el doble) y cada 1,5 s la pelota lanza una
+  OLA: un arco hacia donde va que avanza y crece, empuja hacia afuera y empapa
+  a cada enemigo que cruza (sin daño propio). Ya no tiene estela.
+  Electrocution electrifica a lo que está dentro de una ola.
 - Piedra = la pesada que agrieta (support/tanque): cada golpe agrieta (+12% de
   daño recibido de TODO, hasta 5, 4 s); pelota 10% más lenta, empuja 30% más.
   Ya no tira escombros. Bedrock: grietas 50% más largas y hasta 7.

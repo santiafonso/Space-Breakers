@@ -126,50 +126,35 @@ void WorldRenderer::drawCore(sf::RenderWindow& window, const Core& c) const {
     draw::disc(window, c.pos, c.radius * 0.26f, withAlpha(lighten(tint, 0.7f), 0.95f), withAlpha(tint, 0.8f));
 }
 
-// The water ball's wake: a current. A faint band along its recent path
-// (widest at the head, by the ball) with light streaks flowing through it in
-// the ball's direction - it reads as water pushing, not as a damaging worm.
-void WorldRenderer::drawWaterTrail(sf::RenderWindow& window, const Ball& b) const {
-    const auto& pts = b.waterTrail;
-    const int n = static_cast<int>(pts.size());
-    if (n < 2) return;
-    const float w0 = cfg::element::waterTrailWidth;
-
-    sf::VertexArray band(sf::TriangleStrip, static_cast<std::size_t>(n) * 2);
-    for (int i = 0; i < n; ++i) {
-        const sf::Vector2f prev = pts[i > 0 ? i - 1 : i];
-        const sf::Vector2f next = pts[i < n - 1 ? i + 1 : i];
-        sf::Vector2f dir = next - prev;
-        const float dl = std::sqrt(dir.x * dir.x + dir.y * dir.y);
-        dir = dl > 1e-4f ? dir / dl : sf::Vector2f{1.f, 0.f};
-        const sf::Vector2f nrm{-dir.y, dir.x};
-        const float taper = static_cast<float>(i + 1) / static_cast<float>(n);  // 0 tail -> ~1 head
-        const sf::Color col = withAlpha(theme::elemWater, 0.05f + 0.12f * taper);
-        band[static_cast<std::size_t>(i) * 2].position = pts[i] + nrm * (w0 * taper);
+// A water ball's wave: an arc of water rolling out, thicker as it goes, with a
+// bright crest; it fades toward the arc's tips and over its last stretch.
+void WorldRenderer::drawWave(sf::RenderWindow& window, const Wave& w, float as) const {
+    namespace L = cfg::element;
+    const float k = clampf(w.r / std::max(1.f, w.reach), 0.f, 1.f);
+    const float fade = std::min(1.f, (1.f - k) * 4.f);   // holds, then fades over the last quarter
+    const float thick = (L::waveThick + L::waveThickGrow * k) * as;
+    constexpr int kSeg = 24;
+    sf::VertexArray band(sf::TriangleStrip, (kSeg + 1) * 2);
+    for (int i = 0; i <= kSeg; ++i) {
+        const float u = static_cast<float>(i) / kSeg;                 // 0..1 across the arc
+        const float a = w.dir + (u * 2.f - 1.f) * L::waveArc;
+        const float tip = std::sin(u * kPi);                          // 0 at the tips, 1 in the middle
+        const sf::Vector2f d{std::cos(a), std::sin(a)};
+        const sf::Color col = withAlpha(theme::elemWater, 0.30f * fade * tip);
+        band[static_cast<std::size_t>(i) * 2].position = w.origin + d * (w.r + thick * tip);
         band[static_cast<std::size_t>(i) * 2].color = col;
-        band[static_cast<std::size_t>(i) * 2 + 1].position = pts[i] - nrm * (w0 * taper);
-        band[static_cast<std::size_t>(i) * 2 + 1].color = col;
+        band[static_cast<std::size_t>(i) * 2 + 1].position = w.origin + d * std::max(0.f, w.r - thick * tip);
+        band[static_cast<std::size_t>(i) * 2 + 1].color = withAlpha(theme::elemWater, 0.05f * fade * tip);
     }
     window.draw(band);
-
-    // Streaks: short dashes riding the current toward the head, on three lanes.
-    const float t = clockSeconds();
-    const sf::Color light = lerpColor(theme::elemWater, sf::Color::White, 0.45f);
-    for (int lane = -1; lane <= 1; ++lane) {
-        const float phase = std::fmod(t * 2.2f + 0.37f * static_cast<float>(lane + 1), 1.f);
-        for (int k = 0; k < 3; ++k) {
-            const float u = (static_cast<float>(k) + phase) / 3.f;   // 0 tail -> 1 head
-            const int i = std::min(n - 2, static_cast<int>(u * static_cast<float>(n - 1)));
-            const sf::Vector2f a0 = pts[i], a1 = pts[i + 1];
-            sf::Vector2f d = a1 - a0;
-            const float dl = std::sqrt(d.x * d.x + d.y * d.y);
-            if (dl < 1e-3f) continue;
-            d /= dl;
-            const sf::Vector2f nrm{-d.y, d.x};
-            const float taper = static_cast<float>(i + 1) / static_cast<float>(n);
-            const sf::Vector2f c = a0 + nrm * (w0 * taper * 0.55f * static_cast<float>(lane));
-            draw::line(window, c - d * 5.f, c + d * 6.f, 1.5f, withAlpha(light, 0.55f * taper));
-        }
+    const sf::Color crest = lerpColor(theme::elemWater, sf::Color::White, 0.5f);
+    for (int i = 0; i < kSeg; ++i) {   // the crest along the front
+        const float u0 = static_cast<float>(i) / kSeg, u1 = static_cast<float>(i + 1) / kSeg;
+        const float a0 = w.dir + (u0 * 2.f - 1.f) * L::waveArc, a1 = w.dir + (u1 * 2.f - 1.f) * L::waveArc;
+        const float tip = std::sin((u0 + u1) * 0.5f * kPi);
+        draw::line(window, w.origin + sf::Vector2f{std::cos(a0), std::sin(a0)} * (w.r + thick * 0.8f * tip),
+                   w.origin + sf::Vector2f{std::cos(a1), std::sin(a1)} * (w.r + thick * 0.8f * tip), 2.f * as,
+                   withAlpha(crest, 0.7f * fade * tip));
     }
 }
 
@@ -517,8 +502,7 @@ void WorldRenderer::draw(sf::RenderWindow& window, const World& world) const {
     const float as = world.arenaScale();
     draw::radar(window, world.core().pos, length(sz) * 0.6f, 120.f * as, 12, theme::grid, 0.10f);
 
-    for (const Ball& b : world.balls())
-        if (b.hasElement(Element::Water)) drawWaterTrail(window, b);
+    for (const Wave& wv : world.waves()) drawWave(window, wv, as);
     for (const Obstacle& o : world.obstacles()) drawObstacle(window, o);
     for (const Pool& q : world.pools()) {   // stone reactions: lava / mud / toxic dust, fading out
         const float f = clampf(q.life / std::max(0.01f, q.maxLife), 0.f, 1.f);

@@ -207,6 +207,7 @@ void World::startRun(const WorldParams& p, const std::vector<BallSpec>& balls,
     bolts_.clear();
     obstacles_.clear();
     pools_.clear();
+    waves_.clear();
     blackHoles_.clear();
     tethers_.clear();
     classWorld_ = ClassWorldState{};
@@ -1340,19 +1341,12 @@ void World::triggerReaction(Element x, Element y, Enemy& e, float hitDmg, const 
             hit.push_back(t);
             from = t;
         }
-    } else if (has(Element::Water) && has(Element::Electric)) {  // Electrocution: every wake conducts
+    } else if (has(Element::Water) && has(Element::Electric)) {  // Electrocution: every wave conducts
         fx = {at, S::electrocuteRadius * rm, theme::elemElectric, "ELECTROCUTE"};
         areaDamage(at, fx.radius, hitDmg * S::electrocuteFrac * mul, nullptr);
-        for (const Ball& wb : balls_) {
-            if (!wb.hasElement(Element::Water)) continue;
-            for (Enemy& o : enemies_) {
-                if (o.hp <= 0.f || length(o.pos - at) < fx.radius + o.radius) continue;   // already hit
-                for (const sf::Vector2f& pt : wb.waterTrail)
-                    if (length(o.pos - pt) < cfg::element::waterTrailWidth * 1.5f + o.radius) {
-                        damageEnemy(o, hitDmg * S::electrocuteFrac * mul);
-                        break;
-                    }
-            }
+        for (Enemy& o : enemies_) {   // ...and everything riding a wave right now
+            if (o.hp <= 0.f || length(o.pos - at) < fx.radius + o.radius) continue;   // already hit
+            if (inWave(o)) damageEnemy(o, hitDmg * S::electrocuteFrac * mul);
         }
     } else if (has(Element::Water) && has(Element::Fire)) {   // Steam: a scalding cloud
         fx = {at, S::steamRadius * rm, theme::textHi, "STEAM"};
@@ -1531,16 +1525,25 @@ float World::ballDamage(const Ball& b, const WorldParams& p) const {
 void World::emitElement(Ball& b, float dt, const WorldParams& p, FrameEvents& ev) {
     // Water and electric act on their own (fire, poison, ice and stone act on
     // contact, see strike). An Alchemist can carry both: each keeps its timer.
-    if (b.hasElement(Element::Water)) {
-            // Lay down another point of the "worm" wake behind the ball. The
-            // tail drops off once the worm is at full length; damage is done in
-            // updateWaterTrails.
+    if (b.hasElement(Element::Water) && !b.ghost) {   // a wave, every so often, where it's heading
         b.cooldown -= dt;
-        if (b.cooldown <= 0.f) {
-            b.cooldown = cfg::element::waterInterval;
-            b.waterTrail.push_back(b.pos);
-            while (static_cast<int>(b.waterTrail.size()) > cfg::element::waterTrailPoints)
-                b.waterTrail.pop_front();
+        if (b.cooldown <= 0.f && waveRunning_ && static_cast<int>(waves_.size()) < cfg::element::maxWaves) {
+            namespace L = cfg::element;
+            b.cooldown = L::waveEvery;
+            float dir;
+            if (length(b.vel) > 1.f) dir = std::atan2(b.vel.y, b.vel.x);
+            else if (const auto t = nearestTarget(b.pos)) dir = std::atan2(t->y - b.pos.y, t->x - b.pos.x);   // a still ball
+            else dir = rng_.range(0.f, 2.f * kPi);
+            const float pot = p.elemMult[static_cast<int>(Element::Water)] * b.mods.elemMult;
+            Wave w;
+            w.origin = b.pos;
+            w.dir = dir;
+            w.r = b.radius;
+            w.reach = L::waveReach * (0.8f + 0.2f * pot) * arenaScale();
+            w.push = L::wavePush * pot * arenaScale();
+            w.hitDmg = ballDamage(b, p);
+            w.owner = b.owner;
+            waves_.push_back(std::move(w));
         }
     }
     if (b.hasElement(Element::Electric)) [&] {
@@ -1842,35 +1845,38 @@ void World::updateBolts(float dt) {
 // A water ball drags a "worm" of recent positions. Enemies near any segment of
 // it take damage; the worm is widest at the head (nearest the ball) and tapers
 // to nothing at the tail.
-void World::updateWaterTrails(float dt, const WorldParams& p, FrameEvents& ev) {
-    for (const Ball& b : balls_) {
-        if (!b.hasElement(Element::Water)) continue;
-        const float w0 = cfg::element::waterTrailWidth * elemPotency(b, p);
-        const auto& pts = b.waterTrail;
-        const int n = static_cast<int>(pts.size());
-        if (n < 2) continue;
+void World::updateWaves(float dt, const WorldParams& p, FrameEvents& ev) {
+    namespace L = cfg::element;
+    for (Wave& w : waves_) {
+        w.r += L::waveSpeed * arenaScale() * dt;
+        const float thick = (L::waveThick + L::waveThickGrow * clampf(w.r / w.reach, 0.f, 1.f)) * arenaScale();
         for (Enemy& e : enemies_) {
-            for (int i = 0; i + 1 < n; ++i) {
-                const sf::Vector2f a = pts[i], c = pts[i + 1];   // one segment
-                const sf::Vector2f seg = c - a;
-                const float len2 = dot(seg, seg);
-                float t = len2 > 1e-4f ? clampf(dot(e.pos - a, seg) / len2, 0.f, 1.f) : 0.f;
-                const sf::Vector2f closest = a + seg * t;
-                // head (i near n-1) is full width, tail (i=0) is ~0
-                const float taper = static_cast<float>(i + 1) / static_cast<float>(n);
-                if (length(e.pos - closest) < w0 * taper + e.radius) {
-                    // The wake is a current: it sweeps the enemy along the
-                    // ball's path and soaks it (no damage of its own).
-                    if (!e.orbiter && len2 > 1e-4f)
-                        e.pos += seg / std::sqrt(len2) * cfg::element::waterCurrent * elemPotency(b, p) *
-                                 arenaScale() * taper * dt;
-                    e.soak = std::max(e.soak, cfg::element::soakDuration * 0.5f);
-                    applyElement(e, Element::Water, b.owner, ballDamage(b, p), p, ev);   // wading into a wake soaks it
-                    break;   // one segment's worth per enemy per step
-                }
-            }
+            if (e.hp <= 0.f || e.orbiter || std::find(w.hit.begin(), w.hit.end(), e.id) != w.hit.end()) continue;
+            const sf::Vector2f d = e.pos - w.origin;
+            const float dist = length(d);
+            if (std::fabs(dist - w.r) > thick + e.radius || dist < 1e-3f) continue;
+            if (std::fabs(std::remainder(std::atan2(d.y, d.x) - w.dir, 2.f * kPi)) > L::waveArc) continue;
+            w.hit.push_back(e.id);
+            e.vel += d / dist * w.push * e.knockTaken * (e.soak > 0.f ? L::soakKnock : 1.f);
+            e.stagger = std::max(e.stagger, 0.25f);   // carried by the wave, not walking
+            e.soak = std::max(e.soak, L::soakDuration);
+            applyElement(e, Element::Water, w.owner, w.hitDmg, p, ev);   // it can set off reactions
         }
     }
+    waves_.erase(std::remove_if(waves_.begin(), waves_.end(), [](const Wave& w) { return w.r >= w.reach; }),
+                 waves_.end());
+}
+
+bool World::inWave(const Enemy& e) const {
+    for (const Wave& w : waves_) {
+        const sf::Vector2f d = e.pos - w.origin;
+        const float dist = length(d);
+        const float thick = cfg::element::waveThick * 2.f * arenaScale();
+        if (std::fabs(dist - w.r) < thick + e.radius &&
+            std::fabs(std::remainder(std::atan2(d.y, d.x) - w.dir, 2.f * kPi)) < cfg::element::waveArc)
+            return true;
+    }
+    return false;
 }
 
 // Stone's reaction pools: lava burns, toxic dust poisons (mud slows: poolSlow).
@@ -2621,7 +2627,7 @@ FrameEvents World::step(float dt, const WorldParams& p) {
     updateTethers(dt, p, ev);
     updateBlackHoles(dt, p, ev);
     updateBolts(dt);
-    updateWaterTrails(dt, p, ev);
+    updateWaves(dt, p, ev);
     updateObstacles(dt);
     updatePools(dt);
     updateEnemies(dt, p, ev);
