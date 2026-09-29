@@ -1637,6 +1637,13 @@ sf::Vector2f App::worldToUi(sf::Vector2f p) const {
     return {(p.x - tl.x) * kLogical().x / camSize_.x, (p.y - tl.y) * kLogical().y / camSize_.y};
 }
 
+// A kill's coin: a little bigger with the combo, capped, and shrunk with the
+// camera when it pulls back (so gold never outweighs the fight).
+float App::coinRadius(int comboTier) const {
+    const float zoom = std::min(1.f, kLogical().x / std::max(1.f, camSize_.x));
+    return std::min(cfg::gold::coinMax, cfg::gold::coinBase + cfg::gold::coinPerTier * static_cast<float>(comboTier)) * zoom;
+}
+
 sf::Vector2f App::goldCounterPos() const {
     return {size().x - theme::margin - 30.f, theme::margin + 30.f};
 }
@@ -1647,10 +1654,10 @@ void App::flushMultiKill() {
         data_.run.gold += bonus;
         effects_.addLabel("x" + std::to_string(multiKillN_) + " MULTI-KILL  +" + std::to_string(bonus),
                           multiKillPos_ + sf::Vector2f{0.f, -24.f}, theme::puGolden,
-                          static_cast<unsigned>(std::min(34, 18 + 2 * multiKillN_)), 1.0f);
+                          static_cast<unsigned>(std::min(24, 16 + multiKillN_)), 0.9f);
         audio_.comboUp(std::min(multiKillN_, cfg::combo::baseCapTier));
-        for (int i = 0; i < std::min(multiKillN_, 6); ++i)
-            effects_.addCoin(multiKillPos_, goldCounterPos(), 7.f);
+        for (int i = 0; i < std::min(multiKillN_, 3); ++i)
+            effects_.addCoin(multiKillPos_, goldCounterPos(), coinRadius(0) * 1.2f);
     }
     multiKillN_ = 0;
     multiKillT_ = 0.f;
@@ -1666,7 +1673,7 @@ void App::processEvents(const FrameEvents& ev) {
         if (!data_.run.active) continue;
         data_.run.goldFrac += cfg::gold::perKill * comboGold;
         const sf::Vector2f ui = worldToUi(k);
-        effects_.addCoin(ui, goldCounterPos(), 3.5f + 1.2f * static_cast<float>(ev.comboTier));
+        effects_.addCoin(ui, goldCounterPos(), coinRadius(ev.comboTier));
         multiKillPos_ = ui;
         ++multiKillN_;
         multiKillT_ = cfg::gold::multiKillWindow;

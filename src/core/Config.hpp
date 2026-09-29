@@ -533,6 +533,7 @@ inline constexpr int bossPay = 40;
 // reached the core) pays a bonus on top.
 inline constexpr float perKill = 0.5f;
 inline constexpr float comboBonusPerTier = 0.25f;  // per-kill gold x (1 + this * combo tier)
+inline constexpr float coinBase = 3.f, coinPerTier = 0.35f, coinMax = 6.f;   // a kill's coin radius (UI px)
 inline constexpr float multiKillWindow = 0.35f;    // kills this close together chain into one burst
 inline constexpr int multiKillMin = 3;
 inline constexpr int multiKillGoldPer = 1;         // bonus gold per enemy in a multi-kill

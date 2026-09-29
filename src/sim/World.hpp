@@ -131,7 +131,14 @@ public:
     bool bossWave() const { return bossWave_; }
     bool runOver() const { return runOver_; }
     int wave() const { return wave_; }
-    int enemiesLeft() const { return static_cast<int>(enemies_.size()) + toSpawn_; }
+    // What's left of the fight for the HUD: still to come + alive, not
+    // counting a Splitter's shards (it counts as one, done once it splits -
+    // so the count never climbs back up).
+    int enemiesLeft() const {
+        int n = toSpawn_;
+        for (const Enemy& e : enemies_) n += e.kind == EnemyKind::Shard ? 0 : 1;
+        return n;
+    }
 
     float cruiseBase(const WorldParams& p) const;
     // A ball's body colour at a speed: its lead class's hue (richer ascended),

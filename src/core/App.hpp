@@ -219,6 +219,7 @@ private:
     // Creeds.
     void foldCreeds(WorldParams& p) const;  // the run's creeds into the sim params
     bool openCreedChoice(CreedSource src);   // false = nothing to offer (caller moves on)
+    float coinRadius(int comboTier) const;   // a kill's gold coin (UI px)
     void continueAfterCreed();
     void grantCreed(CreedId id);
     // Pacts.
