@@ -2032,6 +2032,11 @@ siempre se eligen los mismos 3).
   Polvo tóxico (nube de veneno), Esquirlas (explosión que agrieta x2), Imán
   (junta a los enemigos).
 
+**Modificadores nuevos (hecho 2026-09-28):** Ballast, Keen, Reach, Tempered,
+Spin, Leech, Quick mind, Heavy throw, Bouncy (12 en total), para que la
+elección post-pelea no sea siempre la misma. Arreglado: un reroll en una
+elección de modificadores ya no puede dar un item.
+
 **Clase Alchemist (hecho 2026-09-28; se llamaba "Elementalist" en el plan):**
 con la clase (2 items) la pelota lleva 2 elementos que se turnan golpe a golpe
 y reaccionan entre sí (una sola pelota ya genera reacciones); ascendida

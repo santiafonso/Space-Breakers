@@ -18,7 +18,7 @@ bool foldMage(UpgradeKind k, int level, BallMods& m) {
     const float n = static_cast<float>(level - 1);   // levels past the first
     MageMods& g = m.cls.mage;
     switch (k) {
-        case UpgradeKind::Focus: g.focus = M::focus + M::focusPerLevel * n; return true;
+        case UpgradeKind::Focus: g.focus += M::focus + M::focusPerLevel * n; return true;   // += : "Quick mind" too
         case UpgradeKind::ArcaneMissile:   // "Barrage"
             g.barrage = 1 + (level >= 3 ? 1 : 0) + (level >= 5 ? 1 : 0);
             g.barrageFrac = M::barrageFrac + M::barrageFracPerLevel * n;

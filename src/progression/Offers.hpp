@@ -34,7 +34,7 @@ inline constexpr int kChoiceCount = 4;
 inline constexpr int kBallSlots = 4;          // item slots per ball
 inline constexpr int kElementItemCount = 6;
 inline constexpr int kAbilityItemCount = 8;   // AbilityDash..AbilityMissile
-inline constexpr int kModifierCount = 3;      // HeavyImpact..Swift
+inline constexpr int kModifierCount = 12;     // HeavyImpact..Bouncy
 // Items level up: picking one a ball already has (or forging it) raises its
 // level instead of taking another slot. Each item scales its own way per level
 // (App::ballSpec, upgradeLevelDesc). Elements and abilities level the same way.
@@ -59,7 +59,7 @@ inline UpgradeCat upgradeCat(UpgradeKind k) {
     if (i <= static_cast<int>(UpgradeKind::AddBall)) return UpgradeCat::NewBall;
     if (i <= static_cast<int>(UpgradeKind::ElemElectric)) return UpgradeCat::Element;
     if (i <= static_cast<int>(UpgradeKind::AbilityMissile)) return UpgradeCat::Ability;
-    if (i <= static_cast<int>(UpgradeKind::Swift)) return UpgradeCat::Modifier;
+    if (i <= static_cast<int>(UpgradeKind::Bouncy)) return UpgradeCat::Modifier;
     if (i >= static_cast<int>(UpgradeKind::CoreSpring)) return UpgradeCat::Relic;
     return UpgradeCat::Item;
 }
@@ -95,6 +95,9 @@ inline Tier upgradeTier(UpgradeKind k) {
     switch (k) {
         case UpgradeKind::Ricochet: case UpgradeKind::Crit:
         case UpgradeKind::HeavyImpact: case UpgradeKind::BigBall: case UpgradeKind::Swift:
+        case UpgradeKind::Ballast: case UpgradeKind::Keen: case UpgradeKind::Reach: case UpgradeKind::Tempered:
+        case UpgradeKind::Spin: case UpgradeKind::Leech: case UpgradeKind::QuickMind: case UpgradeKind::HeavyThrow:
+        case UpgradeKind::Bouncy:
         case UpgradeKind::CoreSpring: case UpgradeKind::StrongArm:
             return Tier::Common;
         case UpgradeKind::AddBall:
@@ -251,6 +254,15 @@ inline const char* upgradeKindId(UpgradeKind k) {
         case UpgradeKind::HeavyImpact:    return "HeavyImpact";
         case UpgradeKind::BigBall:        return "BigBall";
         case UpgradeKind::Swift:          return "Swift";
+        case UpgradeKind::Ballast:        return "Ballast";
+        case UpgradeKind::Keen:           return "Keen";
+        case UpgradeKind::Reach:          return "Reach";
+        case UpgradeKind::Tempered:       return "Tempered";
+        case UpgradeKind::Spin:           return "Spin";
+        case UpgradeKind::Leech:          return "Leech";
+        case UpgradeKind::QuickMind:      return "QuickMind";
+        case UpgradeKind::HeavyThrow:     return "HeavyThrow";
+        case UpgradeKind::Bouncy:         return "Bouncy";
         case UpgradeKind::CoreSpring:     return "CoreSpring";
         case UpgradeKind::CoreSlowField:  return "CoreSlowField";
         case UpgradeKind::StrongArm:      return "StrongArm";
@@ -324,6 +336,15 @@ inline UpgradeInfo upgradeInfo(UpgradeKind k) {
         case UpgradeKind::HeavyImpact:   return {"Heavy impact", "+15% contact damage (stacks)"};
         case UpgradeKind::BigBall:       return {"Big ball", "+10% radius and harder knockback (stacks)"};
         case UpgradeKind::Swift:         return {"Swift", "+8% cruise and +15% top speed, holds a fling longer (stacks)"};
+        case UpgradeKind::Ballast:       return {"Ballast", "-12% cruise, +20% damage (stacks) - easier to catch, pairs with anything that likes it slow"};
+        case UpgradeKind::Keen:          return {"Keen", "+4% crit chance (stacks)"};
+        case UpgradeKind::Reach:         return {"Reach", "you can grab it from 20% further away (stacks)"};
+        case UpgradeKind::Tempered:      return {"Tempered", "its element is 12% stronger (stacks)"};
+        case UpgradeKind::Spin:          return {"Spin", "15% chance a hit climbs the combo one extra step (stacks)"};
+        case UpgradeKind::Leech:         return {"Leech", "each of its kills patches the core up by 0.3 (stacks)"};
+        case UpgradeKind::QuickMind:     return {"Quick mind", "its abilities recharge 7% faster (stacks)"};
+        case UpgradeKind::HeavyThrow:    return {"Heavy throw", "the first hit after you throw it lands 12% harder (stacks)"};
+        case UpgradeKind::Bouncy:        return {"Bouncy", "it leaves the core 8% faster after a bounce (stacks)"};
         case UpgradeKind::CoreSpring:    return {"Spring core", "your balls bounce off the core faster"};
         case UpgradeKind::CoreSlowField: return {"Slow field", "enemies near the core are slowed"};
         case UpgradeKind::StrongArm:     return {"Strong arm", "you fling every ball noticeably harder"};

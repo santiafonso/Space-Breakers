@@ -35,6 +35,16 @@ enum class UpgradeKind {
     HeavyImpact,       // +contact damage
     BigBall,           // +radius, +knockback
     Swift,             // +cruise and top speed, holds a fling longer
+    // (2026-09-28: more modifiers, so a post-fight pick isn't always the same three)
+    Ballast,           // slower, but hits harder
+    Keen,              // + crit chance
+    Reach,             // you can grab it from further away
+    Tempered,          // its element is stronger
+    Spin,              // its hits may climb the combo an extra step
+    Leech,             // its kills patch the core up a little
+    QuickMind,         // its abilities recharge faster
+    HeavyThrow,        // the first hit after your throw lands harder
+    Bouncy,            // leaves the core faster after a bounce
 
     // ---- items (take one of the 4 item slots; a duplicate levels it up) ----
     Ricochet,          // a wall bounce speeds it up and arms a harder hit [Striker]

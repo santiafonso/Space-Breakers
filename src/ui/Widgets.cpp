@@ -226,7 +226,8 @@ sf::FloatRect slotRect(sf::Vector2f c, int slot, const BallLoadout& L) {
 
 // "DMG 2  SPD 1" - a ball's stacked modifiers, compact.
 std::string modifierLine(const BallLoadout& L) {
-    static const char* kShort[kModifierCount] = {"DMG", "SIZE", "SPD"};
+    static const char* kShort[kModifierCount] = {"DMG", "SIZE", "SPD", "HEAVY", "CRIT", "REACH",
+                                                 "ELEM", "SPIN", "LEECH", "MIND", "THROW", "BOUNCE"};
     std::string out;
     for (int i = 0; i < kModifierCount; ++i) {
         if (L.mods[i] <= 0) continue;

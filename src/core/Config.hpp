@@ -76,6 +76,16 @@ inline constexpr float heavyImpactPerStack = 0.15f;  // "Heavy impact": + this c
 inline constexpr float bigBallPerStack = 0.10f;      // "Big ball": + this radius...
 inline constexpr float bigBallKnockPerStack = 0.25f; // ...and + this knockback
 inline constexpr float bigBallMaxMult = 2.0f;        // radius up to x this (so a ball can't fill the arena)
+// The 2026-09-28 modifiers, per stack.
+inline constexpr float ballastCruise = 0.88f, ballastDamage = 0.2f, ballastMinCruise = 0.45f;
+inline constexpr float keenCrit = 0.04f;
+inline constexpr float reachPerStack = 0.2f;
+inline constexpr float temperedPerStack = 0.12f;
+inline constexpr float spinChance = 0.15f;
+inline constexpr float leechHeal = 0.3f;
+inline constexpr float quickMindPerStack = 0.07f;
+inline constexpr float heavyThrowPerStack = 0.12f;
+inline constexpr float bouncyPerStack = 0.08f;
 inline constexpr float swiftPerStack = 0.08f;        // "Swift": + this cruise speed...
 inline constexpr float swiftTopPerStack = 0.15f;     // ...+ this top speed...
 inline constexpr float swiftFlingPerStack = 0.85f;   // ...and fling decay x this per stack

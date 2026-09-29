@@ -627,7 +627,7 @@ bool World::grabAt(sf::Vector2f point, float catchRadius) {
     float bestDist = catchRadius;
     for (std::size_t i = 0; i < balls_.size(); ++i) {
         if (balls_[i].mods.satellite) continue;   // an orbiting Satellite can't be grabbed
-        const float d = length(balls_[i].pos - point);
+        const float d = length(balls_[i].pos - point) / balls_[i].mods.reach;   // "Reach": grabbed from further
         if (d < bestDist) {
             bestDist = d;
             best = static_cast<int>(i);
@@ -690,6 +690,10 @@ void World::releaseHeld(sf::Vector2f throwVel) {
             b.catchT = cfg::combat::catchWindow;
         }
         classOnThrow(b);  // Slinger: armed first hit, Afterburner
+        if (b.mods.heavyThrow > 0.f) {   // "Heavy throw": rides on the throw's first hit, like the catch reward
+            b.catchBonus += b.mods.heavyThrow;
+            b.catchT = cfg::combat::catchWindow;
+        }
         if (b.mods.cls.summoner.drop > 0.f) {   // "Drop turret": planted on its next tick (it needs the params)
             b.cls.summoner.dropPending = true;
             b.cls.summoner.dropAt = b.pos;
@@ -1214,6 +1218,7 @@ bool World::strike(Ball& b, Enemy& e, sf::Vector2f normal, const WorldParams& p,
     }
     if (m.resonanceFrac > 0.f) resonate(b, dmg, p, ev);   // "Resonance"
     classOnHit(b, e, dmg, kill, p, ev);                   // its classes (mark, stagger, ascended forms...)
+    if (m.spin > 0.f && chance(m.spin, p)) ++comboStreak_;   // "Spin": an extra combo step
     styleOnHit(b, e, p);                                  // "Blur" marks
     if (kill) onKill(b, e, dmg, p, ev);
     if (!kill && allowEcho && m.echoChance > 0.f && e.hp > 0.f && chance(m.echoChance, p))   // "Echo"
@@ -1226,6 +1231,7 @@ void World::onKill(Ball& b, Enemy& e, float dmg, const WorldParams& p, FrameEven
     namespace C = cfg::changer;
     const BallMods& m = b.mods;
     ev.midasGold += m.midasGold;                                    // "Midas"
+    if (m.leech > 0.f && !b.ghost) core_.hp = std::min(core_.maxHp, core_.hp + m.leech);   // "Leech"
     if (m.bomberChance > 0.f && chance(m.bomberChance, p)) {        // "Bomber": the kill goes off
         areaDamage(e.pos, m.bombRadius, dmg * cfg::synergy::bombFrac, &e);
         ev.bursts.push_back({e.pos, m.bombRadius, theme::elemFire, nullptr});
@@ -1702,7 +1708,7 @@ void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
             c.hit) {
             afterBounce(b, c.normal, false);
             aimBounce(b, c.normal, nullptr, p.magneticCore);   // "Magnetic core": every ball aims
-            boostSpeed(b, p.coreBounceBoost, p);   // "Spring core" relic
+            boostSpeed(b, p.coreBounceBoost * b.mods.bouncy, p);   // "Spring core" relic, "Bouncy"
             if (b.mods.menderHeal > 0.f && !b.ghost)   // "Mender": the core patches itself up
                 core_.hp = std::min(core_.maxHp, core_.hp + b.mods.menderHeal);
             if (b.mods.boomerangHit > 0.f) {   // "Boomerang": home - charge up and fly at the threat

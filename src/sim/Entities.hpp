@@ -94,6 +94,12 @@ struct BallMods {
     float knockMult = 1.f;     // Big ball, Bumper
     float elemMult = 1.f;      // element item level
     float copyLife = 1.f;      // web "Brood": its ghost copies (Split shot, Split, Mitosis, Phantom) last x this
+    // modifiers (2026-09-28)
+    float reach = 1.f;         // "Reach": grabbed from this x further
+    float spin = 0.f;          // "Spin": chance a hit climbs the combo an extra step
+    float leech = 0.f;         // "Leech": core hp per kill
+    float heavyThrow = 0.f;    // "Heavy throw": the thrown first hit + this
+    float bouncy = 1.f;        // "Bouncy": speed x this off the core
     // items
     float ricochetMult = 0.f;  // Ricochet: armed-hit damage x this...
     float wallBoost = 1.f;     // ...and speed x this per wall bounce

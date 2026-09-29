@@ -191,6 +191,18 @@ BallSpec App::ballSpec(const BallLoadout& L) const {
     m.cruiseMult = 1.f + C::swiftPerStack * stacks(UpgradeKind::Swift);
     m.maxSpeedMult = 1.f + C::swiftTopPerStack * stacks(UpgradeKind::Swift);
     m.flingDecay = std::pow(C::swiftFlingPerStack, stacks(UpgradeKind::Swift));
+    if (const float n = stacks(UpgradeKind::Ballast); n > 0.f) {   // the 2026-09-28 modifiers
+        m.cruiseMult *= std::max(C::ballastMinCruise, std::pow(C::ballastCruise, n));
+        m.damageMult *= 1.f + C::ballastDamage * n;
+    }
+    m.critChance += C::keenCrit * stacks(UpgradeKind::Keen);
+    m.reach = 1.f + C::reachPerStack * stacks(UpgradeKind::Reach);
+    m.spin = C::spinChance * stacks(UpgradeKind::Spin);
+    m.leech = C::leechHeal * stacks(UpgradeKind::Leech);
+    m.cls.mage.focus += C::quickMindPerStack * stacks(UpgradeKind::QuickMind);
+    m.heavyThrow = C::heavyThrowPerStack * stacks(UpgradeKind::HeavyThrow);
+    m.bouncy = 1.f + C::bouncyPerStack * stacks(UpgradeKind::Bouncy);
+    m.elemMult *= 1.f + C::temperedPerStack * stacks(UpgradeKind::Tempered);
 
     for (int i = 0; i < kBallSlots; ++i) {
         if (L.gear[i] < 0) continue;
@@ -207,7 +219,7 @@ BallSpec App::ballSpec(const BallLoadout& L) const {
                 m.cleaveExec = C::cleaveExecPerLevel * n;
                 break;
             case UpgradeKind::Crit:
-                m.critChance = C::critChance + C::critChancePerLevel * n;
+                m.critChance += C::critChance + C::critChancePerLevel * n;   // += : "Keen" stacks on top
                 m.critMult = C::critMult + C::critMultPerLevel * n;
                 break;
             case UpgradeKind::Executioner:
@@ -721,13 +733,13 @@ UpgradeKind App::rollPick(RollSource src, const std::vector<UpgradeKind>& exclud
         return true;
     };
     // Eligible picks by tier. (An Elite with no item that fits anywhere falls
-    // back to anything.)
+    // back to anything. Cards already on the table don't count here: a reroll
+    // that runs out of modifiers finds nothing new - it never turns into an item.)
     std::vector<UpgradeKind> byTier[kTierCount];
     bool anyAllowed = false;
     for (int i = 0; i < kUpgradeKindCount && !anyAllowed; ++i) {
         const auto k = static_cast<UpgradeKind>(i);
-        anyAllowed = allowed(k) && upgradeEligible(k, c) && (!filter || filter(k)) &&
-                     std::find(exclude.begin(), exclude.end(), k) == exclude.end();
+        anyAllowed = allowed(k) && upgradeEligible(k, c) && (!filter || filter(k));
     }
     for (int i = 0; i < kUpgradeKindCount; ++i) {
         const auto k = static_cast<UpgradeKind>(i);
