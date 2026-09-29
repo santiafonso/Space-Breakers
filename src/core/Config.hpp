@@ -294,8 +294,13 @@ inline constexpr float berserkPerHit = 0.15f, berserkPerLevel = 0.05f;  // Berse
 inline constexpr int   berserkMax = 12, berserkMaxPerLevel = 3;         // ...up to this many
 inline constexpr float giantRadius = 1.8f, giantDamage = 1.3f, giantCruise = 0.8f;
 inline constexpr float giantDamagePerLevel = 0.15f;
-inline constexpr float satelliteRadius = 150.f;    // Satellite: orbit radius around the core
-inline constexpr float satelliteSpeed = 1.1f;      // ...orbit speed x its cruise
+inline constexpr float satelliteRadius = 150.f;    // Satellite: orbit radius around the core (with nothing close)...
+inline constexpr float satelliteSpeed = 1.6f;      // ...orbit speed x its cruise
+// Anything orbiting the core (Satellite, Warden spirits) swings its radius out
+// or in toward the enemy closest to the core, within [orbitMin, orbitMax x its
+// usual radius], easing there at orbitEase per second.
+inline constexpr float orbitMax = 1.9f;
+inline constexpr float orbitEase = 3.5f;
 inline constexpr float satelliteDamage = 1.8f, satellitePerLevel = 0.35f;   // ...its hits x this
 inline constexpr float gravityRadius = 230.f;      // Gravity well: pull radius...
 inline constexpr float gravityPull = 210.f;        // ...px/s drag toward the ball at its centre (fades to 0 at the edge)

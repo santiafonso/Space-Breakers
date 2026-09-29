@@ -2325,6 +2325,18 @@ int App::runSnapshots(const std::string& dir) {
         tab.type = sf::Event::KeyReleased;
         stack_.back()->handleEvent(*this, tab, {0.f, 0.f});
     }
+    {   // orbits: a Satellite ball and Warden spirits swing out to meet the enemies closing in
+        using K = UpgradeKind;
+        BallLoadout& L = data_.run.balls[0];
+        L = BallLoadout{};
+        L.gear[0] = static_cast<int>(K::Satellite); L.gearLvl[0] = 1;
+        L.gear[1] = static_cast<int>(K::SummonWarden); L.gearLvl[1] = 2;
+        syncWorldBalls();
+        world_.devSpawn(EnemyKind::Grunt, 12);
+        for (int i = 0; i < 180; ++i) update(1.f / 60.f);
+        capturePath_ = d + "29_orbits.png";
+        render();
+    }
 
     r.gold = 240;
     rollShop();

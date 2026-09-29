@@ -216,7 +216,8 @@ struct Ball {
     int twinIdx = 0;         // which of its parent's twins
     int berserkStacks = 0;   // "Berserk": hits in a row since the last wall
     float stormT = 0.f;      // "Storm": time to the next zap
-    float orbitAng = 0.f;    // "Satellite": angle around the core
+    float orbitAng = 0.f;    // "Satellite": angle around the core...
+    float orbitR = 0.f;      // ...and its current radius (0 = not set yet)
     float age = 0.f;         // seconds since it appeared (spawn pop-in)
     int preyId = -1;         // "Hunter": the enemy it's locked on (Enemy::id)
     bool homing = false;     // "Boomerang": flying home to the core

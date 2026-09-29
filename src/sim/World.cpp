@@ -837,8 +837,22 @@ void World::aimBounce(Ball& b, sf::Vector2f normal, const Enemy* skip, bool forc
 
 // "Satellite": no bouncing - the ball rides a fixed orbit around the core at
 // cruise speed and grinds whatever comes near (each enemy on a short cooldown).
+float World::orbitTarget(float usual, float minR) const {
+    const float maxR = usual * cfg::changer::orbitMax;
+    float best = 1e9f;
+    for (const Enemy& e : enemies_)
+        if (e.hp > 0.f && !e.orbiter) best = std::min(best, length(e.pos - core_.pos));
+    if (boss_.alive && boss_.intro <= 0.f) best = std::min(best, length(boss_.pos - core_.pos));
+    return best <= maxR ? std::max(best, minR) : usual;
+}
+
 void World::advanceSatellite(Ball& b, float dt, const WorldParams& p, FrameEvents& ev) {
-    const float R = cfg::changer::satelliteRadius * arenaScale() + core_.radius;
+    // It swings its orbit out / in to meet whatever comes closest to the core.
+    const float usual = cfg::changer::satelliteRadius * arenaScale() + core_.radius;
+    if (b.orbitR <= 0.f) b.orbitR = usual;
+    const float want = orbitTarget(usual, core_.radius + b.radius + 12.f);
+    b.orbitR += (want - b.orbitR) * (1.f - std::exp(-cfg::changer::orbitEase * dt));
+    const float R = b.orbitR;
     const float sp = ballCruise(b, p) * cfg::changer::satelliteSpeed;
     b.orbitAng += sp / R * dt;
     const sf::Vector2f dir{std::cos(b.orbitAng), std::sin(b.orbitAng)};

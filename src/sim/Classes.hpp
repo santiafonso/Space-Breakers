@@ -227,6 +227,7 @@ struct SummonerState {
     sf::Vector2f dragonPos{0.f, 0.f};
     float dragonHeading = 0.f;
     float wardenAng = 0.f;
+    float wardenR = 0.f;       // the spirits' current orbit (0 = not set yet: the usual one)
     float wardenRest[kMaxWardens] = {};
     sf::Vector2f prevVel{0.f, 0.f};   // last step's heading (a wall bounce flips it)
     float kennelT = 0.f;       // "Kennel": charge toward the next wisp

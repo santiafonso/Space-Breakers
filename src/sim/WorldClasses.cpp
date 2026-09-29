@@ -884,6 +884,12 @@ template <> struct ClassHooks<BallRole::Summoner> : NoClassHooks {
         // Warden: spirits on a ring around the core.
         if (m.wardens > 0) {
             s.wardenAng += S::wardenSpin * dt;
+            {   // the ring swings out / in to meet what comes closest to the core
+                const float usual = S::wardenOrbit * w.arenaScale();
+                if (s.wardenR <= 0.f) s.wardenR = usual;
+                const float want = w.orbitTarget(usual, w.core_.radius + S::wardenRadius + 8.f);
+                s.wardenR += (want - s.wardenR) * (1.f - std::exp(-cfg::changer::orbitEase * dt));
+            }
             const float dmg = w.ballDamage(b, p) * m.wardenFrac * pw;
             for (int i = 0; i < m.wardens; ++i) {
                 s.wardenRest[i] = std::max(0.f, s.wardenRest[i] - dt);
@@ -901,8 +907,8 @@ template <> struct ClassHooks<BallRole::Summoner> : NoClassHooks {
     }
 
     static sf::Vector2f wardenPos(const World& w, const Ball& b, int i) {
-        return summonerWardenPos(w.core_.pos, b.cls.summoner.wardenAng, b.owner, i, b.mods.cls.summoner.wardens,
-                                 cfg::summoner::wardenOrbit * w.arenaScale());
+        const float r = b.cls.summoner.wardenR > 0.f ? b.cls.summoner.wardenR : cfg::summoner::wardenOrbit * w.arenaScale();
+        return summonerWardenPos(w.core_.pos, b.cls.summoner.wardenAng, b.owner, i, b.mods.cls.summoner.wardens, r);
     }
 
     static void worldTick(World& w, float dt, const WorldParams& p, FrameEvents& ev) {

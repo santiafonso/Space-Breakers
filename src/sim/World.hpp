@@ -222,6 +222,9 @@ private:
     void creedClack(Ball& a, Ball& b, sf::Vector2f at, const WorldParams& p, FrameEvents& ev);  // "Legion"
     void creedCoreBounce(Ball& b, const WorldParams& p, FrameEvents& ev);
     // Speed items of the older classes (sim/WorldStyle.cpp).
+    // Where an orbit around the core wants to be: the enemy closest to the core
+    // (clamped to [minR, usual x orbitMax]), else its usual radius.
+    float orbitTarget(float usual, float minR) const;
     float styleStill(const Ball& b, const WorldParams& p) const;   // 0 at cruise .. 1 stopped
     float styleFast(const Ball& b, const WorldParams& p) const;    // 0 at cruise .. 1 well past it
     bool styleBlurring(const Ball& b, const WorldParams& p) const; // "Blur": passing through right now

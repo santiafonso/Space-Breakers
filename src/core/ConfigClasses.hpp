@@ -171,7 +171,7 @@ inline constexpr int   totemMax = 2;             // per ball
 inline constexpr int   wardenCount = 2;          // +1 at Lv3 and Lv5
 inline constexpr float wardenFrac = 0.5f, wardenFracPerLevel = 0.12f;
 inline constexpr float wardenOrbit = 92.f;       // from the core's centre
-inline constexpr float wardenSpin = 2.2f;        // rad/s
+inline constexpr float wardenSpin = 3.2f;        // rad/s
 inline constexpr float wardenRadius = 7.f;
 inline constexpr float wardenRest = 0.55f;       // after a hit, a spirit rests this long
 inline constexpr float wardenKnock = 170.f;      // shoves what it hits away from the core

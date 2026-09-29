@@ -170,8 +170,8 @@ void worldSummoner(sf::RenderTarget& t, const World& world) {
         const SummonerState& s = b.cls.summoner;
         const sf::Color c = summonColor(static_cast<int>(b.element));
         for (int i = 0; i < m.wardens; ++i) {
-            const sf::Vector2f at = summonerWardenPos(world.core().pos, s.wardenAng, b.owner, i, m.wardens,
-                                                      cfg::summoner::wardenOrbit * world.arenaScale());
+            const float orbit = s.wardenR > 0.f ? s.wardenR : cfg::summoner::wardenOrbit * world.arenaScale();
+            const sf::Vector2f at = summonerWardenPos(world.core().pos, s.wardenAng, b.owner, i, m.wardens, orbit);
             const float a = s.wardenRest[i] > 0.f ? 0.25f : 0.6f;   // dim while it rests after a hit
             draw::disc(t, at, cfg::summoner::wardenRadius * 0.8f, withAlpha(c, a), withAlpha(c, a * 0.5f), {1.f, 1.f}, 14);
         }
