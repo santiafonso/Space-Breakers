@@ -983,9 +983,9 @@ inline const MetaUnlockDef& metaUnlockDef(int u) {
         /* Stonewall */ {"Stonewall", "balls with the Guardian class patch the core up by 0.5 per level on every core bounce",
                          12u, 2, B::Guardian, C, 52, 336.f, 4.f},
         /* Slinger   */ {"Slinger",   "unlocks the Slinger class: its items can appear (throwing and catching)",
-                         18u, 1, B::Slinger,  C,  0,  13.f, 2.f},
+                         18u, 1, B::Slinger,  C,  0,  14.f, 3.f},
         /* SlingerLore*/{"Slinger lore","Slinger items show up 50% more often per level",
-                         10u, 2, B::Slinger,  C, MetaClassSlinger, 13.f, 3.f},
+                         10u, 2, B::Slinger,  C, MetaClassSlinger, 14.f, 4.f},
         /* Striker   */ {"Striker",   "unlocks the Striker class: its items can appear (hits far harder when flung). Until you own any class, Striker is your free starter",
                          12u, 1, B::Striker,  C, MetaSling, 0.f, 3.f},
     };
