@@ -384,7 +384,7 @@ inline constexpr float soakDuration = 3.f;        // x potency
 inline constexpr float soakSlow = 0.7f;           // a soaked enemy moves at this x speed
 inline constexpr float soakKnock = 1.5f;          // ...and takes knockback x this
 inline constexpr float soakFreeze = 2.f;          // ...and stays frozen x this
-inline constexpr float waterCurrent = 190.f;      // px/s the wake sweeps enemies along (x potency)
+inline constexpr float waterCurrent = 280.f;      // px/s the wake sweeps enemies along (x potency)
 // stone (2026-09-28): the heavy ball that cracks. Every hit cracks the enemy:
 // each crack makes it take more from EVERY source. Slower, shoves harder.
 inline constexpr float crackDamage = 0.12f;       // + damage taken per crack...

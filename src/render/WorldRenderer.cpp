@@ -126,15 +126,16 @@ void WorldRenderer::drawCore(sf::RenderWindow& window, const Core& c) const {
     draw::disc(window, c.pos, c.radius * 0.26f, withAlpha(lighten(tint, 0.7f), 0.95f), withAlpha(tint, 0.8f));
 }
 
-// The water ball's "worm" wake: a tapering ribbon along its recent path, widest
-// at the head (by the ball), fading to nothing at the tail.
+// The water ball's wake: a current. A faint band along its recent path
+// (widest at the head, by the ball) with light streaks flowing through it in
+// the ball's direction - it reads as water pushing, not as a damaging worm.
 void WorldRenderer::drawWaterTrail(sf::RenderWindow& window, const Ball& b) const {
     const auto& pts = b.waterTrail;
     const int n = static_cast<int>(pts.size());
     if (n < 2) return;
     const float w0 = cfg::element::waterTrailWidth;
 
-    sf::VertexArray ribbon(sf::TriangleStrip, static_cast<std::size_t>(n) * 2);
+    sf::VertexArray band(sf::TriangleStrip, static_cast<std::size_t>(n) * 2);
     for (int i = 0; i < n; ++i) {
         const sf::Vector2f prev = pts[i > 0 ? i - 1 : i];
         const sf::Vector2f next = pts[i < n - 1 ? i + 1 : i];
@@ -142,16 +143,34 @@ void WorldRenderer::drawWaterTrail(sf::RenderWindow& window, const Ball& b) cons
         const float dl = std::sqrt(dir.x * dir.x + dir.y * dir.y);
         dir = dl > 1e-4f ? dir / dl : sf::Vector2f{1.f, 0.f};
         const sf::Vector2f nrm{-dir.y, dir.x};
-
         const float taper = static_cast<float>(i + 1) / static_cast<float>(n);  // 0 tail -> ~1 head
-        const float half = w0 * taper;
-        const sf::Color col = withAlpha(theme::elemWater, (0.10f + 0.28f * taper));
-        ribbon[static_cast<std::size_t>(i) * 2].position = pts[i] + nrm * half;
-        ribbon[static_cast<std::size_t>(i) * 2].color = col;
-        ribbon[static_cast<std::size_t>(i) * 2 + 1].position = pts[i] - nrm * half;
-        ribbon[static_cast<std::size_t>(i) * 2 + 1].color = col;
+        const sf::Color col = withAlpha(theme::elemWater, 0.05f + 0.12f * taper);
+        band[static_cast<std::size_t>(i) * 2].position = pts[i] + nrm * (w0 * taper);
+        band[static_cast<std::size_t>(i) * 2].color = col;
+        band[static_cast<std::size_t>(i) * 2 + 1].position = pts[i] - nrm * (w0 * taper);
+        band[static_cast<std::size_t>(i) * 2 + 1].color = col;
     }
-    window.draw(ribbon);
+    window.draw(band);
+
+    // Streaks: short dashes riding the current toward the head, on three lanes.
+    const float t = clockSeconds();
+    const sf::Color light = lerpColor(theme::elemWater, sf::Color::White, 0.45f);
+    for (int lane = -1; lane <= 1; ++lane) {
+        const float phase = std::fmod(t * 2.2f + 0.37f * static_cast<float>(lane + 1), 1.f);
+        for (int k = 0; k < 3; ++k) {
+            const float u = (static_cast<float>(k) + phase) / 3.f;   // 0 tail -> 1 head
+            const int i = std::min(n - 2, static_cast<int>(u * static_cast<float>(n - 1)));
+            const sf::Vector2f a0 = pts[i], a1 = pts[i + 1];
+            sf::Vector2f d = a1 - a0;
+            const float dl = std::sqrt(d.x * d.x + d.y * d.y);
+            if (dl < 1e-3f) continue;
+            d /= dl;
+            const sf::Vector2f nrm{-d.y, d.x};
+            const float taper = static_cast<float>(i + 1) / static_cast<float>(n);
+            const sf::Vector2f c = a0 + nrm * (w0 * taper * 0.55f * static_cast<float>(lane));
+            draw::line(window, c - d * 5.f, c + d * 6.f, 1.5f, withAlpha(light, 0.55f * taper));
+        }
+    }
 }
 
 void WorldRenderer::drawObstacle(sf::RenderWindow& window, const Obstacle& o) const {

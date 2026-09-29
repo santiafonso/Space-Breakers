@@ -335,6 +335,32 @@ inline RunMap generateMap(Rng& rng, int act) {
     for (int a : rowNodes.back()) link(a, bossId);
     for (auto& n : m.nodes) std::sort(n.next.begin(), n.next.end());
 
+    // Never two plain fights in a row: a fight that leads on to another
+    // fight turns the second one into a stop (bottom-up, so a change never
+    // makes a new pair below). Elites, Recruits and the row-1 trunk stay.
+    for (MapNode& a : m.nodes) {
+        if (a.type != MapNodeType::Combat) continue;
+        for (int j : a.next) {
+            MapNode& b = m.nodes[static_cast<std::size_t>(j)];
+            if (b.type != MapNodeType::Combat) continue;
+            namespace M = cfg::map;
+            struct W { MapNodeType t; int w; };
+            const W table[] = {
+                {MapNodeType::Upgrade, M::wUpgrade},
+                {MapNodeType::Shop,    b.row >= 3 ? M::wShopNeutral : 0},
+                {MapNodeType::Forge,   b.row >= 4 ? M::wForge : 0},
+                {MapNodeType::Rest,    b.row >= 4 ? M::wRest : 0},
+            };
+            int total = 0;
+            for (const W& w : table) total += w.w;
+            int pick = rng.irange(0, total - 1);
+            for (const W& w : table) {
+                if (pick < w.w) { b.type = w.t; break; }
+                pick -= w.w;
+            }
+        }
+    }
+
     // Now and then an act hides an Altar on its map: a stop on a path (row 4
     // up, not the pre-boss row) turns into one.
     if (rng.irange(0, 99) < cfg::map::altarPct) {
