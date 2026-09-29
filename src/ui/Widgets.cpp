@@ -213,13 +213,17 @@ sf::FloatRect slotRect(sf::Vector2f c, int slot, const BallLoadout& L) {
         const float r = 17.f;
         return {c.x - 58.f - r, hy - r, 2.f * r, 2.f * r};
     }
-    if (isAbilitySlot(slot)) {   // diamonds right of the ball: 1 big, 2 or 3 smaller side by side
-        const int n = abilityBoxes(L);
+    if (isAbilitySlot(slot)) {   // a diamond right of the ball; a Mage's other abilities small beside it
+        (void)L;
         const int i = slot - kSlotAbility;
-        const float r = n == 1 ? 16.f : (n == 2 ? 12.5f : 10.f);
-        const float step = n == 1 ? 0.f : (n == 2 ? 27.f : 21.f);
-        const float x = c.x + 58.f + (static_cast<float>(i) - 0.5f * static_cast<float>(n - 1)) * step;
-        return {x - r, hy - r, 2.f * r, 2.f * r};
+        if (i == 0) {
+            const float r = 16.f;
+            return {c.x + 58.f - r, hy - r, 2.f * r, 2.f * r};
+        }
+        const float r = 6.f;   // like an Alchemist's extra elements, mirrored to the right
+        const sf::Vector2f q{c.x + 58.f + 16.f + 4.f + 11.f * static_cast<float>(i),
+                             hy - 16.f * 0.55f + 13.f * static_cast<float>(i - 1)};
+        return {q.x - r, q.y - r, 2.f * r, 2.f * r};
     }
     return {};
 }
@@ -591,10 +595,9 @@ void drawLoadoutPanel(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f c,
                           withAlpha(lerpColor(theme::ability, theme::bgDeep, 0.65f), 0.95f * sa));
             draw::polygonOutline(w, pc, r * 1.15f, 4, 0.f, 2.f,
                                  withAlpha(lerpColor(theme::ability, sf::Color::White, 0.25f), (0.9f + 0.1f * lit) * sa));
-            if (L.levelAt(s) > 1)
-                drawCentered(w, font, std::to_string(L.levelAt(s)), r > 12.f ? 12u : 11u, {pc.x, pc.y - 1.f},
-                             withAlpha(theme::textHi, sa));
-            if (abilityBoxes(L) == 1) {
+            if (L.levelAt(s) > 1 && r > 8.f)
+                drawCentered(w, font, std::to_string(L.levelAt(s)), 12u, {pc.x, pc.y - 1.f}, withAlpha(theme::textHi, sa));
+            if (s == kSlotAbility) {   // the main one's name under it
                 sf::Text nm = makeText(font, upgradeInfo(static_cast<UpgradeKind>(kind)).title, 12,
                                        withAlpha(theme::ability, sa));
                 if (nm.getLocalBounds().width < 70.f) {

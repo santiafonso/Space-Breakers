@@ -1152,6 +1152,14 @@ void App::cancelEquip() {
 // result that breaks the pick rules - two copies of one pick on a ball, or
 // Conductor / Bedrock without their element (upgradeFitsBall). The type slot
 // is one per ball, so a drop on a ball's panel swaps elements.
+// An element dropped on an Alchemist with room (and without that element)
+// joins its elements instead of swapping.
+static bool alchemistTakes(const BallLoadout& src, int fromSlot, const BallLoadout& dst, bool sameBall) {
+    if (sameBall || fromSlot != kSlotType || src.type < 0 || dst.type < 0) return false;
+    Element have[kMaxElements];
+    return dst.elements(have) < dst.elementCap() && !dst.carriesElement(static_cast<UpgradeKind>(src.type));
+}
+
 int App::slotMoveTarget(int fromBall, int fromSlot, int toBall, int toSlot) const {
     const int n = runBallCount();
     if (fromBall < 0 || fromBall >= n || toBall < 0 || toBall >= n) return -1;
@@ -1159,6 +1167,7 @@ int App::slotMoveTarget(int fromBall, int fromSlot, int toBall, int toSlot) cons
     const BallLoadout& src = data_.run.balls[static_cast<std::size_t>(fromBall)];
     const BallLoadout& dst = data_.run.balls[static_cast<std::size_t>(toBall)];
     if (src.kindAt(fromSlot) < 0) return -1;
+    if ((toSlot < 0 || toSlot == kSlotType) && alchemistTakes(src, fromSlot, dst, fromBall == toBall)) return kSlotType;
     auto sameKind = [&](int s) {
         if (isItemSlot(fromSlot)) return isItemSlot(s);
         if (fromSlot == kSlotType) return s == kSlotType;
@@ -1195,6 +1204,25 @@ bool App::moveSlot(int fromBall, int fromSlot, int toBall, int toSlot) {
     if (toSlot < 0) return false;
     BallLoadout& a = data_.run.balls[static_cast<std::size_t>(fromBall)];
     BallLoadout& b = data_.run.balls[static_cast<std::size_t>(toBall)];
+    if (alchemistTakes(a, fromSlot, b, fromBall == toBall)) {
+        // An Alchemist takes it as one more element (sharing the type slot's
+        // level: the higher of the two). The giver's next element steps up.
+        Element have[kMaxElements];
+        const int nEl = b.elements(have);
+        int kept[kMaxElements - 1] = {-1, -1}, m = 0;
+        for (int x : b.extraType)
+            if (x >= 0) kept[m++] = x;
+        std::copy(kept, kept + kMaxElements - 1, b.extraType);
+        b.extraType[nEl - 1] = a.type;
+        b.typeLvl = std::max(b.typeLvl, a.typeLvl);
+        const int keepLvl = a.typeLvl;   // its other elements shared this level
+        a.type = -1;
+        a.typeLvl = 0;
+        for (int& x : a.extraType)
+            if (x >= 0) { a.type = x; a.typeLvl = keepLvl; x = -1; break; }
+        syncWorldBalls();
+        return true;
+    }
     const int ka = a.kindAt(fromSlot), la = a.levelAt(fromSlot);
     const int kb = b.kindAt(toSlot), lb = b.levelAt(toSlot);
     a.setSlot(fromSlot, kb, kb < 0 ? 0 : lb);
@@ -2272,6 +2300,28 @@ int App::runSnapshots(const std::string& dir) {
         tab.type = sf::Event::KeyPressed;   // its loadout: the extra elements beside the type slot
         stack_.back()->handleEvent(*this, tab, {0.f, 0.f});
         snapFrame(d + "27b_alchemist_tab.png");
+        tab.type = sf::Event::KeyReleased;
+        stack_.back()->handleEvent(*this, tab, {0.f, 0.f});
+    }
+    {   // an Ancient Mage beside it (3 abilities: the big one + two small), and its
+        // ice dragged onto the Alchemist, which takes it as one more element
+        using K = UpgradeKind;
+        data_.run.balls[0].extraType[0] = data_.run.balls[0].extraType[1] = -1;
+        data_.run.balls.resize(2);
+        BallLoadout& M = data_.run.balls[1];
+        M = BallLoadout{};
+        const K items[4] = {K::Focus, K::ArcaneMissile, K::Attunement, K::Twincast};
+        for (int sl = 0; sl < 4; ++sl) { M.gear[sl] = static_cast<int>(items[sl]); M.gearLvl[sl] = 1; }
+        M.ability[0] = static_cast<int>(K::AbilityDash);  M.abilityLvl[0] = 2;
+        M.ability[1] = static_cast<int>(K::AbilityNova);  M.abilityLvl[1] = 1;
+        M.ability[2] = static_cast<int>(K::AbilityArc);   M.abilityLvl[2] = 1;
+        M.type = static_cast<int>(K::ElemIce);
+        M.typeLvl = 1;
+        moveSlot(1, kSlotType, 0, -1);
+        syncWorldBalls();
+        tab.type = sf::Event::KeyPressed;
+        stack_.back()->handleEvent(*this, tab, {0.f, 0.f});
+        snapFrame(d + "28_mage_alchemist_tab.png");
         tab.type = sf::Event::KeyReleased;
         stack_.back()->handleEvent(*this, tab, {0.f, 0.f});
     }
