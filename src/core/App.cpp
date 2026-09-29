@@ -1951,6 +1951,10 @@ void App::update(float frameDt) {
 
     const Core& c = world_.core();
     hud_.setHard(data_.run.hard);
+    {   // the boss's health for the top bar
+        const Boss& bs = world_.boss();
+        hud_.setBoss(bs.alive && bs.maxHp > 0.f ? clampf(bs.hp / bs.maxHp, 0.f, 1.f) : -1.f);
+    }
     hud_.update(frameDt, data_.run.map.act, data_.run.mapRow, mapRows(data_.run.map.act) + 1, world_.enemiesLeft(),
                 c.maxHp > 0.f ? c.hp / c.maxHp : 0.f, world_.comboMultiplier(),
                 data_.run.score, data_.run.gold, world_.effect(), world_.bossWave(),

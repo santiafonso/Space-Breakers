@@ -79,7 +79,7 @@ bool Hud::tooltipAt(sf::Vector2f m, std::string& title, std::string& desc, sf::C
         title = bossWave_ ? std::string(bossName(bossOfAct(act_)))
                           : (eliteWave_ ? "Elite fight" : "Stage " + std::to_string(stage_) + " of " + std::to_string(stages_));
         if (bossWave_) {
-            desc = bossDesc(bossOfAct(act_));
+            desc = std::string(bossDesc(bossOfAct(act_))) + ".  The red bar is its health; past the notch it enrages.";
             return true;
         }
         if (eliteWave_) {
@@ -88,7 +88,7 @@ bool Hud::tooltipAt(sf::Vector2f m, std::string& title, std::string& desc, sf::C
             return true;
         }
         desc = std::to_string(enemiesLeft_) + (enemiesLeft_ == 1 ? " enemy" : " enemies") +
-               " left - the bar fills as you clear them. Keep them off the core: its ring is its health.";
+               " left - the bar fills as you clear the fight. Keep them off the core: its ring is its health.";
         return true;
     }
     return false;
@@ -191,13 +191,24 @@ void Hud::draw(sf::RenderWindow& window) const {
         drawLabel(window, *font_, act, 13, {x0, mg + 4.f}, theme::textDim, -1);
         drawLabel(window, *font_, stage, 18, {x0 + aw + gap, mg + 3.f}, stCol, -1);
     }
-    {
-        const float barW = 300.f;
+    if (bossWave_ && bossFrac_ >= 0.f) {
+        // A boss: its health, big and plain, cut in tenths, with a notch
+        // where it enrages.
+        const float barW = 420.f, x = size_.x * 0.5f - barW * 0.5f, y = mg + 26.f;
+        gauge(window, x, y, barW, 9.f, bossFrac_, theme::coreLow, 0.95f, 10);
+        const float nx = std::round(x + barW * cfg::boss::enrageAt);
+        draw::line(window, {nx, y - 4.f}, {nx, y + 13.f}, 2.f, withAlpha(theme::textHi, 0.6f));
+    } else {
+        // A fight: how much of it is left - the bar fills as you clear it.
+        const float barW = 300.f, x = size_.x * 0.5f - barW * 0.5f, y = mg + 26.f;
         const float done = enemiesPeak_ > 0
                                ? 1.f - static_cast<float>(enemiesLeft_) / static_cast<float>(enemiesPeak_)
                                : 0.f;
-        gauge(window, size_.x * 0.5f - barW * 0.5f, mg + 24.f, barW, 4.f, done,
-              bossWave_ ? theme::coreLow : (eliteWave_ ? theme::ember : theme::accent), 0.85f, 1);
+        const sf::Color col = eliteWave_ ? theme::ember : theme::accent;
+        gauge(window, x, y, barW, 6.f, done, col, 0.9f, 1);
+        if (enemiesLeft_ > 0)
+            drawLabel(window, *font_, std::to_string(enemiesLeft_) + " left", 11, {x + barW + 14.f, y + 3.f},
+                      withAlpha(theme::textLo, 0.9f), -1);
     }
 
     // Active power-up bar, a bit lower so it clears the banner.

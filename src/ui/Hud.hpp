@@ -18,6 +18,8 @@ public:
     // act / stage: where you are on the path map (stage = map row, stages
     // counts the boss row).
     void setHard(bool on) { hard_ = on; }
+    // The boss's health for the top bar (frac < 0 = no boss on the field).
+    void setBoss(float frac) { bossFrac_ = frac; }
     void update(float dt, int act, int stage, int stages, int enemiesLeft, float coreFrac,
                 float comboMultiplier, int score, int gold, const std::optional<ActiveEffect>& effect,
                 bool bossWave, bool hasReserve, PowerUp reservePu, bool eliteWave = false);
@@ -41,6 +43,7 @@ private:
     float goldShown_ = 0.f;   // the counter rolls toward gold_ instead of jumping
     bool bossWave_ = false;
     bool hard_ = false;
+    float bossFrac_ = -1.f;
     bool eliteWave_ = false;
     float coreFrac_ = 1.f;
     float comboMul_ = 1.f;
