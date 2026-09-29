@@ -344,6 +344,9 @@ constexpr float kNodeR = 21.f;
 constexpr float kBossR = 36.f;
 constexpr float kStatusY = 52.f;
 constexpr float kTravelTime = 0.42f;   // the spark's trip to a chosen node
+constexpr float kIntroSpeed = 1.35f;   // the map's opening plays this much faster than a screen's usual pace
+constexpr float kIntroDone = 0.55f;    // ...and nodes can be picked once it's this far in (the rows in view are up)
+constexpr float kScrollRate = 12.f;    // how fast the view glides to where you stand
 constexpr float kRevealDelay = 0.5f;   // the hidden Altar: a beat, then the path draws itself...
 constexpr float kRevealDraw = 1.3f;    // ...over this long, then the Altar lights up
 constexpr float kRevealPop = 0.6f;
@@ -393,10 +396,14 @@ int MapScreen::nodeAt(App& app, sf::Vector2f mouse, bool openOnly) const {
     return best;
 }
 
+bool MapScreen::ready() const {   // the opening has played: a pick now is on purpose
+    return intro() * kIntroSpeed >= kIntroDone && std::fabs(scroll_ - scrollTarget_) < 3.f && revealT_ < 0.f;
+}
+
 void MapScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
     if (travelTo_ >= 0) return;   // on the way: the trip plays out
     auto go = [&](int node) {     // a spark runs along the link, then the stop opens (update)
-        if (!app.mapNodeOpen(node)) return;
+        if (!ready() || !app.mapNodeOpen(node)) return;   // not while the map is still opening
         travelTo_ = node;
         travelT_ = 0.f;
     };
@@ -493,8 +500,8 @@ void MapScreen::update(App& app, float dt, sf::Vector2f mouse) {
             return;   // this screen is closed
         }
     }
-    scroll_ += (scrollTarget_ - scroll_) * (1.f - std::exp(-9.f * dt));
-    hover_ = peek_.open || travelTo_ >= 0 || revealT_ >= 0.f ? -1 : nodeAt(app, mouse);
+    scroll_ += (scrollTarget_ - scroll_) * (1.f - std::exp(-kScrollRate * dt));
+    hover_ = peek_.open || travelTo_ >= 0 || !ready() ? -1 : nodeAt(app, mouse);
     info_ = peek_.open ? -1 : nodeAt(app, mouse, false);
     uisound::hover(this, hover_);
     // The lit way follows the pointer and eases in; a trip keeps it on its node.
@@ -506,7 +513,7 @@ void MapScreen::update(App& app, float dt, sf::Vector2f mouse) {
 
 void MapScreen::draw(App& app, sf::RenderWindow& w) {
     const sf::Vector2f s = app.size();
-    const float it = intro();
+    const float it = intro() * kIntroSpeed;
     const RunState& r = app.data().run;
     const auto& nodes = r.map.nodes;
     const int count = static_cast<int>(nodes.size());

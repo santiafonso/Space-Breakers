@@ -210,6 +210,7 @@ private:
     int altarNode_ = -1;
     float revealT_ = -1.f;
     sf::Vector2f travelFrom(App& app) const;   // where a trip starts: your node, or below row 1
+    bool ready() const;                        // the opening has played out: nodes can be picked
 };
 
 // The F1 dev panel (SB_DEV): grant any pick to a chosen ball, spawn enemy
