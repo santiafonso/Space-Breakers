@@ -1,6 +1,7 @@
 #include "ui/Screens.hpp"
 
 #include <algorithm>
+#include <functional>
 #include <array>
 #include <cmath>
 #include <cstdint>
@@ -55,15 +56,162 @@ std::string currencyLine(const MetaState& m) {
 // from up) and a distance in rings. Each class route owns a wedge around the
 // centre (Offers.hpp); the web is stretched sideways (kStretchX) into an
 // ellipse so the long side routes use the screen's width.
-constexpr float kRingGap = 56.f;      // pixels between concentric rings
-constexpr float kStretchX = 1.4f;     // horizontal stretch of the whole web
-constexpr float kInnerPad = 0.6f;     // ring r sits at (r + this) gaps: room for the 9 routes around the centre
-constexpr float kNodeR = 11.f;        // branch node radius
-constexpr float kClassR = 14.f;       // a class node: bigger, with an outer ring
-constexpr float kRootR = 16.f;        // centre node radius
+constexpr float kRingGap = 124.f;      // pixels between concentric rings (at zoom 1 the web is bigger than the screen)
+constexpr float kStretchX = 1.0f;     // horizontal stretch of the whole web (1: true circles, so the class ring is round)
+constexpr float kInnerPad = 1.1f;     // ring r sits at (r + this) gaps: room for the 9 routes around the centre
+constexpr float kNodeR = 15.f;        // branch node radius
+constexpr float kClassR = 22.f;       // a class node: bigger, with an outer ring
+constexpr float kRootR = 26.f;        // centre node radius
 constexpr float kWebCenterY = 0.53f;  // * size.y
 constexpr int   kBackRings = 7;       // faint rings drawn behind the web
-constexpr float kZoomMin = 0.45f, kZoomMax = 1.9f;
+constexpr float kZoomMin = 0.35f, kZoomMax = 1.6f;
+constexpr float kZoomStart = 1.0f;    // the first visit: the centre and the inner rings
+constexpr float kPanKeySpeed = 620.f; // WASD, px/s
+// Node sizes follow the zoom, a little less than the layout does.
+float nodeScale(float zoom) { return clampf(0.55f + 0.45f * zoom, 0.6f, 1.25f); }
+
+// Planets far behind the web, each on its own slow tilted orbit around the
+// web's centre (with a little parallax as the camera moves), so the screen
+// lives without competing with the nodes.
+struct Planet {
+    float orbit;     // orbit radius, px
+    float tilt;      // ellipse squash (1 = circle)
+    float speed;     // rad/s (sign = direction)
+    float phase;
+    float radius;
+    sf::Color color;
+    bool ring;       // a Saturn ring
+    bool moon;
+};
+const Planet kPlanets[] = {
+    {300.f, 0.42f, 0.050f, 0.6f, 15.f, theme::ballSlow, false, true},
+    {520.f, 0.38f, -0.032f, 2.4f, 26.f, theme::puSurge, true, false},
+    {760.f, 0.45f, 0.022f, 4.1f, 20.f, theme::ember, false, true},
+    {980.f, 0.40f, -0.016f, 5.3f, 34.f, theme::ballMid, true, false},
+    {1240.f, 0.43f, 0.011f, 1.2f, 12.f, theme::venom, false, false},
+};
+constexpr float kSkyParallax = 0.3f;   // planets move this much of the camera's pan
+
+// The web's layout: a radial tree. The data gives every node a parent (and
+// an angle, used only to keep siblings in their order); here every node owns
+// a slice of the circle in proportion to the tips of the web it leads to, and
+// its children share that slice out the same way - so every tip ends up the
+// same angle from its neighbours and the routes open up by their size. The
+// distance from the centre is the node's ring (see webRing).
+float wrapDeg(float a) {   // into (-180, 180]
+    while (a > 180.f) a -= 360.f;
+    while (a <= -180.f) a += 360.f;
+    return a;
+}
+
+constexpr int kRouteMinTips = 5;
+
+float webAngle(int node) {
+    static float table[MetaUnlockCount];
+    static bool built = false;
+    if (!built) {
+        built = true;
+        std::vector<std::vector<int>> kids(MetaUnlockCount);
+        for (int i = 0; i < MetaUnlockCount; ++i)
+            if (!metaNodeRetired(i) && metaUnlockDef(i).parent >= 0) kids[static_cast<std::size_t>(metaUnlockDef(i).parent)].push_back(i);
+        std::vector<int> tips(MetaUnlockCount, 0);
+        // tips under each node (itself, if it has none), children before parents
+        std::function<int(int)> count = [&](int n) {
+            int t = 0;
+            for (int c : kids[static_cast<std::size_t>(n)]) t += count(c);
+            return tips[static_cast<std::size_t>(n)] = std::max(1, t);
+        };
+        count(0);
+        // a small route still gets room: every route counts as at least kRouteMinTips tips
+        {
+            int total = 0;
+            for (int c : kids[0]) {
+                tips[static_cast<std::size_t>(c)] = std::max(tips[static_cast<std::size_t>(c)], kRouteMinTips);
+                total += tips[static_cast<std::size_t>(c)];
+            }
+            tips[0] = std::max(1, total);
+        }
+        // children in their data order, clockwise from the top
+        for (auto& v : kids)
+            std::sort(v.begin(), v.end(), [](int x, int y) {
+                return std::fmod(metaUnlockDef(x).ang + 360.f, 360.f) < std::fmod(metaUnlockDef(y).ang + 360.f, 360.f);
+            });
+        std::function<void(int, float, float)> place = [&](int n, float from, float span) {
+            table[n] = from + span * 0.5f;
+            float at = from;
+            for (int c : kids[static_cast<std::size_t>(n)]) {
+                const float share = span * static_cast<float>(tips[static_cast<std::size_t>(c)]) /
+                                    static_cast<float>(tips[static_cast<std::size_t>(n)]);
+                place(c, at, share);
+                at += share;
+            }
+        };
+        // the first route (Striker, at the top) is centred on 0
+        const auto& top = kids[0];
+        const float first = top.empty() ? 0.f : 360.f * static_cast<float>(tips[static_cast<std::size_t>(top.front())]) /
+                                                     static_cast<float>(tips[0]);
+        place(0, -first * 0.5f, 360.f);
+        table[0] = 0.f;
+        for (int i = 0; i < MetaUnlockCount; ++i)
+            if (metaNodeRetired(i)) table[i] = metaUnlockDef(i).ang;
+    }
+    return table[node];
+}
+
+// The class ring: every class node sits on this ring, so the classes read at
+// a glance as one circle (a red hoop behind it marks it). A class the data put
+// further in moves out to it, with everything beyond it on its route.
+constexpr float kClassRing = 4.f;
+
+bool isClassNodeId(int i) {
+    return (i >= MetaClassSupport && i <= MetaClassJester) || i == MetaClassSlinger || i == MetaClassStriker ||
+           i == MetaClassAlchemist;
+}
+
+float webRing(int node) {
+    // Rings come from the tree, not the data: one ring per step out from the
+    // centre, except that each route's path to its class is spaced evenly
+    // between the centre and the class ring (so every class lands on it), and
+    // whatever hangs past the class goes on one ring per step from there.
+    static float table[MetaUnlockCount];
+    static bool built = false;
+    if (!built) {
+        built = true;
+        auto depth = [](int n) {
+            int d = 0;
+            for (int k = metaUnlockDef(n).parent; k >= 0; k = metaUnlockDef(k).parent) ++d;
+            return d;
+        };
+        int classDepth[kMetaBranchCount] = {};
+        for (int i = 0; i < MetaUnlockCount; ++i)
+            if (isClassNodeId(i)) classDepth[static_cast<int>(metaUnlockDef(i).branch)] = depth(i);
+        for (int i = 0; i < MetaUnlockCount; ++i) {
+            const int d = depth(i);
+            const int cd = classDepth[static_cast<int>(metaUnlockDef(i).branch)];
+            if (cd <= 0) table[i] = static_cast<float>(d);   // no class on this route (Creeds), or the centre
+            else if (d <= cd) table[i] = kClassRing * static_cast<float>(d) / static_cast<float>(cd);
+            else table[i] = kClassRing + static_cast<float>(d - cd);
+        }
+    }
+    return table[node];
+}
+
+// Fog: a locked node shows only within 2 steps of what you own (its parent or
+// grandparent bought; from the centre on a fresh web). Owned nodes always show.
+bool webVisible(int node, const int* unlock) {
+    if (metaNodeRetired(node)) return false;
+    if (node == 0 || unlock[node] > 0) return true;
+    int steps = 0;
+    for (int k = node; k >= 0; k = metaUnlockDef(k).parent) {
+        if (k != node && (unlock[k] > 0 || k == 0)) return steps <= 2;
+        ++steps;
+    }
+    return false;
+}
+
+// The camera is remembered between visits to the web.
+struct WebView { bool saved = false; float zoom = kZoomStart; sf::Vector2f pan{0.f, 0.f}; int sel = 0; };
+WebView g_webView;
 // The legend lists the routes clockwise from the top, like the web.
 constexpr MetaBranch kLegend[] = {MetaBranch::Striker,  MetaBranch::Slinger, MetaBranch::Shooter, MetaBranch::Jester,
                                   MetaBranch::Assassin, MetaBranch::Creeds,   MetaBranch::Summoner,
@@ -86,10 +234,8 @@ sf::Color branchColor(MetaBranch b) {
 float nodeRing(int i) { return metaUnlockDef(i).ring; }
 
 // The node that unlocks a class (drawn bigger, its name always shown).
-bool isClassNode(int i) {
-    return (i >= MetaClassSupport && i <= MetaClassJester) || i == MetaClassSlinger || i == MetaClassStriker ||
-           i == MetaClassAlchemist;
-}
+bool isClassNodeId(int i);
+bool isClassNode(int i) { return isClassNodeId(i); }
 
 const char* branchLabel(MetaBranch b) {
     switch (b) {
@@ -141,13 +287,17 @@ void drawDot(sf::RenderWindow& w, sf::Vector2f p, float r, sf::Color c) {
 void MenuScreen::rebuild(App& app) {
     const sf::Vector2f s = app.size();
     menu_.init(app.font(), theme::fsItem, s.y * 0.072f);
-    menu_.setItems({{"Play", true},
+    hasRun_ = app.hasSavedRun();
+    std::vector<Menu::Item> items;
+    if (hasRun_) items.push_back({"Continue run", true});
+    items.insert(items.end(), {{hasRun_ ? "New run" : "Play", true},
                     {"Stats", true},
                     {"How to Play", true},
                     {"Options", true},
                     {resetArm_ > 0.f ? "Reset progress - click again to confirm" : "Reset progress",
                      true},
                     {"Quit", true}});
+    menu_.setItems(items);
     menu_.layout({s.x * 0.5f, s.y * 0.44f});
 }
 
@@ -157,9 +307,19 @@ void MenuScreen::onEnter(App& app) {
 }
 
 void MenuScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
-    if (isKey(e, sf::Keyboard::Enter) || isKey(e, sf::Keyboard::Space)) { app.openLoadout(); return; }
+    auto resume = [&] {
+        if (!app.resumeRun()) rebuild(app);   // unreadable: it's gone, and so is the button
+    };
+    if (isKey(e, sf::Keyboard::Enter) || isKey(e, sf::Keyboard::Space)) {
+        if (hasRun_) resume();
+        else app.openLoadout();
+        return;
+    }
     if (!isLeftClick(e)) return;
-    switch (menu_.clickIndex(mouse)) {
+    int pick = menu_.clickIndex(mouse);
+    if (hasRun_ && pick == 0) { resume(); return; }
+    if (hasRun_ && pick > 0) --pick;   // the rest sit one lower under "Continue run"
+    switch (pick) {
         case 0: app.openLoadout(); break;
         case 1: app.openStats(); break;
         case 2: app.openHowTo(); break;
@@ -225,28 +385,54 @@ void LoadoutScreen::rebuild(App& app) {
 
 void LoadoutScreen::onEnter(App& app) {
     rebuild(app);
+    backdrop_.init(app.size());
     selNode_ = 0;
     hoverNode_ = -1;
     selUsed_ = false;
     keyNav_ = false;
     lastMouse_ = {-1.f, -1.f};
     for (int i = 0; i < MetaUnlockCount; ++i) glow_[i] = 0.f;
-    // Start zoomed to fit the whole web between the title and the bottom edge
-    // (and clear of the side panels).
-    const sf::Vector2f s = app.size();
-    const float up = s.y * kWebCenterY - 112.f, down = s.y * (1.f - kWebCenterY) - 30.f, side = s.x * 0.5f - 60.f;
-    float fit = 1.f;
-    for (int i = 0; i < MetaUnlockCount; ++i) {
-        if (metaNodeRetired(i)) continue;
-        const sf::Vector2f o = nodeOffset(i) * kRingGap;   // at zoom 1
-        if (o.y < -1.f) fit = std::min(fit, up / -o.y);
-        if (o.y > 1.f) fit = std::min(fit, down / o.y);
-        if (std::fabs(o.x) > 1.f) fit = std::min(fit, side / std::fabs(o.x));
+    // Back where you left it; the first time, on the centre.
+    if (g_webView.saved) {
+        zoom_ = g_webView.zoom;
+        pan_ = g_webView.pan;
+        selNode_ = g_webView.sel;
+    } else {
+        zoom_ = kZoomStart;
+        pan_ = panFor(app, 0, zoom_);
     }
-    zoom_ = clampf(fit, kZoomMin, 1.f);
-    pan_ = {0.f, 0.f};
+    zoomT_ = zoom_;
+    flyNode_ = -1;
     panning_ = false;
     legendHover_ = -1;
+}
+
+// The pan that puts `node` in the middle of the screen at `zoom`.
+sf::Vector2f LoadoutScreen::panFor(App& app, int node, float zoom) const {
+    const sf::Vector2f s = app.size();
+    return sf::Vector2f{0.f, s.y * 0.5f - s.y * kWebCenterY} - nodeOffset(node) * (kRingGap * zoom);
+}
+
+void LoadoutScreen::flyTo(App& app, int node, float zoom) {
+    (void)app;
+    flyNode_ = node;
+    zoomT_ = clampf(zoom, kZoomMin, kZoomMax);
+}
+
+// Keep some of the web on screen: the pan can bring any node to the middle, no further.
+void LoadoutScreen::clampPan(App& app) {
+    const sf::Vector2f s = app.size();
+    float ex = 0.f, ey0 = 0.f, ey1 = 0.f;
+    for (int i = 0; i < MetaUnlockCount; ++i) {
+        if (metaNodeRetired(i)) continue;
+        const sf::Vector2f o = nodeOffset(i) * (kRingGap * zoom_);
+        ex = std::max(ex, std::fabs(o.x));
+        ey0 = std::min(ey0, o.y);
+        ey1 = std::max(ey1, o.y);
+    }
+    const float dy = s.y * 0.5f - s.y * kWebCenterY;
+    pan_.x = clampf(pan_.x, -ex - 60.f, ex + 60.f);
+    pan_.y = clampf(pan_.y, dy - ey1 - 60.f, dy - ey0 + 60.f);
 }
 
 sf::Vector2f LoadoutScreen::webCentre(App& app) const {
@@ -257,8 +443,9 @@ sf::Vector2f LoadoutScreen::webCentre(App& app) const {
 // A node's offset from the centre in rings (stretched sideways).
 sf::Vector2f LoadoutScreen::nodeOffset(int i) {
     const MetaUnlockDef& d = metaUnlockDef(i);
-    const float a = d.ang * kPi / 180.f;
-    const float r = d.ring > 0.01f ? d.ring + kInnerPad : 0.f;
+    const float a = webAngle(i) * kPi / 180.f;
+    const float ring = webRing(i);
+    const float r = ring > 0.01f ? ring + kInnerPad : 0.f;
     return {std::sin(a) * r * kStretchX, -std::cos(a) * r};
 }
 
@@ -266,12 +453,12 @@ sf::Vector2f LoadoutScreen::nodePos(App& app, int i) const {
     return webCentre(app) + nodeOffset(i) * (kRingGap * zoom_);
 }
 
-// Zoom by `factor`, keeping the web point under the pointer where it is.
+// Zoom by `factor` (eased in update), keeping the web point under the pointer where it is.
 void LoadoutScreen::zoomAt(App& app, sf::Vector2f mouse, float factor) {
-    const float nz = clampf(zoom_ * factor, kZoomMin, kZoomMax);
-    const sf::Vector2f c = webCentre(app);
-    pan_ += (mouse - c) * (1.f - nz / zoom_);
-    zoom_ = nz;
+    (void)app;
+    zoomT_ = clampf(zoomT_ * factor, kZoomMin, kZoomMax);
+    zoomAnchor_ = mouse;
+    flyNode_ = -1;
 }
 
 int LoadoutScreen::legendAt(App& app, sf::Vector2f mouse) const {
@@ -285,8 +472,8 @@ int LoadoutScreen::legendAt(App& app, sf::Vector2f mouse) const {
 
 int LoadoutScreen::nodeAt(App& app, sf::Vector2f mouse) const {
     for (int i = 0; i < MetaUnlockCount; ++i) {
-        if (metaNodeRetired(i)) continue;
-        const float r = ((i == 0 ? kRootR : isClassNode(i) ? kClassR : kNodeR) + 7.f) * clampf(zoom_, 0.8f, 1.3f);   // generous but < half the ring gap
+        if (!webVisible(i, app.data().meta.unlock)) continue;
+        const float r = ((i == 0 ? kRootR : isClassNode(i) ? kClassR : kNodeR) + 6.f) * nodeScale(zoom_);   // generous but < half the ring gap
         const sf::Vector2f d = mouse - nodePos(app, i);
         if (d.x * d.x + d.y * d.y <= r * r) return i;
     }
@@ -299,7 +486,7 @@ void LoadoutScreen::moveSelection(App& app, int dx, int dy) {
     int best = -1;
     float bestScore = 1e9f;
     for (int i = 0; i < MetaUnlockCount; ++i) {
-        if (i == selNode_ || metaNodeRetired(i)) continue;
+        if (i == selNode_ || !webVisible(i, app.data().meta.unlock)) continue;
         const sf::Vector2f d = nodePos(app, i) - cur;
         const float along = d.x * static_cast<float>(dx) + d.y * static_cast<float>(dy);
         if (along <= 4.f) continue;
@@ -307,7 +494,12 @@ void LoadoutScreen::moveSelection(App& app, int dx, int dy) {
         const float score = perp * 2.f + along;
         if (score < bestScore) { bestScore = score; best = i; }
     }
-    if (best >= 0) { selNode_ = best; selUsed_ = true; keyNav_ = true; }
+    if (best >= 0) {
+        selNode_ = best;
+        selUsed_ = true;
+        keyNav_ = true;
+        flyTo(app, best, zoomT_);   // the camera follows the selection
+    }
 }
 
 void LoadoutScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
@@ -322,6 +514,7 @@ void LoadoutScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse
     if (e.type == sf::Event::MouseButtonPressed &&
         (e.mouseButton.button == sf::Mouse::Right || e.mouseButton.button == sf::Mouse::Middle)) {
         panning_ = true;
+        flyNode_ = -1;
         panStart_ = mouse;
         panFrom_ = pan_;
         return;
@@ -330,10 +523,13 @@ void LoadoutScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse
         switch (e.key.code) {
             case sf::Keyboard::Add: case sf::Keyboard::Equal:     zoomAt(app, webCentre(app), 1.15f); return;
             case sf::Keyboard::Subtract: case sf::Keyboard::Hyphen: zoomAt(app, webCentre(app), 1.f / 1.15f); return;
-            case sf::Keyboard::Num0: case sf::Keyboard::Home:     onEnter(app); return;
+            case sf::Keyboard::Num0: case sf::Keyboard::Home:     flyTo(app, 0, kZoomStart); return;
             default: break;
         }
     }
+    if (app.devMode() && isKey(e, sf::Keyboard::F1)) { app.devGiveCurrency(); return; }
+    if (app.devMode() && isKey(e, sf::Keyboard::F2)) { app.devRelockWeb(); return; }
+    if (app.devMode() && isKey(e, sf::Keyboard::F3)) { app.devUnlockWeb(); return; }
     if (isKey(e, sf::Keyboard::Enter) || isKey(e, sf::Keyboard::Space)) { app.newRun(); return; }
     if (e.type == sf::Event::KeyPressed) {
         switch (e.key.code) {
@@ -358,20 +554,60 @@ void LoadoutScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse
         case 2: app.back(); return;
         default: break;
     }
-    if (legendAt(app, mouse) >= 0) return;
+    if (const int b = legendAt(app, mouse); b >= 0) {   // fly to the route: its class node, else its first node
+        int target = -1;
+        for (int i = 0; i < MetaUnlockCount && target < 0; ++i)
+            if (static_cast<int>(metaUnlockDef(i).branch) == b && isClassNode(i)) target = i;
+        for (int i = 0; i < MetaUnlockCount; ++i)
+            if (static_cast<int>(metaUnlockDef(i).branch) == b && !metaNodeRetired(i) &&
+                (target < 0 || (!isClassNode(target) && metaUnlockDef(i).ring < metaUnlockDef(target).ring)))
+                target = i;
+        if (target >= 0) {
+            selNode_ = target;
+            selUsed_ = true;
+            flyTo(app, target, std::max(zoomT_, 0.85f));
+            app.audio().uiClick();
+        }
+        return;
+    }
     panning_ = true;   // a left drag on empty space moves the web
+    flyNode_ = -1;
     panStart_ = mouse;
     panFrom_ = pan_;
 }
 
 void LoadoutScreen::update(App& app, float dt, sf::Vector2f mouse) {
     menu_.update(dt, mouse);
-    if (panning_) {
-        const sf::Vector2f s = app.size();
-        pan_ = panFrom_ + (mouse - panStart_);
-        pan_.x = clampf(pan_.x, -s.x * 0.6f, s.x * 0.6f);   // never lose the web off-screen
-        pan_.y = clampf(pan_.y, -s.y * 0.6f, s.y * 0.6f);
+    backdrop_.update(dt);
+    skyT_ += dt;
+    const float ease = 1.f - std::exp(-12.f * dt);
+    // Zoom glides to its target: around the pointer it was wheeled at, or with
+    // the camera when it's flying to a node.
+    if (std::fabs(zoomT_ - zoom_) > 1e-4f) {
+        const float nz = zoom_ + (zoomT_ - zoom_) * ease;
+        if (flyNode_ < 0) pan_ += (zoomAnchor_ - webCentre(app)) * (1.f - nz / zoom_);
+        zoom_ = nz;
     }
+    if (flyNode_ >= 0) {
+        const sf::Vector2f want = panFor(app, flyNode_, zoom_);
+        pan_ += (want - pan_) * ease;
+        if (length(want - pan_) < 0.5f && std::fabs(zoomT_ - zoom_) < 1e-3f) flyNode_ = -1;
+    }
+    if (panning_) {
+        pan_ = panFrom_ + (mouse - panStart_);
+    } else if (app.hasFocus()) {   // WASD glide
+        sf::Vector2f k{0.f, 0.f};
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::A)) k.x += 1.f;
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::D)) k.x -= 1.f;
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::W)) k.y += 1.f;
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::S)) k.y -= 1.f;
+        if (k.x != 0.f || k.y != 0.f) {
+            flyNode_ = -1;
+            pan_ += normalized(k, {0.f, 0.f}) * kPanKeySpeed * dt;
+        }
+    }
+    clampPan(app);
+    g_webView = {true, zoomT_, pan_, selNode_};
     legendHover_ = legendAt(app, mouse);
     if (length(mouse - lastMouse_) > 0.5f) { keyNav_ = false; lastMouse_ = mouse; }
     hoverNode_ = nodeAt(app, mouse);
@@ -395,58 +631,333 @@ void LoadoutScreen::drawInfoCard(App& app, sf::RenderWindow& w, int node) const 
     const std::uint32_t cost = metaUnlockCost(node, lvl);
     const sf::Color col = branchColor(d.branch);
 
-    const float cw = 300.f, ch = 116.f;
-    const sf::Vector2f o(theme::margin, s.y * 0.15f);
+    // A card on the left: the name, its route, WHAT IT GIVES in readable
+    // text, the level it's at, and what the next step costs (or what's missing).
+    const float cw = 340.f;
+    const std::vector<std::string> lines = wrapText(app.font(), d.effect, theme::fsBody, cw - 32.f);
+    const float ch = 124.f + 22.f * static_cast<float>(lines.size());
+    const sf::Vector2f o(theme::margin, s.y * 0.14f);
 
     draw::panel(w, {o.x, o.y, cw, ch}, col, 1.f, 0.3f);
-    draw::box(w, {o.x, o.y, 3.f, ch}, 0.f, col, col);   // branch colour spine
+    draw::box(w, {o.x, o.y, 4.f, ch}, 0.f, col, col);   // branch colour spine
 
-    sf::Text name = makeText(app.font(), d.name, theme::fsItem, theme::textHi);
-    name.setPosition(o.x + 14.f, o.y + 8.f);
+    sf::Text name = makeText(app.font(), d.name, theme::fsHeading, theme::textHi);
+    name.setPosition(o.x + 16.f, o.y + 10.f);
     w.draw(name);
-
     drawLabel(w, app.font(), d.branch == MetaBranch::Root || d.branch == MetaBranch::Creeds
                                  ? std::string(branchLabel(d.branch))
                                  : std::string(branchLabel(d.branch)) + " route",
-              10, {o.x + cw - 14.f, o.y + 46.f}, col, 1);   // on the level line: long names need the width
-
+              11, {o.x + 16.f, o.y + 52.f}, col, -1);
     char lv[48];
-    std::snprintf(lv, sizeof(lv), "Level %d / %d", lvl, d.maxLevel);
-    drawLabel(w, app.font(), lv, 10, {o.x + 14.f, o.y + 46.f}, theme::textLo, -1);
+    std::snprintf(lv, sizeof(lv), "level %d / %d", lvl, d.maxLevel);
+    drawLabel(w, app.font(), lv, 11, {o.x + cw - 16.f, o.y + 52.f}, theme::textLo, 1);
 
-    float y = o.y + 58.f;
-    for (const std::string& dl : wrapText(app.font(), d.effect, theme::fsSmall, cw - 28.f)) {
-        sf::Text t = makeText(app.font(), dl, theme::fsSmall, theme::textLo);
-        t.setPosition(o.x + 14.f, y);
+    drawLabel(w, app.font(), "what it gives", 10, {o.x + 16.f, o.y + 74.f}, theme::textDim, -1);
+    float y = o.y + 84.f;
+    for (const std::string& dl : lines) {
+        sf::Text t = makeText(app.font(), dl, theme::fsBody, theme::textHi);
+        t.setPosition(o.x + 16.f, y);
         w.draw(t);
-        y += 16.f;
+        y += 22.f;
     }
 
     std::string foot;
     sf::Color footCol = theme::textDim;
     if (maxed) {
-        foot = "fully unlocked";
+        foot = lvl > 1 ? "fully unlocked" : "unlocked";
+        footCol = col;
     } else if (!avail) {
         foot = std::string("locked - get ") + metaUnlockDef(d.parent).name + " first";
     } else {
-        foot = "cost  " + std::to_string(cost) + (isPrism ? " prisms" : " cores");
         const bool afford = isPrism ? m.prisms >= cost : m.cores >= cost;
+        foot = std::string(lvl > 0 ? "next level  " : "unlock  ") + std::to_string(cost) + (isPrism ? " prisms" : " cores") +
+               (afford ? "   -   click or E" : "   -   not enough");
         footCol = afford ? (isPrism ? kPrismColor : theme::accent) : theme::coreLow;
     }
     sf::Text ft = makeText(app.font(), foot, theme::fsSmall, footCol);
-    ft.setPosition(o.x + 14.f, o.y + ch - 22.f);
+    ft.setPosition(o.x + 16.f, o.y + ch - 28.f);
     w.draw(ft);
+}
+
+void LoadoutScreen::drawSky(App& app, sf::RenderWindow& w, float alpha) const {
+    if (alpha <= 0.01f) return;
+    backdrop_.draw(w, alpha);
+    const sf::Vector2f s = app.size();
+    const sf::Vector2f c = sf::Vector2f{s.x * 0.5f, s.y * kWebCenterY} + pan_ * kSkyParallax;
+    const float k = 0.6f + 0.4f * zoom_;   // a touch of the zoom, much less than the web
+    for (const Planet& pl : kPlanets) {
+        const float R = pl.orbit * k;
+        {   // its orbit: a faint ellipse
+            sf::CircleShape o(R);
+            o.setOrigin(R, R);
+            o.setPosition(c);
+            o.setScale(1.f, pl.tilt);
+            o.setPointCount(120);
+            o.setFillColor(sf::Color::Transparent);
+            o.setOutlineThickness(1.f);
+            o.setOutlineColor(withAlpha(theme::grid, 0.12f * alpha));
+            w.draw(o);
+        }
+        const float a = pl.phase + pl.speed * skyT_;
+        const sf::Vector2f p = c + sf::Vector2f{std::cos(a) * R, std::sin(a) * R * pl.tilt};
+        const float pr = pl.radius * k;
+        const float near = 0.75f + 0.25f * std::sin(a);   // the near side of the orbit is a bit brighter
+        const float pa = (0.45f + 0.2f * near) * alpha;
+        draw::glow(w, p, pr * 2.8f, pl.color, 0.16f * alpha);
+        // lit from the web's centre: a bright side toward it, a dark side away
+        const sf::Vector2f toC = normalized(c - p, {0.f, -1.f});
+        draw::disc(w, p, pr, withAlpha(lerpColor(pl.color, theme::bg, 0.35f), pa),
+                   withAlpha(lerpColor(pl.color, theme::bg, 0.75f), pa), {1.f, 1.f}, 40);
+        draw::disc(w, p + toC * (pr * 0.28f), pr * 0.62f, withAlpha(lerpColor(pl.color, sf::Color::White, 0.15f), pa * 0.55f),
+                   withAlpha(pl.color, 0.f), {1.f, 1.f}, 32);
+        if (pl.ring) {   // a flat ring across it
+            sf::CircleShape rg(pr * 1.75f);
+            rg.setOrigin(pr * 1.75f, pr * 1.75f);
+            rg.setPosition(p);
+            rg.setScale(1.f, 0.28f);
+            rg.setRotation(-14.f);
+            rg.setPointCount(60);
+            rg.setFillColor(sf::Color::Transparent);
+            rg.setOutlineThickness(2.f);
+            rg.setOutlineColor(withAlpha(lerpColor(pl.color, sf::Color::White, 0.3f), pa * 0.7f));
+            w.draw(rg);
+        }
+        if (pl.moon) {   // a small moon on a quick orbit of its own
+            const float ma = skyT_ * 0.6f + pl.phase * 3.f;
+            const sf::Vector2f mp = p + sf::Vector2f{std::cos(ma), std::sin(ma) * 0.55f} * (pr * 2.3f);
+            draw::disc(w, mp, std::max(2.f, pr * 0.22f), withAlpha(theme::textLo, pa), withAlpha(theme::textDim, pa),
+                       {1.f, 1.f}, 16);
+        }
+    }
 }
 
 void LoadoutScreen::draw(App& app, sf::RenderWindow& w) {
     const sf::Vector2f s = app.size();
     const MetaState& m = app.data().meta;
     const float it = intro();
+    drawSky(app, w, clampf(introPop(it, 0.f, 0.5f), 0.f, 1.f));
 
+    // Faint concentric rings behind the web - every node sits on one of them.
+    const sf::Vector2f centre = nodePos(app, 0);
+    const float ringsA = clampf(introPop(it, 0.10f, 0.4f), 0.f, 1.f);
+    for (int ring = 1; ring <= kBackRings; ++ring) {
+        const float rad = (static_cast<float>(ring) + kInnerPad) * kRingGap * zoom_;
+        sf::CircleShape halo(rad);
+        halo.setOrigin(rad, rad);
+        halo.setPosition(centre);
+        halo.setScale(kStretchX, 1.f);
+        halo.setPointCount(96);
+        halo.setFillColor(sf::Color::Transparent);
+        halo.setOutlineThickness(1.f / kStretchX);
+        halo.setOutlineColor(withAlpha(theme::arenaEdge,
+                                       std::max(0.04f, 0.26f - 0.03f * static_cast<float>(ring - 1)) * ringsA));
+        w.draw(halo);
+    }
+
+    {   // the class ring: a red hoop behind the classes, so they read as one circle
+        const float ra = clampf(introPop(it, 0.14f, 0.4f), 0.f, 1.f);
+        const float rad = (kClassRing + kInnerPad) * kRingGap * zoom_;
+        const float th = nodeScale(zoom_);
+        draw::ring(w, centre, rad, 26.f * th, withAlpha(theme::coreLow, 0.06f * ra), 0.f, 2.f * kPi, 160);
+        draw::ring(w, centre, rad, 2.5f * th, withAlpha(theme::coreLow, 0.55f * ra), 0.f, 2.f * kPi, 160);
+        draw::ring(w, centre, rad + 9.f * th, 1.f, withAlpha(theme::coreLow, 0.22f * ra), 0.f, 2.f * kPi, 160);
+        draw::ring(w, centre, rad - 9.f * th, 1.f, withAlpha(theme::coreLow, 0.22f * ra), 0.f, 2.f * kPi, 160);
+        // its name sits in the widest gap between two classes, just outside the hoop
+        std::vector<float> angs;
+        for (int i = 0; i < MetaUnlockCount; ++i)
+            if (isClassNode(i)) angs.push_back(std::fmod(webAngle(i) + 720.f, 360.f));
+        std::sort(angs.begin(), angs.end());
+        float gapMid = 180.f, gapBest = -1.f;
+        for (std::size_t k = 0; k < angs.size(); ++k) {
+            const float a0 = angs[k], a1 = k + 1 < angs.size() ? angs[k + 1] : angs.front() + 360.f;
+            if (a1 - a0 > gapBest) { gapBest = a1 - a0; gapMid = (a0 + a1) * 0.5f; }
+        }
+        const float ga = gapMid * kPi / 180.f;
+        const sf::Vector2f dir{std::sin(ga), -std::cos(ga)};
+        drawLabel(w, app.font(), "CLASSES", 11, centre + dir * (rad + 20.f * th), withAlpha(theme::coreLow, 0.75f * ra), 0);
+    }
+
+    // Links under the nodes - quiet unless both ends (or the parent) are earned.
+    for (int i = 0; i < MetaUnlockCount; ++i) {
+        const MetaUnlockDef& d = metaUnlockDef(i);
+        if (d.parent < 0 || !webVisible(i, m.unlock)) continue;
+        const float la = clampf(introPop(it, 0.16f + 0.05f * nodeRing(i), 0.3f), 0.f, 1.f);
+        if (la <= 0.001f) continue;
+        const sf::Vector2f a = nodePos(app, d.parent);
+        const sf::Vector2f b = nodePos(app, i);
+        const sf::Color col = branchColor(d.branch);
+        const bool lit = m.unlock[i] > 0;
+        const bool open = !lit && m.unlock[d.parent] > 0;
+        const float focus = (legendHover_ < 0 || static_cast<int>(d.branch) == legendHover_) ? 1.f : 0.25f;
+        const float th = nodeScale(zoom_);
+        if (lit) drawLink(w, a, b, 7.f * th, withAlpha(col, 0.10f * la * focus));   // a soft glow under an earned link
+        drawLink(w, a, b, (lit ? 3.f : 1.5f) * th,
+                 lit ? withAlpha(col, 0.75f * la * focus)
+                     : withAlpha(open ? col : theme::arenaEdge, (open ? 0.35f : 0.22f) * la * focus));
+    }
+
+    // Nodes. Only the one under the cursor / keyboard selection lights up.
+    for (int i = 0; i < MetaUnlockCount; ++i) {
+        if (!webVisible(i, m.unlock)) continue;
+        const MetaUnlockDef& d = metaUnlockDef(i);
+        const int lvl = m.unlock[i];
+        const bool owned = lvl > 0;
+        const bool maxed = metaUnlockMaxed(i, lvl);
+        const bool avail = metaUnlockAvailable(i, m.unlock);
+        const bool isPrism = d.currency == MetaCurrency::Prisms;
+        const std::uint32_t cost = metaUnlockCost(i, lvl);
+        const bool afford = avail && !maxed && (isPrism ? m.prisms >= cost : m.cores >= cost);
+        const sf::Color col = branchColor(d.branch);
+        const sf::Vector2f p = nodePos(app, i);
+        const bool classNode = isClassNode(i);
+        const float baseR = (i == 0 ? kRootR : classNode ? kClassR : kNodeR);
+        const float g = glow_[i];                 // 0 = idle, 1 = lit
+        const float pop = introPop(it, 0.12f + 0.06f * nodeRing(i), 0.34f);
+        if (pop <= 0.001f) continue;
+        const bool inFocus = legendHover_ < 0 || static_cast<int>(d.branch) == legendHover_ || i == 0;
+        const float na = clampf(pop, 0.f, 1.f) * (inFocus ? 1.f : 0.25f);   // intro alpha, legend focus
+        const float ns = nodeScale(zoom_);
+        const float r = baseR * ns * clampf(pop, 0.f, 1.12f) *
+                        (1.f + (legendHover_ >= 0 && inFocus && i != 0 ? 0.12f : 0.f) + 0.25f * g);
+        if (owned) draw::glow(w, p, r * 2.1f, col, 0.22f * na);   // earned: it glows
+        if (afford && !owned) {   // within reach: a slow breathing ring
+            const float br = 0.5f + 0.5f * std::sin(it * 2.6f + static_cast<float>(i) * 0.7f);
+            draw::ring(w, p, r + 5.f + 3.f * br, 1.5f, withAlpha(col, (0.25f + 0.35f * br) * na));
+        }
+
+        if (g > 0.01f) {
+            const float gr = r + 4.f + 12.f * g;
+            sf::CircleShape halo(gr);
+            halo.setOrigin(gr, gr);
+            halo.setPosition(p);
+            halo.setFillColor(withAlpha(col, 0.20f * g * na));
+            w.draw(halo);
+        }
+
+        sf::CircleShape body(r);
+        body.setOrigin(r, r);
+        body.setPosition(p);
+        body.setPointCount(40);
+        body.setOutlineThickness(2.f * ns);
+        if (owned) {
+            body.setFillColor(withAlpha(col, 0.85f * na));
+            body.setOutlineColor(withAlpha(col, 0.9f * na));
+        } else if (avail) {
+            body.setFillColor(withAlpha(col, (0.10f + 0.30f * g) * na));
+            body.setOutlineColor(withAlpha(col, ((afford ? 0.42f : 0.24f) + 0.5f * g) * na));
+        } else {
+            body.setFillColor(withAlpha(theme::arenaEdge, 0.14f * na));
+            body.setOutlineColor(withAlpha(theme::arenaEdge, (0.34f + 0.4f * g) * na));
+        }
+        if (!classNode) {
+            w.draw(body);
+        } else {
+            // A class is a goal, not a step: a hexagon in a strong glow, with an
+            // orbit of its own - a turning dashed ring and three moons in its colour.
+            const float live = owned ? 1.f : avail ? 0.7f : 0.4f;
+            const sf::Color oc = owned || avail ? col : lerpColor(col, theme::arenaEdge, 0.5f);
+            draw::glow(w, p, r * 3.4f, col, (owned ? 0.38f : 0.22f) * na);
+            const float spin = skyT_ * 0.35f + static_cast<float>(i);
+            // a geometric circle: the disc, a fine inner circle and a six-point star turning inside
+            w.draw(body);
+            draw::ring(w, p, r * 0.72f, 1.2f * ns, withAlpha(oc, (0.45f + 0.4f * live) * na));
+            const sf::Color star = withAlpha(owned ? lerpColor(col, sf::Color::White, 0.6f) : oc, (0.5f + 0.4f * live) * na);
+            draw::polygonOutline(w, p, r * 0.7f, 3, spin * 0.5f, 1.2f * ns, star);
+            draw::polygonOutline(w, p, r * 0.7f, 3, spin * 0.5f + kPi, 1.2f * ns, star);
+            draw::ring(w, p, r + 4.f * ns, 1.f * ns, withAlpha(oc, (0.35f + 0.4f * live) * na));
+            const float orbitR = r + 16.f * ns;
+            for (int k = 0; k < 18; ++k) {   // the dashed orbit
+                const float a0 = spin + static_cast<float>(k) * (2.f * kPi / 18.f);
+                draw::ring(w, p, orbitR, 1.5f * ns, withAlpha(oc, 0.55f * live * na), a0, a0 + 0.2f, 4);
+            }
+            for (int k = 0; k < 3; ++k) {   // three moons riding it the other way
+                const float a = -skyT_ * 0.9f + static_cast<float>(k) * (2.f * kPi / 3.f) + static_cast<float>(i);
+                const sf::Vector2f mp = p + sf::Vector2f{std::cos(a), std::sin(a)} * orbitR;
+                draw::glow(w, mp, 9.f * ns, col, 0.35f * live * na);
+                drawDot(w, mp, 3.2f * ns, withAlpha(lerpColor(col, sf::Color::White, 0.45f), live * na));
+            }
+        }
+
+        // an owned node carries a bright core; a prism node a small diamond
+        if (owned) drawDot(w, p, r * 0.3f, withAlpha(lerpColor(col, sf::Color::White, 0.5f), 0.9f * na));
+        if (isPrism && !owned)
+            draw::polygon(w, p, r * 0.35f, 4, 0.f, withAlpha(kPrismColor, 0.8f * na), withAlpha(kPrismColor, 0.8f * na));
+
+        // Idle labels: the purchase frontier (open, not bought yet) shows its
+        // name, so you can read your options without hovering every node;
+        // owned multi-level nodes show their level pips.
+        // Every node names itself once zoomed in enough to read it: earned in
+        // its colour, within reach bright, the rest dim.
+        if (g < 0.03f && i != 0 && !classNode && zoom_ >= 0.6f) {
+            const sf::Color lc = owned ? lerpColor(col, sf::Color::White, 0.25f)
+                               : afford ? theme::textHi
+                               : avail ? theme::textLo
+                                       : theme::textDim;
+            drawOutward(w, app.font(), d.name, p, p - centre, r + (owned && d.maxLevel > 1 ? 8.f : 0.f),
+                        withAlpha(lc, (inFocus ? 0.95f : 0.4f) * na));
+        }
+        // a class node always names its class (the goal at the end of the route)
+        if (g < 0.03f && classNode) {   // outward from the centre, clear of its route
+            const sf::Vector2f out = normalized(p - centre, {0.f, 1.f});
+            const sf::Vector2f side{-out.y, out.x};
+            // beside the node (across its route), on the side away from the web's middle line
+            const sf::Vector2f at = p + side * ((r + 30.f * ns) * (side.x >= 0.f ? 1.f : -1.f)) + out * 6.f;
+            drawLabel(w, app.font(), d.name, 12, at,
+                      withAlpha(owned ? col : avail ? lerpColor(col, theme::textLo, 0.4f) : theme::textDim, na), 0);
+        }
+        if (g < 0.03f && i == 0)
+            drawLabel(w, app.font(), d.name, 12, {p.x, p.y + r + 14.f}, withAlpha(theme::textHi, na), 0);
+        if (g < 0.03f && owned && d.maxLevel > 1) {   // level pips just under the node
+            const float span = static_cast<float>(d.maxLevel - 1) * 7.f;
+            for (int k = 0; k < d.maxLevel; ++k)
+                drawDot(w, {p.x - span * 0.5f + static_cast<float>(k) * 7.f, p.y + r + 7.f}, 2.2f,
+                        withAlpha(k < lvl ? lerpColor(col, sf::Color::White, 0.3f) : theme::textDim, na));
+        }
+
+        // name / level / cost only while lit
+        if (g > 0.03f) {
+            const float a = clampf(g * 1.5f, 0.f, 1.f);
+            drawCentered(w, app.font(), d.name, theme::fsBody, {p.x, p.y - r - 16.f},
+                         withAlpha(theme::textHi, a));
+
+            std::string tag;
+            sf::Color tagCol = theme::textLo;
+            if (maxed) {
+                tag = "MAX";
+            } else if (owned) {
+                tag = "Lv " + std::to_string(lvl) + "  -  " + std::to_string(cost) +
+                      (isPrism ? " pr" : "");
+            } else if (!avail) {
+                tag = "locked";
+                tagCol = theme::textDim;
+            } else {
+                tag = std::to_string(cost) + (isPrism ? " prisms" : " cores");
+                tagCol = afford ? (isPrism ? kPrismColor : theme::accent) : theme::textDim;
+            }
+            drawCentered(w, app.font(), tag, theme::fsSmall, {p.x, p.y + r + 14.f},
+                         withAlpha(tagCol, a));
+
+            if (d.maxLevel > 1) {
+                const float span = static_cast<float>(d.maxLevel - 1) * 7.f;
+                for (int k = 0; k < d.maxLevel; ++k) {
+                    const bool got = k < lvl;
+                    drawDot(w,
+                            {p.x - span * 0.5f + static_cast<float>(k) * 7.f, p.y + r + 27.f},
+                            2.2f, withAlpha(got ? col : theme::textLo, a * (got ? 1.f : 0.45f)));
+                }
+            }
+        }
+    }
+
+    {   // a dark band across the top: the title and the wallet sit over the web, not in it
+        const float ba = clampf(introPop(it, 0.f, 0.3f), 0.f, 1.f);
+        draw::box(w, {0.f, 0.f, s.x, 96.f}, 0.f, withAlpha(theme::bg, 0.94f * ba), withAlpha(theme::bg, 0.80f * ba));
+        draw::line(w, {0.f, 96.f}, {s.x, 96.f}, 1.f, withAlpha(theme::arenaEdge, 0.5f * ba));
+    }
     drawCenteredPop(w, app.font(), "Skill web", theme::fsTitle, {s.x * 0.5f, s.y * 0.055f},
                     theme::textHi, introPop(it, 0.f, 0.32f));
     if (std::fabs(app.uiMouse().x - s.x * 0.5f) < 140.f && app.uiMouse().y < s.y * 0.11f)   // controls: on the title's hover
-        drawCentered(w, app.font(), "click a node to unlock   -   drag to move, wheel to zoom, 0 resets   -   arrows move, E unlocks",
+        drawCentered(w, app.font(), "click a node to unlock   -   drag or WASD to move, wheel to zoom, a route in the list flies there, 0 = centre   -   arrows step, E unlocks",
                      theme::fsSmall, {s.x * 0.5f, s.y * 0.10f}, theme::textLo);
 
     {   // wallet, top-right: "CORES 480" and, once you have any, "PRISMS 6" under it
@@ -475,154 +986,19 @@ void LoadoutScreen::draw(App& app, sf::RenderWindow& w) {
         w.draw(lt);
     }
 
-    // Faint concentric rings behind the web - every node sits on one of them.
-    const sf::Vector2f centre = nodePos(app, 0);
-    const float ringsA = clampf(introPop(it, 0.10f, 0.4f), 0.f, 1.f);
-    for (int ring = 1; ring <= kBackRings; ++ring) {
-        const float rad = (static_cast<float>(ring) + kInnerPad) * kRingGap * zoom_;
-        sf::CircleShape halo(rad);
-        halo.setOrigin(rad, rad);
-        halo.setPosition(centre);
-        halo.setScale(kStretchX, 1.f);
-        halo.setPointCount(96);
-        halo.setFillColor(sf::Color::Transparent);
-        halo.setOutlineThickness(1.f / kStretchX);
-        halo.setOutlineColor(withAlpha(theme::arenaEdge,
-                                       std::max(0.04f, 0.26f - 0.03f * static_cast<float>(ring - 1)) * ringsA));
-        w.draw(halo);
-    }
-
-    // Links under the nodes - quiet unless both ends (or the parent) are earned.
-    for (int i = 0; i < MetaUnlockCount; ++i) {
-        const MetaUnlockDef& d = metaUnlockDef(i);
-        if (d.parent < 0 || metaNodeRetired(i)) continue;
-        const float la = clampf(introPop(it, 0.16f + 0.05f * nodeRing(i), 0.3f), 0.f, 1.f);
-        if (la <= 0.001f) continue;
-        const sf::Vector2f a = nodePos(app, d.parent);
-        const sf::Vector2f b = nodePos(app, i);
-        const sf::Color col = branchColor(d.branch);
-        const bool lit = m.unlock[i] > 0;
-        const bool open = !lit && m.unlock[d.parent] > 0;
-        const float focus = (legendHover_ < 0 || static_cast<int>(d.branch) == legendHover_) ? 1.f : 0.25f;
-        drawLink(w, a, b, lit ? 2.5f : 1.5f,
-                 lit ? withAlpha(col, 0.5f * la * focus)
-                     : withAlpha(open ? col : theme::arenaEdge, 0.22f * la * focus));
-    }
-
-    // Nodes. Only the one under the cursor / keyboard selection lights up.
-    for (int i = 0; i < MetaUnlockCount; ++i) {
-        if (metaNodeRetired(i)) continue;
-        const MetaUnlockDef& d = metaUnlockDef(i);
-        const int lvl = m.unlock[i];
-        const bool owned = lvl > 0;
-        const bool maxed = metaUnlockMaxed(i, lvl);
-        const bool avail = metaUnlockAvailable(i, m.unlock);
-        const bool isPrism = d.currency == MetaCurrency::Prisms;
-        const std::uint32_t cost = metaUnlockCost(i, lvl);
-        const bool afford = avail && !maxed && (isPrism ? m.prisms >= cost : m.cores >= cost);
-        const sf::Color col = branchColor(d.branch);
-        const sf::Vector2f p = nodePos(app, i);
-        const bool classNode = isClassNode(i);
-        const float baseR = (i == 0 ? kRootR : classNode ? kClassR : kNodeR);
-        const float g = glow_[i];                 // 0 = idle, 1 = lit
-        const float pop = introPop(it, 0.12f + 0.06f * nodeRing(i), 0.34f);
-        if (pop <= 0.001f) continue;
-        const bool inFocus = legendHover_ < 0 || static_cast<int>(d.branch) == legendHover_ || i == 0;
-        const float na = clampf(pop, 0.f, 1.f) * (inFocus ? 1.f : 0.25f);   // intro alpha, legend focus
-        const float r = baseR * clampf(zoom_, 0.75f, 1.3f) * clampf(pop, 0.f, 1.12f) *
-                        (1.f + (legendHover_ >= 0 && inFocus && i != 0 ? 0.2f : 0.f) + 0.45f * g);
-
-        if (g > 0.01f) {
-            const float gr = r + 4.f + 12.f * g;
-            sf::CircleShape halo(gr);
-            halo.setOrigin(gr, gr);
-            halo.setPosition(p);
-            halo.setFillColor(withAlpha(col, 0.20f * g * na));
-            w.draw(halo);
-        }
-
-        sf::CircleShape body(r);
-        body.setOrigin(r, r);
-        body.setPosition(p);
-        body.setPointCount(40);
-        body.setOutlineThickness(2.f);
-        if (owned) {
-            body.setFillColor(withAlpha(col, 0.85f * na));
-            body.setOutlineColor(withAlpha(col, 0.9f * na));
-        } else if (avail) {
-            body.setFillColor(withAlpha(col, (0.10f + 0.30f * g) * na));
-            body.setOutlineColor(withAlpha(col, ((afford ? 0.42f : 0.24f) + 0.5f * g) * na));
-        } else {
-            body.setFillColor(withAlpha(theme::arenaEdge, 0.14f * na));
-            body.setOutlineColor(withAlpha(theme::arenaEdge, (0.34f + 0.4f * g) * na));
-        }
-        w.draw(body);
-        if (classNode)   // a class: an outer ring in its colour, brighter once unlocked
-            draw::ring(w, p, r + 4.f, 1.5f, withAlpha(owned || avail ? col : theme::arenaEdge, (owned ? 0.8f : 0.45f) * na));
-
-        // a small pip marks an owned node while it is idle
-        if (owned && g < 0.6f)
-            drawDot(w, p, baseR * 0.22f, withAlpha(theme::bg, 0.55f * na));
-
-        // Idle labels: the purchase frontier (open, not bought yet) shows its
-        // name, so you can read your options without hovering every node;
-        // owned multi-level nodes show their level pips.
-        if (g < 0.03f && avail && !owned && i != 0 && inFocus && !classNode)
-            drawOutward(w, app.font(), d.name, p, p - centre, baseR,
-                        withAlpha(afford ? theme::textLo : theme::textDim, 0.9f * na));
-        // a class node always names its class (the goal at the end of the route)
-        if (g < 0.03f && classNode)
-            drawLabel(w, app.font(), d.name, 10, {p.x, p.y + baseR + 14.f},
-                      withAlpha(owned ? col : avail ? lerpColor(col, theme::textLo, 0.4f) : theme::textDim, na), 0);
-        if (g < 0.03f && owned && d.maxLevel > 1) {
-            const float span = static_cast<float>(d.maxLevel - 1) * 6.f;
-            for (int k = 0; k < d.maxLevel; ++k)
-                drawDot(w, {p.x - span * 0.5f + static_cast<float>(k) * 6.f, p.y + baseR + 7.f}, 2.f,
-                        withAlpha(k < lvl ? col : theme::textDim, na));
-        }
-
-        // name / level / cost only while lit
-        if (g > 0.03f) {
-            const float a = clampf(g * 1.5f, 0.f, 1.f);
-            drawCentered(w, app.font(), d.name, theme::fsSmall, {p.x, p.y - baseR - 13.f},
-                         withAlpha(theme::textHi, a));
-
-            std::string tag;
-            sf::Color tagCol = theme::textLo;
-            if (maxed) {
-                tag = "MAX";
-            } else if (owned) {
-                tag = "Lv " + std::to_string(lvl) + "  -  " + std::to_string(cost) +
-                      (isPrism ? " pr" : "");
-            } else if (!avail) {
-                tag = "locked";
-                tagCol = theme::textDim;
-            } else {
-                tag = std::to_string(cost) + (isPrism ? " prisms" : " cores");
-                tagCol = afford ? (isPrism ? kPrismColor : theme::accent) : theme::textDim;
-            }
-            drawCentered(w, app.font(), tag, theme::fsSmall, {p.x, p.y + baseR + 13.f},
-                         withAlpha(tagCol, a));
-
-            if (d.maxLevel > 1) {
-                const float span = static_cast<float>(d.maxLevel - 1) * 7.f;
-                for (int k = 0; k < d.maxLevel; ++k) {
-                    const bool got = k < lvl;
-                    drawDot(w,
-                            {p.x - span * 0.5f + static_cast<float>(k) * 7.f, p.y + baseR + 25.f},
-                            2.2f, withAlpha(got ? col : theme::textLo, a * (got ? 1.f : 0.45f)));
-                }
-            }
-        }
-    }
-
     if (hoverNode_ >= 0 || selUsed_) drawInfoCard(app, w, selNode_);
+    if (app.devMode())   // the dev keys, quietly under the title band
+        drawCentered(w, app.font(), "DEV   F1  +1000 cores, +10 prisms     F2  lock the web again (refund)     F3  unlock everything",
+                     theme::fsSmall, {s.x * 0.5f, 110.f}, withAlpha(theme::coreLow, 0.8f));
 
     // Route legend, bottom-left: one row per class route (and the Creeds).
-    // Hovering a row lights that route alone.
+    // Hovering a row lights that route alone; clicking it flies there.
     {
         const float la = clampf(introPop(it, 0.2f), 0.f, 1.f);
         float ly = s.y - theme::margin - static_cast<float>(kLegendCount) * kLegendRow;
+        draw::box(w, {theme::margin - 10.f, ly - 24.f, 190.f, static_cast<float>(kLegendCount) * kLegendRow + 30.f},
+                  theme::corner, withAlpha(theme::bg, 0.88f * la), withAlpha(theme::bg, 0.88f * la),
+                  withAlpha(theme::arenaEdge, 0.6f * la), 1.f);
         drawLabel(w, app.font(), "routes", 10, {theme::margin + 2.f, ly - 12.f}, withAlpha(theme::textDim, la), -1);
         for (MetaBranch b : kLegend) {
             const bool hot = legendHover_ == static_cast<int>(b);
@@ -638,6 +1014,11 @@ void LoadoutScreen::draw(App& app, sf::RenderWindow& w) {
         }
     }
 
+    {   // a backing for the run buttons, so the web passes under them cleanly
+        const float ma = clampf(introPop(it, 0.2f), 0.f, 1.f);
+        draw::box(w, {s.x - 260.f, s.y * 0.80f - 82.f, 220.f, 184.f}, theme::corner, withAlpha(theme::bg, 0.88f * ma),
+                  withAlpha(theme::bg, 0.88f * ma), withAlpha(theme::arenaEdge, 0.6f * ma), 1.f);
+    }
     menu_.draw(w, it);
     if (menu_.hovered() == 1)   // what hard mode means, on hover only
         drawTooltip(w, app.font(), lastMouse_, s, "Hard mode",

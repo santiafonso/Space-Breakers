@@ -550,7 +550,53 @@ bool App::simulating() const {
 
 void App::openLoadout() { push(ScreenId::Loadout); }
 
+std::string App::runPath() const {
+    return (std::filesystem::path(savePath_).parent_path() / "run.txt").string();
+}
+
+bool App::hasSavedRun() const {
+    std::error_code ec;
+    return std::filesystem::exists(runPath(), ec);
+}
+
+void App::saveRunNow() {
+    if (!data_.run.active || runBanked_) return;
+    data_.run.coreHp = world_.core().hp;
+    data_.run.coreMaxHp = world_.core().maxHp;
+    saveRun(runPath(), data_.run);
+}
+
+// "Continue run": the saved run, back on its map as it was when the map last
+// opened (a fight you quit in the middle of is still ahead of you).
+bool App::resumeRun() {
+    RunState loaded;
+    if (!loadRun(runPath(), loaded)) {
+        clearRun(runPath());
+        return false;
+    }
+    data_.run = loaded;
+    RunState& r = data_.run;
+    novaCd_ = 0.f;
+    repulseCd_ = 0.f;
+    markCd_ = 0.f;
+    bulletGauge_ = 1.f;
+    bulletOn_ = false;
+    introStep_ = -1;
+    runBanked_ = false;
+    continueUnlocked_ = data_.meta.stats.wins > 0 || r.map.act > 1;
+    world_.startRun(params(), ballSpecs(), r.coreHp, r.coreMaxHp);
+    rememberClasses();   // its classes are old news: no gain banners
+    world_.setPhoenix((r.mods.phoenix && !r.phoenixUsedAct ? 1 : 0) + r.lastStandLeft);
+    effects_.clear();
+    hitstop_ = 0.f;
+    camKick_ = 0.f;
+    replaceStack(ScreenId::Play);
+    openMap();
+    return true;
+}
+
 void App::newRun() {
+    clearRun(runPath());   // a fresh run replaces any saved one
     RunState& r = data_.run;
     r = RunState{};
     r.active = true;
@@ -1010,6 +1056,7 @@ void App::applyUpgrade(int idx) {
 void App::openMap() {
     revealAltarPath();   // one step from the boss with the streak earned: the hidden Altar
     push(ScreenId::Map);
+    saveRunNow();        // quitting from here resumes here
 }
 
 bool App::mapNodeOpen(int node) const {
@@ -1358,10 +1405,12 @@ void App::bankRun(bool won) {
         std::max(data_.meta.stats.bestScore, static_cast<std::uint32_t>(r.score));
     if (won) ++data_.meta.stats.wins;
 
+    clearRun(runPath());   // it's over: nothing to resume
     save();
 }
 
 void App::finishToMenu() {
+    clearRun(runPath());
     data_.run = RunState{};
     save();
     replaceStack(ScreenId::Menu);
@@ -1414,6 +1463,7 @@ void App::leaveBossWin() {
 }
 
 void App::abandonRun() {
+    clearRun(runPath());
     data_.run = RunState{};
     save();
     replaceStack(ScreenId::Menu);
@@ -1423,6 +1473,7 @@ void App::abandonRun() {
 void App::wipeSave() {
     std::error_code ec;
     std::filesystem::remove(savePath_, ec);   // start the next save from nothing
+    clearRun(runPath());
 
     const SoundSettings sound = data_.meta.sound;   // a preference, not progress: keep the mix
     data_ = GameData{};                        // cores, prisms, unlocks, stats, run
@@ -1606,6 +1657,39 @@ void App::buyMetaUnlock(int u) {
     ++data_.meta.unlock[u];
     audio_.purchase();
     effects_.flash(theme::accent, 0.4f);
+    save();
+}
+
+void App::devGiveCurrency() {
+    if (!devMode()) return;
+    data_.meta.cores += 1000;
+    data_.meta.prisms += 10;
+    audio_.purchase();
+    effects_.addLabel("DEV  +1000 cores  +10 prisms", {size().x * 0.5f, size().y * 0.16f}, theme::accent, 20, 1.2f);
+    save();
+}
+
+void App::devRelockWeb() {
+    if (!devMode()) return;
+    MetaState& m = data_.meta;
+    for (int u = 0; u < MetaUnlockCount; ++u) {
+        for (int lvl = 0; lvl < m.unlock[u]; ++lvl) {
+            const std::uint32_t c = metaUnlockCost(u, lvl);
+            (metaUnlockCurrency(u) == MetaCurrency::Prisms ? m.prisms : m.cores) += c;
+        }
+        m.unlock[u] = 0;
+    }
+    audio_.letGo();
+    effects_.addLabel("DEV  web locked again, cost refunded", {size().x * 0.5f, size().y * 0.16f}, theme::coreLow, 20, 1.4f);
+    save();
+}
+
+void App::devUnlockWeb() {
+    if (!devMode()) return;
+    for (int u = 0; u < MetaUnlockCount; ++u) data_.meta.unlock[u] = metaUnlockDef(u).maxLevel;   // retired ones stay 0
+    audio_.purchase();
+    effects_.flash(theme::accent, 0.4f);
+    effects_.addLabel("DEV  the whole web unlocked", {size().x * 0.5f, size().y * 0.16f}, theme::accent, 20, 1.2f);
     save();
 }
 
@@ -1907,7 +1991,7 @@ void App::update(float frameDt) {
     // World units for the play screen, fixed UI units for menus / cards (see
     // handleEvent) - the world view can be zoomed out on the boss arena.
     const sf::Vector2f mouse =
-        simulating() ? window_.mousePosition() : window_.uiMousePosition();
+        simulating() ? window_.mousePosition() : uiMouse();   // uiMouse: the snapshot pointer when staged
     effects_.update(frameDt);
     fade_ *= std::exp(-cfg::app::fadeRate * frameDt);
 
@@ -2481,6 +2565,32 @@ int App::runSnapshots(const std::string& dir) {
         back();
     }
 
+    {   // the run on disk: write it, read it back, compare, then resume it from the menu
+        saveRunNow();
+        RunState back;
+        const RunState& r0 = data_.run;
+        bool same = loadRun(runPath(), back) && back.balls.size() == r0.balls.size() && back.gold == r0.gold &&
+                    back.map.act == r0.map.act && back.map.nodes.size() == r0.map.nodes.size() &&
+                    back.mapNode == r0.mapNode && back.mapRow == r0.mapRow && back.creeds == r0.creeds &&
+                    back.pacts == r0.pacts && back.wave == r0.wave && back.score == r0.score &&
+                    std::fabs(back.coreHp - world_.core().hp) < 0.01f && back.mods.catalyst == r0.mods.catalyst;
+        for (std::size_t i = 0; same && i < r0.balls.size(); ++i) {
+            const BallLoadout &a = r0.balls[i], &b = back.balls[i];
+            for (int k = 0; k < kLoadoutSlots; ++k) same = same && a.kindAt(k) == b.kindAt(k) && a.levelAt(k) == b.levelAt(k);
+            for (int k = 0; k < kModifierCount; ++k) same = same && a.mods[k] == b.mods[k];
+            for (int k = 0; k < kMaxElements - 1; ++k) same = same && a.extraType[k] == b.extraType[k];
+        }
+        for (std::size_t i = 0; same && i < r0.map.nodes.size(); ++i) {
+            const MapNode &a = r0.map.nodes[i], &b = back.map.nodes[i];
+            same = a.type == b.type && a.row == b.row && a.lane == b.lane && a.visited == b.visited && a.next == b.next;
+        }
+        std::cerr << "snapshot: run save round-trip " << (same ? "ok" : "MISMATCH") << '\n';
+        replaceStack(ScreenId::Menu);
+        snapFrame(d + "33_menu_continue.png");
+        std::cerr << "snapshot: resume " << (resumeRun() ? "ok" : "FAILED") << '\n';
+        snapFrame(d + "34_resumed_map.png");
+    }
+
     data_.run = RunState{};   // back in the game menu, a well-grown web
     for (int u : {MetaChannel, MetaClassMage, MetaLoreMage, MetaAbilityBulwark, MetaFireItem, MetaVenom, MetaReroll,
                   MetaLuckyStar, MetaClassJester, MetaSling, MetaClassSlinger, MetaHeft, MetaClassStriker, MetaVenom, MetaClassAlchemist, MetaTreasury, MetaHaggler, MetaCharged, MetaClassSupport, MetaRally,
@@ -2489,6 +2599,28 @@ int App::runSnapshots(const std::string& dir) {
     replaceStack(ScreenId::Menu);
     openLoadout();
     snapFrame(d + "15_web_grown.png");
+    snapMouseOn_ = true;   // the pointer on the centre node: its info card
+    snapMouse_ = {size().x * 0.5f, size().y * 0.5f};
+    snapFrame(d + "15b_web_card.png");
+    snapMouseOn_ = false;
+    {   // zoomed right out: the whole web, to judge the routes' spacing
+        sf::Event wheel{};
+        wheel.type = sf::Event::MouseWheelScrolled;
+        wheel.mouseWheelScroll.delta = -12.f;
+        wheel.mouseWheelScroll.x = static_cast<int>(size().x * 0.5f);
+        wheel.mouseWheelScroll.y = static_cast<int>(size().y * 0.5f);
+        stack_.back()->handleEvent(*this, wheel, {size().x * 0.5f, size().y * 0.53f});
+        snapFrame(d + "15c_web_overview.png");
+        // a fresh web (only the centre bought): the fog hides what's far away
+        const MetaState keep = data_.meta;
+        for (int u = 0; u < MetaUnlockCount; ++u) data_.meta.unlock[u] = 0;
+        data_.meta.unlock[MetaCalling] = 1;
+        data_.meta.unlock[MetaHeft] = 1;
+        snapFrame(d + "15d_web_fresh.png");
+        for (int u = 0; u < MetaUnlockCount; ++u) data_.meta.unlock[u] = metaUnlockDef(u).maxLevel;   // and all of it
+        snapFrame(d + "15e_web_all.png");
+        data_.meta = keep;
+    }
 
     // The run intro: Covenant creed -> Quartermaster starter pick -> the map.
     data_.meta.unlock[MetaQuartermaster] = 1;

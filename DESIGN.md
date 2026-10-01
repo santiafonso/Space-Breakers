@@ -2154,10 +2154,77 @@ de las pelotas: Q, el anillo de E y F.
 - **Dev (SB_DEV=1):** en el mapa podés ir a cualquier nodo, no solo a los que
   están conectados (`App::mapNodeOpen`), para probar lo que quieras.
 
+### Guardar la run (2026-10-01)
+
+- La run en curso se guarda aparte, en `saves/run.txt` (`saveRun / loadRun /
+  clearRun` en `platform/Save.cpp`), **cada vez que se abre el mapa**
+  (`App::openMap -> saveRunNow`). Guarda la vida del núcleo, el oro, el
+  puntaje, las pelotas (items, elemento, habilidades, modificadores), las
+  reliquias, los creeds, los pactos, el mapa entero con lo recorrido, la
+  posición, la racha del Altar y los usos de Phoenix / Last stand.
+- El menú principal muestra **"Continue run"** arriba de todo si hay una run
+  guardada, y "Play" pasa a llamarse "New run". `App::resumeRun` la carga,
+  arma el World con esas pelotas y ese núcleo, y abre el mapa.
+- Si cerrás en medio de una pelea (o en una tienda o elección después de
+  ella), volvés al mapa de antes: esa pelea sigue por delante. Se puede
+  "reintentar" una pelea saliendo; aceptado por ahora.
+- Se borra al perder o ganar (`bankRun`), al abandonar, al volver al menú
+  de fin de run, al empezar una run nueva y con Reset progress. Un archivo
+  con otro formato o roto no se carga: se borra y listo.
+- El modo snapshot hace la prueba de ida y vuelta (guardar, leer, comparar
+  campo por campo, reanudar) y saca 33_menu_continue / 34_resumed_map.
+
+### Web de habilidades más grande (2026-10-01)
+
+- Anillos a 124 px (antes 56), nodos de 15 / 22 (clase) / 26 (centro) px y más
+  aire alrededor del centro: a zoom 1 la web es más grande que la pantalla y
+  se recorre, no se ve toda de un vistazo.
+- Navegación: arrastrar o WASD para moverse, rueda para zoom (suave, hacia el
+  puntero), **click en una ruta de la leyenda = volar a su clase**, flechas =
+  saltar al nodo vecino con la cámara siguiéndolo, 0 / Home = volver al centro.
+  La cámara recuerda dónde la dejaste entre visitas.
+- Cada nodo muestra su nombre (lo comprado en su color, lo que podés pagar en
+  blanco, lo demás apagado); lo comprado brilla, lo que podés pagar respira con
+  un anillo, las uniones de tus caminos se encienden.
+- Tarjeta de info más grande a la izquierda: nombre, ruta, nivel, **"what it
+  gives"** en letra legible, y abajo el costo del próximo nivel o qué te falta.
+- Una franja arriba (título y cores) y fondos detrás de la leyenda y de los
+  botones, para que la web pase por debajo sin ensuciarlos.
+- Fondo vivo, como la pantalla de inicio: el radar con orbes que flotan
+  (`MenuBackdrop`) y 5 planetas en órbitas elípticas lentas alrededor del
+  centro de la web (algunos con anillo o luna), con paralaje de 0.3x respecto de
+  la cámara (`kPlanets`, `LoadoutScreen::drawSky`). Tenues: la web es lo
+  principal.
+- **Los nodos de clase son distintos a todo lo demás:** un círculo geométrico
+  (disco, un círculo interior fino y una estrella de seis puntas que gira
+  adentro), resplandor fuerte en su color y una órbita propia (anillo punteado
+  que gira y tres lunas en sentido contrario). Más apagados mientras no se
+  pueden comprar.
+- **El anillo de las clases:** todas las clases están a la misma distancia del
+  centro (anillo 4, `kClassRing`; las que los datos ponían en el 3 se corren
+  hacia afuera junto con lo que cuelga de ellas, `webRing`). La web ya no se
+  estira en horizontal (`kStretchX` = 1), así que el anillo es un círculo, y un
+  aro rojo de fondo lo marca, con "CLASSES" en el hueco más grande entre dos
+  clases.
+- **Niebla:** un nodo bloqueado solo se ve si está a 2 pasos o menos de algo
+  que ya compraste (en una web nueva, del centro; `webVisible`). Lo comprado
+  siempre se ve. Lo oculto no se dibuja, ni sus uniones, ni se puede
+  seleccionar.
+- **Layout geométrico (árbol radial):** los ángulos y anillos de los datos ya
+  no se usan para ubicar (el ángulo solo ordena a los hermanos). Cada nodo
+  tiene una porción del círculo proporcional a las puntas de la web que salen
+  de él (cada ruta cuenta como al menos 5), y sus hijos se reparten esa
+  porción igual: todas las puntas quedan equiespaciadas (`webAngle`). El
+  anillo es la profundidad en el árbol, salvo que el camino de cada ruta a su
+  clase se reparte parejo entre el centro y el aro de clases, y lo que cuelga
+  después va de a un anillo por paso (`webRing`).
+- **Dev (SB_DEV=1) en la web:** F1 = +1000 cores y +10 prisms, F2 = volver a
+  bloquear todos los nodos devolviendo lo gastado, F3 = desbloquear toda la
+  web al máximo (gratis). Una línea roja bajo el
+  título lo recuerda.
+
 ### Anotado para después (el usuario lo pidió así)
 
-- **La web de habilidades:** más grande, mucho más linda y fácil de navegar
-  (no hace falta verla toda de un vistazo), y que cada nodo diga claro qué da.
 - **Progresión:** por ahora todo se desbloquea como está; se ve más adelante.
 - **5 actos:** se queda así; el balance entre actos se ve después.
 - **Música:** los tracks actuales son libres, pero el usuario quiere sumar más.

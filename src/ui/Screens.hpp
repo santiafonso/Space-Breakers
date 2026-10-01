@@ -26,6 +26,7 @@ private:
     Menu menu_;
     MenuBackdrop backdrop_;   // balls drifting behind the menu
     float resetArm_ = 0.f;   // >0 while "Reset progress" waits for a confirming click
+    bool hasRun_ = false;    // a saved run: "Continue run" heads the list
 };
 
 // The game menu: a radial skill web. Spend cores (and prisms on a few key
@@ -51,11 +52,18 @@ private:
     sf::Vector2f webCentre(App& app) const;             // the root node, after panning
     void zoomAt(App& app, sf::Vector2f mouse, float factor);
     int legendAt(App& app, sf::Vector2f mouse) const;   // branch legend row under the pointer, -1 none
+    void flyTo(App& app, int node, float zoom);          // ease the camera onto a node
+    sf::Vector2f panFor(App& app, int node, float zoom) const;   // the pan that centres `node`
+    void clampPan(App& app);
+    void drawSky(App& app, sf::RenderWindow& w, float alpha) const;   // drifting orbs + orbiting planets
 
     Menu menu_;
     // Pan / zoom: the web grows past one screen, so it can be dragged around
     // and zoomed with the wheel. Labels keep their size; only the layout scales.
     float zoom_ = 1.f;
+    float zoomT_ = 1.f;                   // the zoom it eases toward...
+    sf::Vector2f zoomAnchor_{0.f, 0.f};   // ...keeping this screen point still
+    int flyNode_ = -1;                    // >= 0: the camera glides to centre this node
     sf::Vector2f pan_{0.f, 0.f};
     bool panning_ = false;
     sf::Vector2f panStart_{0.f, 0.f};
@@ -67,6 +75,8 @@ private:
     bool keyNav_ = false;                 // arrows in use - light selNode_ until the mouse moves
     sf::Vector2f lastMouse_{-1.f, -1.f};
     float glow_[MetaUnlockCount] = {};    // 0 = idle, 1 = lit; only the active node rises
+    MenuBackdrop backdrop_;               // the start screen's drifting balls, behind the web
+    float skyT_ = 0.f;                    // drives the planets' orbits
 };
 
 // The peek itself: every ball's loadout, the relics and the creeds, dimming

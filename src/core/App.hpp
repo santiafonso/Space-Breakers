@@ -67,7 +67,9 @@ public:
     int choiceCount() const { return choiceCount_; }   // cards on the table (an Elite deals 3)
 
     void openLoadout();     // Menu -> the game menu
-    void newRun();          // Loadout "Start" -> a fresh run
+    void newRun();          // Loadout "Start" -> a fresh run (drops a saved one)
+    bool hasSavedRun() const;   // a run in progress on disk (saves/run.txt)
+    bool resumeRun();           // Menu "Continue run": back on its map; false if it couldn't be read
     void applyUpgrade(int idx);   // Choice: take card idx (asks for a ball first when it needs one)
 
     // ---- path map ----
@@ -192,6 +194,11 @@ public:
     void quit();
 
     void buyMetaUnlock(int unlock);
+    // SB_DEV on the web: F1 = +1000 cores and +10 prisms, F2 = lock every node
+    // again and pay back what it cost (to test unlocking from scratch).
+    void devGiveCurrency();
+    void devRelockWeb();
+    void devUnlockWeb();   // F3: every node to its max level, free
     void toggleSound();
     void setAiming(bool on);   // slingshot aim in progress: time slows for a moment
     void toggleFullscreen();
@@ -292,6 +299,8 @@ private:
     GameData data_;
     Rng rng_;
     std::string savePath_;  // set in the ctor: <exe dir>/saves/save.txt
+    std::string runPath() const;   // the run in progress: run.txt beside the save
+    void saveRunNow();             // write it (the map just opened)
 
     std::vector<std::unique_ptr<Screen>> stack_;
     TabPeek peek_;   // TAB over every run screen that doesn't run its own (shop, cards, pickers...)
