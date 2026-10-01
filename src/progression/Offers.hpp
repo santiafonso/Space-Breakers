@@ -759,7 +759,7 @@ enum MetaUnlock {
     MetaSalvage,      // Salvage    - more cores per enemy kill
     MetaInterest,     // Interest   - cores for clearing a wave with no core damage
     MetaProspector,   // Prospector - skipping a pick refunds reroll charges
-    MetaStockpile,    // Stockpile  - a random power-up refills a reserve slot (key Q)
+    MetaStockpile,    // (retired 2026-10-01: Q is the player's Mark now) - hidden, never sold
     MetaMagnet,       // Magnet     - power-up orbs drift toward the nearest ball
     MetaAfterglow,    // Afterglow  - continuous power-ups fade out instead of cutting
     MetaCharged,      // Charged    - power-ups start with part of their duration
@@ -910,10 +910,10 @@ inline const MetaUnlockDef& metaUnlockDef(int u) {
                          12u, 3, B::Jester,   C, 10,  56.f, 4.f},
         /* Prospector*/ {"Prospector","skipping a pick to repair the core refunds a reroll charge",
                          12u, 2, B::Jester,   C, 25,  56.f, 5.f},
-        /* Stockpile */ {"Stockpile", "keep one random power-up in reserve; press Q to use it",
-                         6u,  1, B::Support,  C, 18, 206.f, 3.f},
+        /* Stockpile */ {"Stockpile", "retired",
+                         6u,  0, B::Support,  C, 18, 206.f, 3.f},   // maxLevel 0: off the web (see metaNodeRetired)
         /* Magnet    */ {"Magnet",    "power-up orbs drift toward your nearest ball",
-                         10u, 1, B::Support,  C, 27, 206.f, 4.f},
+                         10u, 1, B::Support,  C, 18, 206.f, 3.f},
         /* Afterglow */ {"Afterglow", "when a power-up ends its effect fades out instead of cutting",
                          10u, 2, B::Support,  C, 28, 207.f, 5.f},
         /* Charged   */ {"Charged",   "power-ups arrive with part of their duration already charged",
@@ -950,7 +950,7 @@ inline const MetaUnlockDef& metaUnlockDef(int u) {
                          3u,  1, B::Creeds,    P, 43, 138.f, 3.6f},
         /* Alchemy   */ {"Alchemy",   "the Alchemy creed can be offered: random extra elements, a ball reacts with itself",
                          3u,  1, B::Creeds,    P, 44, 152.f, 3.6f},
-        /* Merchant  */ {"Merchant",  "you may reroll the shop's stock once per level, and its sale gets 15% deeper",
+        /* Merchant  */ {"Merchant",  "the first shop reroll at each shop is free (1 per level), and its sale gets 15% deeper",
                          12u, 2, B::Jester,   C, 38,  88.f, 4.f},
         /* Treasury  */ {"Treasury",  "start every run with +20 gold per level",
                          10u, 3, B::Jester,   C,  9,  88.f, 2.f},
@@ -1081,6 +1081,10 @@ inline bool abilityUnlocked(UpgradeKind k, const int* levels) {
 }
 
 inline bool metaUnlockMaxed(int u, int level) { return level >= metaUnlockDef(u).maxLevel; }
+
+// A node taken out of the game keeps its index (saves stay valid) but leaves
+// the web: maxLevel 0.
+inline bool metaNodeRetired(int u) { return metaUnlockDef(u).maxLevel <= 0; }
 
 inline std::uint32_t metaUnlockCost(int u, int level) {
     std::uint32_t c = metaUnlockDef(u).baseCost;

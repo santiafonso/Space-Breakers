@@ -14,6 +14,13 @@ namespace {
 
 constexpr unsigned kSampleRate = 44100;
 constexpr std::size_t kVoices = 24;    // roomy so overlapping note tails wash together
+constexpr std::size_t kHitVoices = 8;  // ball hits: their own small pool
+// Ball hits thin out as they pile up: never two notes closer than kHitGap s,
+// and each note is quieter the busier the last moment was (kHitCrowd hits in
+// about kHitWindow s already halve... see ballHit).
+constexpr float kHitGap = 0.055f;
+constexpr float kHitWindow = 0.45f;
+constexpr float kHitCrowd = 3.f;
 constexpr float kSfxVolume = 26.f;     // sf::Sound volume of a cue at full scale
 constexpr float kMusicVolume = 38.f;   // background bed, well under the sfx
 constexpr float kAmbienceVolume = 9.f; // the fight hum sits far under everything
@@ -201,8 +208,8 @@ bool Audio::init() {
                 main = tone(f, f, 90, Square, 0.15);
                 rich = tone(f, f, 220, Triangle, 0.4);
             } else {                          // the original: a pure sine and a warm bell
-                main = tone(f, f, 150, Sine, 0.5);
-                rich = bell(f, 340, 0.42);
+                main = tone(f, f, 190, Sine, 0.42, 0.07);   // a soft swell, not a click
+                rich = bell(f, 360, 0.36);
             }
             good = good && load(noteMain_[st][i], main) && load(noteRich_[st][i], rich);
         }
@@ -212,6 +219,7 @@ bool Audio::init() {
     ok_ = good;
     if (ok_) {
         pool_.resize(kVoices);
+        hitPool_.resize(kHitVoices);
         ambience_.setLoop(true);
         lastCue_.fill(-10.f);
     }
@@ -380,6 +388,18 @@ void Audio::cue(Cue c, float pitch, float volume01, float minGap) {
     play(cues_[c][static_cast<std::size_t>(st)], pitch, volume01, cat);
 }
 
+void Audio::playHit(const sf::SoundBuffer& buffer, float pitch, float volume01) {
+    if (hitPool_.empty()) return;
+    const float g = catGain(SndBallHit);
+    if (g <= 0.f) return;
+    sf::Sound& s = hitPool_[hitNext_];
+    hitNext_ = (hitNext_ + 1) % hitPool_.size();
+    s.setBuffer(buffer);
+    s.setPitch(pitch);
+    s.setVolume(clampf(volume01, 0.f, 1.f) * kSfxVolume * g);
+    s.play();
+}
+
 void Audio::ballHit(float speed01, float harmony01, bool ballPair) {
     if (!ok_ || catGain(SndBallHit) <= 0.f) return;
     const auto st = static_cast<std::size_t>(settings_.style[SndBallHit]);
@@ -387,31 +407,46 @@ void Audio::ballHit(float speed01, float harmony01, bool ballPair) {
     const auto& richNotes = noteRich_[st];
     speed01 = clampf(speed01, 0.f, 1.f);
     harmony01 = clampf(harmony01, 0.f, 1.f);
+
+    // How busy the last moment was: every hit counts, the count fades out
+    // over ~kHitWindow s. Hits closer than kHitGap don't sound at all, so a
+    // pile of bounces becomes a steady patter instead of a wall.
+    const float now = clock_.getElapsedTime().asSeconds();
+    if (lastHitT_ >= 0.f) hitRate_ *= std::exp(-(now - lastHitT_) / kHitWindow);
+    hitRate_ += 1.f;
+    lastHitT_ = now;
+    if (lastNoteT_ >= 0.f && now - lastNoteT_ < kHitGap) return;
+    lastNoteT_ = now;
+    const float crowd = 1.f / std::sqrt(std::max(1.f, hitRate_ / kHitCrowd));   // 1 alone, ~0.5 in a crowd
     ++hitTick_;
 
     // scale degree: faster -> higher, ball-vs-ball rings a few steps up, plus a
-    // little wander so a steady rally isn't a monotone.
+    // little wander so a steady rally isn't a monotone - but never the same
+    // note twice running (a repeated note is what grates).
     int n = static_cast<int>(std::lround(speed01 * (kScaleN - 5)));
     if (ballPair) n += 4;
     n += static_cast<int>(hitTick_ % 3) - 1;
     n = std::max(0, std::min(kScaleN - 1, n));
+    if (n == lastNote_) n = n > 0 ? n - 1 : n + 1;
+    lastNote_ = n;
 
-    const float shimmer = 1.f + 0.014f * (static_cast<float>(hitTick_ % 7) - 3.f);
+    const float shimmer = 1.f + 0.01f * (static_cast<float>(hitTick_ % 7) - 3.f);
 
     // The main tone is always there; it steps back as the harmony layer grows.
-    play(mainNotes[static_cast<std::size_t>(n)], shimmer,
-         (0.20f + 0.16f * speed01) * (1.f - 0.45f * harmony01), SndBallHit);
+    playHit(mainNotes[static_cast<std::size_t>(n)], shimmer,
+            (0.15f + 0.11f * speed01) * (1.f - 0.45f * harmony01) * crowd);
 
     // The bell fades in with the damage combo - "la armonia sube de a poco".
     if (harmony01 > 0.04f)
-        play(richNotes[static_cast<std::size_t>(n)], shimmer,
-             (0.09f + 0.32f * harmony01) * (0.55f + 0.45f * speed01), SndBallHit);
+        playHit(richNotes[static_cast<std::size_t>(n)], shimmer,
+                (0.07f + 0.24f * harmony01) * (0.55f + 0.45f * speed01) * crowd);
 
-    // Deep into a chain, sprinkle a chord tone so it blooms into a fuller sound.
-    if (harmony01 > 0.4f && hitTick_ % 2 == 0) {
+    // Deep into a chain, now and then a chord tone so it blooms - only while
+    // it isn't already crowded.
+    if (harmony01 > 0.4f && hitTick_ % 3 == 0 && crowd > 0.6f) {
         const int step = harmony01 > 0.75f ? 4 : 2;   // ~fifth vs ~third up the scale
         const int h = std::max(0, std::min(kScaleN - 1, n + step));
-        play(richNotes[static_cast<std::size_t>(h)], shimmer, 0.07f + 0.16f * harmony01, SndBallHit);
+        playHit(richNotes[static_cast<std::size_t>(h)], shimmer, (0.05f + 0.12f * harmony01) * crowd);
     }
 }
 

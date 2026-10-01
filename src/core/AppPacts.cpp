@@ -79,7 +79,7 @@ bool App::openPactChoice(bool fromMap) {
         const auto id = static_cast<PactId>(i);
         if (r.hasPact(id)) continue;
         if (pactDef(id).needsHands && !canGrab()) continue;   // Hunters / Clockwork: hands off, nothing to trade
-        if (id == PactId::Overflow && static_cast<int>(r.balls.size()) >= cfg::ball::maxBalls) continue;
+        if (id == PactId::Overflow && static_cast<int>(r.balls.size()) >= ballCap()) continue;
         bool ok = true;
         for (int have : r.pacts)
             if (pactsConflict(id, static_cast<PactId>(have))) ok = false;
@@ -119,7 +119,7 @@ void App::grantPact(PactId id) {
     r.pacts.push_back(static_cast<int>(id));
     switch (id) {
         case PactId::Overflow:
-            if (static_cast<int>(r.balls.size()) < cfg::ball::maxBalls) r.balls.push_back(BallLoadout{});
+            if (static_cast<int>(r.balls.size()) < ballCap()) r.balls.push_back(BallLoadout{});
             break;
         case PactId::LastBreath:
             world_.addCoreMaxHp(-world_.core().maxHp * (1.f - cfg::pact::lastBreathCore));

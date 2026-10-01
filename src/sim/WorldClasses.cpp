@@ -92,6 +92,7 @@ template <> struct ClassHooks<BallRole::Mage> : NoClassHooks {
         for (Missile& m : ms) {
             m.life -= dt;
             if (m.life <= 0.f) continue;
+            if (const Enemy* f = w.focusEnemy()) m.target = f->id;   // the player's target
             Enemy* t = findEnemy(w, m.target);
             if (!t) {   // lost its target: the nearest one to the missile
                 const Enemy* n = w.nearestEnemy(m.pos, A::missileRetarget * as);
@@ -101,6 +102,7 @@ template <> struct ClassHooks<BallRole::Mage> : NoClassHooks {
             sf::Vector2f aim = m.pos + m.vel;
             if (t) aim = t->pos;
             else if (w.boss_.alive && w.boss_.intro <= 0.f) aim = w.boss_.pos;
+            if (w.focusIsBoss()) aim = w.boss_.pos;
             // turn toward the aim point at a capped rate, then speed up
             const float sp = std::min(length(m.vel) + A::missileAccel * as * dt, A::missileTopSpeed * as);
             const float cur = std::atan2(m.vel.y, m.vel.x);
@@ -251,6 +253,11 @@ template <> struct ClassHooks<BallRole::Shooter> : NoClassHooks {
     // Where to shoot from `from`: the nearest enemy in range (led a little),
     // or the boss. False if there's nothing to shoot at.
     static bool aimAt(const World& w, sf::Vector2f from, float range, int skipId, sf::Vector2f& at) {
+        if (const auto f = w.focusPos(); f && dot(*f - from, *f - from) <= range * range &&
+                                         !(w.focusEnemy() && w.focusEnemy()->id == skipId)) {
+            at = *f;   // the player's target, when it's in range
+            return true;
+        }
         const Enemy* best = nullptr;
         float bestD2 = range * range;
         for (const Enemy& e : w.enemies_) {
@@ -460,6 +467,10 @@ template <> struct ClassHooks<BallRole::Assassin> : NoClassHooks {
 
     // The live enemy nearest `from` inside the arena, not already in `skip`.
     static Enemy* pick(World& w, sf::Vector2f from, float range, const std::vector<Enemy*>& skip) {
+        if (const Enemy* f = w.focusEnemy();   // the player's target, when it's in range
+            f && dot(f->pos - from, f->pos - from) <= range * range &&
+            std::find(skip.begin(), skip.end(), f) == skip.end())
+            return const_cast<Enemy*>(f);
         Enemy* best = nullptr;
         float bestD2 = range * range;
         for (Enemy& e : w.enemies_) {
@@ -698,6 +709,10 @@ template <> struct ClassHooks<BallRole::Summoner> : NoClassHooks {
 
     // The nearest live enemy (or the boss) to a point, within range.
     static bool target(const World& w, sf::Vector2f from, float range, sf::Vector2f& out) {
+        if (const auto f = w.focusPos(); f && dot(*f - from, *f - from) <= range * range) {
+            out = *f;   // the player's target, when it's in range
+            return true;
+        }
         const Enemy* e = w.nearestEnemy(from, range);
         float best = e ? length(e->pos - from) : range;
         if (e) out = e->pos;
@@ -1346,6 +1361,10 @@ template <> struct ClassHooks<BallRole::Slinger> : NoClassHooks {
             const float d2 = dot(o.pos - b.pos, o.pos - b.pos);
             if (d2 < best) { best = d2; t = &o; }
         }
+        if (const Enemy* f = w.focusEnemy(); f && f != &e && dot(f->pos - b.pos, f->pos - b.pos) <=
+                                                  cfg::slinger::ambushRange * w.arenaScale() *
+                                                      cfg::slinger::ambushRange * w.arenaScale())
+            t = const_cast<Enemy*>(f);   // the player's target, when it's in range
         if (!t) return;
         const sf::Vector2f from = b.pos;
         const sf::Vector2f dir = normalized(from - t->pos, {1.f, 0.f});

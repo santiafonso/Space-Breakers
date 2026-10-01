@@ -114,6 +114,15 @@ private:
     std::vector<sf::Sound> pool_;
     std::size_t next_ = 0;
     unsigned hitTick_ = 0;    // rolls forward per ball hit, for subtle note / pitch wander
+    // Ball hits get their own few voices (a crowd of bounces steals from
+    // itself, not from the other cues) and thin out when they pile up.
+    std::vector<sf::Sound> hitPool_;
+    std::size_t hitNext_ = 0;
+    float hitRate_ = 0.f;      // recent hits, decaying (see ballHit)
+    float lastHitT_ = -1.f;
+    float lastNoteT_ = -1.f;
+    int lastNote_ = -1;
+    void playHit(const sf::SoundBuffer& buffer, float pitch, float volume01);
 
     // One song that fades in / out between tracks; paused at silence so it
     // resumes from there (the boss loop restarts instead). A seamed Loop plays

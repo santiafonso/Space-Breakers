@@ -106,6 +106,7 @@ const char* enemyName(EnemyKind k) {
         case EnemyKind::Blinker:  return "Blinker";
         case EnemyKind::Mender:   return "Mender";
         case EnemyKind::Brute:    return "Brute";
+        case EnemyKind::Snare:    return "Snare";
     }
     return "";
 }
@@ -143,6 +144,7 @@ const char* enemyDesc(EnemyKind k) {
         case EnemyKind::Blinker:  return "jumps closer to the core every few seconds - catch it between jumps";
         case EnemyKind::Mender:   return "slow; heals every enemy around it - kill it first";
         case EnemyKind::Brute:    return "miniboss: huge, very tough, barely pushed; flattens a chunk of the core";
+        case EnemyKind::Snare:    return "catches the first ball that hits it and holds it until you kill it with another";
     }
     return "";
 }

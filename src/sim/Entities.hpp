@@ -180,6 +180,7 @@ struct Ball {
     sf::Vector2f vel;
     float radius = cfg::ball::radius;
     bool held = false;
+    int snaredBy = -1;       // a Snare's id while one holds it (it can't move or be grabbed)
     RoleMask roles = 0;      // its classes (see BallRole)
     RoleMask ascended = 0;   // ...and which of them are ascended
     BallRole primary = BallRole::Normal;   // its first class (see leadRole)
@@ -258,7 +259,11 @@ sf::Color ballHue(const Ball& b);
 
 // Grunt = the plain walker. The rest each want a different answer (cfg::enemy).
 // Brute is the miniboss: elite fights bring one (cfg::enemy).
-enum class EnemyKind { Grunt, Runner, Tank, Splitter, Shard, Shielded, Blinker, Mender, Brute };
+enum class EnemyKind { Grunt, Runner, Tank, Splitter, Shard, Shielded, Blinker, Mender, Brute, Snare };
+
+// How an enemy walks to the core: straight, zig-zagging across its line, or
+// circling the core as it closes in (World::rollGait).
+enum class Gait { Straight, Weave, Spiral };
 
 const char* enemyName(EnemyKind k);
 const char* enemyDesc(EnemyKind k);
@@ -297,6 +302,10 @@ struct Enemy {
     float blinkT = 0.f;     // Blinker: seconds to its next jump
     float blinkFx = 0.f;    // Blinker: 1 right after a jump, fades (the render's flicker)
     sf::Vector2f blinkFrom; // Blinker: where it jumped from (a fading afterimage)
+    bool snaring = false;   // Snare: it's holding a ball (until it dies)
+    Gait gait = Gait::Straight;
+    float gaitPhase = 0.f;  // Weave: where in its sway it started
+    float gaitSign = 1.f;   // Weave / Spiral: which way it leans
 };
 
 // An electric ball's arc: a brief line from the ball to the enemy it zapped.
@@ -494,7 +503,6 @@ struct WorldParams {
     // Meta web (Fase A).
     int  aegisHits = 0;           // Aegis: core ignores this many hits at the start of each wave
     float coreRegenPerSec = 0.f;  // Regen: core heals this fast during a wave
-    bool stockpile = false;       // Stockpile: a random power-up refills a reserve slot (key Q)
     bool magnetPickups = false;   // Magnet: power-up orbs drift toward the nearest ball
     int  afterglowLevel = 0;      // Afterglow: continuous buffs fade out instead of cutting
     float chargedFrac = 0.f;      // Charged: power-ups start with + this fraction of duration

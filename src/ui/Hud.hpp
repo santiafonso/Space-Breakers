@@ -22,7 +22,7 @@ public:
     void setBoss(float frac) { bossFrac_ = frac; }
     void update(float dt, int act, int stage, int stages, int enemiesLeft, float coreFrac,
                 float comboMultiplier, int score, int gold, const std::optional<ActiveEffect>& effect,
-                bool bossWave, bool hasReserve, PowerUp reservePu, bool eliteWave = false);
+                bool bossWave, bool eliteWave = false);
     void pulseCombo();
     void pulseGold();
     void draw(sf::RenderWindow& window) const;
@@ -50,8 +50,6 @@ private:
     float comboPop_ = 0.f;
     float effectAlpha_ = 0.f;
     std::optional<ActiveEffect> effect_;
-    bool hasReserve_ = false;
-    PowerUp reservePu_ = PowerUp::Points2x;
 };
 
 }  // namespace sb

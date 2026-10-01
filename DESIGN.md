@@ -2062,3 +2062,103 @@ ya es un arquetipo de Creed.
 8. Después de todo esto: estudiar la progresión (qué se desbloquea y cuándo)
 y mejorar el árbol meta (la web). Clases cerradas en 10: las 8 de hoy +
 Slinger + Elementalist; las combinaciones se hacen con los items.
+
+## 11. Pasada de balance post-playtest (2026-10-01)
+
+El usuario jugó una run: "está muy duro y eso me gusta". Cambios de esa charla
+(todo en `ui-polish`):
+
+- **Más pelotas tarde:** tope de 5 pelotas (`cfg::ball::baseBalls`) y +2 desde
+  el acto 3, o sea después de vencer al jefe del acto 2 (`lateBalls`,
+  `lateBallsAct`; `App::ballCap()`, Duet sigue en 2). Al entrar al acto 3 sale
+  "+2 BALL SLOTS". `maxBalls` = 7 es el techo duro del World. El TAB con 7
+  paneles se achica (zoom mínimo 0.6).
+- **Tecla F = tirar una pelota al azar** (desde el acto 2, `cfg::app::autoThrowAct`):
+  una pelota libre al azar va al enemigo más cercano, como un click pero sin
+  premio de atrapada, con 1.6 s de recarga (`autoThrowCooldown`) para que
+  clickear siga siendo mejor. Chip "F" a la derecha de las pelotas, con la
+  recarga llenándose. No existe con Hunters / Clockwork (sin manos).
+- **Saltear elecciones:** botón "Skip" bajo las cartas (al lado de "Repair the
+  core instead" si el núcleo está herido). Prospector devuelve rerolls también
+  acá.
+- **Tiendas:** muchas menos. Como mucho `cfg::map::shopsPerAct` = 1 en los
+  caminos de cada acto, más la fija de la fila previa al jefe; las demás pasan
+  a "?" (~2.4 -> ~1.8 por mapa). En cambio, el **reroll es ilimitado** y cada
+  uno sale bastante más caro que el anterior: 15 x 1.7^n (15, 26, 43, 74, 125,
+  213...). Merchant ahora da el primer reroll gratis por nivel. La estantería
+  trae un item el 60% de las visitas (antes 40%).
+- **Eventos en los "?"** (`progression/Events.hpp`, `core/AppEvents.cpp`,
+  `ui/EventScreen.*`): el 40% de los "?" (`cfg::event::chancePct`) es "A
+  stranger" con 2 tratos a elegir o irse. Los precios suben por acto:
+  - Drifter: una pelota nueva por 120 (+40 por acto; 200 en el acto 3).
+  - Smuggler: elegir 1 de 3 items (probabilidades de élite) por 70 (+20).
+  - Blood price: +60 oro (+20) a cambio de -12% de vida máxima del núcleo.
+  - Tithe: +15% de vida máxima del núcleo (y la cura) por 50 (+15).
+  - Coin flip: apostar 40 (+15); 50% de cobrar x2.5.
+  - Wandering smith: subir de nivel un item por 40 (+10).
+  Un trato que no podés pagar se ve apagado. Los que no aplican (sin lugar
+  para pelotas, nada para forjar) no salen.
+- **Enemigos nuevos:**
+  - **Snare** (desde la oleada 13): atrapa la primera pelota que lo golpea y la
+    tiene quieta (no se puede agarrar) hasta que lo matás con otra. Nunca atrapa
+    tu última pelota libre. Al morir, la suelta a velocidad de crucero.
+  - **Andares:** grunts, runners, splitters y shielded pueden avanzar en
+    zigzag (Weave, desde la oleada 3) o en espiral alrededor del núcleo
+    (Spiral, desde la 11), y se vuelven más comunes cada acto. Medido sin
+    ventana: llegan al núcleo en tiempos parecidos a los que van derecho
+    (~9-11 s), así que la presión es la misma pero hay que leerlos distinto.
+- **Golpes de pelota más suaves:** voces propias para los golpes (8), nunca
+  dos notas a menos de 55 ms, el volumen baja cuando se amontonan (1/raíz de
+  la densidad reciente), nunca la misma nota dos veces seguidas, ataque más
+  suave en el estilo Soft, y los acordes del combo solo si no está saturado.
+
+### Habilidades del jugador: Q y E (2026-10-01)
+
+Para que el jugador haga más que atrapar. Son del jugador, no de una pelota
+ni de un build (`cfg::player`). Los chips están abajo a la izquierda, al lado
+de las pelotas: Q, el anillo de E y F.
+
+- **Q = Volley** (desde el arranque; reemplazó a "Marcar" el mismo día, a
+  pedido del usuario): como clickear todas las pelotas a la vez pero más
+  rápido. Cada pelota libre (no la que tenés en la mano, ni una atrapada por un
+  Snare o un Satellite) sale por el mismo `releaseHeld` que un click, directo
+  al enemigo más cercano **a esa pelota** (o al objetivo, si marcaste uno), a
+  1.4x la velocidad del click y sin premio de atrapada. Recarga en 1 s.
+  Medido sin ventana: con 4 pelotas, un Tank de la oleada 4 muere en 1 s. Muy
+  fuerte y spameable: vigilar en el playtest.
+- **El click a una pelota** ahora la tira al enemigo más cercano **al núcleo**
+  (el que está por pegarle), no al más cercano a la pelota.
+- **Objetivo del jugador:** click sobre un enemigo (o el jefe), sin una pelota
+  debajo, lo marca con una mira; otro click encima lo desmarca, y se limpia al
+  morir o en cada oleada. Mientras vive, todo lo que apunta va a él: el click,
+  Q, Dash, los misiles del Mage, el Shooter, el Assassin, el Summoner y sus
+  torretas, el Ambush del Slinger (los que tienen alcance, solo si está dentro
+  del alcance), Seeker, Hunter, Clockwork y los rebotes apuntados
+  (`World::focusAt / focusPos`; `nearestTarget` lo devuelve primero). Lo que
+  solo pregunta "¿hay algo cerca?" para dispararse no cambió.
+- **E = Tiempo bala** (desde el acto 2, se mantiene apretada): el combate va
+  a 0.3x mientras la tenés apretada. Es un **recurso que el jugador administra**
+  (pedido explícito): un anillo verde con 3 s reales de cámara lenta que se
+  vacía al usarlo y se recarga solo (de vacío a lleno en 14 s, empieza 0.8 s
+  después de soltar). Hace falta un 8% para volver a arrancarla. El pacto
+  Heavy Arm también la quita.
+- **Stockpile se retiró:** era la reserva de power-up en Q. Su nodo queda en el
+  enum (no se mueve ningún índice del save) con maxLevel 0, lo que lo saca de la
+  web (`metaNodeRetired`). Magnet ocupa su lugar y cuelga del mismo padre.
+- **F = Repulsión** (desde el acto 2; reemplazó al "tiro de una pelota al
+  azar", que al usuario no le gustó): el núcleo suelta una onda que empuja a
+  todo enemigo a menos de 270 px y lo aturde 1 s (los empapados vuelan x1.5).
+  Recarga 10 s. Medido: aleja ~215-230 px. En pelea F es esto; afuera sigue
+  siendo pantalla completa (F11 siempre).
+
+- **Dev (SB_DEV=1):** en el mapa podés ir a cualquier nodo, no solo a los que
+  están conectados (`App::mapNodeOpen`), para probar lo que quieras.
+
+### Anotado para después (el usuario lo pidió así)
+
+- **La web de habilidades:** más grande, mucho más linda y fácil de navegar
+  (no hace falta verla toda de un vistazo), y que cada nodo diga claro qué da.
+- **Progresión:** por ahora todo se desbloquea como está; se ve más adelante.
+- **5 actos:** se queda así; el balance entre actos se ve después.
+- **Música:** los tracks actuales son libres, pero el usuario quiere sumar más.
+- **Opción en español:** para lo último (ver la rama WIP pausada).

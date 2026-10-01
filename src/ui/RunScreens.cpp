@@ -789,14 +789,14 @@ sf::FloatRect ShopScreen::offerRect(App& app, int i) const {
 
 namespace {
 // The shop's buttons that apply right now: Sell while this visit allows one
-// (and there's an item to sell), Reroll only with "Merchant", Leave always.
+// (and there's an item to sell), Reroll and Leave always.
 std::vector<int> shopButtons(App& app) {
     bool items = false;
     for (const BallLoadout& L : app.data().run.balls)
         for (int sl = 0; sl < kBallSlots; ++sl) items = items || L.gear[sl] >= 0;
     std::vector<int> v;
     if (app.shopSellsLeft() > 0 && items) v.push_back(0);
-    if (app.shopRerollsLeft() > 0) v.push_back(1);
+    v.push_back(1);
     v.push_back(2);
     return v;
 }
@@ -925,7 +925,9 @@ void ShopScreen::draw(App& app, sf::RenderWindow& w) {
                                                      : "Sell an item",
                    theme::puGolden, hover_ == 100 ? 1.f : 0.f, true);
     if (const sf::FloatRect br = buttonRect(app, 1); br.width > 0.f)
-        drawButton(w, f, br, "Reroll (R)  -  " + std::to_string(app.shopRerollPrice()) + "g", theme::puSurge,
+        drawButton(w, f, br, app.shopRerollPrice() == 0 ? std::string("Reroll (R)  -  free")
+                                                        : "Reroll (R)  -  " + std::to_string(app.shopRerollPrice()) + "g",
+                   theme::puSurge,
                    hover_ == 101 ? 1.f : 0.f, g >= app.shopRerollPrice());
     drawButton(w, f, buttonRect(app, 2), "Leave", theme::accent, hover_ == 102 ? 1.f : 0.f, true);
 
@@ -944,8 +946,9 @@ void ShopScreen::draw(App& app, sf::RenderWindow& w) {
                         " left at this shop (Haggler: +1 per level).", theme::puGolden);
     } else if (hover_ == 101) {
         drawTooltip(w, f, mouse_, s, "Reroll",
-                    "replace the stock with new picks (and a new sale). " + std::to_string(app.shopRerollsLeft()) +
-                        " left at this shop (Merchant: 1 per level).", theme::puSurge);
+                    "replace the stock with new picks (and a new sale). As often as you like - each reroll at "
+                    "this shop costs much more than the last (Merchant: the first is free, 1 per level).",
+                    theme::puSurge);
     }
 }
 

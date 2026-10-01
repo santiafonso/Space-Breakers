@@ -39,7 +39,7 @@ struct SpawnDef { EnemyKind kind; int count; const char* label; };
 constexpr SpawnDef kSpawns[] = {
     {EnemyKind::Grunt, 5, "5 Grunts"},     {EnemyKind::Runner, 5, "5 Runners"},
     {EnemyKind::Tank, 2, "2 Tanks"},       {EnemyKind::Splitter, 3, "3 Splitters"},
-    {EnemyKind::Shielded, 3, "3 Shielded"}, {EnemyKind::Blinker, 3, "3 Blinkers"},
+    {EnemyKind::Shielded, 3, "3 Shielded"}, {EnemyKind::Blinker, 3, "3 Blinkers"}, {EnemyKind::Snare, 2, "2 Snares"},
     {EnemyKind::Mender, 2, "2 Menders"},   {EnemyKind::Brute, 1, "1 Brute"},
 };
 constexpr int kSpawnCount = static_cast<int>(sizeof(kSpawns) / sizeof(kSpawns[0]));

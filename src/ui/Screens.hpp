@@ -132,12 +132,14 @@ public:
 private:
     int cardAt(App& app, sf::Vector2f mouse) const;  // 0..3, -1 none
     sf::FloatRect healRect(sf::Vector2f size) const;  // "repair core" button, when the core isn't full
+    sf::FloatRect skipRect(App& app) const;           // "skip": take nothing (beside the repair button)
     sf::FloatRect rerollRect(sf::Vector2f size, int i, int n) const;  // "reroll" strip under card i of n
     bool coreHurt(App& app) const;
 
     float hover_[4] = {};
     float rerollHover_[4] = {};
     float healHover_ = 0.f;
+    float skipHover_ = 0.f;
     sf::Vector2f mouse_;
 };
 

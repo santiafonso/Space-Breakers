@@ -59,7 +59,8 @@ bool World::fireAbility(Ball& b, const AbilitySpec& a, const WorldParams& p, Fra
         case Ability::Dash: {   // a burst straight at the nearest enemy
             if (b.mods.satellite) return false;   // an orbit can't dash
             sf::Vector2f target;
-            if (const Enemy* e = nearestEnemy(b.pos, A::dashRange * as)) target = e->pos;
+            if (const auto f = focusPos()) target = *f;   // the player's target
+            else if (const Enemy* e = nearestEnemy(b.pos, A::dashRange * as)) target = e->pos;
             else if (boss_.alive && boss_.intro <= 0.f) target = boss_.pos;
             else return false;
             const sf::Vector2f d = normalized(target - b.pos, {1.f, 0.f});

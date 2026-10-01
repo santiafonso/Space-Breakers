@@ -8,6 +8,7 @@
 
 #include "platform/Audio.hpp"
 #include "platform/Window.hpp"
+#include "progression/Events.hpp"
 #include "progression/GameData.hpp"
 #include "progression/Offers.hpp"
 #include "render/Effects.hpp"
@@ -17,7 +18,7 @@
 
 namespace sb {
 
-enum class ScreenId { Menu, Loadout, Play, Choice, Pause, Stats, HowTo, BossWin, Map, Shop, Equip, Dev, Creed, Sound, AbilityPick, Altar };
+enum class ScreenId { Menu, Loadout, Play, Choice, Pause, Stats, HowTo, BossWin, Map, Shop, Equip, Dev, Creed, Sound, AbilityPick, Altar, Event };
 
 // Who opened the ball / slot picker, and so what confirming it does.
 // ShopForge / Sell are the shop's paid forge and its "sell an item" counter.
@@ -46,6 +47,7 @@ public:
     sf::Vector2f size() const { return window_.logicalSize(); }
     void useWorldView() { window_.useWorldView(); }
     void useUiView() { window_.useUiView(); }
+    bool hasFocus() { return window_.handle().hasFocus(); }
     void useUiZoom(float k) { window_.useUiZoom(k); }
     sf::Vector2f uiMouse() const {   // pointer in UI units, any screen (photo mode can pin it)
         return snapMouseOn_ ? snapMouse_ : window_.uiMousePosition();
@@ -99,7 +101,7 @@ public:
     // item back and the forge as a paid service.
     int shopOfferPrice(int i) const;    // what offer i costs right now (sale / prepaid applied)
     int shopRerollPrice() const;
-    int shopRerollsLeft() const;        // rerolls this visit still allows ("Merchant": 1 per level, else none)
+    int shopFreeRerolls() const;        // free rerolls this visit still has ("Merchant": 1 per level)
     int shopSellsLeft() const;          // items this visit may still buy back (1, +1 per "Haggler" level)
     void rerollShop();
     int saleOffPercent() const;
@@ -108,8 +110,26 @@ public:
     int forgeCap() const;               // max forge level ("Duet" raises it)
     void rerollChoice(int idx);   // Choice: swap card `idx` for another item (costs a Foresight charge)
     void repairCoreSkipItem();    // Choice: heal the core to full instead of taking an item
+    void skipChoice();            // Choice: take nothing
+    int ballCap() const;          // balls the arena holds now (more after act 2's boss; "Duet": two)
+    // F, Repulse (from act 2): the core shoves nearby enemies away.
+    bool repulseOpen() const;
+    float repulseCooldown() const { return repulseCd_; }
+    void repulse();
+    // "?" stop events (progression/Events.hpp): deals for gold, or walk away.
+    const std::vector<EventKind>& eventDeals() const { return eventDeals_; }
+    int eventGoldOf(EventKind k) const { return eventGold(k, data_.run.map.act); }
+    bool eventDealOk(EventKind k) const;   // affordable and something to gain
+    void takeEventDeal(int idx);
+    void leaveEvent();
     void playerRepair(float amount);   // a deliberate repair: heals and ends this act's "Iron core"
-    void useReserve();            // Play: fire the "Stockpile" reserve power-up (key Q)
+    // The player's own abilities: Q = Mark (always), E = bullet time (act 2 on, held).
+    void playerMark();   // Q: the volley
+    float markCooldown() const { return markCd_; }
+    bool bulletOpen() const;
+    void setBulletHeld(bool on) { bulletHeld_ = on; }
+    float bulletGauge() const { return bulletGauge_; }   // 0..1
+    bool bulletActive() const { return bulletOn_; }
     void leaveBossWin();    // BossWin card "Back to menu" -> game menu (banks the run)
     void continuePastBoss();  // BossWin card "Continue" -> resume at wave 11
     bool bossWinCanContinue() const;  // true when the BossWin card should offer "Continue"
@@ -302,6 +322,15 @@ private:
     bool abilityAfterFight_ = false;   // the ability pick came from postFight: its pick follows
     int introStep_ = -1;      // >= 0 while the run intro (creed / starter pick) is still running
     float novaCd_ = 0.f;      // "Nova" creed cooldown (s)
+    float repulseCd_ = 0.f;   // F cooldown (s)
+    float markCd_ = 0.f;      // Q cooldown (s)
+    float bulletGauge_ = 1.f; // E gauge, 0..1
+    bool bulletHeld_ = false; // E is down (the Play screen polls it)
+    bool bulletOn_ = false;   // ...and the slow motion is running
+    float bulletIdle_ = 0.f;  // real s since it last ran (refill waits a moment)
+    std::vector<EventKind> eventDeals_;   // the "?" event on screen
+    bool openEvent();         // a "?" stop rolled an event: false = nothing to offer
+    bool openForgePicker();   // the Forge's item picker: false = nothing to level up
 public:
     bool choiceIsBossTreasure() const { return rollSource_ == RollSource::Boss; }
 private:

@@ -237,6 +237,7 @@ void LoadoutScreen::onEnter(App& app) {
     const float up = s.y * kWebCenterY - 112.f, down = s.y * (1.f - kWebCenterY) - 30.f, side = s.x * 0.5f - 60.f;
     float fit = 1.f;
     for (int i = 0; i < MetaUnlockCount; ++i) {
+        if (metaNodeRetired(i)) continue;
         const sf::Vector2f o = nodeOffset(i) * kRingGap;   // at zoom 1
         if (o.y < -1.f) fit = std::min(fit, up / -o.y);
         if (o.y > 1.f) fit = std::min(fit, down / o.y);
@@ -284,6 +285,7 @@ int LoadoutScreen::legendAt(App& app, sf::Vector2f mouse) const {
 
 int LoadoutScreen::nodeAt(App& app, sf::Vector2f mouse) const {
     for (int i = 0; i < MetaUnlockCount; ++i) {
+        if (metaNodeRetired(i)) continue;
         const float r = ((i == 0 ? kRootR : isClassNode(i) ? kClassR : kNodeR) + 7.f) * clampf(zoom_, 0.8f, 1.3f);   // generous but < half the ring gap
         const sf::Vector2f d = mouse - nodePos(app, i);
         if (d.x * d.x + d.y * d.y <= r * r) return i;
@@ -297,7 +299,7 @@ void LoadoutScreen::moveSelection(App& app, int dx, int dy) {
     int best = -1;
     float bestScore = 1e9f;
     for (int i = 0; i < MetaUnlockCount; ++i) {
-        if (i == selNode_) continue;
+        if (i == selNode_ || metaNodeRetired(i)) continue;
         const sf::Vector2f d = nodePos(app, i) - cur;
         const float along = d.x * static_cast<float>(dx) + d.y * static_cast<float>(dy);
         if (along <= 4.f) continue;
@@ -493,7 +495,7 @@ void LoadoutScreen::draw(App& app, sf::RenderWindow& w) {
     // Links under the nodes - quiet unless both ends (or the parent) are earned.
     for (int i = 0; i < MetaUnlockCount; ++i) {
         const MetaUnlockDef& d = metaUnlockDef(i);
-        if (d.parent < 0) continue;
+        if (d.parent < 0 || metaNodeRetired(i)) continue;
         const float la = clampf(introPop(it, 0.16f + 0.05f * nodeRing(i), 0.3f), 0.f, 1.f);
         if (la <= 0.001f) continue;
         const sf::Vector2f a = nodePos(app, d.parent);
@@ -509,6 +511,7 @@ void LoadoutScreen::draw(App& app, sf::RenderWindow& w) {
 
     // Nodes. Only the one under the cursor / keyboard selection lights up.
     for (int i = 0; i < MetaUnlockCount; ++i) {
+        if (metaNodeRetired(i)) continue;
         const MetaUnlockDef& d = metaUnlockDef(i);
         const int lvl = m.unlock[i];
         const bool owned = lvl > 0;
@@ -625,7 +628,7 @@ void LoadoutScreen::draw(App& app, sf::RenderWindow& w) {
             const bool hot = legendHover_ == static_cast<int>(b);
             int owned = 0, total = 0;
             for (int i = 0; i < MetaUnlockCount; ++i)
-                if (metaUnlockDef(i).branch == b) { ++total; owned += m.unlock[i] > 0 ? 1 : 0; }
+                if (metaUnlockDef(i).branch == b && !metaNodeRetired(i)) { ++total; owned += m.unlock[i] > 0 ? 1 : 0; }
             drawDot(w, {theme::margin + 8.f, ly + 8.f}, hot ? 7.5f : 6.f, withAlpha(branchColor(b), la));
             sf::Text t = makeText(app.font(), std::string(branchLabel(b)) + "   " + std::to_string(owned) + "/" +
                                   std::to_string(total), theme::fsSmall, withAlpha(hot ? theme::textHi : theme::textLo, la));
@@ -656,6 +659,14 @@ void PlayScreen::onEnter(App&) {
 }
 
 void PlayScreen::grab(App& app, sf::Vector2f mouse) {
+    // A click on an enemy (not on a ball) makes it the target; again clears it.
+    bool onBall = false;
+    for (const Ball& b : app.world().balls())
+        onBall = onBall || length(b.pos - mouse) < b.radius + 10.f * app.world().arenaScale();
+    if (!onBall && app.world().focusAt(mouse)) {
+        app.audio().uiClick();
+        return;
+    }
     if (!app.canGrab()) return;   // "Hunters" / "Clockwork" creeds: hands off
     // The wide arena is framed by a pulled-back camera: scale the reach with it
     // so a grab covers the same on screen as in act 1.
@@ -685,7 +696,7 @@ void PlayScreen::dropHeld(App& app) {
 }
 
 // Two ways to throw, no options: click a ball (let go without moving) and it
-// flies at the nearest enemy; press and pull to aim it with the slingshot.
+// flies at the enemy nearest the core; press and pull to aim it with the slingshot.
 void PlayScreen::release(App& app) {
     if (!dragging_) return;
     const float power = app.flingPower();   // Strong arm, Hot Hands / Pinball creeds
@@ -694,10 +705,11 @@ void PlayScreen::release(App& app) {
         commitAim(app);   // a fast pull that ended between frames still aims
     dragging_ = false;
     if (!aimCommitted_) {
-        // A click: the ball goes at the enemy nearest to it, through the same
-        // release as a hand-aimed throw. Nothing to hit: let it carry on.
+        // A click: the ball goes at the enemy nearest the core - the one about
+        // to hurt it - through the same release as a hand-aimed throw. Nothing
+        // to hit: let it carry on.
         const Ball* b = app.world().heldBall();
-        const std::optional<sf::Vector2f> target = b ? app.world().nearestTarget(b->pos) : std::nullopt;
+        const std::optional<sf::Vector2f> target = b ? app.world().nearestTarget(app.world().core().pos) : std::nullopt;
         if (b && target && length(*target - b->pos) > 1e-3f) {
             const float speed = lerpf(cfg::app::slingMinSpeed, cfg::app::slingMaxSpeed, cfg::app::quickThrowPower) *
                                 app.quickThrowMul();   // "Stillness" pact
@@ -739,7 +751,8 @@ void PlayScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
         return;
     }
     if (isKey(e, sf::Keyboard::Escape)) { app.openPause(); return; }
-    if (isKey(e, sf::Keyboard::Q)) { app.useReserve(); return; }   // "Stockpile" reserve power-up
+    if (isKey(e, sf::Keyboard::Q)) { app.playerMark(); return; }   // volley: every ball at its nearest enemy
+    if (isKey(e, sf::Keyboard::F)) { app.repulse(); return; }      // the core's shockwave (act 2 on)
     if (isKey(e, sf::Keyboard::Space) ||                               // "Nova" creed
         (e.type == sf::Event::MouseButtonPressed && e.mouseButton.button == sf::Mouse::Right)) {
         app.useCreedAbility();
@@ -760,6 +773,7 @@ void PlayScreen::update(App& app, float dt, sf::Vector2f mouse) {
     app.world().setPointer(mouse);   // "Grip" bends balls toward it
     sceneIn_ += dt;
     peek_.update(dt);
+    app.setBulletHeld(!peek_.open && app.hasFocus() && sf::Keyboard::isKeyPressed(sf::Keyboard::E));
     if (peek_.open) return;   // paused: the stage banner and drag sampling wait too
     clock_ += dt;
     bannerT_ += dt;
@@ -825,7 +839,22 @@ void PlayScreen::draw(App& app, sf::RenderWindow& w) {
     drawCreedWorld(app, w);   // Hunters tethers, Living Core overcharge
     app.effects().drawRings(w);
     if (dragging_ && aimCommitted_) drawAim(app, w);
+    if (const auto at = app.world().focusPos()) {   // the player's target: a slow-turning sight
+        const float k = app.world().arenaScale();
+        const float rr = (app.world().focusIsBoss() ? app.world().boss().radius : app.world().focusEnemy()->radius) +
+                         14.f * k;
+        const float spin = clock_ * 1.2f;
+        for (int i = 0; i < 4; ++i) {
+            const float a = spin + static_cast<float>(i) * kPi * 0.5f;
+            draw::ring(w, *at, rr, 2.5f * k, withAlpha(theme::textHi, 0.85f), a, a + 0.7f, 10);
+        }
+    }
     app.useUiView();
+    if (app.bulletActive()) {   // bullet time: a faint green wash over the arena
+        sf::RectangleShape tint(app.size());
+        tint.setFillColor(withAlpha(theme::bulletTime, 0.05f));
+        w.draw(tint);
+    }
 
     app.hud().draw(w);
 
@@ -842,7 +871,42 @@ void PlayScreen::draw(App& app, sf::RenderWindow& w) {
         dx += 22.f;
     }
     drawTabHint(app, w, {theme::margin, tally.top});
-
+    // The player's keys, right of the tally: Q volley, E bullet-time gauge, F repulse.
+    // A key cap fills up from the bottom while it recharges; E is a green ring
+    // that empties as you spend it.
+    auto keyCap = [&](sf::FloatRect r, const char* key, float ready, bool live) {
+        const sf::Color kc = live ? theme::accent : theme::textDim;
+        draw::box(w, r, theme::corner, withAlpha(theme::bg, 0.6f), withAlpha(theme::bg, 0.6f),
+                  withAlpha(kc, 0.35f + 0.45f * ready), 1.5f);
+        if (!live)
+            draw::box(w, {r.left + 2.f, r.top + r.height - 2.f - (r.height - 4.f) * ready, r.width - 4.f,
+                          (r.height - 4.f) * ready},
+                      0.f, withAlpha(theme::accent, 0.18f), withAlpha(theme::accent, 0.18f));
+        drawLabel(w, app.font(), key, 12, {r.left + r.width * 0.5f, r.top + r.height * 0.5f}, kc);
+    };
+    float kx = dx + 8.f;
+    const sf::FloatRect markKey{kx, dy - 11.f, 22.f, 22.f};
+    keyCap(markKey, "Q", 1.f - clampf(app.markCooldown() / cfg::player::markCooldown, 0.f, 1.f),
+           app.markCooldown() <= 0.f);
+    kx += 30.f;
+    sf::FloatRect bulletKey{};
+    if (app.bulletOpen()) {
+        bulletKey = {kx, dy - 13.f, 26.f, 26.f};
+        const sf::Vector2f c{kx + 13.f, dy};
+        const float g = app.bulletGauge();
+        const bool on = app.bulletActive();
+        if (on) draw::glow(w, c, 22.f, theme::bulletTime, 0.35f);
+        draw::ring(w, c, 11.f, 3.f, withAlpha(theme::textDim, 0.5f));
+        if (g > 0.001f)
+            draw::ring(w, c, 11.f, 3.f, withAlpha(theme::bulletTime, on ? 1.f : 0.85f), -kPi * 0.5f,
+                       -kPi * 0.5f + 2.f * kPi * g, 40);
+        drawLabel(w, app.font(), "E", 11, c, g >= cfg::player::bulletMinStart ? theme::bulletTime : theme::textDim);
+        kx += 34.f;
+    }
+    const sf::FloatRect throwKey{kx, dy - 11.f, 22.f, 22.f};
+    if (app.repulseOpen())
+        keyCap(throwKey, "F", 1.f - clampf(app.repulseCooldown() / cfg::player::repulseCooldown, 0.f, 1.f),
+               app.repulseCooldown() <= 0.f);
     drawCreedHud(app, w, app.uiMouse(), !peek_.open && !dragging_);
 
     if (peek_.open) {
@@ -858,10 +922,26 @@ void PlayScreen::draw(App& app, sf::RenderWindow& w) {
         if (app.hud().tooltipAt(um, tt, td, tc)) {
             drawTooltip(w, app.font(), um, s, tt, td, tc);
         } else if (hovered) {
-            drawTooltip(w, app.font(), um, s, enemyName(hovered->kind), enemyDesc(hovered->kind), theme::enemy);
+            drawTooltip(w, app.font(), um, s, enemyName(hovered->kind),
+                        std::string(enemyDesc(hovered->kind)) + ". Click it to make it your target.", theme::enemy);
+        } else if (markKey.contains(um)) {
+            drawTooltip(w, app.font(), um, s, "Volley  (Q)",
+                        "like clicking every ball at once, but faster: each free ball is thrown at the enemy "
+                        "nearest to it. Recharges in 1 s.",
+                        theme::accent);
+        } else if (app.bulletOpen() && bulletKey.contains(um)) {
+            drawTooltip(w, app.font(), um, s, "Bullet time  (hold E)",
+                        "the fight runs slow while you hold E. The ring empties as you spend it and refills on its "
+                        "own a moment after you let go - spend it where it counts.",
+                        theme::bulletTime);
+        } else if (app.repulseOpen() && throwKey.contains(um)) {
+            drawTooltip(w, app.font(), um, s, "Repulse  (F)",
+                        "the core sends out a shockwave: every enemy near it is shoved away and staggered for a "
+                        "moment (soaked ones fly further). Recharges in 10 s.",
+                        theme::core);
         } else if (sf::FloatRect(tally.left - 6.f, tally.top + 26.f, tally.width + 12.f, tally.height - 20.f).contains(um)) {
             drawTooltip(w, app.font(), um, s, "Your balls",
-                        "click one to throw it at the nearest enemy, or press and pull back to aim. TAB shows each ball's classes, items, type, abilities and modifiers (the fight pauses).");
+                        "click one to throw it at the enemy nearest the core, or press and pull back to aim. TAB shows each ball's classes, items, type, abilities and modifiers (the fight pauses).");
         }
     }
 
@@ -1184,10 +1264,20 @@ int ChoiceScreen::cardAt(App& app, sf::Vector2f mouse) const {
     return -1;
 }
 
+// The buttons under the cards: [Repair the core instead] [Skip], or [Skip] alone.
 sf::FloatRect ChoiceScreen::healRect(sf::Vector2f s) const {
-    const float wd = 360.f, ht = 34.f;
-    const float cy = s.y * 0.52f + kCardH * 0.5f + 30.f;
-    return {s.x * 0.5f - wd * 0.5f, cy - ht * 0.5f, wd, ht};
+    const float wd = 300.f, ht = 34.f, gap = 14.f, skipW = 140.f;
+    const float cy = s.y * 0.52f + kCardH * 0.5f + 50.f;
+    return {s.x * 0.5f - (wd + gap + skipW) * 0.5f, cy - ht * 0.5f, wd, ht};
+}
+
+sf::FloatRect ChoiceScreen::skipRect(App& app) const {
+    const sf::Vector2f s = app.size();
+    const float wd = 140.f, ht = 34.f, gap = 14.f;
+    const float cy = s.y * 0.52f + kCardH * 0.5f + 50.f;
+    if (!coreHurt(app)) return {s.x * 0.5f - wd * 0.5f, cy - ht * 0.5f, wd, ht};
+    const sf::FloatRect h = healRect(s);
+    return {h.left + h.width + gap, cy - ht * 0.5f, wd, ht};
 }
 
 // A "reroll" strip along the bottom edge of card i (inside it, above the heal button).
@@ -1218,6 +1308,10 @@ void ChoiceScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse)
         app.repairCoreSkipItem();
         return;
     }
+    if (skipRect(app).contains(mouse)) {
+        app.skipChoice();
+        return;
+    }
     const int c = cardAt(app, mouse);
     if (c >= 0) app.applyUpgrade(c);
 }
@@ -1234,10 +1328,13 @@ void ChoiceScreen::update(App& app, float dt, sf::Vector2f mouse) {
     }
     const bool onHeal = coreHurt(app) && healRect(app.size()).contains(mouse);
     healHover_ = lerpf(healHover_, onHeal ? 1.f : 0.f, k);
-    int hot = c;   // card, its reroll strip (10 + i) or the repair button (20)
+    const bool onSkip = skipRect(app).contains(mouse);
+    skipHover_ = lerpf(skipHover_, onSkip ? 1.f : 0.f, k);
+    int hot = c;   // card, its reroll strip (10 + i), the repair button (20) or skip (21)
     for (int i = 0; i < app.choiceCount() && hot < 0; ++i)
         if (canReroll && rerollRect(app.size(), i, app.choiceCount()).contains(mouse)) hot = 10 + i;
     if (hot < 0 && onHeal) hot = 20;
+    if (hot < 0 && onSkip) hot = 21;
     uisound::hover(this, hot);
 }
 
@@ -1297,7 +1394,14 @@ void ChoiceScreen::draw(App& app, sf::RenderWindow& w) {
         const float a = clampf(hintPop, 0.f, 1.f);
         draw::panel(w, r, theme::core, a, healHover_);
         drawCenteredPop(w, app.font(), "Repair the core instead", theme::fsSmall,
-                        {s.x * 0.5f, r.top + r.height * 0.5f - 1.f}, theme::textHi, hintPop);
+                        {r.left + r.width * 0.5f, r.top + r.height * 0.5f - 1.f}, theme::textHi, hintPop);
+    }
+    {
+        const sf::FloatRect r = skipRect(app);
+        const float a = clampf(hintPop, 0.f, 1.f);
+        draw::panel(w, r, theme::textLo, a * 0.8f, skipHover_);
+        drawCenteredPop(w, app.font(), "Skip", theme::fsSmall, {r.left + r.width * 0.5f, r.top + r.height * 0.5f - 1.f},
+                        theme::textLo, hintPop);
     }
 
     // Hover help: what the card's kind means, the reroll strip, the repair skip.
@@ -1312,6 +1416,8 @@ void ChoiceScreen::draw(App& app, sf::RenderWindow& w) {
     if (const int c = cardAt(app, mouse_); c >= 0) {
         const UpgradeCat cat = upgradeCat(app.choices()[c]);
         drawTooltip(w, app.font(), mouse_, s, upgradeCatName(cat), upgradeCatDesc(cat), catColor(cat));
+    } else if (skipRect(app).contains(mouse_)) {
+        drawTooltip(w, app.font(), mouse_, s, "Skip", "take none of these and move on", theme::textLo);
     } else if (coreHurt(app) && healRect(s).contains(mouse_)) {
         drawTooltip(w, app.font(), mouse_, s, "Skip the pick",
                     std::string("repair the core to full instead of taking a card") +
@@ -1390,24 +1496,27 @@ void HowToScreen::draw(App& app, sf::RenderWindow& w) {
     drawCenteredPop(w, app.font(), "How to Play", theme::fsTitle, {s.x * 0.5f, s.y * 0.16f},
                     theme::textHi, introPop(it, 0.f, 0.3f));
 
-    const std::array<const char*, 7> lines = {{
+    const std::array<const char*, 10> lines = {{
         "Enemies march on the core at the centre. Keep it alive.",
-        "Click a ball to throw it at the nearest enemy; press and pull back to aim it.",
+        "Click a ball to throw it at the enemy nearest the core; press and pull back to aim it.",
+        "Click an enemy to target it: throws, Q and every ability go for it.",
+        "Q throws every ball at the enemy nearest to it, faster than a click.",
+        "From act 2: hold E for bullet time (a gauge that refills), F makes the core repulse.",
         "Items carry a class tag: 2 of a tag give a ball that class (it can have two),",
         "4 its ascended form. Two balls' elements on one enemy set off a reaction.",
         "Between fights, pick your path on the map: fights pay gold, elites add a pick,",
         "shops / forges / rests / upgrades build your balls (4 item slots each).",
         "Five acts, a boss at the end of each. Beat the last one to finish the run.",
     }};
-    const float y0 = s.y * 0.32f;
+    const float y0 = s.y * 0.27f;
     for (std::size_t i = 0; i < lines.size(); ++i)
         drawCenteredPop(w, app.font(), lines[i], theme::fsBody,
-                        {s.x * 0.5f, y0 + 38.f * static_cast<float>(i)},
+                        {s.x * 0.5f, y0 + 31.f * static_cast<float>(i)},
                         i + 1 == lines.size() ? theme::textHi : theme::textLo,
                         introPop(it, 0.08f + 0.05f * static_cast<float>(i)));
 
     drawCenteredPop(w, app.font(),
-                    "ESC  pause      TAB  your balls      F  fullscreen      M  sound",
+                    "ESC  pause      TAB  your balls      F11  fullscreen      M  sound",
                     theme::fsSmall, {s.x * 0.5f, s.y * 0.72f}, theme::textLo, introPop(it, 0.36f));
 
 }

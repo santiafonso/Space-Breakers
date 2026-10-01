@@ -22,7 +22,7 @@ void Hud::pulseGold() { goldPop_ = std::min(1.f, goldPop_ + 0.5f); }
 
 void Hud::update(float dt, int act, int stage, int stages, int enemiesLeft, float coreFrac,
                  float comboMultiplier, int score, int gold, const std::optional<ActiveEffect>& effect,
-                 bool bossWave, bool hasReserve, PowerUp reservePu, bool eliteWave) {
+                 bool bossWave, bool eliteWave) {
     eliteWave_ = eliteWave && !bossWave;
     if (act != act_ || stage != stage_ || bossWave != bossWave_) enemiesPeak_ = 0;
     act_ = act;
@@ -36,8 +36,6 @@ void Hud::update(float dt, int act, int stage, int stages, int enemiesLeft, floa
     coreFrac_ = clampf(coreFrac, 0.f, 1.f);
     comboMul_ = comboMultiplier;
     effect_ = effect;
-    hasReserve_ = hasReserve;
-    reservePu_ = reservePu;
 
     comboPop_ *= std::exp(-7.f * dt);
     goldPop_ *= std::exp(-9.f * dt);
@@ -60,12 +58,6 @@ bool Hud::tooltipAt(sf::Vector2f m, std::string& title, std::string& desc, sf::C
         title = "Gold";
         desc = "earned from fights; spend it in shops on the map";
         color = theme::puGolden;
-        return true;
-    }
-    if (hasReserve_ && sf::FloatRect(size_.x - mg - 170.f, mg + 24.f, 176.f, 24.f).contains(m)) {
-        title = std::string("Reserve: ") + powerUpName(reservePu_);
-        desc = std::string(powerUpDesc(reservePu_)) + " - press Q to use it";
-        color = powerUpColor(reservePu_);
         return true;
     }
     if (effectAlpha_ > 0.5f && effect_ &&
@@ -160,17 +152,6 @@ void Hud::draw(sf::RenderWindow& window) const {
     const float right = size_.x - mg;
     readout(window, *font_, "gold", std::to_string(static_cast<int>(std::lround(goldShown_))), 22, right,
             mg + 6.f, withAlpha(theme::puGolden, 0.55f), theme::puGolden, 1.f + 0.3f * goldPop_);
-
-    // "Stockpile" reserve power-up, under the gold.
-    if (hasReserve_) {
-        const sf::Color col = powerUpColor(reservePu_);
-        const float cy = mg + 36.f;
-        drawLabel(window, *font_, powerUpName(reservePu_), 12, {right, cy}, col, 1);
-        const float lw = makeLabel(*font_, powerUpName(reservePu_), 12, col).getLocalBounds().width;
-        const sf::FloatRect key{right - lw - 32.f, cy - 11.f, 22.f, 22.f};   // a [Q] key cap
-        draw::box(window, key, 0.f, withAlpha(col, 0.12f), withAlpha(col, 0.04f), withAlpha(col, 0.7f), 1.f);
-        drawLabel(window, *font_, "q", 12, {key.left + key.width * 0.5f + 1.f, cy}, col);
-    }
 
     // Stage readout, top centre: "ACT 1   STAGE 3 / 15" over the stage's
     // progress (enemies cleared). How many are left is on hover.

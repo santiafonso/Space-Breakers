@@ -56,10 +56,10 @@ inline const char* mapNodeDesc(MapNodeType t) {
     switch (t) {
         case MapNodeType::Combat:  return "a wave of enemies - pays gold and a modifier pick";
         case MapNodeType::Elite:   return "a much harder wave - more gold and an item pick (items only come from elites and shops)";
-        case MapNodeType::Shop:    return "buy what's on the shelf: items, abilities, relics, modifiers. Sell one item";
+        case MapNodeType::Shop:    return "rare: buy what's on the shelf (items, abilities, relics, modifiers), reroll it as often as you can pay, sell one item";
         case MapNodeType::Forge:   return "level up one item a ball already carries";
         case MapNodeType::Rest:    return "no fight: the core is repaired to full";
-        case MapNodeType::Upgrade: return "no fight: a free pick of 1 of 3 (no items)";
+        case MapNodeType::Upgrade: return "no fight: a free pick of 1 of 3 (no items) - or a stranger with deals for gold";
         case MapNodeType::Recruit: return "no fight: a new ball, or a free pick";
         case MapNodeType::Boss:    return "the act's boss";
         case MapNodeType::Altar:   return "no fight: a pact - a gift with a price. Take one of three, or walk away";
@@ -359,6 +359,18 @@ inline RunMap generateMap(Rng& rng, int act) {
                 pick -= w.w;
             }
         }
+    }
+
+    // Shops are rare: keep at most cfg::map::shopsPerAct on the paths (the
+    // pre-boss row's shop aside); the rest turn into "?" stops.
+    {
+        std::vector<MapNode*> shops;
+        for (MapNode& n : m.nodes)
+            if (n.type == MapNodeType::Shop && n.row < R) shops.push_back(&n);
+        for (int i = static_cast<int>(shops.size()) - 1; i > 0; --i)
+            std::swap(shops[static_cast<std::size_t>(i)], shops[static_cast<std::size_t>(rng.irange(0, i))]);
+        for (std::size_t i = static_cast<std::size_t>(cfg::map::shopsPerAct); i < shops.size(); ++i)
+            shops[i]->type = MapNodeType::Upgrade;
     }
 
     // Now and then an act hides an Altar on its map: a stop on a path (row 4

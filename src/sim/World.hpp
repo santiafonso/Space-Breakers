@@ -64,7 +64,6 @@ public:
     void pulseElement(int idx);   // it just took an element: rings in its colour when the fight runs
     void repairCore(float amount);
     void addCoreMaxHp(float delta);                  // raise the core's max HP mid-run
-    void useReserve(const WorldParams& p);           // "Stockpile": fire the held reserve power-up
 
     // ---- creeds (sim/WorldCreeds.cpp) -----------------------------------
     void trimBalls(int n);                     // "Duet": drop every ball past the first n
@@ -92,6 +91,18 @@ public:
     void moveHeld(sf::Vector2f target, float dt);
     void releaseHeld(sf::Vector2f throwVel);
     void cancelHeld();                 // let go without a throw: the ball resumes its old velocity
+    int repulse();   // F: shove every enemy near the core away and stagger it; how many it hit
+    // The player's target: click an enemy (or the boss) and every throw, ability,
+    // dash and automatic aim goes for it while it lives (nearestTarget, Dash,
+    // missiles, Shooter, Assassin, Summoner, Slinger, Seeker, Hunter, Clockwork,
+    // aimed bounces). False = nothing under the point; true toggles it.
+    bool focusAt(sf::Vector2f point);
+    std::optional<sf::Vector2f> focusPos() const;
+    const Enemy* focusEnemy() const;   // the target if it's a live enemy (not the boss)
+    bool focusIsBoss() const { return focusBoss_ && focusPos().has_value(); }
+    // Q, Volley: every free ball is thrown at the live enemy (or boss) nearest
+    // to it, at `speed`. False = nothing to aim at.
+    bool volley(float speed);
     // Quick throw: the live enemy (or the boss) nearest to a point, if any.
     std::optional<sf::Vector2f> nearestTarget(sf::Vector2f from) const;
     const Ball* heldBall() const {
@@ -114,8 +125,6 @@ public:
     const Core& core() const { return core_; }
     const Boss& boss() const { return boss_; }
     const std::optional<ActiveEffect>& effect() const { return effect_; }
-    bool hasReserve() const { return hasReserve_; }          // "Stockpile"
-    PowerUp reservePu() const { return reservePu_; }
     bool coreCleanWave() const { return !coreHitThisWave_; } // "Interest": no core damage this wave
     sf::Vector2f size() const { return size_; }
 
@@ -248,7 +257,10 @@ private:
     void pactWallBump(Ball& b);                                       // "Anchor Walls"
     void pactCoreBounce(Ball& b);                                     // "Juggler": the streak ends on the core
     void pactOnGrab(Ball& b);                                         // "Frenzy" / "Juggler"
-    void pactOnThrow(Ball& b);                                        // "Hot Potato" / "Mirror"
+    void pactOnThrow(Ball& b);
+    void rollGait(Enemy& e);                       // straight / weave / spiral (spawnEnemy)
+    bool trySnare(Ball& b, Enemy& e);              // a Snare catches the ball that hit it
+    void updateSnared(Ball& b, const WorldParams& p);   // hangs on its Snare, or is let go                                        // "Hot Potato" / "Mirror"
     void pactHeldTick(float dt);                                      // "Hot Potato": the ball slips        // "Living Core" overcharge
     void creedCoreHit(const WorldParams& p, FrameEvents& ev);                    // "Fortress" / "Bloodlust"
 
@@ -319,6 +331,8 @@ private:
     int heldIndex_ = -1;
     sf::Vector2f heldGrabOffset_{0.f, 0.f};  // ball pos - cursor at grab, eased to zero
     sf::Vector2f heldPrevVel_{0.f, 0.f};     // velocity before the grab (cancelHeld restores it)
+    int focusId_ = -1;         // the player's target: an enemy id...
+    bool focusBoss_ = false;   // ...or the boss
     float heldCatch_ = 0.f;                  // catch reward earned by this grab (0..catchBonusMax)
     float heldT_ = 0.f;                      // seconds the held ball has been held ("Hot Potato")
     sf::Vector2f pointer_{0.f, 0.f};         // your pointer in the arena ("Grip")
@@ -360,9 +374,6 @@ private:
 
     int aegisChargesLeft_ = 0;      // "Aegis": hits the core still soaks this wave
     bool coreHitThisWave_ = false;  // "Interest": did anything reach the core this wave
-    PowerUp reservePu_ = PowerUp::Points2x;   // "Stockpile"
-    bool hasReserve_ = false;
-    float reserveTimer_ = cfg::powerup::reserveFillTime;
 
     // creeds
     std::vector<sf::Vector2f> huntPrey_;   // "Hunters": per ball, where its prey was last seen

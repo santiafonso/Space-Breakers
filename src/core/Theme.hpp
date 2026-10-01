@@ -84,6 +84,7 @@ inline const sf::Color classJester = soften({255, 124, 214});
 inline const sf::Color classSlinger = soften({86, 214, 255});
 inline const sf::Color classAlchemist = soften({206, 238, 84});
 inline const sf::Color ability = soften({120, 216, 255});   // ability picks and slots
+inline const sf::Color bulletTime = soften({110, 232, 140});   // the E bullet-time gauge
 inline const sf::Color pact = soften({206, 74, 146});       // pacts and the Altar: a gift with a price
 
 // Layout / type - room to breathe: few things on screen, none of them tiny

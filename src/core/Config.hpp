@@ -18,7 +18,13 @@ inline constexpr float radius = 18.f;
 inline constexpr float baseCruise = 300.f;       // px/s orbit speed at level 0
 inline constexpr float hardSpeedCap = 2600.f;
 inline constexpr float maxSpeedCruiseMul = 4.0f; // ceiling = cruise * this (capped by hardSpeedCap)
-inline constexpr int maxBalls = 5;   // few balls, each one a built-up "character" (classes, 4 items, type, abilities)
+// Few balls, each one a built-up "character" (classes, 4 items, type, abilities).
+// The arena holds baseBalls; beating act 2's boss makes room for lateBalls more
+// (App::ballCap). maxBalls is the hard ceiling the World is sized for.
+inline constexpr int baseBalls = 5;
+inline constexpr int lateBalls = 2;
+inline constexpr int lateBallsAct = 3;   // from this act on
+inline constexpr int maxBalls = baseBalls + lateBalls;
 
 // Speed regulation: cruise is a floor the ball climbs back to quickly and a
 // target it eases down to slowly, so a fling stays fast for a moment.
@@ -520,6 +526,9 @@ inline constexpr float eliteCountMul = 1.3f;
 // Altar (pacts): rare on the map, or down the hidden path before the boss.
 inline constexpr int altarPct = 22;            // % chance an act's map has one Altar (rows 4+, not the pre-boss row)
 inline constexpr int altarStreak = 3;          // flawless fights in a row (per act) that open the hidden path
+// Shops are rare: at most this many on an act's paths (the pre-boss row's
+// shop aside); extras turn into "?" stops.
+inline constexpr int shopsPerAct = 1;
 }  // namespace map
 
 namespace gold {
@@ -550,14 +559,17 @@ inline constexpr int priceRepair = 20;     // repairs repairFrac of the core's m
 inline constexpr float repairFrac = 0.30f;
 inline constexpr int shopOffers = 3;   // a small shelf...
 inline constexpr int shopMaxItems = 1; // ...with at most one item on it (items are scarce)...
-inline constexpr float shopItemChance = 0.4f;   // ...and only on this share of visits
+inline constexpr float shopItemChance = 0.6f;   // ...and only on this share of visits
 inline constexpr int maxItemLevel = 3;     // forge cap
 // Shop extras (Fase O): one offer is on sale, a mystery box, a paid reroll,
 // selling an item back, and the forge as a paid service.
 inline constexpr float saleOff = 0.40f;    // the sale offer costs this much less ("Merchant" deepens it)
 inline constexpr int mysteryPrice = 55;    // a pick rolled at elite odds, revealed on purchase
-inline constexpr int rerollBase = 12;      // shop reroll: this, +rerollStep per reroll at this shop
-inline constexpr int rerollStep = 6;
+// Shop reroll: as many as you can pay for, each dearer than the last:
+// rerollBase * rerollGrowth^n (15, 26, 43, 74, 125, 213 ...). "Merchant": the
+// first one per level at each shop is free.
+inline constexpr int rerollBase = 15;
+inline constexpr float rerollGrowth = 1.7f;
 inline constexpr float sellFrac = 0.45f;   // selling an item pays this of its tier price, x its level
 inline constexpr int forgeServicePrice = 45;   // level up an item without a Forge node
 }  // namespace gold
@@ -708,6 +720,21 @@ inline constexpr float blinkDist = 150.f;     // px per jump (stops short of the
 inline constexpr float menderHp = 1.4f, menderSpeed = 0.7f, menderRadius = 1.05f;
 inline constexpr float mendRadius = 170.f;
 inline constexpr float mendPerSec = 0.10f;    // of the target's max HP per second
+// Snare (act 2+): catches the first ball that hits it (never your last free
+// one) and holds it until another ball kills it.
+inline constexpr float snareHp = 1.5f, snareSpeed = 0.75f, snareRadius = 1.15f;
+// Gaits: some enemies don't walk straight in. Weave = sways across its line;
+// Spiral = circles the core as it closes in (a bit faster, so it arrives in
+// about the same time). Rolled per spawn on grunts, runners, splitters and
+// shielded enemies; the chance grows over the run.
+inline constexpr int weaveWave = 3, spiralWave = 11;
+inline constexpr int weavePct = 18, spiralPct = 14;       // at their first wave...
+inline constexpr int gaitPctPerAct = 4;                    // ...+ this per act after
+inline constexpr float weaveAmp = 0.85f, weaveFreq = 2.4f; // sideways lean (x speed), sway rate (rad/s)
+inline constexpr float weaveSpeed = 1.3f;
+inline constexpr float spiralInward = 0.5f;                // inward share far out (straightens up close)
+inline constexpr float spiralNear = 260.f;                 // px from the core where it goes straight in
+inline constexpr float spiralSpeed = 1.3f;
 // Brute (the miniboss): huge, very tough, barely moves when hit, flattens a
 // chunk of the core. Every elite fight brings one (two from act 3); from act 2
 // a normal fight can end with one.
@@ -717,9 +744,9 @@ inline constexpr int   bruteWave = 12;            // first normal wave that may 
 inline constexpr float bruteFightChance = 0.35f;  // ...this chance per normal fight
 // First wave each kind can show up, and its roll weight (grunts fill the rest).
 inline constexpr int runnerWave = 2, splitterWave = 3, tankWave = 4, shieldWave = 5;
-inline constexpr int blinkerWave = 12, menderWave = 22;
+inline constexpr int blinkerWave = 12, menderWave = 22, snareWave = 13;
 inline constexpr int wGrunt = 46, wRunner = 20, wSplitter = 14, wTank = 11, wShield = 12;
-inline constexpr int wBlinker = 12, wMender = 6;
+inline constexpr int wBlinker = 12, wMender = 6, wSnare = 7;
 inline constexpr int eliteTankBonus = 10, eliteShieldBonus = 8;   // elites lean on the tough ones
 }  // namespace enemy
 
@@ -818,6 +845,49 @@ inline constexpr float alchemyDamage = 0.75f;
 inline constexpr float bloodCoreDamage = 1.5f;
 }  // namespace creed
 
+// The player's own abilities (2026-10-01): Q = Mark from the start, E =
+// bullet time from act 2. They belong to you, not to a ball or a build.
+namespace player {
+// Q, Volley: like clicking every ball at once - each free ball is thrown
+// straight at the enemy (or boss) nearest to it, faster than a click throw,
+// with no catch reward.
+inline constexpr float markCooldown = 1.f;
+inline constexpr float volleySpeedMul = 1.4f;   // x the click throw's speed
+// E, Bullet time: hold it and the fight runs slow. A gauge: it drains while
+// held and refills on its own a moment after you let go, so you choose
+// where to spend it.
+inline constexpr int bulletAct = 2;
+inline constexpr float bulletScale = 0.3f;        // sim speed while it runs
+inline constexpr float bulletMax = 3.f;           // real s of slow motion in a full gauge
+inline constexpr float bulletRecharge = 14.f;     // real s from empty to full
+inline constexpr float bulletRechargeDelay = 0.8f;
+inline constexpr float bulletMinStart = 0.08f;    // gauge needed to start it again
+// F, Repulse (act 2 on): the core sends out a shockwave - every enemy near it
+// is shoved away (soaked ones further) and staggered. The panic button.
+inline constexpr int repulseAct = 2;
+inline constexpr float repulseCooldown = 10.f;
+inline constexpr float repulseRadius = 270.f;   // px (x arena scale)
+inline constexpr float repulseKnock = 800.f;    // outward speed given (x knockTaken): ~230 px with the stagger drag
+inline constexpr float repulseStagger = 1.0f;   // s it drifts instead of walking
+}  // namespace player
+
+// "?" stops (progression/Events.hpp): now and then a stranger with deals for
+// gold instead of the free pick. Prices and payouts are base + perAct * (act - 1).
+namespace event {
+inline constexpr int chancePct = 40;          // % of "?" stops that hold an event
+inline constexpr int deals = 2;               // deals on offer (plus walking away)
+inline constexpr int ballPrice = 120, ballPerAct = 40;        // a new ball
+inline constexpr int smugglerPrice = 70, smugglerPerAct = 20; // an item pick at elite odds
+inline constexpr int bloodGold = 60, bloodPerAct = 20;        // gold for core max HP...
+inline constexpr float bloodHpFrac = 0.12f;                   // ...this share of it
+inline constexpr int tithePrice = 50, tithePerAct = 15;       // core max HP for gold...
+inline constexpr float titheHpFrac = 0.15f;                   // ...this much more (and healed)
+inline constexpr int gambleStake = 40, gamblePerAct = 15;     // coin flip: lose it or win...
+inline constexpr float gambleWinMul = 2.5f;                   // ...this times it back
+inline constexpr int gambleWinPct = 50;
+inline constexpr int smithPrice = 40, smithPerAct = 10;       // level up an item
+}  // namespace event
+
 // Pacts (progression/Pacts.hpp): a gift with a price.
 namespace pact {
 inline constexpr int offered = 3;              // cards at an Altar
@@ -872,7 +942,6 @@ inline constexpr int   goldenComboRate = 2;        // GOLDEN BOUNCE: combo climb
 inline constexpr float overdriveDamageMul = 2.0f;  // OVERDRIVE: ball contact damage x this
 
 // Pickups web branch, Fase A.
-inline constexpr float reserveFillTime = 22.f;     // "Stockpile": seconds to refill the reserve slot
 inline constexpr float chargedFracPerLevel = 0.15f;// "Charged": + this fraction of duration per level
 inline constexpr float afterglowPerLevel = 1.5f;   // "Afterglow": a continuous effect fades over this many s past 0, per level
 inline constexpr float magnetAccel = 900.f;        // "Magnet": pickup steering toward the nearest ball

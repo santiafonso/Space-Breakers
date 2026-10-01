@@ -48,7 +48,7 @@ inline const PactDef& pactDef(PactId id) {
          "Stillness, Guardian items, Slug, catching", false},
         {"Quick Hands", "the catch reward is doubled: snatch a fast ball and its next hit lands up to twice as hard",
          "a ball you haven't thrown for 10 s hits 20% softer", "Juggler, Hot Potato, Striker items, fast balls", true},
-        {"Heavy Arm", "your throws leave your hand 50% faster", "no slow motion while you aim",
+        {"Heavy Arm", "your throws leave your hand 50% faster", "no slow motion: none while you aim, and no bullet time (E)",
          "Striker items, Comet, Catch reward", true},
         {"Glass Edge", "+30% crit chance on every ball", "hits that don't crit deal 20% less",
          "Keen eye, Echo, Jester items", false},

@@ -184,7 +184,7 @@ std::vector<std::string> wrapText(const sf::Font& font, const std::string& str, 
 float panelRowZoom(sf::Vector2f size, int n, float reserve, float maxZoom) {
     const float fn = static_cast<float>(std::max(1, n));
     const float need = fn * kPanelW + (fn - 1.f) * kPanelGap + reserve + 2.f * theme::margin + 40.f;
-    return clampf(std::min(size.x / need, size.y * 0.66f / kPanelH), 0.75f, maxZoom);
+    return clampf(std::min(size.x / need, size.y * 0.66f / kPanelH), 0.6f, maxZoom);
 }
 
 sf::Vector2f panelCenter(sf::Vector2f size, int i, int n, float cy, float cx) {

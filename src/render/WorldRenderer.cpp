@@ -352,6 +352,17 @@ void WorldRenderer::drawEnemy(sf::RenderWindow& window, const Enemy& e, sf::Vect
             draw::polygonOutline(window, e.pos, r * 0.62f, 6, spin, 1.5f, withAlpha(fill, 0.6f));
             break;
         }
+        case EnemyKind::Snare: {   // a disc ringed by hooks curling inward; they close around a caught ball
+            const float spin = e.age * (e.snaring ? 0.2f : 0.9f);
+            draw::disc(window, e.pos, r * 0.78f, inner, outer);
+            draw::ring(window, e.pos, r * 0.78f, rimW, rim);
+            const sf::Color hc = e.snaring ? lighten(fill, 0.3f) : rim;
+            for (int k = 0; k < 4; ++k) {
+                const float a = spin + static_cast<float>(k) * kPi * 0.5f;
+                draw::ring(window, e.pos, r * (e.snaring ? 1.0f : 1.12f), 3.f, withAlpha(hc, 0.95f), a, a + 0.9f, 10);
+            }
+            break;
+        }
         default:
             draw::disc(window, e.pos, r, inner, outer);
             draw::ring(window, e.pos, r, rimW, rim);
