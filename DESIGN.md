@@ -467,8 +467,20 @@ Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
     acto que suena todo el acto (mapa, peleas, tienda, cartas: las peleas son
     muy cortas para cambiar en cada una) y `boss.mp3` (solo mientras corre la
     oleada del jefe; arranca siempre de cero, al ganar vuelve el del acto).
-    Acto 1..5 -> `map.ogg`, `fight2.mp3`, `fight3.mp3`, `fight2.mp3`,
-    `fight3.mp3` (tabla `kActLoop` en `App::update`). `fight1.ogg`
+    Acto 1..5 -> `map.ogg`, `fight4.mp3` (Neon Action), `fight3.mp3`,
+    `fight2.mp3`, `fight3.mp3` (tabla `kActLoop` en `App::update`).
+  - **Intensidad (2026-10-03):** el loop del acto suena suave (45 %) en el
+    mapa, la tienda y las cartas, y sube a pleno en ~2 s cuando arranca una
+    pelea (baja en ~3 s al terminar; `Audio::setIntensity`). El menu no se
+    toca.
+  - **Web de habilidades (2026-10-03):** entre runs, mientras la web esta
+    abierta (aunque haya opciones encima), suena `web.ogg` (Friendly Trap,
+    chill; `Track::Web`). Las pantallas cortas (cartas, tienda, eventos) no
+    llevan tema propio: el jugador pasa ahi pocos segundos.
+  - **Jefe en dos movimientos (2026-10-03):** `boss.mp3` entra despacio (7 s)
+    y bajo, y sube de 45 % a 85 % a medida que el jefe pierde vida hasta la
+    furia; al enfurecerse cae `boss2.ogg` (Heavy Boss Battle 1, guitarras) a
+    pleno en menos de un segundo, despues de un respiro corto. `fight1.ogg`
     (Pinball Royale) esta fuera por ahora, comentado en `App.cpp`.
   - `App::update` elige el track cada frame y llama `Audio::update(dt)`, que
     hace el cruce: el loop que sale baja en 1.5 s y el que entra sube en 2.5 s
@@ -1996,9 +2008,10 @@ solo pero cuidando el núcleo.
   sale del centro (entre Striker y Shooter): nodo "Slinger" (18 cores) y
   "Slinger lore". Regla por ahora: toda rama de la web sale del centro.
   Striker también es una clase a desbloquear (nodo "Striker", 12 cores, en su
-  ruta tras Heft y Sling). Mientras no tengas ninguna clase comprada, Striker
-  queda abierta como clase de arranque (si no, una partida nueva no tendría
-  items).
+  ruta tras Heft y Sling). ~~Mientras no tengas ninguna clase comprada, Striker
+  queda abierta como clase de arranque.~~ Desde 2026-10-03 (pedido del
+  usuario) no hay clase de arranque: los items de Striker recién aparecen al
+  comprar su nodo. Sin ninguna clase, las élites ofrecen otras cartas.
   Ballast (modificador) pasa al paso 6, con los modificadores nuevos.
 - Las demás clases solo suman items que escalan con la velocidad:
   Guardian **Anchor**, **Plow**; Shooter **Slug** (más lenta = más cadencia y
@@ -2123,7 +2136,7 @@ de las pelotas: Q, el anillo de E y F.
   rápido. Cada pelota libre (no la que tenés en la mano, ni una atrapada por un
   Snare o un Satellite) sale por el mismo `releaseHeld` que un click, directo
   al enemigo más cercano **a esa pelota** (o al objetivo, si marcaste uno), a
-  1.4x la velocidad del click y sin premio de atrapada. Recarga en 1 s.
+  1.4x la velocidad del click y sin premio de atrapada. Recarga en 1.25 s (era 1 s; +25% a pedido del usuario, 2026-10-03).
   Medido sin ventana: con 4 pelotas, un Tank de la oleada 4 muere en 1 s. Muy
   fuerte y spameable: vigilar en el playtest.
 - **El click a una pelota** ahora la tira al enemigo más cercano **al núcleo**
@@ -2246,6 +2259,29 @@ de las pelotas: Q, el anillo de E y F.
   subir de nivel un ítem (Forge), con las cartas del evento "?" en el color
   del núcleo (`App::openRestStop`, `EventKind::Rest/Temper`). Si no hay nada
   para forjar, repara directo como antes. "Move on" sale sin nada.
+
+### 2026-10-03: el HUD vive en las bandas negras
+
+- **La arena queda limpia:** solo pelotas, enemigos y núcleo. Todo el HUD de la
+  pelea va en las bandas negras (`cfg::app::arenaBand`). Arriba, en una línea:
+  el combo a la izquierda, "act N  stage x / y" con su barra y "N left" al
+  centro (en un jefe, su nombre y su vida), y el oro a la derecha. Abajo: las
+  pelotas, Q / E / F y TAB a la izquierda, el power-up activo al centro, y los
+  credos y pactos (y la carga de Nova) a la derecha.
+
+- **Web:** el panel de rutas y el de Start run / Mode / Back comparten el
+  borde de abajo y el texto va centrado en su caja; las rutas se minimizan con
+  el botón "-" de su encabezado (se recuerda mientras el juego está abierto).
+- **Mapa de la run:** TAB en la banda negra de abajo y los credos al final de
+  la línea de estado, arriba: nada del HUD dentro del marco.
+
+- **Mapas cortos hasta la primera clase:** mientras no tengas ninguna clase
+  comprada en la web, el acto 1 tiene la mitad de filas (`cfg::map::rowsFirstRun` = 6 en
+  vez de 11), así el jugador llega antes al jefe y a la web con cores para una
+  clase. El mapa guarda sus filas (`RunMap::rows`, también en `run.txt`), y las
+  oleadas se reparten sobre ese largo; la fila 1 siempre es la oleada 1.
+  Ganarle al jefe paga 30 cores (Slinger 18, o la ruta de Striker 30); morir
+  en el jefe, ~18.
 
 ### Anotado para después (el usuario lo pidió así)
 

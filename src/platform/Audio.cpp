@@ -265,12 +265,20 @@ void Audio::setTrack(Track t, int variant) {
         pick_[static_cast<std::size_t>(t)] = static_cast<std::size_t>(std::max(variant, 0)) % loops.size();
 }
 
+void Audio::setFadeIn(Track t, int variant, float seconds) {
+    auto& loops = music_[static_cast<std::size_t>(t)];
+    if (variant >= 0 && static_cast<std::size_t>(variant) < loops.size())
+        loops[static_cast<std::size_t>(variant)].fadeIn = std::max(0.1f, seconds);
+}
+
 void Audio::update(float dt) {
     // A calm hand-over: the old loop eases out first and the new one only starts
     // rising once the old is mostly gone, so two tempos never clash at full level.
     constexpr float kFadeOut = 1.5f;     // seconds
-    constexpr float kFadeIn = 2.5f;
     constexpr float kHandOver = 0.25f;   // the new loop waits until the rest are below this
+    // Intensity swells into a fight in ~2 s and settles back down in ~3 s.
+    const float di = intensityTarget_ - intensity_;
+    intensity_ += di > 0.f ? std::min(di, dt / 2.f) : std::max(di, -dt / 3.f);
     const float vol = musicVolume();
     float others = 0.f;   // loudest loop that is on its way out
     for (std::size_t t = 0; t < kTracks; ++t)
@@ -280,9 +288,10 @@ void Audio::update(float dt) {
         for (std::size_t i = 0; i < music_[t].size(); ++i) {
             Stream& st = music_[t][i];
             const bool want = enabled_ && t == static_cast<std::size_t>(track_) && i == pick_[t];
-            if (want && others <= kHandOver) st.level = std::min(1.f, st.level + dt / kFadeIn);
+            if (want && others <= kHandOver) st.level = std::min(1.f, st.level + dt / st.fadeIn);
             else if (!want) st.level = std::max(0.f, st.level - dt / kFadeOut);
-            updateStream(st, t == static_cast<std::size_t>(Track::Boss), dt, vol);
+            const float k = t == static_cast<std::size_t>(Track::Menu) ? 1.f : intensity_;
+            updateStream(st, t == static_cast<std::size_t>(Track::Boss), dt, vol * k);
         }
     }
 }

@@ -18,7 +18,7 @@ namespace sb {
 // menu, one loop per act, the boss; optional - a part with no file is silent). Everything degrades silently when no audio device is available.
 class Audio {
 public:
-    enum class Track { None, Menu, Run, Boss, Count };
+    enum class Track { None, Menu, Run, Boss, Web, Count };   // Web: the skill web, between runs
 
     // Where a file loops. A song that fades out at its end loops back from
     // `end` (before the fade) to `start` through a `seam`-second crossfade
@@ -45,6 +45,11 @@ public:
     void setTrack(Track t, int variant = 0);
     Track track() const { return track_; }
     void update(float dt);    // per frame: the music crossfade
+    // How hard the run / boss music plays, 0..1, eased toward: soft on the map
+    // and in menus, full in a fight. The menu loop ignores it.
+    void setIntensity(float target) { intensityTarget_ = target; }
+    // Seconds a loop takes to fade in (default 2.5).
+    void setFadeIn(Track t, int variant, float seconds);
     void setAmbience(bool on);   // idempotent: the quiet fight hum loop
 
     // A ball clacked off a wall / core / another ball. Plays a note from a
@@ -134,6 +139,7 @@ private:
         float seamT = 1.f;   // 0..1 through a loop-point crossfade (1 = none running)
         float level = 0.f;   // 0..1 track crossfade position
         float gain = 1.f;    // loudness match
+        float fadeIn = 2.5f; // seconds from silence to full
     };
     // Park / run its voices, cross the loop point, set volumes. `restart`: rewind when parked.
     void updateStream(Stream& st, bool restart, float dt, float vol);
@@ -141,6 +147,7 @@ private:
     std::array<std::vector<Stream>, kTracks> music_;
     std::array<std::size_t, kTracks> pick_{};   // which of a track's loops plays
     Track track_ = Track::None;
+    float intensity_ = 0.f, intensityTarget_ = 1.f;
 };
 
 }  // namespace sb

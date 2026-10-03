@@ -7,15 +7,23 @@ map.ogg     "Sci-fi Puzzle Stage Select" by Mintodog - CC0
 fight2.mp3  "Tower Defense Theme" by DST (nosoapradio.us) - CC0
             https://opengameart.org/content/tower-defense-theme
 
-boss.mp3    "space_boss_battle" (bpm175) - from OpenGameArt; credited here in
-            case its license is CC-BY 3.0 ("Space Boss Battle Theme"):
-            https://opengameart.org/content/space-boss-battle-theme
+boss.mp3    "Space Boss Battle" by MintoDog - CC0
+            https://opengameart.org/content/space-boss-battle
 
-fight3.mp3  "space_dungeon" (bpm100) - from OpenGameArt (same series as the
-            stage-select tracks above); credited in case it's CC-BY.
+boss2.ogg   "Heavy Boss Battle 1" by MintoDog - CC0
+            https://opengameart.org/node/183631
+
+fight3.mp3  "Space Dungeon" by MintoDog - CC0
+            https://opengameart.org/content/space-dungeon
+
+fight4.mp3  "Neon Action" (loopable) by Bogart VGM - CC-BY 4.0
+            https://opengameart.org/content/neon-action
+
+web.ogg     "Friendly Trap" by glitchart (Of Far Different Nature & extenz &
+            vitalezzz) - CC-BY 4.0
+            https://opengameart.org/node/191142
 
 menu.ogg    "Cosmic Menu" - source to be confirmed.
 fight1.ogg  "Pinball Royale" - source to be confirmed (not played right now).
 
-TODO: confirm the exact source page and license of boss.mp3, fight3.mp3,
-menu.ogg and fight1.ogg.
+TODO: confirm the exact source page and license of menu.ogg and fight1.ogg.

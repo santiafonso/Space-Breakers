@@ -260,16 +260,20 @@ bool drawCreedStrip(App& app, sf::RenderWindow& w, sf::Vector2f pos, bool center
 
 void drawCreedHud(App& app, sf::RenderWindow& w, sf::Vector2f mouse, bool tips) {
     if (app.data().run.creeds.empty() && app.data().run.pacts.empty()) return;
+    // Bottom band, right-aligned (the balls and keys hold its left end).
     const sf::Vector2f s = app.size();
-    const float y = s.y - theme::margin - 92.f;
-    bool shown = drawCreedStrip(app, w, {theme::margin, y}, false, mouse, tips);
+    const float y = s.y - cfg::app::arenaBand * 0.5f - 11.f;
+    const float x = s.x - theme::margin - creedStripWidth(app);
+    bool shown = drawCreedStrip(app, w, {x, y}, false, mouse, tips);
     if (app.hasCreed(CreedId::Nova)) {   // the Nova charge, right above the chips
         const float cd = app.novaCooldown();
         const bool ready = cd <= 0.f;
         char buf[48];
         std::snprintf(buf, sizeof(buf), ready ? "NOVA ready - SPACE / right-click" : "NOVA  %.1fs", static_cast<double>(cd));
         sf::Text t = makeText(app.font(), buf, theme::fsSmall, ready ? theme::accent : theme::textDim);
-        t.setPosition(theme::margin, y - 20.f);
+        const sf::FloatRect tb = t.getLocalBounds();   // left of the chips, same row
+        t.setOrigin(tb.left + tb.width, tb.top + tb.height * 0.5f);
+        t.setPosition(std::round(x - 14.f), std::round(y + 11.f));
         w.draw(t);
         if (!shown && tips && t.getGlobalBounds().contains(mouse))
             drawTooltip(w, app.font(), mouse, s, "Nova",

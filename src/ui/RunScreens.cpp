@@ -339,7 +339,7 @@ namespace {
 constexpr float kMapStep = 104.f;
 constexpr float kMapLaneGap = 190.f;
 constexpr float kMapTop = 104.f;      // the view's top edge (under the status line)
-constexpr float kMapBottomPad = 70.f; // row 1's distance from the bottom edge at scroll 0
+constexpr float kMapBottomPad = 100.f; // row 1's distance from the bottom edge at scroll 0 (clear of the frame)
 constexpr float kNodeR = 21.f;
 constexpr float kBossR = 36.f;
 constexpr float kStatusY = 52.f;
@@ -354,7 +354,7 @@ constexpr float kRevealPop = 0.6f;
 
 float MapScreen::scrollMax(App& app) const {
     const sf::Vector2f s = app.size();
-    return std::max(0.f, static_cast<float>(mapRows(app.data().run.map.act)) * kMapStep - (s.y - kMapBottomPad - kMapTop - 60.f));
+    return std::max(0.f, static_cast<float>(app.data().run.map.rowCount()) * kMapStep - (s.y - kMapBottomPad - kMapTop - 60.f));
 }
 
 float MapScreen::scrollFor(App& app, int row) const {
@@ -658,13 +658,13 @@ void MapScreen::draw(App& app, sf::RenderWindow& w) {
         draw::polygon(w, {s.x * 0.5f, s.y - 16.f}, 6.f, 3, kPi / 2.f, withAlpha(theme::textDim, 0.8f),
                       withAlpha(theme::textDim, 0.8f));
 
-    drawTabHint(app, w, {theme::margin, s.y - theme::margin - keyCapSize(app.font(), "tab").y});
-
-    // The run's creeds, top-right under the header (hover a chip for its rule).
+    // HUD stays off the map: TAB in the black band under the frame, the run's
+    // creeds at the right end of the status line (hover a chip for its rule).
+    drawTabHint(app, w, {theme::margin, s.y - cfg::app::arenaBand * 0.5f - keyCapSize(app.font(), "tab").y * 0.5f});
     bool creedHover = false;
     if (!r.creeds.empty() || !r.pacts.empty())
-        creedHover = drawCreedStrip(app, w, {s.x - theme::margin - creedStripWidth(app), kMapTop + 24.f}, false, mouse_,
-                                  info_ < 0 && !peek_.open);
+        creedHover = drawCreedStrip(app, w, {s.x - theme::margin - creedStripWidth(app), kStatusY - 11.f}, false,
+                                  mouse_, info_ < 0 && !peek_.open);
 
     if (peek_.open) {   // the loadout peek covers the map; its own hover help only
         drawLoadoutOverlay(app, w, false, peek_);

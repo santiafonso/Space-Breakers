@@ -490,6 +490,7 @@ inline constexpr float coresMul = 1.75f;
 namespace map {
 inline constexpr int rows = 13;         // choosable rows per act (acts 2-5); the boss is row rows+1
 inline constexpr int rowsAct1 = 11;     // act 1 is a shorter climb (see mapRows)
+inline constexpr int rowsFirstRun = 6;  // ...and half that until the first class is bought (App::newRun)
 inline constexpr int lanes = 4;         // max nodes per row
 inline constexpr int minPerRow = 2;     // and min, between the trunk and the pre-boss row
 inline constexpr int splitPct = 22;     // % chance per row that a path forks into a free neighbouring lane
@@ -851,7 +852,7 @@ namespace player {
 // Q, Volley: like clicking every ball at once - each free ball is thrown
 // straight at the enemy (or boss) nearest to it, faster than a click throw,
 // with no catch reward.
-inline constexpr float markCooldown = 1.f;
+inline constexpr float markCooldown = 1.25f;
 inline constexpr float volleySpeedMul = 1.4f;   // x the click throw's speed
 // E, Bullet time: hold it and the fight runs slow. A gauge: it drains while
 // held and refills on its own a moment after you let go, so you choose

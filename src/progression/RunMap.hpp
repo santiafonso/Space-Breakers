@@ -33,8 +33,10 @@ inline int mapRows(int act) { return act == 1 ? cfg::map::rowsAct1 : cfg::map::r
 
 struct RunMap {
     int act = 1;
+    int rows = 0;   // its choosable rows; 0 = the act's usual mapRows (the first run's act 1 is shorter)
     std::vector<MapNode> nodes;
-    int bossRow() const { return mapRows(act) + 1; }
+    int rowCount() const { return rows > 0 ? rows : mapRows(act); }
+    int bossRow() const { return rowCount() + 1; }
 };
 
 inline const char* mapNodeName(MapNodeType t) {
@@ -69,13 +71,14 @@ inline const char* mapNodeDesc(MapNodeType t) {
 
 // The difficulty wave map row `row` of act `act` plays as: rows 1..rows spread
 // over waves 1..9 of the act, the boss row is wave 10 of the act (10, 20 ... 50).
-inline int mapRowWave(int act, int row) {
+inline int mapRowWave(int act, int row, int rows) {
     const int base = (act - 1) * cfg::run::bossWave;
-    const int rows = mapRows(act);
     if (row > rows) return base + cfg::run::bossWave;
+    if (row <= 1) return base + 1;   // the act opens on its easiest wave, however short the map
     const int span = cfg::run::bossWave - 1;
     return base + std::clamp((row * span + rows - 1) / rows, 1, span);
 }
+inline int mapRowWave(const RunMap& m, int row) { return mapRowWave(m.act, row, m.rowCount()); }
 
 namespace detail {
 
@@ -132,11 +135,12 @@ static_assert(sizeof(kPreBossRow) / sizeof(kPreBossRow[0]) == cfg::map::lanes);
 // Every row between has 2..lanes nodes. The last row is kPreBossRow: each
 // node of the row before links to the stops in its lane and the lanes beside
 // it, and all of it feeds the boss.
-inline RunMap generateMap(Rng& rng, int act) {
+inline RunMap generateMap(Rng& rng, int act, int rows = 0) {
     RunMap m;
     m.act = act;
+    m.rows = rows;
     const int L = cfg::map::lanes;
-    const int R = mapRows(act);
+    const int R = m.rowCount();
 
     // Walk the paths: walkers[k] = path k's lane on the current row.
     std::vector<std::vector<int>> laneRows;   // lanes used per row 2..R-1

@@ -159,7 +159,7 @@ void App::notePactFight(bool flawless) {
 // The map plays its reveal (consumeAltarReveal).
 void App::revealAltarPath() {
     RunState& r = data_.run;
-    if (!r.active || r.altarState != 1 || r.mapNode < 0 || r.mapRow != mapRows(r.map.act)) return;
+    if (!r.active || r.altarState != 1 || r.mapNode < 0 || r.mapRow != r.map.rowCount()) return;
     int boss = -1;
     for (int i = 0; i < static_cast<int>(r.map.nodes.size()); ++i)
         if (r.map.nodes[static_cast<std::size_t>(i)].type == MapNodeType::Boss) boss = i;

@@ -89,12 +89,22 @@ App::App() : window_(kLogical()), world_({kLogical().x, kLogical().y - 2.f * cfg
     // the end loop back before the fade over a 4 s seam. Both measured per
     // file - re-measure when a file is swapped. The rest are cut to loop.
     audio_.addMusic(Audio::Track::Menu, findAsset("music/menu.ogg"), 1.05f, {0.2f, 376.f, 4.f});
+    // The skill web is where a player lingers between runs: a chill loop
+    // (Friendly Trap fades out from ~159 s - loop before it).
+    audio_.addMusic(Audio::Track::Web, findAsset("music/web.ogg"), 1.05f, {0.f, 162.f, 4.f});
     audio_.addMusic(Audio::Track::Run, findAsset("music/map.ogg"), 1.17f, {0.f, 112.5f, 4.f});
     // Out for now (the user is trying the others): Pinball Royale.
     // audio_.addMusic(Audio::Track::Run, findAsset("music/fight1.ogg"), 1.08f, {0.3f, 242.f, 4.f});
     audio_.addMusic(Audio::Track::Run, findAsset("music/fight2.mp3"), 0.76f);
     audio_.addMusic(Audio::Track::Run, findAsset("music/fight3.mp3"), 0.67f);
+    // Neon Action ends in a ring-out and 3 s of silence: loop before it.
+    audio_.addMusic(Audio::Track::Run, findAsset("music/fight4.mp3"), 0.67f, {0.f, 182.5f, 3.f});
+    // A boss in two movements: its theme creeps in and swells as it bleeds
+    // (variant 0); when it enrages the heavy one drops in fast (variant 1).
     audio_.addMusic(Audio::Track::Boss, findAsset("music/boss.mp3"), 0.65f);
+    audio_.addMusic(Audio::Track::Boss, findAsset("music/boss2.ogg"), 0.64f);
+    audio_.setFadeIn(Audio::Track::Boss, 0, 7.f);
+    audio_.setFadeIn(Audio::Track::Boss, 1, 0.6f);
 
     loadGame(savePath_, data_);
     audio_.setEnabled(data_.meta.soundOn);
@@ -662,11 +672,16 @@ void App::newRun() {
     }
 
     // The act's path map. A dev SB_WAVE start drops you at the row before it.
+    // Until the first class is bought, act 1 is half length, so a new player
+    // reaches the boss (and the web, with cores for a class) sooner.
     const int act = cfg::run::actOfWave(startWave);
-    r.map = generateMap(rng_, act);
+    bool anyClass = false;
+    for (int i = 0; i < kClassCount && !anyClass; ++i)
+        anyClass = data_.meta.unlock[classUnlockNode(classTag(i))] > 0;
+    r.map = generateMap(rng_, act, act == 1 && !anyClass ? cfg::map::rowsFirstRun : 0);
     r.mapNode = -1;
     r.mapRow = 0;   // stand just before the first row that plays as startWave
-    while (r.mapRow <= mapRows(act) && mapRowWave(act, r.mapRow + 1) < startWave) ++r.mapRow;
+    while (r.mapRow <= r.map.rowCount() && mapRowWave(r.map, r.mapRow + 1) < startWave) ++r.mapRow;
     r.wave = startWave - 1;
     replaceStack(ScreenId::Play);
     introStep_ = 0;
@@ -725,7 +740,7 @@ UpgradeCtx App::buildUpgradeCtx() const {
     if (u[MetaGravity] == 0)   c.lock(UpgradeKind::GravityWell);
     if (u[MetaGemini] == 0)    c.lock(UpgradeKind::Gemini);
     if (u[MetaPrism] == 0)     c.lock(UpgradeKind::PrismCore);
-    // Items of a class that isn't unlocked yet (Striker is always open).
+    // Items of a class that isn't unlocked yet on the web.
     for (int i = 0; i < kUpgradeKindCount; ++i) {
         const auto k = static_cast<UpgradeKind>(i);
         if (upgradeCat(k) == UpgradeCat::Item && !classUnlocked(itemTag(k), u)) c.lock(k);
@@ -1075,7 +1090,7 @@ void App::travelTo(int node) {
     n.visited = true;
     r.mapNode = node;
     r.mapRow = n.row;
-    const int wave = mapRowWave(r.map.act, n.row);
+    const int wave = mapRowWave(r.map, n.row);
     audio_.travel();
     back();   // close the map: the Play screen is underneath
     const sf::Vector2f mid{size().x * 0.5f, size().y * 0.4f};
@@ -1602,7 +1617,7 @@ void App::devOpen(DevOpen what) {
                                   theme::textLo, 22, 1.2f);
             break;
         case DevOpen::JumpToBoss:   // stand right before the boss row and open the map
-            data_.run.mapRow = mapRows(data_.run.map.act);
+            data_.run.mapRow = data_.run.map.rowCount();
             data_.run.mapNode = -1;
             world_.devWinWave();
             openMap();
@@ -2018,15 +2033,26 @@ void App::update(float frameDt) {
 
     // Music follows the run: one loop carries a whole act (map, fights, shops
     // alike - fights are too short to switch on), the boss fight has its own,
-    // the menu loop outside a run. They crossfade.
-    static constexpr int kActLoop[] = {0, 1, 2, 1, 2};   // act 1..5 -> Run loop (see addMusic above)
+    // the menu loop outside a run. They crossfade. The act's loop plays soft
+    // on the map and between fights and swells when a fight starts; a boss
+    // starts low, builds as it loses health and turns heavy when it enrages.
+    static constexpr int kActLoop[] = {0, 3, 2, 1, 2};   // act 1..5 -> Run loop (see addMusic above)
     const int act = std::clamp(data_.run.map.act, 1, 5);
-    if (!data_.run.active)
-        audio_.setTrack(Audio::Track::Menu);
-    else if (world_.waveRunning() && cfg::run::isBossWave(data_.run.wave))
-        audio_.setTrack(Audio::Track::Boss);
-    else
+    const bool onWeb = std::any_of(stack_.begin(), stack_.end(), [](const std::unique_ptr<Screen>& sc) {
+        return dynamic_cast<const LoadoutScreen*>(sc.get()) != nullptr;
+    });
+    if (!data_.run.active) {
+        audio_.setTrack(onWeb ? Audio::Track::Web : Audio::Track::Menu);
+    } else if (world_.waveRunning() && cfg::run::isBossWave(data_.run.wave)) {
+        const Boss& bs = world_.boss();
+        const float hp = bs.alive && bs.maxHp > 0.f ? clampf(bs.hp / bs.maxHp, 0.f, 1.f) : 1.f;
+        const float built = clampf((1.f - hp) / (1.f - cfg::boss::enrageAt), 0.f, 1.f);
+        audio_.setTrack(Audio::Track::Boss, bs.enraged ? 1 : 0);
+        audio_.setIntensity(bs.enraged ? 1.f : 0.45f + 0.4f * built);
+    } else {
         audio_.setTrack(Audio::Track::Run, kActLoop[act - 1]);
+        audio_.setIntensity(world_.waveRunning() ? 1.f : 0.45f);
+    }
     audio_.update(frameDt);
 
     // A quiet hum under a live fight; a soft two-note warning while the core is low.
@@ -2166,7 +2192,7 @@ void App::update(float frameDt) {
         const Boss& bs = world_.boss();
         hud_.setBoss(bs.alive && bs.maxHp > 0.f ? clampf(bs.hp / bs.maxHp, 0.f, 1.f) : -1.f);
     }
-    hud_.update(frameDt, data_.run.map.act, data_.run.mapRow, mapRows(data_.run.map.act) + 1, world_.enemiesLeft(),
+    hud_.update(frameDt, data_.run.map.act, data_.run.mapRow, data_.run.map.rowCount() + 1, world_.enemiesLeft(),
                 c.maxHp > 0.f ? c.hp / c.maxHp : 0.f, world_.comboMultiplier(),
                 data_.run.score, data_.run.gold, world_.effect(), world_.bossWave(), data_.run.eliteWave);
 }
@@ -2365,7 +2391,7 @@ int App::runSnapshots(const std::string& dir) {
         n.visited = true;
         r.mapNode = node;
         r.mapRow = n.row;
-        if (n.row >= mapRows(r.map.act) || n.next.empty()) break;
+        if (n.row >= r.map.rowCount() || n.next.empty()) break;
         node = n.next[static_cast<std::size_t>(n.row) % n.next.size()];
     }
     world_.devWinWave();
@@ -2583,7 +2609,7 @@ int App::runSnapshots(const std::string& dir) {
     {
         RunState& rr = data_.run;
         for (int i = 0; i < static_cast<int>(rr.map.nodes.size()); ++i)
-            if (rr.map.nodes[static_cast<std::size_t>(i)].row == mapRows(rr.map.act)) {
+            if (rr.map.nodes[static_cast<std::size_t>(i)].row == rr.map.rowCount()) {
                 rr.mapNode = i;
                 rr.mapRow = rr.map.nodes[static_cast<std::size_t>(i)].row;
                 rr.map.nodes[static_cast<std::size_t>(i)].visited = true;

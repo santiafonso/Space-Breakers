@@ -825,7 +825,7 @@ enum MetaUnlock {
     // ---- 2026-09-28 append (never reorder): the Slinger route ----
     MetaClassSlinger, // Slinger        - Slinger items can appear (its own route, from the centre)
     MetaLoreSlinger,  // Slinger lore
-    MetaClassStriker, // Striker        - Striker items can appear (the starter class until any class is bought)
+    MetaClassStriker, // Striker        - Striker items can appear
     MetaClassAlchemist, // Alchemist    - Alchemist items can appear; its route holds the six elements
     MetaLoreAlchemist,  // Alchemist lore
     MetaUnlockCount
@@ -1034,7 +1034,7 @@ inline const MetaUnlockDef& metaUnlockDef(int u) {
                          18u, 1, B::Slinger,  C,  0,  14.f, 3.f},
         /* SlingerLore*/{"Slinger lore","Slinger items show up 50% more often per level",
                          10u, 2, B::Slinger,  C, MetaClassSlinger, 14.f, 4.f},
-        /* Striker   */ {"Striker",   "unlocks the Striker class: its items can appear (hits far harder when flung). Until you own any class, Striker is your free starter",
+        /* Striker   */ {"Striker",   "unlocks the Striker class: its items can appear (hits far harder when flung)",
                          12u, 1, B::Striker,  C, MetaSling, 0.f, 3.f},
         /* Alchemist */ {"Alchemist", "unlocks the Alchemist class: its items can appear (2 elements per ball that react with each other). Its route holds the elements",
                          18u, 1, B::Alchemist, C, 4, 299.f, 3.f},
@@ -1118,14 +1118,11 @@ inline int classUnlockNode(ItemTag t) {
 }
 
 inline bool classUnlocked(ItemTag t, const int* levels) {
+    // Every class, Striker too, waits for its web node (the user's call,
+    // 2026-10-03: no starter class). With none bought, elites fall back to
+    // other picks (see App::rollPick).
     const int n = classUnlockNode(t);
-    if (n < 0 || levels[n] > 0) return true;
-    // Striker is the starter: open until any class node is bought, so a fresh
-    // save still has items to find.
-    if (t != ItemTag::Striker) return false;
-    for (int i = 1; i < static_cast<int>(ItemTag::Alchemist) + 1; ++i)
-        if (const int c = classUnlockNode(static_cast<ItemTag>(i)); c >= 0 && levels[c] > 0) return false;
-    return true;
+    return n < 0 || levels[n] > 0;
 }
 
 }  // namespace sb

@@ -181,7 +181,7 @@ bool saveRun(const std::string& path, const RunState& r) {
             for (int i = 0; i < kModifierCount; ++i) f << ' ' << L.mods[i];
             f << '\n';
         }
-        f << "run.map " << r.map.act << '\n';
+        f << "run.map " << r.map.act << ' ' << r.map.rows << '\n';   // rows 0 = the act's usual length
         for (const MapNode& n : r.map.nodes) {   // type row lane visited, then its links
             f << "run.node " << static_cast<int>(n.type) << ' ' << n.row << ' ' << n.lane << ' '
               << (n.visited ? 1 : 0) << ' ' << n.next.size();
@@ -242,6 +242,7 @@ bool loadRun(const std::string& path, RunState& out) {
             if (!ls.fail()) r.balls.push_back(L);
         } else if (key == "run.map") {
             ls >> r.map.act;
+            if (!(ls >> r.map.rows)) r.map.rows = 0;   // older saves: the usual length
             sawMap = true;
         } else if (key == "run.node") {
             MapNode n;

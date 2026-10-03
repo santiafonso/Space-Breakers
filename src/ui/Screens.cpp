@@ -190,7 +190,7 @@ bool webVisible(int node, const int* unlock) {
 }
 
 // The camera is remembered between visits to the web.
-struct WebView { bool saved = false; float zoom = kZoomStart; sf::Vector2f pan{0.f, 0.f}; int sel = 0; };
+struct WebView { bool saved = false; float zoom = kZoomStart; sf::Vector2f pan{0.f, 0.f}; int sel = 0; bool legendMin = false; };
 WebView g_webView;
 // The legend lists the routes clockwise from the top, like the web.
 constexpr MetaBranch kLegend[] = {MetaBranch::Striker,  MetaBranch::Slinger, MetaBranch::Shooter, MetaBranch::Jester,
@@ -198,6 +198,37 @@ constexpr MetaBranch kLegend[] = {MetaBranch::Striker,  MetaBranch::Slinger, Met
                                   MetaBranch::Support,  MetaBranch::Mage,    MetaBranch::Alchemist, MetaBranch::Guardian};
 constexpr int kLegendCount = 11;
 constexpr float kLegendRow = 21.f;
+
+// The two panels over the web (route legend bottom-left, run buttons
+// bottom-right) share one bottom edge, clear of the screen frame.
+constexpr float kPanelBottomGap = 46.f;   // from the bottom of the screen
+constexpr float kLegendHead = 28.f;       // the "routes" row with the minimise toggle
+constexpr float kLegendW = 190.f;
+constexpr float kRunPanelW = 220.f;
+constexpr float kRunPanelPad = 14.f;
+
+sf::FloatRect legendPanel(sf::Vector2f s, bool minimised) {
+    const float h = kLegendHead + (minimised ? 0.f : static_cast<float>(kLegendCount) * kLegendRow + 8.f);
+    return {theme::margin - 10.f, s.y - kPanelBottomGap - h, kLegendW, h};
+}
+// Row i's band inside the legend.
+sf::FloatRect legendRow(sf::Vector2f s, int i) {
+    const sf::FloatRect p = legendPanel(s, false);
+    return {p.left, p.top + kLegendHead + static_cast<float>(i) * kLegendRow, p.width, kLegendRow};
+}
+sf::FloatRect legendToggle(sf::Vector2f s, bool minimised) {
+    const sf::FloatRect p = legendPanel(s, minimised);
+    return {p.left + p.width - 26.f, p.top + 5.f, 18.f, 18.f};
+}
+// The whole header row folds / opens the legend (the toggle is its marker).
+sf::FloatRect legendHeader(sf::Vector2f s, bool minimised) {
+    const sf::FloatRect p = legendPanel(s, minimised);
+    return {p.left, p.top, p.width, kLegendHead};
+}
+sf::FloatRect runPanel(sf::Vector2f s, float rowGap) {
+    const float h = 3.f * rowGap + 2.f * kRunPanelPad;
+    return {s.x - theme::margin - 10.f - kRunPanelW, s.y - kPanelBottomGap - h, kRunPanelW, h};
+}
 
 const sf::Color kPrismColor = theme::puSurge;   // violet - distinct from the core-blue accent
 
@@ -360,7 +391,9 @@ void LoadoutScreen::rebuild(App& app) {
     menu_.setItems({{"Start run", true},
                     {app.data().meta.hardMode ? "Mode: Hard" : "Mode: Normal", true},
                     {"Back", true}});
-    menu_.layout({s.x - 150.f, s.y * 0.80f});   // bottom-right, clear of the web
+    // Bottom-right, the three rows centred in their panel.
+    const sf::FloatRect rp = runPanel(s, s.y * 0.050f);
+    menu_.layout({rp.left + rp.width * 0.5f, rp.top + kRunPanelPad + s.y * 0.050f * 0.5f});
 }
 
 void LoadoutScreen::onEnter(App& app) {
@@ -442,15 +475,17 @@ void LoadoutScreen::zoomAt(App& app, sf::Vector2f mouse, float factor) {
 }
 
 int LoadoutScreen::legendAt(App& app, sf::Vector2f mouse) const {
+    if (g_webView.legendMin) return -1;
     const sf::Vector2f s = app.size();
-    const float top = s.y - theme::margin - static_cast<float>(kLegendCount) * kLegendRow;
     for (int i = 0; i < kLegendCount; ++i)
-        if (sf::FloatRect(theme::margin, top + static_cast<float>(i) * kLegendRow - 2.f, 170.f, kLegendRow).contains(mouse))
-            return static_cast<int>(kLegend[i]);
+        if (legendRow(s, i).contains(mouse)) return static_cast<int>(kLegend[i]);
     return -1;
 }
 
 int LoadoutScreen::nodeAt(App& app, sf::Vector2f mouse) const {
+    // The panels over the web cover the nodes under them.
+    const sf::Vector2f s = app.size();
+    if (legendPanel(s, g_webView.legendMin).contains(mouse) || runPanel(s, s.y * 0.050f).contains(mouse)) return -1;
     for (int i = 0; i < MetaUnlockCount; ++i) {
         if (!webVisible(i, app.data().meta.unlock)) continue;
         const float r = ((i == 0 ? kRootR : isClassNode(i) ? kClassR : kNodeR) + 6.f) * nodeScale(zoom_);   // generous but < half the ring gap
@@ -534,6 +569,10 @@ void LoadoutScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse
         case 2: app.back(); return;
         default: break;
     }
+    if (legendHeader(app.size(), g_webView.legendMin).contains(mouse)) {   // minimise / open the legend
+        g_webView.legendMin = !g_webView.legendMin;
+        return;
+    }
     if (const int b = legendAt(app, mouse); b >= 0) {   // fly to the route: its class node, else its first node
         int target = -1;
         for (int i = 0; i < MetaUnlockCount && target < 0; ++i)
@@ -587,8 +626,9 @@ void LoadoutScreen::update(App& app, float dt, sf::Vector2f mouse) {
         }
     }
     clampPan(app);
-    g_webView = {true, zoomT_, pan_, selNode_};
+    g_webView = {true, zoomT_, pan_, selNode_, g_webView.legendMin};   // the camera; the legend keeps its fold
     legendHover_ = legendAt(app, mouse);
+    uisound::hover(&g_webView, legendHeader(app.size(), g_webView.legendMin).contains(mouse) ? 0 : -1);
     if (length(mouse - lastMouse_) > 0.5f) { keyNav_ = false; lastMouse_ = mouse; }
     hoverNode_ = nodeAt(app, mouse);
     if (hoverNode_ >= 0) { selNode_ = hoverNode_; selUsed_ = true; }   // hover drives card + E key
@@ -928,31 +968,48 @@ void LoadoutScreen::draw(App& app, sf::RenderWindow& w) {
                      theme::fsSmall, {s.x * 0.5f, 110.f}, withAlpha(theme::coreLow, 0.8f));
 
     // Route legend, bottom-left: one row per class route (and the Creeds).
-    // Hovering a row lights that route alone; clicking it flies there.
+    // Hovering a row lights that route alone; clicking it flies there. The
+    // toggle in its header folds it down to that header.
     {
         const float la = clampf(introPop(it, 0.2f), 0.f, 1.f);
-        float ly = s.y - theme::margin - static_cast<float>(kLegendCount) * kLegendRow;
-        draw::box(w, {theme::margin - 10.f, ly - 24.f, 190.f, static_cast<float>(kLegendCount) * kLegendRow + 30.f},
-                  theme::corner, withAlpha(theme::bg, 0.88f * la), withAlpha(theme::bg, 0.88f * la),
+        const bool mini = g_webView.legendMin;
+        const sf::FloatRect p = legendPanel(s, mini);
+        draw::box(w, p, theme::corner, withAlpha(theme::bg, 0.88f * la), withAlpha(theme::bg, 0.88f * la),
                   withAlpha(theme::arenaEdge, 0.6f * la), 1.f);
-        drawLabel(w, app.font(), "routes", 10, {theme::margin + 2.f, ly - 12.f}, withAlpha(theme::textDim, la), -1);
-        for (MetaBranch b : kLegend) {
-            const bool hot = legendHover_ == static_cast<int>(b);
-            int owned = 0, total = 0;
-            for (int i = 0; i < MetaUnlockCount; ++i)
-                if (metaUnlockDef(i).branch == b && !metaNodeRetired(i)) { ++total; owned += m.unlock[i] > 0 ? 1 : 0; }
-            drawDot(w, {theme::margin + 8.f, ly + 8.f}, hot ? 7.5f : 6.f, withAlpha(branchColor(b), la));
-            sf::Text t = makeText(app.font(), std::string(branchLabel(b)) + "   " + std::to_string(owned) + "/" +
-                                  std::to_string(total), theme::fsSmall, withAlpha(hot ? theme::textHi : theme::textLo, la));
-            t.setPosition(theme::margin + 22.f, ly);
-            w.draw(t);
-            ly += kLegendRow;
+        const float hy = p.top + kLegendHead * 0.5f;
+        drawLabel(w, app.font(), "routes", 10, {p.left + 12.f, hy}, withAlpha(theme::textDim, la), -1);
+        const sf::FloatRect tg = legendToggle(s, mini);
+        const bool tgHot = legendHeader(s, mini).contains(lastMouse_);
+        const sf::Color tc = withAlpha(tgHot ? theme::textHi : theme::textDim, la);
+        draw::box(w, tg, theme::corner, withAlpha(theme::bg, 0.f), withAlpha(theme::bg, 0.f),
+                  withAlpha(tgHot ? theme::textLo : theme::arenaEdge, la), 1.f);
+        const sf::Vector2f tcn{tg.left + tg.width * 0.5f, tg.top + tg.height * 0.5f};
+        draw::line(w, {tcn.x - 4.f, tcn.y}, {tcn.x + 4.f, tcn.y}, 1.5f, tc);       // "-" open, "+" folded
+        if (mini) draw::line(w, {tcn.x, tcn.y - 4.f}, {tcn.x, tcn.y + 4.f}, 1.5f, tc);
+        if (!mini) {
+            for (int r = 0; r < kLegendCount; ++r) {
+                const MetaBranch b = kLegend[r];
+                const bool hot = legendHover_ == static_cast<int>(b);
+                int owned = 0, total = 0;
+                for (int i = 0; i < MetaUnlockCount; ++i)
+                    if (metaUnlockDef(i).branch == b && !metaNodeRetired(i)) { ++total; owned += m.unlock[i] > 0 ? 1 : 0; }
+                const sf::FloatRect row = legendRow(s, r);
+                const float cy = row.top + row.height * 0.5f;
+                if (hot)
+                    draw::box(w, {row.left + 1.f, row.top, row.width - 2.f, row.height}, 0.f,
+                              withAlpha(branchColor(b), 0.08f * la), withAlpha(branchColor(b), 0.08f * la));
+                drawDot(w, {row.left + 18.f, cy}, hot ? 7.5f : 6.f, withAlpha(branchColor(b), la));
+                const sf::Color tcol = withAlpha(hot ? theme::textHi : theme::textLo, la);
+                drawLabel(w, app.font(), branchLabel(b), 12, {row.left + 32.f, cy}, tcol, -1);
+                drawLabel(w, app.font(), std::to_string(owned) + " / " + std::to_string(total), 12,
+                          {row.left + row.width - 12.f, cy}, withAlpha(theme::textDim, la), 1);
+            }
         }
     }
 
     {   // a backing for the run buttons, so the web passes under them cleanly
         const float ma = clampf(introPop(it, 0.2f), 0.f, 1.f);
-        draw::box(w, {s.x - 260.f, s.y * 0.80f - 82.f, 220.f, 184.f}, theme::corner, withAlpha(theme::bg, 0.88f * ma),
+        draw::box(w, runPanel(s, s.y * 0.050f), theme::corner, withAlpha(theme::bg, 0.88f * ma),
                   withAlpha(theme::bg, 0.88f * ma), withAlpha(theme::arenaEdge, 0.6f * ma), 1.f);
     }
     menu_.draw(w, it);
@@ -1178,19 +1235,18 @@ void PlayScreen::draw(App& app, sf::RenderWindow& w) {
 
     app.hud().draw(w);
 
-    // Ball tally, bottom-left: one chip per ball in its class colour, the
-    // [TAB] cap for the loadout above them. Words only on hover.
+    // Bottom band, left to right: one chip per ball in its class colour, the
+    // player's keys, then the [TAB] cap for the loadout. Words only on hover.
     const std::vector<Ball>& balls = app.world().balls();
     const sf::Vector2f s = app.size();
     const sf::FloatRect tally = ballTallyRect(app, static_cast<int>(balls.size()));
-    float dx = tally.left + 9.f;
-    const float dy = tally.top + tally.height - 9.f;
+    float dx = tally.left + 13.f;
+    const float dy = tally.top + tally.height * 0.5f;
     for (const Ball& b : balls) {
         const sf::Color ec = ballHue(b);   // its class, not its element
         draw::disc(w, {dx, dy}, 7.f, lerpColor(ec, sf::Color::White, 0.2f), ec, {1.f, 1.f}, 20);
         dx += 22.f;
     }
-    drawTabHint(app, w, {theme::margin, tally.top});
     // The player's keys, right of the tally: Q volley, E bullet-time gauge, F repulse.
     // A key cap fills up from the bottom while it recharges; E is a green ring
     // that empties as you spend it.
@@ -1227,6 +1283,8 @@ void PlayScreen::draw(App& app, sf::RenderWindow& w) {
     if (app.repulseOpen())
         keyCap(throwKey, "F", 1.f - clampf(app.repulseCooldown() / cfg::player::repulseCooldown, 0.f, 1.f),
                app.repulseCooldown() <= 0.f);
+    if (app.repulseOpen()) kx += 30.f;
+    drawTabHint(app, w, {kx + 10.f, dy - keyCapSize(app.font(), "tab").y * 0.5f});
     drawCreedHud(app, w, app.uiMouse(), !peek_.open && !dragging_);
 
     if (peek_.open) {
@@ -1247,7 +1305,7 @@ void PlayScreen::draw(App& app, sf::RenderWindow& w) {
         } else if (markKey.contains(um)) {
             drawTooltip(w, app.font(), um, s, "Volley  (Q)",
                         "like clicking every ball at once, but faster: each free ball is thrown at the enemy "
-                        "nearest to it. Recharges in 1 s.",
+                        "nearest to it. Recharges in 1.25 s.",
                         theme::accent);
         } else if (app.bulletOpen() && bulletKey.contains(um)) {
             drawTooltip(w, app.font(), um, s, "Bullet time  (hold E)",
@@ -1259,7 +1317,7 @@ void PlayScreen::draw(App& app, sf::RenderWindow& w) {
                         "the core sends out a shockwave: every enemy near it is shoved away and staggered for a "
                         "moment (soaked ones fly further). Recharges in 10 s.",
                         theme::core);
-        } else if (sf::FloatRect(tally.left - 6.f, tally.top + 26.f, tally.width + 12.f, tally.height - 20.f).contains(um)) {
+        } else if (tally.contains(um)) {
             drawTooltip(w, app.font(), um, s, "Your balls",
                         "click one to throw it at the enemy nearest the core, or press and pull back to aim. TAB shows each ball's classes, items, type, abilities and modifiers (the fight pauses).");
         }
@@ -1284,9 +1342,9 @@ void PlayScreen::drawWaveBanner(App& app, sf::RenderWindow& w) const {
 
     const int act = bannerWave_ / 100, row = bannerWave_ % 100;
     std::string label = "Stage " + std::to_string(row);
-    const bool elite = app.data().run.eliteWave && row <= mapRows(act);
+    const bool elite = app.data().run.eliteWave && row <= app.data().run.map.rowCount();
     if (elite) label = "Elite";
-    if (row > mapRows(act)) label = bossName(bossOfAct(act));
+    if (row > app.data().run.map.rowCount()) label = bossName(bossOfAct(act));
     const sf::Color frame = elite ? theme::ember : theme::accent;   // an elite's banner burns orange
     drawLabel(w, app.font(), elite ? "act " + std::to_string(act) + "   -   item spoils" : "act " + std::to_string(act), 12,
               {s.x * 0.5f, s.y * 0.40f - 46.f - (1.f - out) * 16.f}, withAlpha(frame, a));
@@ -1337,7 +1395,8 @@ bool TabPeek::handle(const sf::Event& e) {
 
 sf::FloatRect ballTallyRect(App& app, int balls) {
     const sf::Vector2f s = app.size();
-    return {theme::margin, s.y - theme::margin - 50.f, std::max(60.f, 22.f * static_cast<float>(balls)), 50.f};
+    const float band = cfg::app::arenaBand;
+    return {theme::margin - 6.f, s.y - band, 22.f * static_cast<float>(std::max(1, balls)) - 3.f, band};
 }
 
 void drawTabHint(App& app, sf::RenderWindow& w, sf::Vector2f topLeft) {
