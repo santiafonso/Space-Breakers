@@ -2195,6 +2195,9 @@ de las pelotas: Q, el anillo de E y F.
   centro de la web (algunos con anillo o luna), con paralaje de 0.3x respecto de
   la cámara (`kPlanets`, `LoadoutScreen::drawSky`). Tenues: la web es lo
   principal.
+- **El mapa de la run tiene el mismo fondo** (orbes que flotan y planetas en
+  órbita, `drawOrbitingPlanets` en `ui/MenuBackdrop.cpp`, compartido con la
+  web); los planetas se deslizan un poco con el scroll del mapa.
 - **Los nodos de clase son distintos a todo lo demás:** un círculo geométrico
   (disco, un círculo interior fino y una estrella de seis puntas que gira
   adentro), resplandor fuerte en su color y una órbita propia (anillo punteado
@@ -2222,6 +2225,27 @@ de las pelotas: Q, el anillo de E y F.
   bloquear todos los nodos devolviendo lo gastado, F3 = desbloquear toda la
   web al máximo (gratis). Una línea roja bajo el
   título lo recuerda.
+
+### 2026-10-02: bandas negras y el descanso con elección
+
+- **Bandas negras arriba y abajo de la arena** (`cfg::app::arenaBand` = 36 px
+  de UI por lado): la arena es más baja que la pantalla (1280x728), así que la
+  cámara, que siempre encuadra con el aspecto de la UI, deja una franja negra
+  arriba y abajo. Una pelota pegada a la pared de arriba o de abajo se agarra
+  cómoda. El marco, el tinte del combo y el de bullet time siguen a la arena
+  (`App::arenaRect`); las bandas se dibujan sobre el mundo y bajo el HUD
+  (`App::drawArenaBands`). La arena del jefe usa el mismo aspecto, así que
+  también tiene bandas.
+- **La honda no se corta en el borde de la pantalla:** mientras apuntás, el
+  cursor se oculta y el tiro se mide por el movimiento del mouse
+  (`Window::setMouseCapture` / `pumpCapture`), y el cursor se recentra a
+  escondidas cuando se acerca al borde. Una pelota pegada a cualquier pared,
+  en pantalla completa, se tira a toda potencia. Al soltar, el cursor vuelve
+  donde terminó el tiro (dentro de la ventana).
+- **El nodo de descanso ahora es una elección:** reparar el núcleo (Rest) o
+  subir de nivel un ítem (Forge), con las cartas del evento "?" en el color
+  del núcleo (`App::openRestStop`, `EventKind::Rest/Temper`). Si no hay nada
+  para forjar, repara directo como antes. "Move on" sale sin nada.
 
 ### Anotado para después (el usuario lo pidió así)
 

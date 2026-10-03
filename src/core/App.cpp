@@ -67,7 +67,7 @@ std::string findAsset(const std::string& rel) {
 
 }  // namespace
 
-App::App() : window_(kLogical()), world_(kLogical()) {
+App::App() : window_(kLogical()), world_({kLogical().x, kLogical().y - 2.f * cfg::app::arenaBand}) {
     savePath_ = (exeDir() / "saves" / "save.txt").string();
 
     // Lato Bold for the UI, Lato Black for titles (Widgets picks it for big
@@ -1085,13 +1085,9 @@ void App::travelTo(int node) {
         case MapNodeType::Boss:
             startWaveAt(wave, n.type == MapNodeType::Elite);
             break;
-        case MapNodeType::Rest:
+        case MapNodeType::Rest:   // repair the core, or forge an item
             r.wave = wave;
-            playerRepair(hasCreed(CreedId::Fortress) ? world_.core().maxHp * cfg::creed::fortressRestHeal : 1e9f);
-            audio_.purchase();
-            effects_.flash(theme::core, 0.5f);
-            effects_.addLabel(hasCreed(CreedId::Fortress) ? "Core half repaired" : "Core repaired", mid, theme::core, 26, 1.2f);
-            openMap();
+            openRestStop();
             break;
         case MapNodeType::Upgrade:   // a free pick - or now and then a stranger with deals
             r.wave = wave;
@@ -1772,6 +1768,27 @@ sf::Vector2f App::worldToUi(sf::Vector2f p) const {
     return {(p.x - tl.x) * kLogical().x / camSize_.x, (p.y - tl.y) * kLogical().y / camSize_.y};
 }
 
+// The arena's walls in UI units (the black bands lie outside it); the frame
+// holds still while the camera shakes.
+sf::FloatRect App::arenaRect() const {
+    const sf::Vector2f tl = worldToUi({0.f, 0.f}) + camShake_ * (kLogical().x / camSize_.x);
+    const sf::Vector2f br = worldToUi(world_.size()) + camShake_ * (kLogical().x / camSize_.x);
+    return {tl.x, tl.y, br.x - tl.x, br.y - tl.y};
+}
+
+// The black bands above and below the arena, drawn over the world (so nothing
+// spills into them) and under the HUD.
+void App::drawArenaBands(sf::RenderTarget& t) const {
+    const sf::FloatRect arena = arenaRect();
+    sf::RectangleShape band({size().x, std::max(0.f, arena.top)});
+    band.setFillColor(sf::Color::Black);
+    t.draw(band);
+    const float bottom = arena.top + arena.height;
+    band.setSize({size().x, std::max(0.f, size().y - bottom)});
+    band.setPosition(0.f, bottom);
+    t.draw(band);
+}
+
 // A kill's coin: a little bigger with the combo, capped, and shrunk with the
 // camera when it pulls back (so gold never outweighs the fight).
 float App::coinRadius(int comboTier) const {
@@ -1988,6 +2005,10 @@ void App::afterFightPick() {
 }
 
 void App::update(float frameDt) {
+    // The slingshot pull reads mouse motion while aiming (see Window::setMouseCapture);
+    // let go of it the moment aiming stops for any reason.
+    window_.setMouseCapture(aiming_ && simulating() && window_.handle().hasFocus());
+    window_.pumpCapture();
     // World units for the play screen, fixed UI units for menus / cards (see
     // handleEvent) - the world view can be zoomed out on the boss arena.
     const sf::Vector2f mouse =
@@ -2093,12 +2114,16 @@ void App::update(float frameDt) {
     // wave Choice and the "Continue" card too - so the view doesn't zoom in and
     // straight back out. It snaps to the fixed view once the run is banked (a
     // loss, or the final "Back to menu") or gone.
+    // The arena is wider than the screen's aspect, so the framing (always kept at
+    // the UI's aspect) leaves the black bands above and below it.
     sf::Vector2f tgtSize = kLogical();
-    sf::Vector2f tgtCenter = kLogical() * 0.5f;
+    sf::Vector2f tgtCenter = world_.viewCenter();
     bool snap = true;
     if (data_.run.active && !runBanked_) {
-        tgtSize = world_.viewSize();
-        tgtCenter = world_.viewCenter();
+        const sf::Vector2f vs = world_.viewSize();
+        const float ratio = kLogical().x / kLogical().y;
+        const float fw = std::max(vs.x, vs.y * ratio);
+        tgtSize = {fw, fw / ratio};
         snap = false;
     }
     if (snap) {
@@ -2151,12 +2176,14 @@ void App::render() {
     window_.useUiView();
     w.clear(theme::bg);
     backdrop::draw(w, size());
+    const sf::FloatRect arena = arenaRect();
     if (heat_ > 0.01f) {   // warm tint over the arena (not the letterbox bars)
-        sf::RectangleShape hot(size());
+        sf::RectangleShape hot({arena.width, arena.height});
+        hot.setPosition(arena.left, arena.top);
         hot.setFillColor(withAlpha(theme::bgHot, heat_ * cfg::app::heatAlpha));
         w.draw(hot);
     }
-    effects_.drawBorder(w);
+    effects_.drawBorder(w, arena);
 
     std::size_t start = 0;
     for (std::size_t i = stack_.size(); i-- > 0;) {
@@ -2527,6 +2554,10 @@ int App::runSnapshots(const std::string& dir) {
         eventDeals_ = {EventKind::Drifter, EventKind::Gamble};
         push(ScreenId::Event);
         snapFrame(d + "30_event.png");
+        back();
+        eventDeals_ = {EventKind::Rest, EventKind::Temper};
+        push(ScreenId::Event);
+        snapFrame(d + "35_rest_stop.png");
         back();
         while (runBallCount() < ballCap()) rr.balls.push_back(BallLoadout{});
         syncWorldBalls();

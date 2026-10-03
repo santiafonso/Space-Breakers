@@ -70,26 +70,6 @@ constexpr float kPanKeySpeed = 620.f; // WASD, px/s
 // Node sizes follow the zoom, a little less than the layout does.
 float nodeScale(float zoom) { return clampf(0.55f + 0.45f * zoom, 0.6f, 1.25f); }
 
-// Planets far behind the web, each on its own slow tilted orbit around the
-// web's centre (with a little parallax as the camera moves), so the screen
-// lives without competing with the nodes.
-struct Planet {
-    float orbit;     // orbit radius, px
-    float tilt;      // ellipse squash (1 = circle)
-    float speed;     // rad/s (sign = direction)
-    float phase;
-    float radius;
-    sf::Color color;
-    bool ring;       // a Saturn ring
-    bool moon;
-};
-const Planet kPlanets[] = {
-    {300.f, 0.42f, 0.050f, 0.6f, 15.f, theme::ballSlow, false, true},
-    {520.f, 0.38f, -0.032f, 2.4f, 26.f, theme::puSurge, true, false},
-    {760.f, 0.45f, 0.022f, 4.1f, 20.f, theme::ember, false, true},
-    {980.f, 0.40f, -0.016f, 5.3f, 34.f, theme::ballMid, true, false},
-    {1240.f, 0.43f, 0.011f, 1.2f, 12.f, theme::venom, false, false},
-};
 constexpr float kSkyParallax = 0.3f;   // planets move this much of the camera's pan
 
 // The web's layout: a radial tree. The data gives every node a parent (and
@@ -684,51 +664,7 @@ void LoadoutScreen::drawSky(App& app, sf::RenderWindow& w, float alpha) const {
     backdrop_.draw(w, alpha);
     const sf::Vector2f s = app.size();
     const sf::Vector2f c = sf::Vector2f{s.x * 0.5f, s.y * kWebCenterY} + pan_ * kSkyParallax;
-    const float k = 0.6f + 0.4f * zoom_;   // a touch of the zoom, much less than the web
-    for (const Planet& pl : kPlanets) {
-        const float R = pl.orbit * k;
-        {   // its orbit: a faint ellipse
-            sf::CircleShape o(R);
-            o.setOrigin(R, R);
-            o.setPosition(c);
-            o.setScale(1.f, pl.tilt);
-            o.setPointCount(120);
-            o.setFillColor(sf::Color::Transparent);
-            o.setOutlineThickness(1.f);
-            o.setOutlineColor(withAlpha(theme::grid, 0.12f * alpha));
-            w.draw(o);
-        }
-        const float a = pl.phase + pl.speed * skyT_;
-        const sf::Vector2f p = c + sf::Vector2f{std::cos(a) * R, std::sin(a) * R * pl.tilt};
-        const float pr = pl.radius * k;
-        const float near = 0.75f + 0.25f * std::sin(a);   // the near side of the orbit is a bit brighter
-        const float pa = (0.45f + 0.2f * near) * alpha;
-        draw::glow(w, p, pr * 2.8f, pl.color, 0.16f * alpha);
-        // lit from the web's centre: a bright side toward it, a dark side away
-        const sf::Vector2f toC = normalized(c - p, {0.f, -1.f});
-        draw::disc(w, p, pr, withAlpha(lerpColor(pl.color, theme::bg, 0.35f), pa),
-                   withAlpha(lerpColor(pl.color, theme::bg, 0.75f), pa), {1.f, 1.f}, 40);
-        draw::disc(w, p + toC * (pr * 0.28f), pr * 0.62f, withAlpha(lerpColor(pl.color, sf::Color::White, 0.15f), pa * 0.55f),
-                   withAlpha(pl.color, 0.f), {1.f, 1.f}, 32);
-        if (pl.ring) {   // a flat ring across it
-            sf::CircleShape rg(pr * 1.75f);
-            rg.setOrigin(pr * 1.75f, pr * 1.75f);
-            rg.setPosition(p);
-            rg.setScale(1.f, 0.28f);
-            rg.setRotation(-14.f);
-            rg.setPointCount(60);
-            rg.setFillColor(sf::Color::Transparent);
-            rg.setOutlineThickness(2.f);
-            rg.setOutlineColor(withAlpha(lerpColor(pl.color, sf::Color::White, 0.3f), pa * 0.7f));
-            w.draw(rg);
-        }
-        if (pl.moon) {   // a small moon on a quick orbit of its own
-            const float ma = skyT_ * 0.6f + pl.phase * 3.f;
-            const sf::Vector2f mp = p + sf::Vector2f{std::cos(ma), std::sin(ma) * 0.55f} * (pr * 2.3f);
-            draw::disc(w, mp, std::max(2.f, pr * 0.22f), withAlpha(theme::textLo, pa), withAlpha(theme::textDim, pa),
-                       {1.f, 1.f}, 16);
-        }
-    }
+    drawOrbitingPlanets(w, c, skyT_, 0.6f + 0.4f * zoom_, alpha);   // a touch of the zoom, much less than the web
 }
 
 void LoadoutScreen::draw(App& app, sf::RenderWindow& w) {
@@ -1231,8 +1167,11 @@ void PlayScreen::draw(App& app, sf::RenderWindow& w) {
         }
     }
     app.useUiView();
+    app.drawArenaBands(w);
     if (app.bulletActive()) {   // bullet time: a faint green wash over the arena
-        sf::RectangleShape tint(app.size());
+        const sf::FloatRect ar = app.arenaRect();
+        sf::RectangleShape tint({ar.width, ar.height});
+        tint.setPosition(ar.left, ar.top);
         tint.setFillColor(withAlpha(theme::bulletTime, 0.05f));
         w.draw(tint);
     }

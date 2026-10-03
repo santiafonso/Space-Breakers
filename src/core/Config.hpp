@@ -971,6 +971,9 @@ inline constexpr float aimSlowMax = 2.5f;
 inline constexpr float catchRadius = 130.f;   // grab a ball from near it, not only dead-on
 inline constexpr float grabSettle = 16.f;     // how fast the grab offset eases out (per s)
 inline constexpr float fadeRate = 14.f;
+// A black band above and below the arena (UI px at normal zoom): a ball pinned
+// to the top or bottom wall still has room around it for the pointer.
+inline constexpr float arenaBand = 36.f;
 
 // Impact juice: freeze the sim for a beat and kick the camera on a hit. Kept
 // short so the game still feels fast.

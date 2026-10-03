@@ -164,22 +164,23 @@ void Effects::update(float dt) {
     flash_ *= std::exp(-6.f * dt);
 }
 
-void Effects::drawBorder(sf::RenderWindow& window) const {
+void Effects::drawBorder(sf::RenderWindow& window, sf::FloatRect arena) const {
     // The arena frame: a hairline all round, corner brackets and a small notch
     // at the middle of each side, like the bezel of an instrument. A wall that
     // was just hit lights up along its whole length.
-    const float W = size_.x, H = size_.y;
+    const float X = arena.left, Y = arena.top, W = arena.width, H = arena.height;
+    const float cx = X + W * 0.5f, cy = Y + H * 0.5f;
     const sf::Color hair = withAlpha(theme::arenaEdge, 0.9f);
-    draw::box(window, {0.5f, 0.5f, W - 1.f, H - 1.f}, 0.f, sf::Color::Transparent, sf::Color::Transparent, hair, 1.f);
+    draw::box(window, {X + 0.5f, Y + 0.5f, W - 1.f, H - 1.f}, 0.f, sf::Color::Transparent, sf::Color::Transparent, hair, 1.f);
     const sf::Color mark = lerpColor(theme::arenaEdge, theme::accent, 0.3f);
-    draw::brackets(window, {3.f, 3.f, W - 6.f, H - 6.f}, 26.f, 2.f, mark);
-    draw::line(window, {W * 0.5f - 14.f, 3.f}, {W * 0.5f + 14.f, 3.f}, 2.f, mark);
-    draw::line(window, {W * 0.5f - 14.f, H - 3.f}, {W * 0.5f + 14.f, H - 3.f}, 2.f, mark);
-    draw::line(window, {3.f, H * 0.5f - 14.f}, {3.f, H * 0.5f + 14.f}, 2.f, mark);
-    draw::line(window, {W - 3.f, H * 0.5f - 14.f}, {W - 3.f, H * 0.5f + 14.f}, 2.f, mark);
+    draw::brackets(window, {X + 3.f, Y + 3.f, W - 6.f, H - 6.f}, 26.f, 2.f, mark);
+    draw::line(window, {cx - 14.f, Y + 3.f}, {cx + 14.f, Y + 3.f}, 2.f, mark);
+    draw::line(window, {cx - 14.f, Y + H - 3.f}, {cx + 14.f, Y + H - 3.f}, 2.f, mark);
+    draw::line(window, {X + 3.f, cy - 14.f}, {X + 3.f, cy + 14.f}, 2.f, mark);
+    draw::line(window, {X + W - 3.f, cy - 14.f}, {X + W - 3.f, cy + 14.f}, 2.f, mark);
 
     const float th = 3.f;
-    const sf::FloatRect bars[4] = {{0.f, 0.f, th, H}, {W - th, 0.f, th, H}, {0.f, 0.f, W, th}, {0.f, H - th, W, th}};
+    const sf::FloatRect bars[4] = {{X, Y, th, H}, {X + W - th, Y, th, H}, {X, Y, W, th}, {X, Y + H - th, W, th}};
     for (int i = 0; i < 4; ++i) {
         if (edge_[i] < 0.02f) continue;
         sf::RectangleShape bar({bars[i].width, bars[i].height});

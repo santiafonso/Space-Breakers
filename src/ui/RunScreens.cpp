@@ -461,6 +461,8 @@ void MapScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
 
 void MapScreen::update(App& app, float dt, sf::Vector2f mouse) {
     clock_ += dt;
+    if (!backdropInit_) { backdropInit_ = true; backdrop_.init(app.size()); }
+    backdrop_.update(dt);
     mouse_ = mouse;
     peek_.update(dt);
     if (!scrollInit_) {   // open on where you stand: the next row just above centre
@@ -517,6 +519,13 @@ void MapScreen::draw(App& app, sf::RenderWindow& w) {
     const RunState& r = app.data().run;
     const auto& nodes = r.map.nodes;
     const int count = static_cast<int>(nodes.size());
+
+    {   // the far background: drifting balls and planets on slow orbits, sliding a
+        // little as the map scrolls
+        const float ba = clampf(intro() * 2.f, 0.f, 1.f);
+        if (backdropInit_) backdrop_.draw(w, ba);
+        drawOrbitingPlanets(w, {s.x * 0.5f, s.y * 0.55f + scroll_ * 0.25f}, clock_, 0.9f, ba);
+    }
 
     // Nodes fade out toward the top and bottom edges of the view rather than
     // being cut off.

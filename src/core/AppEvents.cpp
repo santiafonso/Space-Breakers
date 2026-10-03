@@ -18,6 +18,7 @@ bool App::eventDealOk(EventKind k) const {
     switch (k) {
         case EventKind::Drifter: return runBallCount() < ballCap();
         case EventKind::Smith:
+        case EventKind::Temper:
             for (const BallLoadout& L : r.balls)
                 for (int sl = 0; sl < kLoadoutSlots; ++sl)
                     if (L.kindAt(sl) >= 0 && L.levelAt(sl) < forgeCap()) return true;
@@ -114,8 +115,36 @@ void App::takeEventDeal(int idx) {
             audio_.purchase();
             if (!openForgePicker()) openMap();
             break;
+        case EventKind::Rest:
+            restRepair();
+            openMap();
+            break;
+        case EventKind::Temper:
+            audio_.purchase();
+            if (!openForgePicker()) openMap();
+            break;
     }
     save();
+}
+
+// The Rest stop: repair the core, or level up an item at the forge. With
+// nothing to forge it just repairs, as before.
+void App::openRestStop() {
+    if (!eventDealOk(EventKind::Temper)) {
+        restRepair();
+        openMap();
+        return;
+    }
+    eventDeals_ = {EventKind::Rest, EventKind::Temper};
+    push(ScreenId::Event);
+}
+
+void App::restRepair() {
+    const sf::Vector2f mid{size().x * 0.5f, size().y * 0.4f};
+    playerRepair(hasCreed(CreedId::Fortress) ? world_.core().maxHp * cfg::creed::fortressRestHeal : 1e9f);
+    audio_.purchase();
+    effects_.flash(theme::core, 0.5f);
+    effects_.addLabel(hasCreed(CreedId::Fortress) ? "Core half repaired" : "Core repaired", mid, theme::core, 26, 1.2f);
 }
 
 void App::leaveEvent() {

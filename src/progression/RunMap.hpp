@@ -58,7 +58,7 @@ inline const char* mapNodeDesc(MapNodeType t) {
         case MapNodeType::Elite:   return "a much harder wave - more gold and an item pick (items only come from elites and shops)";
         case MapNodeType::Shop:    return "rare: buy what's on the shelf (items, abilities, relics, modifiers), reroll it as often as you can pay, sell one item";
         case MapNodeType::Forge:   return "level up one item a ball already carries";
-        case MapNodeType::Rest:    return "no fight: the core is repaired to full";
+        case MapNodeType::Rest:    return "no fight: repair the core, or level up an item";
         case MapNodeType::Upgrade: return "no fight: a free pick of 1 of 3 (no items) - or a stranger with deals for gold";
         case MapNodeType::Recruit: return "no fight: a new ball, or a free pick";
         case MapNodeType::Boss:    return "the act's boss";

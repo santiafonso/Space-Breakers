@@ -30,4 +30,9 @@ private:
     Rng rng_;
 };
 
+// A few planets on slow tilted orbits around `centre`, each with its faint
+// orbit, some with a ring or a moon - the far background of the skill web and
+// the run map. `t` = seconds (drives the orbits), `scale` sizes the system.
+void drawOrbitingPlanets(sf::RenderWindow& window, sf::Vector2f centre, float t, float scale, float alpha);
+
 }  // namespace sb

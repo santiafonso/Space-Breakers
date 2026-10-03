@@ -1,6 +1,7 @@
 #include "platform/Window.hpp"
 
 #include <algorithm>
+#include <cmath>
 
 namespace sb {
 
@@ -65,7 +66,40 @@ void Window::setWorldView(sf::Vector2f size, sf::Vector2f center) {
 }
 
 sf::Vector2f Window::mousePosition() const {
+    if (captured_)
+        return win_.mapPixelToCoords({static_cast<int>(std::lround(virtualPx_.x)), static_cast<int>(std::lround(virtualPx_.y))},
+                                     worldView_);
     return win_.mapPixelToCoords(sf::Mouse::getPosition(win_), worldView_);
+}
+
+void Window::setMouseCapture(bool on) {
+    if (on == captured_) return;
+    captured_ = on;
+    if (on) {
+        lastPx_ = sf::Mouse::getPosition(win_);
+        virtualPx_ = {static_cast<float>(lastPx_.x), static_cast<float>(lastPx_.y)};
+        win_.setMouseCursorVisible(false);
+    } else {
+        const sf::Vector2u ws = win_.getSize();
+        const int x = std::clamp(static_cast<int>(std::lround(virtualPx_.x)), 0, static_cast<int>(ws.x) - 1);
+        const int y = std::clamp(static_cast<int>(std::lround(virtualPx_.y)), 0, static_cast<int>(ws.y) - 1);
+        if (win_.hasFocus()) sf::Mouse::setPosition({x, y}, win_);
+        win_.setMouseCursorVisible(true);
+    }
+}
+
+void Window::pumpCapture() {
+    if (!captured_) return;
+    const sf::Vector2i cur = sf::Mouse::getPosition(win_);
+    virtualPx_ += sf::Vector2f(static_cast<float>(cur.x - lastPx_.x), static_cast<float>(cur.y - lastPx_.y));
+    lastPx_ = cur;
+    // Near an edge the cursor would stop: put it back in the middle (hidden).
+    const sf::Vector2u ws = win_.getSize();
+    const int m = static_cast<int>(std::min(ws.x, ws.y) / 6);
+    if (win_.hasFocus() && (cur.x < m || cur.y < m || cur.x > static_cast<int>(ws.x) - m || cur.y > static_cast<int>(ws.y) - m)) {
+        lastPx_ = {static_cast<int>(ws.x / 2), static_cast<int>(ws.y / 2)};
+        sf::Mouse::setPosition(lastPx_, win_);
+    }
 }
 
 sf::Vector2f Window::uiMousePosition() const {

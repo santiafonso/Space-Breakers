@@ -47,6 +47,8 @@ public:
     sf::Vector2f size() const { return window_.logicalSize(); }
     void useWorldView() { window_.useWorldView(); }
     void useUiView() { window_.useUiView(); }
+    sf::FloatRect arenaRect() const;   // the arena's walls in UI units
+    void drawArenaBands(sf::RenderTarget& t) const;
     bool hasFocus() { return window_.handle().hasFocus(); }
     void useUiZoom(float k) { window_.useUiZoom(k); }
     sf::Vector2f uiMouse() const {   // pointer in UI units, any screen (photo mode can pin it)
@@ -340,6 +342,8 @@ private:
     std::vector<EventKind> eventDeals_;   // the "?" event on screen
     bool openEvent();         // a "?" stop rolled an event: false = nothing to offer
     bool openForgePicker();   // the Forge's item picker: false = nothing to level up
+    void openRestStop();      // a Rest stop: repair the core or forge an item
+    void restRepair();
 public:
     bool choiceIsBossTreasure() const { return rollSource_ == RollSource::Boss; }
 private:

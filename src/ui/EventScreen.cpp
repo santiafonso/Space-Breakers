@@ -73,14 +73,18 @@ void EventScreen::draw(App& app, sf::RenderWindow& w) {
     const sf::Vector2f s = app.size();
     const float it = intro();
     const sf::Font& f = app.font();
-    const sf::Color col = theme::puSurge;   // the "?" stop's colour on the map
+    const auto& deals = app.eventDeals();
+    // The Rest stop reuses this screen: repair the core or forge, in the core's colour.
+    const bool rest = !deals.empty() && deals.front() == EventKind::Rest;
+    const sf::Color col = rest ? theme::core : theme::puSurge;   // the stop's colour on the map
 
     drawDim(w, s, 0.88f * clampf(introPop(it, 0.f, 0.25f), 0.f, 1.f));
-    drawCenteredPop(w, f, "A stranger", theme::fsTitle, {s.x * 0.5f, s.y * 0.085f}, col, introPop(it, 0.04f, 0.32f));
-    drawCenteredPop(w, f, "gold  " + std::to_string(app.gold()), theme::fsBody, {s.x * 0.5f, s.y * 0.085f + 42.f},
-                    theme::puGolden, introPop(it, 0.1f));
+    drawCenteredPop(w, f, rest ? "Rest" : "A stranger", theme::fsTitle, {s.x * 0.5f, s.y * 0.085f}, col,
+                    introPop(it, 0.04f, 0.32f));
+    if (!rest)
+        drawCenteredPop(w, f, "gold  " + std::to_string(app.gold()), theme::fsBody, {s.x * 0.5f, s.y * 0.085f + 42.f},
+                        theme::puGolden, introPop(it, 0.1f));
 
-    const auto& deals = app.eventDeals();
     const int n = static_cast<int>(deals.size());
     for (int i = 0; i < n; ++i) {
         const EventKind k = deals[static_cast<std::size_t>(i)];
@@ -93,8 +97,11 @@ void EventScreen::draw(App& app, sf::RenderWindow& w) {
         r.top += (1.f - clampf(cp, 0.f, 1.f)) * 50.f - 12.f * h;
         const float pulse = 0.5f + 0.5f * std::sin(clock_ * 1.8f + static_cast<float>(i) * 1.3f);
         const int gold = app.eventGoldOf(k);
-        drawRuleCard(w, f, r, col, a, h, pulse, std::to_string(i + 1) + "   DEAL",
-                     ok ? eventHint(k) : "not enough gold", eventName(k), eventGain(k, gold), eventCost(k, gold));
+        std::string gain = eventGain(k, gold), cost = eventCost(k, gold);
+        if (k == EventKind::Rest && app.hasCreed(CreedId::Fortress)) gain = "the core is half repaired";
+        if (k == EventKind::Rest && app.ironCoreAlive()) cost = "ends this act's Iron core";
+        drawRuleCard(w, f, r, col, a, h, pulse, std::to_string(i + 1) + (rest ? "   CHOICE" : "   DEAL"),
+                     ok ? eventHint(k) : "not enough gold", eventName(k), gain, cost);
     }
 
     {   // walk away: nothing gained, nothing lost
@@ -102,7 +109,7 @@ void EventScreen::draw(App& app, sf::RenderWindow& w) {
         const sf::FloatRect r = leaveRect(app);
         draw::box(w, r, theme::corner, withAlpha(lerpColor(theme::bg, col, 0.08f + 0.2f * leaveHover_), a),
                   withAlpha(lerpColor(theme::bg, col, 0.03f), a), withAlpha(col, (0.25f + 0.5f * leaveHover_) * a), 1.5f);
-        drawCentered(w, f, "Walk away", theme::fsSmall, {r.left + r.width * 0.5f, r.top + r.height * 0.5f - 1.f},
+        drawCentered(w, f, rest ? "Move on" : "Walk away", theme::fsSmall, {r.left + r.width * 0.5f, r.top + r.height * 0.5f - 1.f},
                      withAlpha(theme::textLo, a));
     }
 }
