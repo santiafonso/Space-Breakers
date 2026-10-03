@@ -8,6 +8,7 @@
 
 #include "platform/Audio.hpp"
 #include "platform/Window.hpp"
+#include "progression/Events.hpp"
 #include "progression/GameData.hpp"
 #include "progression/Offers.hpp"
 #include "render/Effects.hpp"
@@ -17,14 +18,14 @@
 
 namespace sb {
 
-enum class ScreenId { Menu, Loadout, Play, Choice, Pause, Stats, HowTo, BossWin, Map, Shop, Equip, Dev, Pact, Sound, AbilityPick };
+enum class ScreenId { Menu, Loadout, Play, Choice, Pause, Stats, HowTo, BossWin, Map, Shop, Equip, Dev, Creed, Sound, AbilityPick, Altar, Event };
 
 // Who opened the ball / slot picker, and so what confirming it does.
 // ShopForge / Sell are the shop's paid forge and its "sell an item" counter.
 enum class EquipSource { Choice, Shop, Forge, ShopForge, Sell };
 
-// Where a pact choice comes from: the run start ("Covenant") or the act-1 boss.
-enum class PactSource { Start, Boss };
+// Where a creed choice comes from: the run start ("Covenant") or the act-1 boss.
+enum class CreedSource { Start, Boss };
 
 // Top-level application: owns the window, subsystems and the screen stack, runs
 // the loop (fixed-step simulation, per-frame render) and wires the flow:
@@ -46,6 +47,10 @@ public:
     sf::Vector2f size() const { return window_.logicalSize(); }
     void useWorldView() { window_.useWorldView(); }
     void useUiView() { window_.useUiView(); }
+    sf::FloatRect arenaRect() const;   // the arena's walls in UI units
+    void drawArenaBands(sf::RenderTarget& t) const;
+    bool hasFocus() { return window_.handle().hasFocus(); }
+    void useUiZoom(float k) { window_.useUiZoom(k); }
     sf::Vector2f uiMouse() const {   // pointer in UI units, any screen (photo mode can pin it)
         return snapMouseOn_ ? snapMouse_ : window_.uiMousePosition();
     }
@@ -61,9 +66,12 @@ public:
     int bossIronCores() const { return bossIronCores_; }         // BossWin card: "Iron core" cores (0 = none)
     bool ironCoreAlive() const { return data_.run.active && !data_.run.repairedThisAct; }
     const std::array<UpgradeKind, kChoiceCount>& choices() const { return choices_; }
+    int choiceCount() const { return choiceCount_; }   // cards on the table (an Elite deals 3)
 
     void openLoadout();     // Menu -> the game menu
-    void newRun();          // Loadout "Start" -> a fresh run
+    void newRun();          // Loadout "Start" -> a fresh run (drops a saved one)
+    bool hasSavedRun() const;   // a run in progress on disk (saves/run.txt)
+    bool resumeRun();           // Menu "Continue run": back on its map; false if it couldn't be read
     void applyUpgrade(int idx);   // Choice: take card idx (asks for a ball first when it needs one)
 
     // ---- path map ----
@@ -91,39 +99,65 @@ public:
     // ---- shop ----
     int shopPrice(UpgradeKind k) const;
     void buyShopOffer(int i);
-    void buyRepair();
-    int repairAmount() const;           // HP a shop repair restores
+    int repairAmount() const;           // HP a repair restores
     void leaveShop();
     // Shop extras (Fase O): a sale, a mystery box, a paid reroll, selling an
     // item back and the forge as a paid service.
     int shopOfferPrice(int i) const;    // what offer i costs right now (sale / prepaid applied)
-    int mysteryPrice() const;
-    void buyMystery();
     int shopRerollPrice() const;
+    int shopFreeRerolls() const;        // free rerolls this visit still has ("Merchant": 1 per level)
+    int shopSellsLeft() const;          // items this visit may still buy back (1, +1 per "Haggler" level)
     void rerollShop();
     int saleOffPercent() const;
-    void beginShopForge();
     void beginSell();
     int sellValue(int ball, int slot) const;
     int forgeCap() const;               // max forge level ("Duet" raises it)
     void rerollChoice(int idx);   // Choice: swap card `idx` for another item (costs a Foresight charge)
     void repairCoreSkipItem();    // Choice: heal the core to full instead of taking an item
+    void skipChoice();            // Choice: take nothing
+    int ballCap() const;          // balls the arena holds now (more after act 2's boss; "Duet": two)
+    // F, Repulse (from act 2): the core shoves nearby enemies away.
+    bool repulseOpen() const;
+    float repulseCooldown() const { return repulseCd_; }
+    void repulse();
+    // "?" stop events (progression/Events.hpp): deals for gold, or walk away.
+    const std::vector<EventKind>& eventDeals() const { return eventDeals_; }
+    int eventGoldOf(EventKind k) const { return eventGold(k, data_.run.map.act); }
+    bool eventDealOk(EventKind k) const;   // affordable and something to gain
+    void takeEventDeal(int idx);
+    void leaveEvent();
     void playerRepair(float amount);   // a deliberate repair: heals and ends this act's "Iron core"
-    void useReserve();            // Play: fire the "Stockpile" reserve power-up (key Q)
+    // The player's own abilities: Q = Mark (always), E = bullet time (act 2 on, held).
+    void playerMark();   // Q: the volley
+    float markCooldown() const { return markCd_; }
+    bool bulletOpen() const;
+    void setBulletHeld(bool on) { bulletHeld_ = on; }
+    float bulletGauge() const { return bulletGauge_; }   // 0..1
+    bool bulletActive() const { return bulletOn_; }
     void leaveBossWin();    // BossWin card "Back to menu" -> game menu (banks the run)
     void continuePastBoss();  // BossWin card "Continue" -> resume at wave 11
     bool bossWinCanContinue() const;  // true when the BossWin card should offer "Continue"
 
-    // ---- pacts (Fase O) ----
-    const std::vector<PactId>& pactChoices() const { return pactChoices_; }
-    PactSource pactSource() const { return pactSrc_; }
-    void choosePact(int idx);          // Pact screen: take card idx
-    void refusePacts();                // Pact screen: turn them all down for gold
-    bool hasPact(PactId id) const { return data_.run.hasPact(id); }
+    // ---- creeds (Fase O) ----
+    const std::vector<CreedId>& creedChoices() const { return creedChoices_; }
+    CreedSource creedSource() const { return creedSrc_; }
+    void chooseCreed(int idx);          // Creed screen: take card idx
+    void refuseCreeds();                // Creed screen: turn them all down for gold
+    bool hasCreed(CreedId id) const { return data_.run.hasCreed(id); }
     int luck() const;   // the run's luck, in points (Lucky clover, Lucky star, Loaded Dice, Lucky charm)
     bool canGrab() const;              // "Hunters" / "Clockwork" take the balls out of your hands
     float flingPower() const;          // throw speed multiplier (Strong arm, Hot Hands, Pinball)
-    void usePactAbility();             // "Nova" (SPACE / right-click in a fight)
+    void useCreedAbility();             // "Nova" (SPACE / right-click in a fight)
+    // ---- pacts (2026-09-28, core/AppPacts.cpp) ----
+    const std::vector<PactId>& pactChoices() const { return pactChoices_; }
+    void choosePact(int idx);           // Altar screen: take card idx
+    void refusePacts();                 // Altar screen: walk away
+    bool hasPact(PactId id) const { return data_.run.hasPact(id); }
+    bool aimSlows() const { return !hasPact(PactId::HeavyArm); }   // "Heavy Arm": no bullet time
+    bool aimGuide() const { return !hasPact(PactId::Blind); }      // "Blind": no dotted guide
+    float quickThrowMul() const;        // "Stillness": weaker quick throws
+    bool consumeAltarReveal();          // the map: play the "a path opens" animation once
+    void devTogglePact(PactId id);      // SB_DEV: grant it (or drop the rule)
     float novaCooldown() const { return novaCd_; }
     std::string choiceTitle() const;   // Choice screen heading
     // ---- "Calling": the starting ball's class, picked in the run intro ----
@@ -136,12 +170,10 @@ public:
     // ---- dev tools: enabled by the SB_DEV env var, no-ops otherwise -----
     bool devMode() const;
     void devWinWave();
-    void devGrantCores(int n);
     void devGrantCurrency();   // top cores + prisms up to a huge pile (game-menu web testing)
     void devHealCore();
     void devToggleInvuln();
     void devAddBall();
-    void devCycleGrant();  // grant the "next" upgrade in the pool
     // ---- the F1 dev panel (SB_DEV only) ----
     void devOpenPanel();
     void devGrant(UpgradeKind k);            // onto devBall()
@@ -153,9 +185,9 @@ public:
     float devTimeScale() const { return devTimeScale_; }
     int devBall() const { return std::min(devBall_, std::max(0, runBallCount() - 1)); }
     void devSetBall(int b) { devBall_ = b; }
-    enum class DevOpen { Shop, Forge, Upgrade, Elite, BossTreasure, Recruit, JumpToBoss, PactBoss, PactStart, AbilityPick };
+    enum class DevOpen { Shop, Forge, Upgrade, Elite, BossTreasure, Recruit, JumpToBoss, CreedBoss, CreedStart, AbilityPick, PostFight, Altar };
     void devOpen(DevOpen what);
-    void devTogglePact(PactId id);   // grant it (or drop it, if the run has it)
+    void devToggleCreed(CreedId id);   // grant it (or drop it, if the run has it)
     void openPause();
     void openStats();
     void openSound();       // the Sound settings screen (main menu / pause)
@@ -164,6 +196,11 @@ public:
     void quit();
 
     void buyMetaUnlock(int unlock);
+    // SB_DEV on the web: F1 = +1000 cores and +10 prisms, F2 = lock every node
+    // again and pay back what it cost (to test unlocking from scratch).
+    void devGiveCurrency();
+    void devRelockWeb();
+    void devUnlockWeb();   // F3: every node to its max level, free
     void toggleSound();
     void setAiming(bool on);   // slingshot aim in progress: time slows for a moment
     void toggleFullscreen();
@@ -180,7 +217,12 @@ private:
     unsigned powerUpMask() const;
     void startWaveAt(int wave, bool elite);   // fight wave N (boss waves are picked by N)
     // Where a set of cards comes from - it sets the tier odds.
-    enum class RollSource { Normal, Elite, Boss };
+    // Where a pick comes from, which decides what it may be:
+    //  Normal (Upgrade / Recruit nodes): anything but items;
+    //  PostFight (after a plain fight): modifiers only;
+    //  Elite: items only; Boss (treasure): anything; Shop: anything but a ball.
+    // A new ball is always a long shot (cfg::run::newBallCardWeight).
+    enum class RollSource { Normal, Elite, Boss, Shop, PostFight };
     void openChoice(RollSource src = RollSource::Normal);
     // One random eligible pick: rolls a tier by the source's odds (Lucky clover
     // shifts them up), then a pick of that tier not in `exclude`. `filter`
@@ -195,17 +237,27 @@ private:
     bool autoTarget(UpgradeKind k, int& ball, int& slot) const;   // first ball / free slot it fits
     void finishChoice();                                          // after a pick: fx, close, next wave
     void afterChoice();       // a Choice closed: back to the map, or on with the run intro
-    // Run intro (newRun): Covenant pact -> Calling class pick -> Quartermaster starter pick -> map.
+    // Run intro (newRun): Covenant creed -> Calling class pick -> Quartermaster starter pick -> map.
     void advanceRunIntro();
     bool openStarterChoice();
     std::vector<UpgradeKind> starterPool(Tier want);          // Starter kit candidates, nearest tier first
+    void postFight();
+    void afterFightPick();   // an Elite's pick, else the map
     bool openAbilityChoice();                                 // the run's first ability (false = nothing to pick)
     void grantMageMissiles();                                 // a Mage ball gets Magic missile in a free slot
+    // Creeds.
+    void foldCreeds(WorldParams& p) const;  // the run's creeds into the sim params
+    bool openCreedChoice(CreedSource src);   // false = nothing to offer (caller moves on)
+    float coinRadius(int comboTier) const;   // a kill's gold coin (UI px)
+    void continueAfterCreed();
+    void grantCreed(CreedId id);
     // Pacts.
-    void foldPacts(WorldParams& p) const;  // the run's pacts into the sim params
-    bool openPactChoice(PactSource src);   // false = nothing to offer (caller moves on)
-    void continueAfterPact();
+    void foldPacts(WorldParams& p) const;
+    bool openPactChoice(bool fromMap = true);   // false = nothing to offer (caller moves on)
     void grantPact(PactId id);
+    void notePactFight(bool flawless);  // the hidden Altar path's streak
+    void revealAltarPath();             // on the pre-boss row with the streak: the hidden Altar appears
+    int colossusBall() const;           // "Colossus": the most built-up ball (-1 = none)
     void applyDuet();
     void applyLegion();
     int randomItemFor(const BallLoadout& b, Tier maxTier);   // a random unlocked item that fits (-1 none)
@@ -216,7 +268,7 @@ private:
     // Class-gain feedback (one central place): compare every ball's classes
     // with what they were at the last sync; a new class, a second class or
     // the ascended form gets a banner, a sound and a flare on the ball.
-    struct KnownClasses { RoleMask roles = 0; ItemTag ascended = ItemTag::None; };
+    struct KnownClasses { RoleMask roles = 0; ItemTag ascended = ItemTag::None; Element element = Element::Plain; };
     std::vector<KnownClasses> knownClasses_;
     void rememberClasses();   // take the current loadout as the baseline (run start)
     void announceClassGains();
@@ -226,7 +278,6 @@ private:
     void handleEvent(const sf::Event& e);
     void update(float frameDt);
     void render();
-    void drawDevOverlay(sf::RenderWindow& w) const;   // dev key cheat-sheet, always top-right in SB_DEV
     // Dev "photo mode" (SB_SNAPSHOT=<dir>): stage every screen, save a PNG of
     // each and quit - a way to look at the UI without playing.
     int runSnapshots(const std::string& dir);
@@ -250,13 +301,15 @@ private:
     GameData data_;
     Rng rng_;
     std::string savePath_;  // set in the ctor: <exe dir>/saves/save.txt
+    std::string runPath() const;   // the run in progress: run.txt beside the save
+    void saveRunNow();             // write it (the map just opened)
 
     std::vector<std::unique_ptr<Screen>> stack_;
     TabPeek peek_;   // TAB over every run screen that doesn't run its own (shop, cards, pickers...)
+    bool onPauseMenus() const;   // pause / stats / how-to / options / dev: they own Esc
     bool onOptions() const;                  // the Options (sound) screen is on top
-    sf::FloatRect optionsButton() const;     // the corner [O] OPTIONS button, UI units
-    void drawOptionsButton(sf::RenderWindow& w) const;
     std::array<UpgradeKind, kChoiceCount> choices_{};
+    int choiceCount_ = 3;   // cfg::run::choiceCards until a roll sets it
     int lastRunWave_ = 0;
     int lastRunCores_ = 0;
     int lastRunPrisms_ = 0;
@@ -265,7 +318,6 @@ private:
     int bossIronCores_ = 0;
     bool continueUnlocked_ = false;  // snapshot at newRun: has a run ever been won before?
     bool runBanked_ = false;         // this run's cores/prisms have been paid out
-    int devGrantNext_ = 0;
     int devBall_ = 0;              // dev panel: which ball grants go to
     float devTimeScale_ = 1.f;     // dev panel: simulation speed
     EquipSource equipSrc_ = EquipSource::Choice;
@@ -273,11 +325,25 @@ private:
     int equipRef_ = -1;       // Choice card / shop offer being placed
     RollSource rollSource_ = RollSource::Normal;   // what the current Choice was rolled from (rerolls keep it)
     std::string choiceTitle_;                      // custom Choice heading ("Starter kit ..."), empty = default
+    std::vector<CreedId> creedChoices_;
     std::vector<PactId> pactChoices_;
+    bool pactFromMap_ = true;   // the Altar was a map stop: closing it goes back to the map
     std::vector<UpgradeKind> abilityChoices_;   // the first-ability pick's cards
-    PactSource pactSrc_ = PactSource::Boss;
-    int introStep_ = -1;      // >= 0 while the run intro (pact / starter pick) is still running
-    float novaCd_ = 0.f;      // "Nova" pact cooldown (s)
+    CreedSource creedSrc_ = CreedSource::Boss;
+    bool abilityAfterFight_ = false;   // the ability pick came from postFight: its pick follows
+    int introStep_ = -1;      // >= 0 while the run intro (creed / starter pick) is still running
+    float novaCd_ = 0.f;      // "Nova" creed cooldown (s)
+    float repulseCd_ = 0.f;   // F cooldown (s)
+    float markCd_ = 0.f;      // Q cooldown (s)
+    float bulletGauge_ = 1.f; // E gauge, 0..1
+    bool bulletHeld_ = false; // E is down (the Play screen polls it)
+    bool bulletOn_ = false;   // ...and the slow motion is running
+    float bulletIdle_ = 0.f;  // real s since it last ran (refill waits a moment)
+    std::vector<EventKind> eventDeals_;   // the "?" event on screen
+    bool openEvent();         // a "?" stop rolled an event: false = nothing to offer
+    bool openForgePicker();   // the Forge's item picker: false = nothing to level up
+    void openRestStop();      // a Rest stop: repair the core or forge an item
+    void restRepair();
 public:
     bool choiceIsBossTreasure() const { return rollSource_ == RollSource::Boss; }
 private:

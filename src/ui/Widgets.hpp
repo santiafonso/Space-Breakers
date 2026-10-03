@@ -22,6 +22,13 @@ sf::Text makeLabel(const sf::Font& font, const std::string& str, unsigned size, 
 void drawLabel(sf::RenderTarget& t, const sf::Font& font, const std::string& str, unsigned size,
                sf::Vector2f pos, sf::Color color, int align = 0);
 
+// A keyboard key cap ([TAB], [O]) for a shortcut. The caption saying what it
+// does appears beside it only while `hot` (hovered): on the right when
+// `captionRight`, else on the left. keyCapSize = the cap's box for `key`.
+sf::Vector2f keyCapSize(const sf::Font& font, const std::string& key);
+void drawKeyCap(sf::RenderWindow& w, const sf::Font& font, sf::FloatRect cap, const std::string& key,
+                const std::string& caption, bool hot, bool captionRight = true);
+
 // Draw a string centred on `pos`.
 void drawCentered(sf::RenderWindow& window, const sf::Font& font, const std::string& str,
                   unsigned size, sf::Vector2f pos, sf::Color color);
@@ -49,11 +56,20 @@ std::vector<std::string> wrapText(const sf::Font& font, const std::string& str, 
                                   float maxW);
 
 // ---- ball loadout panels: one ball's look, classes, slots, modifiers ----
+// The ball's identity sits in the header - its type as a circle on the left,
+// its abilities as cyan diamonds on the right, the ball between - and its
+// gear below: the 4 item slots as chips.
 inline constexpr float kPanelW = 180.f;
-inline constexpr float kPanelH = 294.f;
+inline constexpr float kPanelH = 272.f;
 inline constexpr float kPanelGap = 16.f;
-inline constexpr float kSlotH = 23.f;
-inline constexpr float kSlotStep = 27.f;
+inline constexpr float kSlotH = 26.f;
+inline constexpr float kSlotStep = 31.f;
+inline constexpr float kPanelHeadY = 32.f;     // header row (type / ball / abilities), from the panel top
+inline constexpr float kPanelItemsTop = 118.f; // first item slot's centre, from the panel top
+
+// How much a row of n loadout panels can be magnified to use the screen
+// (`reserve` = width kept for something beside the row): few balls, big panels.
+float panelRowZoom(sf::Vector2f size, int n, float reserve = 0.f, float maxZoom = 1.2f);
 
 // Centre of panel i of n in a row at height cy, the row centred on cx (the
 // screen centre by default).
@@ -62,7 +78,7 @@ sf::Vector2f panelCenter(sf::Vector2f size, int i, int n, float cy, float cx = -
 // panel. The ability row splits into abilityBoxes(L) boxes.
 sf::FloatRect slotRect(sf::Vector2f panelCentre, int slot, const BallLoadout& L);
 int abilityBoxes(const BallLoadout& L);   // open ability slots + any filled closed ones
-std::string modifierLine(const BallLoadout& L);
+std::string modifierLine(const BallLoadout& L, const sf::Font* font = nullptr, unsigned size = 11, float maxW = 0.f);
 sf::Color catColor(UpgradeCat c);
 sf::Color tagColor(ItemTag t);   // a class's colour (its items, its name)
 sf::Color tierColor(Tier t);     // Common grey .. Legendary gold
@@ -79,6 +95,27 @@ void drawTierFrame(sf::RenderWindow& w, sf::FloatRect r, Tier t, float hover, fl
 // ("MAKES A STRIKER" / "ASCENDS: MEGA STRIKER"). No-op for untagged picks.
 void drawClassCardMark(sf::RenderWindow& w, const sf::Font& font, sf::FloatRect r, UpgradeKind k,
                        const std::vector<BallLoadout>& balls, float alpha);
+
+// A pick kind's small mark, the same wherever it's shown: item = square,
+// ability = diamond, element = hexagon, relic = circle, modifier = triangle,
+// new ball = ring. `size` is its radius.
+void drawKindMark(sf::RenderTarget& w, UpgradeCat cat, sf::Vector2f pos, float size, sf::Color color);
+
+// A whole pick card, with its three facts kept apart so they never blur:
+// WHAT it is (item / relic / ability...) = a plain label top-left; HOW RARE =
+// 1..5 pips (and the tier word when it fits) top-right plus the frame's edge;
+// WHICH CLASS = a solid badge in the class colour under the title, with the
+// class spine and wash. Then the description, above `bottomReserve`.
+struct PickCardStyle {
+    float hover = 0.f, alpha = 1.f, time = 0.f, reveal = 1.f;
+    float pop = 1.f;              // the title's spring (an introPop value)
+    float bottomReserve = 0.f;    // px kept free at the bottom (a price, a reroll strip)
+    std::string note;             // a short line under the badge, e.g. "Lv 1 -> 2"
+    bool classMark = true;        // the class spine / wash / "makes a" chip
+    bool showWhat = true;         // the kind label (off where a group header already says it)
+};
+void drawPickCard(sf::RenderWindow& w, const sf::Font& font, sf::FloatRect r, UpgradeKind k,
+                  const std::vector<BallLoadout>& balls, const PickCardStyle& st);
 
 // What part of a loadout panel centred at `c` the pointer is on: a slot
 // (0..kLoadoutSlots-1), kPanelPartBall = the ball / class name,

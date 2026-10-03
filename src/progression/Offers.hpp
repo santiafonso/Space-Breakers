@@ -34,11 +34,15 @@ inline constexpr int kChoiceCount = 4;
 inline constexpr int kBallSlots = 4;          // item slots per ball
 inline constexpr int kElementItemCount = 6;
 inline constexpr int kAbilityItemCount = 8;   // AbilityDash..AbilityMissile
-inline constexpr int kModifierCount = 3;      // HeavyImpact..Swift
+inline constexpr int kModifierCount = 12;     // HeavyImpact..Bouncy
 // Items level up: picking one a ball already has (or forging it) raises its
 // level instead of taking another slot. Each item scales its own way per level
 // (App::ballSpec, upgradeLevelDesc). Elements and abilities level the same way.
-inline constexpr int kMaxItemLevel = 5;
+inline constexpr int kMaxItemLevel = 5;   // elements and abilities
+// Items stop at Lv3, but each level counts double: an item at level L plays
+// like the old level gearPower(L) (1, 3, 5), so every item level is a big step.
+inline constexpr int kMaxGearLevel = 3;
+inline int gearPower(int lvl) { return 1 + 2 * (std::clamp(lvl, 1, kMaxGearLevel) - 1); }
 
 // A ball's slots, addressed as one list: 0..3 items, then the type slot, then
 // the ability slots (kMaxAbilitySlots of them, abilitySlotCount() active).
@@ -55,10 +59,13 @@ inline UpgradeCat upgradeCat(UpgradeKind k) {
     if (i <= static_cast<int>(UpgradeKind::AddBall)) return UpgradeCat::NewBall;
     if (i <= static_cast<int>(UpgradeKind::ElemElectric)) return UpgradeCat::Element;
     if (i <= static_cast<int>(UpgradeKind::AbilityMissile)) return UpgradeCat::Ability;
-    if (i <= static_cast<int>(UpgradeKind::Swift)) return UpgradeCat::Modifier;
+    if (i <= static_cast<int>(UpgradeKind::Bouncy)) return UpgradeCat::Modifier;
     if (i >= static_cast<int>(UpgradeKind::CoreSpring)) return UpgradeCat::Relic;
     return UpgradeCat::Item;
 }
+
+// How far a pick can level on a ball: items Lv3, elements / abilities Lv5.
+inline int maxLevelOf(UpgradeKind k) { return upgradeCat(k) == UpgradeCat::Item ? kMaxGearLevel : kMaxItemLevel; }
 
 inline const char* upgradeCatName(UpgradeCat c) {
     switch (c) {
@@ -75,9 +82,9 @@ inline const char* upgradeCatName(UpgradeCat c) {
 inline const char* upgradeCatDesc(UpgradeCat c) {
     switch (c) {
         case UpgradeCat::NewBall:  return "adds one more ball to the arena";
-        case UpgradeCat::Element:  return "goes in the ball's type slot (one element per ball; a new one swaps it). Two balls with different elements hitting the same enemy set off a reaction. Taking it again on the same ball levels it up. Doesn't count toward a class.";
+        case UpgradeCat::Element:  return "goes in the ball's type slot (one element per ball, a new one swaps it; an Alchemist holds 2, 3 ascended). Two different elements meeting on an enemy set off a reaction - from two balls, or one Alchemist. Taking it again on the same ball levels it up. Doesn't count toward a class.";
         case UpgradeCat::Ability:  return "a timed active in the ball's ability slot: it fires by itself every few seconds. Taking it again on the same ball levels it up. Doesn't count toward a class.";
-        case UpgradeCat::Item:     return "a unique effect for one ball; takes one of its 4 item slots. Its tag counts toward the ball's class: 2 of a tag = that class, 4 = its ascended form. Taking it again on the same ball levels it up (max level 5).";
+        case UpgradeCat::Item:     return "a unique effect for one ball; takes one of its 4 item slots. Its tag counts toward the ball's class: 2 of a tag = that class, 4 = its ascended form. Taking it again on the same ball levels it up (max level 3, each level a big step).";
         case UpgradeCat::Modifier: return "a stat bump for one ball; no slot, stacks without limit";
         case UpgradeCat::Relic:    return "a passive for the whole run, on every ball";
     }
@@ -88,6 +95,9 @@ inline Tier upgradeTier(UpgradeKind k) {
     switch (k) {
         case UpgradeKind::Ricochet: case UpgradeKind::Crit:
         case UpgradeKind::HeavyImpact: case UpgradeKind::BigBall: case UpgradeKind::Swift:
+        case UpgradeKind::Ballast: case UpgradeKind::Keen: case UpgradeKind::Reach: case UpgradeKind::Tempered:
+        case UpgradeKind::Spin: case UpgradeKind::Leech: case UpgradeKind::QuickMind: case UpgradeKind::HeavyThrow:
+        case UpgradeKind::Bouncy:
         case UpgradeKind::CoreSpring: case UpgradeKind::StrongArm:
             return Tier::Common;
         case UpgradeKind::AddBall:
@@ -244,6 +254,15 @@ inline const char* upgradeKindId(UpgradeKind k) {
         case UpgradeKind::HeavyImpact:    return "HeavyImpact";
         case UpgradeKind::BigBall:        return "BigBall";
         case UpgradeKind::Swift:          return "Swift";
+        case UpgradeKind::Ballast:        return "Ballast";
+        case UpgradeKind::Keen:           return "Keen";
+        case UpgradeKind::Reach:          return "Reach";
+        case UpgradeKind::Tempered:       return "Tempered";
+        case UpgradeKind::Spin:           return "Spin";
+        case UpgradeKind::Leech:          return "Leech";
+        case UpgradeKind::QuickMind:      return "QuickMind";
+        case UpgradeKind::HeavyThrow:     return "HeavyThrow";
+        case UpgradeKind::Bouncy:         return "Bouncy";
         case UpgradeKind::CoreSpring:     return "CoreSpring";
         case UpgradeKind::CoreSlowField:  return "CoreSlowField";
         case UpgradeKind::StrongArm:      return "StrongArm";
@@ -267,11 +286,11 @@ inline const char* upgradeKindId(UpgradeKind k) {
 inline UpgradeInfo upgradeInfo(UpgradeKind k) {
     switch (k) {
         case UpgradeKind::AddBall:       return {"Extra ball", "one more ball in the arena"};
-        case UpgradeKind::ElemFire:      return {"Fire", "the ball turns fire: heavier contact hits"};
+        case UpgradeKind::ElemFire:      return {"Fire", "the ball turns fire: every hit sets the enemy alight, hotter each time; a burning enemy that dies sets the ones around it on fire"};
         case UpgradeKind::ElemPoison:    return {"Poison", "the ball turns poison: hits stack damage over time"};
-        case UpgradeKind::ElemWater:     return {"Water", "the ball turns water: trails a damaging wake"};
+        case UpgradeKind::ElemWater:     return {"Water", "the ball turns water: hits soak enemies (slower, knocked further, frozen twice as long), and every 1.5 s it sends out a wave ahead of it that grows as it rolls, shoving and soaking everything it crosses"};
         case UpgradeKind::ElemIce:       return {"Ice", "the ball turns ice: hits freeze enemies in place"};
-        case UpgradeKind::ElemStone:     return {"Stone", "the ball turns stone: drops grinding rubble"};
+        case UpgradeKind::ElemStone:     return {"Stone", "the ball turns stone: heavier and slower, and every hit cracks the enemy - each crack makes it take 12% more from every ball (up to 5)"};
         case UpgradeKind::ElemElectric:  return {"Electric", "the ball turns electric: zaps nearby enemies"};
         case UpgradeKind::AbilityDash:   return {"Dash", "every few seconds the ball bursts straight at the nearest enemy"};
         case UpgradeKind::AbilityNova:   return {"Nova", "every few seconds the ball lets out a shockwave that hits and shoves everything around it"};
@@ -288,7 +307,7 @@ inline UpgradeInfo upgradeInfo(UpgradeKind k) {
         case UpgradeKind::Overkill:      return {"Overkill", "leftover damage from a kill splashes onto the next enemy"};
         case UpgradeKind::Shatter:       return {"Shatter", "hitting a frozen enemy deals bonus damage"};
         case UpgradeKind::Conductor:     return {"Conductor", "its electric arc jumps on to another enemy"};
-        case UpgradeKind::Bedrock:       return {"Bedrock", "its stone rubble lasts much longer"};
+        case UpgradeKind::Bedrock:       return {"Bedrock", "its cracks last 50% longer and go deeper: up to 7 per enemy"};
         case UpgradeKind::Echo:          return {"Echo", "25% chance a hit strikes twice (effects and all)"};
         case UpgradeKind::Tesla:         return {"Tesla", "20% chance a hit zaps up to 3 enemies nearby"};
         case UpgradeKind::Bomber:        return {"Bomber", "30% chance an enemy it kills explodes"};
@@ -317,6 +336,15 @@ inline UpgradeInfo upgradeInfo(UpgradeKind k) {
         case UpgradeKind::HeavyImpact:   return {"Heavy impact", "+15% contact damage (stacks)"};
         case UpgradeKind::BigBall:       return {"Big ball", "+10% radius and harder knockback (stacks)"};
         case UpgradeKind::Swift:         return {"Swift", "+8% cruise and +15% top speed, holds a fling longer (stacks)"};
+        case UpgradeKind::Ballast:       return {"Ballast", "-12% cruise, +20% damage (stacks) - easier to catch, pairs with anything that likes it slow"};
+        case UpgradeKind::Keen:          return {"Keen", "+4% crit chance (stacks)"};
+        case UpgradeKind::Reach:         return {"Reach", "you can grab it from 20% further away (stacks)"};
+        case UpgradeKind::Tempered:      return {"Tempered", "its element is 12% stronger (stacks)"};
+        case UpgradeKind::Spin:          return {"Spin", "15% chance a hit climbs the combo one extra step (stacks)"};
+        case UpgradeKind::Leech:         return {"Leech", "each of its kills patches the core up by 0.3 (stacks)"};
+        case UpgradeKind::QuickMind:     return {"Quick mind", "its abilities recharge 7% faster (stacks)"};
+        case UpgradeKind::HeavyThrow:    return {"Heavy throw", "the first hit after you throw it lands 12% harder (stacks)"};
+        case UpgradeKind::Bouncy:        return {"Bouncy", "it leaves the core 8% faster after a bounce (stacks)"};
         case UpgradeKind::CoreSpring:    return {"Spring core", "your balls bounce off the core faster"};
         case UpgradeKind::CoreSlowField: return {"Slow field", "enemies near the core are slowed"};
         case UpgradeKind::StrongArm:     return {"Strong arm", "you fling every ball noticeably harder"};
@@ -359,7 +387,7 @@ inline const char* upgradeLevelDesc(UpgradeKind k) {
         case UpgradeKind::Overkill:      return "more splash; a 2nd enemy at level 3, a 3rd at level 5";
         case UpgradeKind::Shatter:       return "+40% damage vs frozen enemies";
         case UpgradeKind::Conductor:     return "the arc jumps one more time";
-        case UpgradeKind::Bedrock:       return "the rubble lasts even longer";
+        case UpgradeKind::Bedrock:       return "the cracks last even longer";
         case UpgradeKind::Echo:          return "+10% chance";
         case UpgradeKind::Tesla:         return "+8% chance, zaps one more enemy";
         case UpgradeKind::Bomber:        return "+12% chance, a bigger blast";
@@ -400,6 +428,10 @@ struct BallLoadout {
     int gearLvl[kBallSlots] = {0, 0, 0, 0};    // item level: 1 once equipped, up to kMaxItemLevel
     int type = -1;                             // element pick in the type slot, -1 = none (Plain)
     int typeLvl = 0;
+    // An Alchemist's extra elements (element picks, -1 = none), in the order
+    // it got them. Not slots of their own: they sit beside the type slot and
+    // share its level. Only as many count as the ball can hold (elementCap).
+    int extraType[kMaxElements - 1] = {-1, -1};
     int ability[kMaxAbilitySlots] = {-1, -1, -1};   // ability picks, -1 = empty
     int abilityLvl[kMaxAbilitySlots] = {0, 0, 0};
     int mods[kModifierCount] = {};             // stacks per modifier (modifierIndex)
@@ -425,7 +457,8 @@ struct BallLoadout {
     void clearSlot(int s) { setSlot(s, -1, 0); }
     int levelUp(int s) {   // +1 level on a filled slot; returns the new level
         if (kindAt(s) < 0) return 0;
-        setSlot(s, kindAt(s), levelAt(s) + 1);
+        const int cap = s < kBallSlots ? kMaxGearLevel : kMaxItemLevel;   // items stop at Lv3
+        setSlot(s, kindAt(s), std::min(levelAt(s) + 1, cap));
         return levelAt(s);
     }
 
@@ -446,6 +479,26 @@ struct BallLoadout {
                         : static_cast<Element>(elementItemSlot(static_cast<UpgradeKind>(type)) + 1);
     }
 
+    // How many elements it can hold: 1, 2 as an Alchemist, 3 ascended.
+    int elementCap() const {
+        const int n = tagCount(ItemTag::Alchemist);
+        return n >= 4 ? 3 : (n >= 2 ? 2 : 1);
+    }
+    // Every element it carries right now (the type slot first), up to its cap.
+    int elements(Element out[kMaxElements]) const {
+        int n = 0;
+        if (type >= 0) out[n++] = element();
+        for (int i = 0; i < kMaxElements - 1 && n < elementCap(); ++i)
+            if (extraType[i] >= 0) out[n++] = static_cast<Element>(elementItemSlot(static_cast<UpgradeKind>(extraType[i])) + 1);
+        return n;
+    }
+    bool carriesElement(UpgradeKind k) const {
+        if (type == static_cast<int>(k)) return true;
+        for (int i = 0; i < kMaxElements - 1; ++i)
+            if (extraType[i] == static_cast<int>(k)) return true;
+        return false;
+    }
+
     // ---- classes
     int tagCount(ItemTag t) const {
         int n = 0;
@@ -454,7 +507,9 @@ struct BallLoadout {
         return n;
     }
     bool hasRole(ItemTag t) const { return t != ItemTag::None && tagCount(t) >= 2; }
-    // Its classes (at most 2), in slot order: the class of the earliest item first.
+    // Its classes, lead first. The lead - the ball's body colour - is the
+    // class it has put the most item levels into; on a tie, the one whose item
+    // sits higher in the slots (so dragging items in TAB picks the colour).
     int roles(ItemTag out[2]) const {
         int n = 0;
         for (int g : gear) {
@@ -463,7 +518,14 @@ struct BallLoadout {
             if (!hasRole(t) || (n == 1 && out[0] == t)) continue;
             out[n++] = t;
         }
+        if (n == 2 && tagLevels(out[1]) > tagLevels(out[0])) std::swap(out[0], out[1]);
         return n;
+    }
+    int tagLevels(ItemTag t) const {   // total item levels of that class's items
+        int sum = 0;
+        for (int i = 0; i < kBallSlots; ++i)
+            if (gear[i] >= 0 && itemTag(static_cast<UpgradeKind>(gear[i])) == t) sum += std::max(1, gearLvl[i]);
+        return sum;
     }
     RoleMask roleMask() const {
         ItemTag r[2];
@@ -508,7 +570,7 @@ inline bool upgradeNeedsTarget(UpgradeKind k) {
 // Taking `k` on this ball levels up the copy it already has (instead of
 // filling a slot).
 inline bool upgradeLevelsUp(UpgradeKind k, const BallLoadout& b) {
-    return upgradeTakesSlot(k) && b.has(k);
+    return upgradeTakesSlot(k) && (b.has(k) || (upgradeCat(k) == UpgradeCat::Element && b.carriesElement(k)));
 }
 
 // Can pick `k` go into slot `s` of this ball? Items: an item slot. Elements:
@@ -523,7 +585,7 @@ inline bool slotAccepts(UpgradeKind k, int s, const BallLoadout& b) {
 }
 
 // Can pick `k` go on this ball? A duplicate levels up the equipped one, until
-// kMaxItemLevel; a new element / ability swaps the old one if the slot is
+// kMaxGearLevel (items) / kMaxItemLevel (elements, abilities); a new element / ability swaps the old one if the slot is
 // full; Conductor / Bedrock only with their element. Modifiers: always.
 inline bool upgradeFitsBall(UpgradeKind k, const BallLoadout& b) {
     switch (upgradeCat(k)) {
@@ -532,9 +594,9 @@ inline bool upgradeFitsBall(UpgradeKind k, const BallLoadout& b) {
         case UpgradeCat::Ability:
             return !b.has(k) || b.levelOf(k) < kMaxItemLevel;
         case UpgradeCat::Item:
-            if (b.has(k)) return b.levelOf(k) < kMaxItemLevel;
-            if (k == UpgradeKind::Conductor) return b.element() == Element::Electric;
-            if (k == UpgradeKind::Bedrock) return b.element() == Element::Stone;
+            if (b.has(k)) return b.levelOf(k) < kMaxGearLevel;
+            if (k == UpgradeKind::Conductor) return b.carriesElement(UpgradeKind::ElemElectric);
+            if (k == UpgradeKind::Bedrock) return b.carriesElement(UpgradeKind::ElemStone);
             return true;
         default: return false;
     }
@@ -649,10 +711,11 @@ inline bool classHasItems(ItemTag t) {
 //   Shooter  (upper right) ball speed, speed power-ups
 //   Jester   (right)       gold, cores, rerolls, luck
 //   Assassin (lower right) crits, elite kills, execute
-//   Pacts    (bottom)      its own branch, no class
+//   Creeds    (bottom)      its own branch, no class
 //   Summoner (bottom)      copies, recruits, the starter kit, Gemini
 //   Support  (lower left)  power-ups, marks
-//   Mage     (left)        abilities (unlocked here) and elements
+//   Mage     (left)        abilities (unlocked here)
+//   Alchemist(left, low)   the six elements, Ember, Prism core
 //   Guardian (upper left)  the core: health, heals, shields
 // Past each class node: "<Class> lore" (its items show up more often) and one
 // class-flavoured perk. A node can only be bought once the node that gates it
@@ -675,7 +738,7 @@ enum MetaUnlock {
     MetaVenom,        // Venom     - unlocks the poison ball item, +poison potency
     MetaTide,         // Tide      - unlocks the water ball item, +water potency
     MetaFrost,        // Frost     - unlocks the ice ball item, +freeze time
-    MetaQuarry,       // Quarry    - unlocks the stone ball item, +rubble potency
+    MetaQuarry,       // Quarry    - unlocks the stone ball item, +crack potency
     MetaArc,          // Arc       - unlocks the electric ball item, +zap potency
     MetaBounty,       // Fortune   - earn cores for every enemy killed
     MetaWindfall,     // Windfall  - chance a cleared run pays a 2nd prism
@@ -696,11 +759,11 @@ enum MetaUnlock {
     MetaSalvage,      // Salvage    - more cores per enemy kill
     MetaInterest,     // Interest   - cores for clearing a wave with no core damage
     MetaProspector,   // Prospector - skipping a pick refunds reroll charges
-    MetaStockpile,    // Stockpile  - a random power-up refills a reserve slot (key Q)
+    MetaStockpile,    // (retired 2026-10-01: Q is the player's Mark now) - hidden, never sold
     MetaMagnet,       // Magnet     - power-up orbs drift toward the nearest ball
     MetaAfterglow,    // Afterglow  - continuous power-ups fade out instead of cutting
     MetaCharged,      // Charged    - power-ups start with part of their duration
-    MetaEmber,        // Ember      - fire ball hits apply a burn (fire has no DoT alone)
+    MetaEmber,        // Ember      - fire burns hotter
     // ---- v12 append (indices 32+, never reorder) ----
     MetaArmory,       // Armory       - epic picks turn up more often
     MetaSatellite,    // Satellite    - the Satellite legendary can appear
@@ -711,13 +774,13 @@ enum MetaUnlock {
     MetaHaggler,      // Haggler      - shop prices drop
     MetaStarterKit,   // Starter kit  - start the run with a free item
     MetaEliteSpoils,  // Elite spoils - elites pay more gold
-    // ---- v13 append (indices 41+, never reorder): the Pacts branch + shop / start nodes ----
-    MetaOath,         // Oath          - the boss offers 4 pacts instead of 3        (Pacts hub)
-    MetaCovenant,     // Covenant      - start every run by choosing a pact
-    MetaPactHunters,  // Hunters       - the Hunters pact can be offered
-    MetaPactLegion,   // Legion        - the Legion pact can be offered
-    MetaPactDice,     // Loaded dice   - the Loaded Dice pact can be offered
-    MetaPactAlchemy,  // Alchemy       - the Alchemy pact can be offered
+    // ---- v13 append (indices 41+, never reorder): the Creeds branch + shop / start nodes ----
+    MetaOath,         // Oath          - the boss offers 4 creeds instead of 3        (Creeds hub)
+    MetaCovenant,     // Covenant      - start every run by choosing a creed
+    MetaCreedHunters,  // Hunters       - the Hunters creed can be offered
+    MetaCreedLegion,   // Legion        - the Legion creed can be offered
+    MetaCreedDice,     // Loaded dice   - the Loaded Dice creed can be offered
+    MetaCreedAlchemy,  // Alchemy       - the Alchemy creed can be offered
     MetaMerchant,     // Merchant      - shops stock more and their sale is deeper
     MetaTreasury,     // Treasury      - start each run with gold
     MetaQuartermaster,// Quartermaster - choose the Starter kit item from 4 cards
@@ -759,15 +822,21 @@ enum MetaUnlock {
     MetaArchive,      // Archive        - Mage balls recharge faster still
     MetaLoreGuardian, // Guardian lore                                                    (Guardian)
     MetaStonewall,    // Stonewall      - Guardian balls patch the core on core bounces
+    // ---- 2026-09-28 append (never reorder): the Slinger route ----
+    MetaClassSlinger, // Slinger        - Slinger items can appear (its own route, from the centre)
+    MetaLoreSlinger,  // Slinger lore
+    MetaClassStriker, // Striker        - Striker items can appear (the starter class until any class is bought)
+    MetaClassAlchemist, // Alchemist    - Alchemist items can appear; its route holds the six elements
+    MetaLoreAlchemist,  // Alchemist lore
     MetaUnlockCount
 };
 
 // A route = a class (same order as ItemTag: Striker = 1 ... Jester = 8), plus
-// the root and the Pacts branch. Not saved.
-enum class MetaBranch { Root, Striker, Guardian, Support, Mage, Shooter, Assassin, Summoner, Jester, Pacts };
-inline constexpr int kMetaBranchCount = 10;
-inline ItemTag metaBranchTag(MetaBranch b) {   // the class a route leads to (None: root / Pacts)
-    return b == MetaBranch::Root || b == MetaBranch::Pacts ? ItemTag::None : static_cast<ItemTag>(static_cast<int>(b));
+// the root and the Creeds branch. Not saved.
+enum class MetaBranch { Root, Striker, Guardian, Support, Mage, Shooter, Assassin, Summoner, Jester, Slinger, Alchemist, Creeds };
+inline constexpr int kMetaBranchCount = 12;
+inline ItemTag metaBranchTag(MetaBranch b) {   // the class a route leads to (None: root / Creeds)
+    return b == MetaBranch::Root || b == MetaBranch::Creeds ? ItemTag::None : static_cast<ItemTag>(static_cast<int>(b));
 }
 enum class MetaCurrency { Cores, Prisms };
 
@@ -793,18 +862,18 @@ inline const MetaUnlockDef& metaUnlockDef(int u) {
                          10u, 3, B::Guardian, C,  0, 330.f, 1.f},
         /* Mend      */ {"Mend",      "the core heals +3 more between waves",
                          12u, 3, B::Guardian, C,  1, 316.f, 2.f},
-        /* Ignition  */ {"Ignition",  "the fire element can appear; higher levels hit harder",
-                         2u,  3, B::Mage,     P, MetaAbilityMissile, 294.f, 2.f},
+        /* Ignition  */ {"Ignition",  "the fire element can appear; higher levels burn hotter",
+                         2u,  3, B::Alchemist, P,  0, 299.f, 1.f},
         /* Venom     */ {"Venom",     "the poison element can appear; higher levels stack faster",
-                         2u,  3, B::Mage,     P,  3, 294.f, 3.f},
-        /* Tide      */ {"Tide",      "the water element can appear; higher levels leave a wider wake",
-                         3u,  3, B::Mage,     P,  4, 294.f, 4.f},
+                         2u,  3, B::Alchemist, P,  3, 299.f, 2.f},
+        /* Tide      */ {"Tide",      "the water element can appear; higher levels soak longer and send bigger waves",
+                         3u,  3, B::Alchemist, P, MetaClassAlchemist, 292.f, 4.f},
         /* Frost     */ {"Frost",     "the ice element can appear; higher levels freeze for longer",
-                         3u,  3, B::Mage,     P,  5, 294.f, 5.f},
-        /* Quarry    */ {"Quarry",    "the stone element can appear; higher levels grind harder",
-                         4u,  3, B::Mage,     P,  6, 294.f, 6.f},
+                         3u,  3, B::Alchemist, P,  5, 292.f, 5.f},
+        /* Quarry    */ {"Quarry",    "the stone element can appear; higher levels keep the cracks open longer",
+                         4u,  3, B::Alchemist, P, MetaClassAlchemist, 306.f, 4.f},
         /* Arc       */ {"Static",    "the electric element can appear; higher levels zap harder",
-                         4u,  3, B::Mage,     P,  7, 294.f, 7.f},
+                         4u,  3, B::Alchemist, P,  7, 306.f, 5.f},
         /* Fortune   */ {"Fortune",   "earn cores for every enemy you kill",
                          6u,  3, B::Jester,   C,  0,  72.f, 1.f},
         /* Windfall  */ {"Windfall",  "20% chance a cleared run pays a 2nd prism",
@@ -841,16 +910,16 @@ inline const MetaUnlockDef& metaUnlockDef(int u) {
                          12u, 3, B::Jester,   C, 10,  56.f, 4.f},
         /* Prospector*/ {"Prospector","skipping a pick to repair the core refunds a reroll charge",
                          12u, 2, B::Jester,   C, 25,  56.f, 5.f},
-        /* Stockpile */ {"Stockpile", "keep one random power-up in reserve; press Q to use it",
-                         6u,  1, B::Support,  C, 18, 206.f, 3.f},
+        /* Stockpile */ {"Stockpile", "retired",
+                         6u,  0, B::Support,  C, 18, 206.f, 3.f},   // maxLevel 0: off the web (see metaNodeRetired)
         /* Magnet    */ {"Magnet",    "power-up orbs drift toward your nearest ball",
-                         10u, 1, B::Support,  C, 27, 206.f, 4.f},
+                         10u, 1, B::Support,  C, 18, 206.f, 3.f},
         /* Afterglow */ {"Afterglow", "when a power-up ends its effect fades out instead of cutting",
                          10u, 2, B::Support,  C, 28, 207.f, 5.f},
         /* Charged   */ {"Charged",   "power-ups arrive with part of their duration already charged",
                          10u, 2, B::Support,  C, 14, 222.f, 3.f},
-        /* Ember     */ {"Ember",     "fire ball hits set enemies alight for a burn; scales with Ignition",
-                         2u,  3, B::Mage,     P,  3, 303.f, 3.f},
+        /* Ember     */ {"Ember",     "fire burns 35% hotter per level (with Ignition's level on top)",
+                         2u,  3, B::Alchemist, P,  3, 308.f, 2.f},
         /* Armory    */ {"Armory",    "Epic picks turn up more often (+50% odds per level)",
                          2u,  2, B::Jester,   P, 47,  88.f, 5.f},
         /* Satellite */ {"Satellite", "the Satellite legendary can appear: a ball that orbits the core",
@@ -860,28 +929,28 @@ inline const MetaUnlockDef& metaUnlockDef(int u) {
         /* Twins     */ {"Twins",     "the Gemini legendary can appear: a permanent ghost twin",
                          3u,  1, B::Summoner, P, MetaBrood, 192.f, 2.3f},
         /* Prism     */ {"Prism",     "the Prism core legendary relic can appear: reactions everywhere",
-                         4u,  1, B::Mage,     P,  5, 303.f, 4.6f},
+                         4u,  1, B::Alchemist, P,  6, 292.f, 6.f},
         /* Lucky star*/ {"Lucky star","+2 luck per level: higher chances and rarer cards",
                          12u, 3, B::Jester,   C, 20,  72.f, 3.f},
-        /* Haggler   */ {"Haggler",   "shop prices drop 10% per level",
+        /* Haggler   */ {"Haggler",   "shop prices drop 10% per level, and you may sell one more item per shop",
                          10u, 3, B::Jester,   C, 48,  88.f, 3.f},
         /* StarterKit*/ {"Starter kit","start every run with a free item on your first ball (Uncommon, then Rare)",
                          14u, 2, B::Summoner, C, MetaBrood, 164.f, 2.3f},
         /* EliteSpoils*/{"Elite spoils","elite fights pay +50% gold per level",
                          12u, 2, B::Assassin, C, MetaKeenInstinct, 115.f, 2.f},
-        /* Oath      */ {"Oath",      "after the act-1 boss, choose from 4 pacts instead of 3. Opens the Pacts.",
-                         14u, 1, B::Pacts,    C,  0, 145.f, 1.f},
-        /* Covenant  */ {"Covenant",  "start every run by choosing a pact (1 of 3) - with the boss's, a run can hold two",
-                         3u,  1, B::Pacts,    P, 41, 145.f, 2.f},
-        /* Hunters   */ {"Hunters",   "the Hunters pact can be offered: every ball chases its own prey, hands off",
-                         2u,  1, B::Pacts,    P, 41, 136.f, 2.6f},
-        /* Legion    */ {"Legion",    "the Legion pact can be offered: two more balls at once, clacks throw sparks",
-                         2u,  1, B::Pacts,    P, 41, 154.f, 2.6f},
-        /* Dice      */ {"Loaded dice","the Loaded Dice pact can be offered: +12 luck, fight gold is double or nothing",
-                         3u,  1, B::Pacts,    P, 43, 138.f, 3.6f},
-        /* Alchemy   */ {"Alchemy",   "the Alchemy pact can be offered: random extra elements, a ball reacts with itself",
-                         3u,  1, B::Pacts,    P, 44, 152.f, 3.6f},
-        /* Merchant  */ {"Merchant",  "shops stock one more pick and their sale gets 15% deeper per level",
+        /* Oath      */ {"Oath",      "after the act-1 boss, choose from 4 creeds instead of 3. Opens the Creeds.",
+                         14u, 1, B::Creeds,    C,  0, 145.f, 1.f},
+        /* Covenant  */ {"Covenant",  "start every run by choosing a creed (1 of 3) - with the boss's, a run can hold two",
+                         3u,  1, B::Creeds,    P, 41, 145.f, 2.f},
+        /* Hunters   */ {"Hunters",   "the Hunters creed can be offered: every ball chases its own prey, hands off",
+                         2u,  1, B::Creeds,    P, 41, 136.f, 2.6f},
+        /* Legion    */ {"Legion",    "the Legion creed can be offered: two more balls at once, clacks throw sparks",
+                         2u,  1, B::Creeds,    P, 41, 154.f, 2.6f},
+        /* Dice      */ {"Loaded dice","the Loaded Dice creed can be offered: +12 luck, fight gold is double or nothing",
+                         3u,  1, B::Creeds,    P, 43, 138.f, 3.6f},
+        /* Alchemy   */ {"Alchemy",   "the Alchemy creed can be offered: random extra elements, a ball reacts with itself",
+                         3u,  1, B::Creeds,    P, 44, 152.f, 3.6f},
+        /* Merchant  */ {"Merchant",  "the first shop reroll at each shop is free (1 per level), and its sale gets 15% deeper",
                          12u, 2, B::Jester,   C, 38,  88.f, 4.f},
         /* Treasury  */ {"Treasury",  "start every run with +20 gold per level",
                          10u, 3, B::Jester,   C,  9,  88.f, 2.f},
@@ -908,9 +977,9 @@ inline const MetaUnlockDef& metaUnlockDef(int u) {
         /* Sling     */ {"Sling",     "every throw flies 8% faster per level",
                          8u,  3, B::Striker,  C, 11,   0.f, 2.f},
         /* Momentum  */ {"Momentum",  "balls with the Striker class hit 10% harder per level",
-                         12u, 2, B::Striker,  C, 58,   0.f, 3.f},
+                         12u, 2, B::Striker,  C, MetaClassStriker, 0.f, 4.f},
         /* StrikerLore*/{"Striker lore","Striker items show up 50% more often per level",
-                         10u, 2, B::Striker,  C, 59,   0.f, 4.f},
+                         10u, 2, B::Striker,  C, 59,   0.f, 5.f},
         /* Velocity  */ {"Velocity",  "every ball cruises 5% faster per level",
                          8u,  2, B::Shooter,  C,  0,  27.f, 1.f},
         /* ShooterLore*/{"Shooter lore","Shooter items show up 50% more often per level",
@@ -961,6 +1030,16 @@ inline const MetaUnlockDef& metaUnlockDef(int u) {
                          10u, 2, B::Guardian, C, 52, 324.f, 4.f},
         /* Stonewall */ {"Stonewall", "balls with the Guardian class patch the core up by 0.5 per level on every core bounce",
                          12u, 2, B::Guardian, C, 52, 336.f, 4.f},
+        /* Slinger   */ {"Slinger",   "unlocks the Slinger class: its items can appear (throwing and catching)",
+                         18u, 1, B::Slinger,  C,  0,  14.f, 3.f},
+        /* SlingerLore*/{"Slinger lore","Slinger items show up 50% more often per level",
+                         10u, 2, B::Slinger,  C, MetaClassSlinger, 14.f, 4.f},
+        /* Striker   */ {"Striker",   "unlocks the Striker class: its items can appear (hits far harder when flung). Until you own any class, Striker is your free starter",
+                         12u, 1, B::Striker,  C, MetaSling, 0.f, 3.f},
+        /* Alchemist */ {"Alchemist", "unlocks the Alchemist class: its items can appear (2 elements per ball that react with each other). Its route holds the elements",
+                         18u, 1, B::Alchemist, C, 4, 299.f, 3.f},
+        /* AlchLore  */ {"Alchemist lore", "Alchemist items show up 50% more often per level",
+                         10u, 2, B::Alchemist, C, MetaClassAlchemist, 299.f, 5.5f},
     };
     return defs[u];
 }
@@ -976,6 +1055,8 @@ inline int classLoreNode(ItemTag t) {
         case ItemTag::Assassin: return MetaLoreAssassin;
         case ItemTag::Summoner: return MetaLoreSummoner;
         case ItemTag::Jester:   return MetaLoreJester;
+        case ItemTag::Slinger:  return MetaLoreSlinger;
+        case ItemTag::Alchemist: return MetaLoreAlchemist;
         default:                return -1;
     }
 }
@@ -1001,6 +1082,10 @@ inline bool abilityUnlocked(UpgradeKind k, const int* levels) {
 
 inline bool metaUnlockMaxed(int u, int level) { return level >= metaUnlockDef(u).maxLevel; }
 
+// A node taken out of the game keeps its index (saves stay valid) but leaves
+// the web: maxLevel 0.
+inline bool metaNodeRetired(int u) { return metaUnlockDef(u).maxLevel <= 0; }
+
 inline std::uint32_t metaUnlockCost(int u, int level) {
     std::uint32_t c = metaUnlockDef(u).baseCost;
     for (int i = 0; i < level; ++i) c *= 2u;
@@ -1015,9 +1100,10 @@ inline bool metaUnlockAvailable(int u, const int* levels) {
     return p < 0 || levels[p] > 0;
 }
 
-// The web node that unlocks a class; -1 for Striker (always open).
+// The web node that unlocks a class.
 inline int classUnlockNode(ItemTag t) {
     switch (t) {
+        case ItemTag::Striker:  return MetaClassStriker;
         case ItemTag::Support:  return MetaClassSupport;
         case ItemTag::Guardian: return MetaClassGuardian;
         case ItemTag::Mage:     return MetaClassMage;
@@ -1025,13 +1111,21 @@ inline int classUnlockNode(ItemTag t) {
         case ItemTag::Assassin: return MetaClassAssassin;
         case ItemTag::Summoner: return MetaClassSummoner;
         case ItemTag::Jester:   return MetaClassJester;
+        case ItemTag::Slinger:  return MetaClassSlinger;
+        case ItemTag::Alchemist: return MetaClassAlchemist;
         default:                return -1;
     }
 }
 
 inline bool classUnlocked(ItemTag t, const int* levels) {
     const int n = classUnlockNode(t);
-    return n < 0 || levels[n] > 0;
+    if (n < 0 || levels[n] > 0) return true;
+    // Striker is the starter: open until any class node is bought, so a fresh
+    // save still has items to find.
+    if (t != ItemTag::Striker) return false;
+    for (int i = 1; i < static_cast<int>(ItemTag::Alchemist) + 1; ++i)
+        if (const int c = classUnlockNode(static_cast<ItemTag>(i)); c >= 0 && levels[c] > 0) return false;
+    return true;
 }
 
 }  // namespace sb

@@ -170,8 +170,8 @@ void worldSummoner(sf::RenderTarget& t, const World& world) {
         const SummonerState& s = b.cls.summoner;
         const sf::Color c = summonColor(static_cast<int>(b.element));
         for (int i = 0; i < m.wardens; ++i) {
-            const sf::Vector2f at = summonerWardenPos(world.core().pos, s.wardenAng, b.owner, i, m.wardens,
-                                                      cfg::summoner::wardenOrbit * world.arenaScale());
+            const float orbit = s.wardenR > 0.f ? s.wardenR : cfg::summoner::wardenOrbit * world.arenaScale();
+            const sf::Vector2f at = summonerWardenPos(world.core().pos, s.wardenAng, b.owner, i, m.wardens, orbit);
             const float a = s.wardenRest[i] > 0.f ? 0.25f : 0.6f;   // dim while it rests after a hit
             draw::disc(t, at, cfg::summoner::wardenRadius * 0.8f, withAlpha(c, a), withAlpha(c, a * 0.5f), {1.f, 1.f}, 14);
         }
@@ -188,6 +188,62 @@ void worldSummoner(sf::RenderTarget& t, const World& world) {
             draw::line(t, p, p + f * 6.f, 1.5f, cc);
             draw::disc(t, p, 3.5f, cc, withAlpha(c, 0.45f), {1.f, 1.f}, 12);
         }
+    }
+}
+
+// ==================================================================== Slinger
+// A chevron pointing where it flies: the ball you throw.
+void markSlinger(sf::RenderTarget& t, sf::Vector2f p, float r, float heading, float a) {
+    const sf::Vector2f f{std::cos(heading), std::sin(heading)};
+    const sf::Vector2f s{-f.y, f.x};
+    const sf::Vector2f tip = p + f * (r * 0.42f);
+    const sf::Vector2f back = p - f * (r * 0.05f);
+    draw::line(t, tip, back + s * (r * 0.36f), 2.f, white(0.75f * a));
+    draw::line(t, tip, back - s * (r * 0.36f), 2.f, white(0.75f * a));
+}
+// "Afterburner": the fire left along a throw - small embers that shrink as
+// they burn out.
+void worldSlinger(sf::RenderTarget& t, const World& world) {
+    const float k = world.arenaScale();
+    for (const SlingerWorld::Flame& f : world.classWorld().slinger.flames) {
+        const float life = clampf(f.life / f.maxLife, 0.f, 1.f);
+        const float r = cfg::slinger::flameRadius * k * (0.45f + 0.55f * life);
+        draw::disc(t, f.pos, r, withAlpha(theme::ember, 0.35f * life), withAlpha(theme::elemFire, 0.f), {1.f, 1.f}, 16);
+        draw::disc(t, f.pos, r * 0.35f, withAlpha(sf::Color(255, 220, 160), 0.6f * life),
+                   withAlpha(theme::ember, 0.2f * life), {1.f, 1.f}, 10);
+    }
+}
+
+// ==================================================================== Alchemist
+// A small triangle: the old sign for the elements.
+void markAlchemist(sf::RenderTarget& t, sf::Vector2f p, float r, float, float a) {
+    draw::polygonOutline(t, p, r * 0.34f, 3, -kPi / 2.f, 1.5f, white(0.75f * a));
+}
+
+// ==================================================================== speed items
+// Anchor / Beacon: a faint aura that fills in as the ball slows. Wake: a
+// dotted trail. Leyline: small runes waiting for the next cast.
+void worldStyle(sf::RenderTarget& t, const World& world) {
+    const float k = world.arenaScale();
+    for (const Ball& b : world.balls()) {
+        const float still = b.cls.mage.still;
+        if (still <= 0.05f) continue;
+        const ClassMods& c = b.mods.cls;
+        if (c.guardian.anchor > 0.f)
+            draw::ring(t, b.pos, c.guardian.anchorRadius * k, 1.5f * k, withAlpha(theme::core, 0.25f * still));
+        if (c.support.beacon > 0.f) {
+            const float R = c.support.beaconRadius * k * (0.4f + 0.6f * still);
+            draw::disc(t, b.pos, R, withAlpha(theme::puSurge, 0.07f * still), withAlpha(theme::puSurge, 0.f), {1.f, 1.f}, 32);
+            draw::ring(t, b.pos, R, 1.5f * k, withAlpha(theme::puSurge, 0.3f * still));
+        }
+    }
+    for (const SupportWorld::WakePoint& w : world.classWorld().support.wake) {
+        const float a = clampf(w.life / cfg::style::wakeLife, 0.f, 1.f);
+        draw::disc(t, w.pos, 3.f * k, withAlpha(theme::puSurge, 0.45f * a), withAlpha(theme::puSurge, 0.f), {1.f, 1.f}, 8);
+    }
+    for (const MageWorld::Rune& r : world.classWorld().mage.runes) {
+        const float a = clampf(r.life / 1.f, 0.f, 1.f);
+        draw::polygonOutline(t, r.pos, 7.f * k, 4, 0.f, 1.5f * k, withAlpha(theme::classMage, 0.7f * a));
     }
 }
 
@@ -224,14 +280,28 @@ BallLook ballLook(const Ball& b) {
 
 void drawBallIdentity(sf::RenderTarget& t, const BallLook& look, sf::Vector2f pos, float r, float heading,
                       float alpha, bool held) {
-    // Rim: the element, muted, as a hairline just outside the edge; plain = faint white.
+    // Layers, inside out, each told apart by shape and place (not only hue -
+    // a Shooter's orange and fire's orange must still read as two things):
+    //  body          = the lead class's colour (the disc itself);
+    //  second class  = a thick SOLID band just inside the edge, its colour pure;
+    //  element       = a thin DASHED ring outside the edge, past a dark gap.
+    if (look.second != BallRole::Normal) {
+        const float band = std::max(2.2f, r * 0.2f);   // thin enough that the body (the lead class) still dominates
+        draw::ring(t, pos, r - band * 0.5f, band,
+                   withAlpha(lerpColor(roleColor(look.second), sf::Color::White, 0.08f), 0.97f * alpha));
+        draw::ring(t, pos, r - band - 0.4f, 1.f, withAlpha(theme::bgDeep, 0.35f * alpha));   // seam against the body
+    }
     draw::ring(t, pos, r, 1.5f, withAlpha(sf::Color::White, (held ? 0.85f : 0.22f) * alpha));
-    if (look.element != Element::Plain)
-        draw::ring(t, pos, r + 1.6f, 1.6f, withAlpha(elementColor(look.element), 0.85f * alpha));
-    // A second class: its colour along the lower half of the rim, inside.
-    if (look.second != BallRole::Normal)
-        draw::ring(t, pos, r - 1.8f, 3.f, withAlpha(lerpColor(roleColor(look.second), sf::Color::White, 0.1f), 0.95f * alpha),
-                   0.25f, kPi - 0.25f, 32);
+    if (look.element != Element::Plain) {
+        const sf::Color ec = lerpColor(elementColor(look.element), sf::Color::White, 0.12f);
+        const float er = r + 4.f;
+        constexpr int kDashes = 10;
+        for (int k = 0; k < kDashes; ++k) {
+            const float a0 = static_cast<float>(k) * 2.f * kPi / kDashes;
+            draw::ring(t, pos, er, 2.4f, withAlpha(ec, 0.95f * alpha), a0, a0 + 0.62f * 2.f * kPi / kDashes, 6);
+        }
+        draw::ring(t, pos, er + 3.f, 1.f, withAlpha(ec, 0.2f * alpha));   // a faint halo of its colour
+    }
     for (int i = 0; i < kClassCount; ++i) {
         const BallRole c = classAt(i);
         if ((look.roles & roleBit(c)) == 0) continue;
@@ -265,6 +335,18 @@ void drawClassPulse(sf::RenderTarget& t, BallRole lead, bool ascended, sf::Vecto
         draw::ring(t, pos, r * (1.1f + 1.7f * grow), 1.f + 1.5f * k, withAlpha(c, 0.55f * k));
 }
 
+// A ball that just took an element: two rings of its colour ripple out.
+void drawElementPulse(sf::RenderTarget& t, Element el, sf::Vector2f pos, float r, float k) {
+    if (k <= 0.f || el == Element::Plain) return;
+    const sf::Color c = lerpColor(elementColor(el), sf::Color::White, 0.15f);
+    const float e = 1.f - k;
+    const float grow = 1.f - (1.f - e) * (1.f - e);
+    draw::glow(t, pos, r * (2.f + 1.2f * grow), c, 0.2f * k);
+    draw::ring(t, pos, r * (1.2f + 2.2f * grow), 1.f + 2.5f * k, withAlpha(c, 0.9f * k));
+    const float e2 = clampf(e * 1.4f - 0.3f, 0.f, 1.f);   // a second ring a beat later
+    if (e2 > 0.f) draw::ring(t, pos, r * (1.2f + 1.6f * e2), 1.f + 1.5f * k, withAlpha(c, 0.6f * k));
+}
+
 // ---------------------------------------------------------------- dispatch
 
 void drawClassMark(sf::RenderTarget& t, BallRole role, sf::Vector2f pos, float r, float heading, float alpha) {
@@ -278,6 +360,8 @@ void drawClassMark(sf::RenderTarget& t, BallRole role, sf::Vector2f pos, float r
         case BallRole::Assassin: markAssassin(t, pos, r, heading, alpha); break;
         case BallRole::Summoner: markSummoner(t, pos, r, heading, alpha); break;
         case BallRole::Jester:   markJester(t, pos, r, heading, alpha); break;
+        case BallRole::Slinger:  markSlinger(t, pos, r, heading, alpha); break;
+        case BallRole::Alchemist: markAlchemist(t, pos, r, heading, alpha); break;
     }
 }
 
@@ -287,6 +371,8 @@ void drawClassWorld(sf::RenderTarget& t, const World& world) {
     worldAssassin(t, world);
     worldSummoner(t, world);
     worldJester(t, world);
+    worldSlinger(t, world);
+    worldStyle(t, world);
 }
 
 }  // namespace sb

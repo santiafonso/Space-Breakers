@@ -1,0 +1,506 @@
+// App: creeds, the run intro and the shop extras (Fase O). Split from App.cpp
+// so the run-flow additions sit in one place.
+
+#include <algorithm>
+#include <cmath>
+#include <numeric>
+
+#include "core/App.hpp"
+#include "core/Config.hpp"
+#include "core/Theme.hpp"
+#include "ui/CreedScreen.hpp"
+#include "ui/Widgets.hpp"
+
+namespace sb {
+
+// ---------------------------------------------------------------- creeds: params
+
+void App::foldCreeds(WorldParams& p) const {
+    namespace P = cfg::creed;
+    for (int raw : data_.run.creeds) {
+        switch (static_cast<CreedId>(raw)) {
+            case CreedId::HotHands:
+                p.cruiseMult *= P::hotCruise;
+                p.creed.speedCeilMul *= P::hotCeil;
+                p.creed.flingHold *= P::hotHold;
+                break;
+            case CreedId::Nova: break;   // an active ability (useCreedAbility) + a smaller core
+            case CreedId::Hunters:
+                p.creed.hunters = true;
+                p.damageMult *= P::huntDamage;
+                break;
+            case CreedId::Clockwork:
+                p.creed.autoFlingEvery = P::clockEvery;
+                p.creed.autoFlingSpeed = P::clockSpeed;
+                p.damageMult *= P::clockDamage;
+                break;
+            case CreedId::Pinball: p.creed.pinball = true; break;
+            case CreedId::Duet:
+                p.damageMult *= P::duetDamage;
+                p.ballRadiusMult *= P::duetRadius;
+                break;
+            case CreedId::Legion:
+                p.creed.legion = true;
+                p.damageMult *= P::legionDamage;
+                break;
+            case CreedId::LivingCore:
+                p.creed.livingCore = true;
+                p.creed.enemySpeedMul *= P::coreEnemySpeed;
+                break;
+            case CreedId::Fortress: p.creed.fortress = true; break;
+            case CreedId::LoadedDice: break;   // its luck is counted in App::luck
+            case CreedId::Alchemy:
+                p.creed.alchemy = true;
+                p.damageMult *= P::alchemyDamage;
+                break;
+            case CreedId::Bloodlust:
+                p.creed.bloodlust = true;
+                p.creed.coreDamageMul *= P::bloodCoreDamage;
+                break;
+        }
+    }
+}
+
+bool App::canGrab() const { return !hasCreed(CreedId::Hunters) && !hasCreed(CreedId::Clockwork); }
+
+float App::flingPower() const {
+    float k = data_.run.mods.strongArm ? cfg::combat::flingPowerBoost : 1.f;
+    if (hasCreed(CreedId::HotHands)) k *= cfg::creed::hotFling;
+    if (hasCreed(CreedId::Pinball)) k *= cfg::creed::pinFling;
+    k *= 1.f + cfg::meta::slingPerLevel * static_cast<float>(data_.meta.unlock[MetaSling]);   // web "Sling"
+    if (hasPact(PactId::HeavyArm)) k *= cfg::pact::heavyArmFling;      // pacts
+    if (hasPact(PactId::AnchorWalls)) k *= cfg::pact::anchorFling;
+    if (hasPact(PactId::Blind)) k *= cfg::pact::blindFling;
+    return k;
+}
+
+void App::useCreedAbility() {
+    if (!hasCreed(CreedId::Nova) || !data_.run.active || !simulating() || novaCd_ > 0.f) return;
+    world_.creedNova(params());
+    novaCd_ = cfg::creed::novaCooldown;
+    effects_.addBurst(world_.core().pos, cfg::creed::novaRadius * world_.arenaScale(), theme::accent);
+    effects_.flash(theme::accent, 0.35f);
+    camKick_ = std::max(camKick_, 6.f);
+    audio_.thrown(1.f);
+}
+
+// ---------------------------------------------------------------- creeds: flow
+
+bool App::openCreedChoice(CreedSource src) {
+    const RunState& r = data_.run;
+    const int* u = data_.meta.unlock;
+    if (static_cast<int>(r.creeds.size()) >= kMaxCreeds) return false;
+
+    std::vector<CreedId> pool;
+    for (int i = 0; i < kCreedCount; ++i) {
+        const auto id = static_cast<CreedId>(i);
+        const CreedDef& d = creedDef(id);
+        if (d.unlockNode >= 0 && u[d.unlockNode] == 0) continue;   // still behind its web node
+        bool ok = !r.hasCreed(id);
+        for (int have : r.creeds)
+            if (creedsConflict(id, static_cast<CreedId>(have))) ok = false;
+        if (ok) pool.push_back(id);
+    }
+    if (pool.empty()) return false;
+    for (int i = static_cast<int>(pool.size()) - 1; i > 0; --i)
+        std::swap(pool[static_cast<std::size_t>(i)], pool[static_cast<std::size_t>(rng_.irange(0, i))]);
+
+    // Spread the offer over different archetypes first, so the three cards
+    // are three different ways to play; fill up from the rest after.
+    const int want = cfg::creed::offered + (u[MetaOath] > 0 ? 1 : 0);
+    creedChoices_.clear();
+    for (CreedId id : pool) {
+        if (static_cast<int>(creedChoices_.size()) >= want) break;
+        bool fresh = true;
+        for (CreedId c : creedChoices_)
+            if (creedDef(c).archetype == creedDef(id).archetype) fresh = false;
+        if (fresh) creedChoices_.push_back(id);
+    }
+    for (CreedId id : pool) {
+        if (static_cast<int>(creedChoices_.size()) >= want) break;
+        if (std::find(creedChoices_.begin(), creedChoices_.end(), id) == creedChoices_.end()) creedChoices_.push_back(id);
+    }
+    creedSrc_ = src;
+    world_.forceRelease();
+    setAiming(false);
+    push(ScreenId::Creed);
+    return true;
+}
+
+void App::continueAfterCreed() {
+    if (creedSrc_ == CreedSource::Boss) openChoice(RollSource::Boss);   // then the boss treasure
+    else if (introStep_ >= 0) advanceRunIntro();
+}
+
+void App::chooseCreed(int idx) {
+    if (idx < 0 || idx >= static_cast<int>(creedChoices_.size())) return;
+    const CreedId id = creedChoices_[static_cast<std::size_t>(idx)];
+    audio_.cardPick();
+    back();   // close the creed screen
+    grantCreed(id);
+    continueAfterCreed();
+    save();
+}
+
+void App::refuseCreeds() {
+    back();
+    data_.run.gold += cfg::creed::refuseGold;
+    effects_.addLabel("+" + std::to_string(cfg::creed::refuseGold) + " gold", {size().x * 0.5f, size().y * 0.4f},
+                      theme::puGolden, 26, 1.2f);
+    audio_.purchase();
+    continueAfterCreed();
+}
+
+void App::grantCreed(CreedId id) {
+    RunState& r = data_.run;
+    if (r.hasCreed(id)) return;
+    r.creeds.push_back(static_cast<int>(id));
+    switch (id) {
+        case CreedId::Nova:
+            world_.addCoreMaxHp(-world_.core().maxHp * (1.f - cfg::creed::novaCoreHp));
+            novaCd_ = 0.f;
+            break;
+        case CreedId::Fortress:
+            world_.addCoreMaxHp(world_.core().maxHp * (cfg::creed::fortressHp - 1.f));
+            break;
+        case CreedId::Duet:   applyDuet(); break;
+        case CreedId::Legion: applyLegion(); break;
+        default: break;
+    }
+    syncWorldBalls();
+    const sf::Color col = creedColor(creedDef(id).archetype);
+    effects_.flash(col, 0.8f);
+    effects_.addLabel(std::string("CREED  ") + creedDef(id).name, {size().x * 0.5f, size().y * 0.1f}, col, 34, 1.8f);
+    audio_.comboUp(cfg::combo::baseCapTier);
+}
+
+// "Duet": keep the two most built-up balls; everything the others carried
+// flows into them - items become forge levels, modifiers move over.
+void App::applyDuet() {
+    RunState& r = data_.run;
+    const int n = static_cast<int>(r.balls.size());
+    const int keepN = cfg::creed::duetBalls;
+    if (n <= keepN) return;
+    auto score = [](const BallLoadout& L) {
+        int s = 0;
+        for (int i = 0; i < kLoadoutSlots; ++i)
+            if (L.kindAt(i) >= 0) s += 3 + L.levelAt(i);
+        for (int m : L.mods) s += m;
+        return s;
+    };
+    std::vector<int> order(static_cast<std::size_t>(n));
+    std::iota(order.begin(), order.end(), 0);
+    std::stable_sort(order.begin(), order.end(), [&](int a, int b) {
+        return score(r.balls[static_cast<std::size_t>(a)]) > score(r.balls[static_cast<std::size_t>(b)]);
+    });
+    std::vector<int> kept(order.begin(), order.begin() + keepN);
+    std::sort(kept.begin(), kept.end());
+    std::vector<BallLoadout> keep;
+    for (int i : kept) keep.push_back(r.balls[static_cast<std::size_t>(i)]);
+
+    int gold = 0, turn = 0, levels = 0;
+    for (int i = 0; i < n; ++i) {
+        if (std::find(kept.begin(), kept.end(), i) != kept.end()) continue;
+        const BallLoadout& L = r.balls[static_cast<std::size_t>(i)];
+        for (int m = 0; m < kModifierCount; ++m)
+            keep[static_cast<std::size_t>(turn++ % keepN)].mods[m] += L.mods[m];
+        for (int sl = 0; sl < kLoadoutSlots; ++sl) {   // items, element and abilities alike
+            if (L.kindAt(sl) < 0) continue;
+            std::vector<std::pair<int, int>> spots;   // kept (ball, slot) that can still level
+            for (int b = 0; b < keepN; ++b)
+                for (int s2 = 0; s2 < kLoadoutSlots; ++s2)
+                    if (keep[static_cast<std::size_t>(b)].kindAt(s2) >= 0 &&
+                        keep[static_cast<std::size_t>(b)].levelAt(s2) <
+                            maxLevelOf(static_cast<UpgradeKind>(keep[static_cast<std::size_t>(b)].kindAt(s2))))
+                        spots.push_back({b, s2});
+            if (spots.empty()) { gold += cfg::creed::duetMeltGold; continue; }
+            const auto [b, s2] = spots[static_cast<std::size_t>(rng_.irange(0, static_cast<int>(spots.size()) - 1))];
+            keep[static_cast<std::size_t>(b)].levelUp(s2);
+            ++levels;
+        }
+    }
+    r.balls = keep;
+    r.gold += gold;
+    world_.trimBalls(keepN);
+    std::string msg = "absorbed: +" + std::to_string(levels) + " forge levels";
+    if (gold > 0) msg += "  +" + std::to_string(gold) + " gold";
+    effects_.addLabel(msg, {size().x * 0.5f, size().y * 0.1f + 40.f}, theme::textHi, 20, 2.0f);
+}
+
+// "Legion": two more balls with an item each; a full arena gets modifier
+// stacks instead.
+void App::applyLegion() {
+    RunState& r = data_.run;
+    for (int k = 0; k < cfg::creed::legionBalls; ++k) {
+        if (static_cast<int>(r.balls.size()) < ballCap()) {
+            BallLoadout L;
+            const int item = randomItemFor(L, Tier::Rare);
+            if (item >= 0) { L.gear[0] = item; L.gearLvl[0] = 1; }
+            r.balls.push_back(L);
+        } else {
+            for (BallLoadout& L : r.balls) ++L.mods[rng_.irange(0, kModifierCount - 1)];
+        }
+    }
+}
+
+int App::randomItemFor(const BallLoadout& b, Tier maxTier) {
+    const UpgradeCtx c = buildUpgradeCtx();
+    std::vector<int> pool;
+    for (int i = 0; i < kUpgradeKindCount; ++i) {
+        const auto k = static_cast<UpgradeKind>(i);
+        if (upgradeCat(k) != UpgradeCat::Item || upgradeTier(k) > maxTier) continue;
+        if (c.isLocked(k) || !upgradeFitsBall(k, b)) continue;
+        if (k == UpgradeKind::Shatter && !c.elemUnlocked[3]) continue;   // needs ice
+        pool.push_back(i);
+    }
+    if (pool.empty()) return -1;
+    return pool[static_cast<std::size_t>(rng_.irange(0, static_cast<int>(pool.size()) - 1))];
+}
+
+void App::devToggleCreed(CreedId id) {
+    if (!devMode() || !data_.run.active) return;
+    auto& v = data_.run.creeds;
+    const auto it = std::find(v.begin(), v.end(), static_cast<int>(id));
+    if (it != v.end()) {   // dev only: drops the rule, one-off effects (balls, core HP) stay
+        v.erase(it);
+        syncWorldBalls();
+        effects_.addLabel(std::string("- ") + creedDef(id).name, {size().x * 0.5f, size().y * 0.9f}, theme::textLo, 18, 0.9f);
+        return;
+    }
+    grantCreed(id);
+}
+
+// ---------------------------------------------------------------- run intro
+
+std::string App::choiceTitle() const {
+    if (!choiceTitle_.empty()) return choiceTitle_;
+    switch (rollSource_) {
+        case RollSource::Boss:      return "Boss treasure - choose one";
+        case RollSource::Elite:     return "Elite spoils - choose an item";
+        case RollSource::PostFight: return "Choose a modifier";
+        default:                    return "Choose one";
+    }
+}
+
+void App::afterChoice() {
+    if (introStep_ >= 0) advanceRunIntro();
+    else openMap();
+}
+
+// newRun's opening beats, in order; each step may open a screen and comes
+// back here when it closes. Ends on the map.
+void App::advanceRunIntro() {
+    const int* u = data_.meta.unlock;
+    if (introStep_ == 0) {
+        introStep_ = 1;
+        if (u[MetaCovenant] > 0 && openCreedChoice(CreedSource::Start)) return;   // "Covenant"
+    }
+    if (introStep_ == 1) introStep_ = 2;   // (the first ability now comes after the first fight - postFight)
+    if (introStep_ == 2) {
+        introStep_ = 3;
+        if (u[MetaQuartermaster] > 0 && u[MetaStarterKit] > 0 && openStarterChoice()) return;   // "Quartermaster"
+    }
+    introStep_ = -1;
+    openMap();
+}
+
+// ---------------------------------------------------------------- the first ability
+
+// Every run starts classless; the first ball picks its first ability from
+// cards of the abilities the web has unlocked (Dash and Nova are always open;
+// the Mage route unlocks the rest). 3 cards, 4 with "Calling". One ability:
+// it's simply granted (no screen). None: nothing to do.
+bool App::openAbilityChoice() {
+    abilityChoices_.clear();
+    if (data_.run.balls.empty()) return false;
+    const UpgradeCtx c = buildUpgradeCtx();
+    std::vector<UpgradeKind> pool;
+    for (int i = 0; i < kUpgradeKindCount; ++i) {
+        const auto k = static_cast<UpgradeKind>(i);
+        if (upgradeCat(k) == UpgradeCat::Ability && upgradeEligible(k, c)) pool.push_back(k);
+    }
+    for (int i = static_cast<int>(pool.size()) - 1; i > 0; --i)
+        std::swap(pool[static_cast<std::size_t>(i)], pool[static_cast<std::size_t>(rng_.irange(0, i))]);
+    const int want = cfg::meta::abilityPickCards + (data_.meta.unlock[MetaCalling] > 0 ? 1 : 0);   // "Calling"
+    if (static_cast<int>(pool.size()) > want) pool.resize(static_cast<std::size_t>(want));
+    if (pool.empty()) return false;
+    std::sort(pool.begin(), pool.end());   // stable card order: the enum's
+    abilityChoices_ = pool;
+    if (pool.size() == 1) {
+        chooseAbilityCard(0);
+        return false;
+    }
+    push(ScreenId::AbilityPick);
+    return true;
+}
+
+void App::chooseAbility(int idx) {
+    if (idx < 0 || idx >= static_cast<int>(abilityChoices_.size())) return;
+    audio_.cardPick();
+    back();   // close the pick
+    chooseAbilityCard(idx);
+    if (introStep_ >= 0) advanceRunIntro();   // (the dev panel can open it mid-run too)
+    else if (abilityAfterFight_) {             // the first fight's ability: then on as usual
+        abilityAfterFight_ = false;
+        afterFightPick();
+    }
+    save();
+}
+
+// The first ball takes card idx in its first ability slot.
+void App::chooseAbilityCard(int idx) {
+    RunState& r = data_.run;
+    if (r.balls.empty() || idx < 0 || idx >= static_cast<int>(abilityChoices_.size())) return;
+    const UpgradeKind k = abilityChoices_[static_cast<std::size_t>(idx)];
+    BallLoadout& L = r.balls[0];
+    if (L.has(k)) L.levelUp(L.slotOf(k));
+    else L.setSlot(kSlotAbility, static_cast<int>(k), 1);
+    syncWorldBalls();
+    effects_.flash(theme::ability, 0.4f);
+    effects_.addLabel(upgradeInfo(k).title, {size().x * 0.5f, size().y * 0.3f}, theme::ability, 30, 1.4f);
+}
+
+// "Quartermaster": the Starter kit's free item, picked from 4 cards of its tier.
+// Items the Starter kit can give the first ball: unlocked, fitting, new to
+// it. The kit's tier first (shuffled), then the nearest tiers - with few
+// classes unlocked the kit's own tier can run short.
+std::vector<UpgradeKind> App::starterPool(Tier want) {
+    std::vector<UpgradeKind> out;
+    const RunState& r = data_.run;
+    if (r.balls.empty()) return out;
+    const UpgradeCtx c = buildUpgradeCtx();
+    const int w = static_cast<int>(want);
+    for (int d = 0; d < kTierCount; ++d)
+        for (int t : {w - d, w + d}) {
+            if (t < 0 || t >= kTierCount || (d == 0 && t != w) || (d > 0 && t == w)) continue;
+            std::vector<UpgradeKind> tier;
+            for (int i = 0; i < kUpgradeKindCount; ++i) {
+                const auto k = static_cast<UpgradeKind>(i);
+                if (upgradeCat(k) == UpgradeCat::Item && static_cast<int>(upgradeTier(k)) == t && upgradeEligible(k, c) &&
+                    upgradeFitsBall(k, r.balls[0]) && !r.balls[0].has(k))
+                    tier.push_back(k);
+            }
+            for (int i = static_cast<int>(tier.size()) - 1; i > 0; --i)
+                std::swap(tier[static_cast<std::size_t>(i)], tier[static_cast<std::size_t>(rng_.irange(0, i))]);
+            out.insert(out.end(), tier.begin(), tier.end());
+            if (d == 0) break;   // (w - 0 and w + 0 are the same tier)
+        }
+    return out;
+}
+
+bool App::openStarterChoice() {
+    const Tier want = data_.meta.unlock[MetaStarterKit] >= 2 ? Tier::Rare : Tier::Uncommon;
+    const std::vector<UpgradeKind> pool = starterPool(want);
+    if (pool.empty()) return false;
+    if (static_cast<int>(pool.size()) < kChoiceCount) {   // not enough for a choice: just hand one over
+        applyUpgradeKind(pool[0], 0, -1);
+        return false;
+    }
+    for (int i = 0; i < kChoiceCount; ++i) choices_[static_cast<std::size_t>(i)] = pool[static_cast<std::size_t>(i)];
+    choiceCount_ = kChoiceCount;
+    rollSource_ = RollSource::Normal;
+    const bool allWant = std::all_of(choices_.begin(), choices_.end(), [want](UpgradeKind k) { return upgradeTier(k) == want; });
+    choiceTitle_ = allWant ? std::string("Starter kit - pick your ") + tierName(want) + " item" : "Starter kit - pick your item";
+    push(ScreenId::Choice);
+    return true;
+}
+
+// ---------------------------------------------------------------- shop extras
+
+int App::forgeCap() const { return kMaxGearLevel; }   // items stop at Lv3 (each level counts double)
+
+int App::saleOffPercent() const {
+    const float off = cfg::gold::saleOff + cfg::meta::merchantSalePerLevel * static_cast<float>(data_.meta.unlock[MetaMerchant]);
+    return static_cast<int>(std::lround(off * 100.f));
+}
+
+int App::shopOfferPrice(int i) const {
+    const RunState& r = data_.run;
+    if (i < 0 || i >= static_cast<int>(r.shopOffers.size())) return 0;
+    const int deal = i < static_cast<int>(r.shopDeal.size()) ? r.shopDeal[static_cast<std::size_t>(i)] : 0;
+    if (deal == 2) return 0;   // a revealed mystery box: already paid for
+    const int base = shopPrice(static_cast<UpgradeKind>(r.shopOffers[static_cast<std::size_t>(i)]));
+    if (deal == 1)
+        return std::max(1, static_cast<int>(std::lround(static_cast<float>(base) * (1.f - static_cast<float>(saleOffPercent()) / 100.f))));
+    return base;
+}
+
+// Stock the shelves: shopOffers picks, at most shopMaxItems of them items, one on sale.
+void App::rollShopOffers() {
+    RunState& r = data_.run;
+    std::vector<int> prepaid;
+    for (std::size_t i = 0; i < r.shopOffers.size(); ++i)
+        if (i < r.shopDeal.size() && r.shopDeal[i] == 2 && !r.shopSold[i]) prepaid.push_back(r.shopOffers[i]);
+
+    std::vector<UpgradeKind> taken;
+    for (int k : prepaid) taken.push_back(static_cast<UpgradeKind>(k));
+    const int count = cfg::gold::shopOffers;
+    std::vector<UpgradeKind> fresh;
+    // At most cfg::gold::shopMaxItems items on the shelf, and on most visits none.
+    int items = rng_.range(0.f, 1.f) < cfg::gold::shopItemChance ? 0 : cfg::gold::shopMaxItems;
+    for (int i = 0; i < count; ++i) {
+        const UpgradeKind k = items >= cfg::gold::shopMaxItems
+            ? rollPick(RollSource::Shop, taken, [](UpgradeKind u) { return upgradeCat(u) != UpgradeCat::Item; })
+            : rollPick(RollSource::Shop, taken);
+        if (upgradeCat(k) == UpgradeCat::Item) ++items;
+        if (std::find(taken.begin(), taken.end(), k) != taken.end()) break;   // pool ran dry
+        taken.push_back(k);
+        fresh.push_back(k);
+    }
+    r.shopOffers.clear();
+    for (UpgradeKind k : fresh) r.shopOffers.push_back(static_cast<int>(k));
+    r.shopDeal.assign(r.shopOffers.size(), 0);
+    if (!fresh.empty()) r.shopDeal[static_cast<std::size_t>(rng_.irange(0, static_cast<int>(fresh.size()) - 1))] = 1;
+    for (int k : prepaid) {
+        r.shopOffers.push_back(k);
+        r.shopDeal.push_back(2);
+    }
+    r.shopSold.assign(r.shopOffers.size(), false);
+}
+
+// Rerolls: as many as you can pay for, each much dearer than the last
+// (cfg::gold::rerollGrowth); "Merchant" makes the first one per level free.
+int App::shopRerollPrice() const {
+    if (shopFreeRerolls() > 0) return 0;
+    const int paid = data_.run.shopRerolls - data_.meta.unlock[MetaMerchant];
+    return static_cast<int>(std::lround(static_cast<float>(cfg::gold::rerollBase) *
+                                        std::pow(cfg::gold::rerollGrowth, static_cast<float>(paid))));
+}
+
+// Selling is one item per visit (+1 per "Haggler" level).
+int App::shopFreeRerolls() const { return std::max(0, data_.meta.unlock[MetaMerchant] - data_.run.shopRerolls); }
+int App::shopSellsLeft() const { return std::max(0, 1 + data_.meta.unlock[MetaHaggler] - data_.run.shopSells); }
+
+void App::rerollShop() {
+    RunState& r = data_.run;
+    if (r.gold < shopRerollPrice()) return;
+    r.gold -= shopRerollPrice();
+    ++r.shopRerolls;
+    rollShopOffers();
+    audio_.purchase();
+    effects_.flash(theme::accent, 0.25f);
+}
+
+void App::beginSell() {
+    if (shopSellsLeft() <= 0) return;
+    equipSrc_ = EquipSource::Sell;
+    equipRef_ = -1;
+    bool any = false;
+    for (int b = 0; b < runBallCount(); ++b) any = any || equipFitsBall(b);
+    if (!any) {
+        effects_.addLabel("no items to sell", {size().x * 0.5f, size().y * 0.14f}, theme::textLo, 20, 1.2f);
+        return;
+    }
+    push(ScreenId::Equip);
+}
+
+int App::sellValue(int ball, int slot) const {
+    if (ball < 0 || ball >= runBallCount() || slot < 0 || slot >= kBallSlots) return 0;
+    const BallLoadout& L = data_.run.balls[static_cast<std::size_t>(ball)];
+    if (L.gear[slot] < 0) return 0;
+    const int base = cfg::gold::priceByTier[static_cast<int>(upgradeTier(static_cast<UpgradeKind>(L.gear[slot])))];
+    return std::max(1, static_cast<int>(std::lround(static_cast<float>(base) * cfg::gold::sellFrac *
+                                                    static_cast<float>(std::max(1, L.gearLvl[slot])))));
+}
+
+}  // namespace sb

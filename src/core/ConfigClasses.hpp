@@ -171,7 +171,7 @@ inline constexpr int   totemMax = 2;             // per ball
 inline constexpr int   wardenCount = 2;          // +1 at Lv3 and Lv5
 inline constexpr float wardenFrac = 0.5f, wardenFracPerLevel = 0.12f;
 inline constexpr float wardenOrbit = 92.f;       // from the core's centre
-inline constexpr float wardenSpin = 2.2f;        // rad/s
+inline constexpr float wardenSpin = 3.2f;        // rad/s
 inline constexpr float wardenRadius = 7.f;
 inline constexpr float wardenRest = 0.55f;       // after a hit, a spirit rests this long
 inline constexpr float wardenKnock = 170.f;      // shoves what it hits away from the core
@@ -231,5 +231,105 @@ inline constexpr float jackpotBlast = 3.f, jackpotBlastPerLevel = 0.5f;   // x t
 inline constexpr float jackpotRadius = 150.f;
 inline constexpr int jackpotGold = 10, jackpotGoldPerLevel = 5;
 }  // namespace jester
+
+// ==================================================================== Slinger
+namespace slinger {
+// Role (2 items): catching it pays more, your throw's first hit lands harder.
+inline constexpr float catchMul = 1.5f;        // catch reward x this
+inline constexpr float thrownHit = 1.25f;      // the first hit after your throw x this...
+inline constexpr float armedTime = 3.f;        // ...if it lands within this long
+// Master Slinger (4 items): every catch recharges its abilities; a bigger thrown hit.
+inline constexpr float masterRecharge = 0.35f; // share of each ability's cooldown
+inline constexpr float masterThrownHit = 1.5f;
+
+// "Coil": left alone it coasts down to a stop; your throw x this.
+inline constexpr float coilThrow = 2.f, coilThrowPerLevel = 0.2f;
+inline constexpr float coilDrag = 0.45f;       // speed lost per s (exponential), slower each level
+inline constexpr float coilDragPerLevel = -0.05f;
+// "Catch & release": caught within window s of your throw, +per damage (up to max).
+inline constexpr float releaseWindow = 2.5f;
+inline constexpr float releasePer = 0.15f, releasePerPerLevel = 0.04f;
+inline constexpr int releaseMax = 5;
+// "Afterburner": after your throw, while faster than its cruise, it leaves
+// fire - the Fire element for real (reactions, Ember's burn, element nodes).
+inline constexpr float burnFrac = 0.6f, burnFracPerLevel = 0.15f;   // flame damage/s x the ball's hit
+inline constexpr float burnTime = 1.4f, burnTimePerLevel = 0.2f;
+inline constexpr float flameEvery = 0.05f;     // s between flames
+inline constexpr float flameLife = 1.2f;
+inline constexpr float flameRadius = 22.f;
+inline constexpr int maxFlames = 90;
+// "Momentum": + damage per cruise of speed over its cruise.
+inline constexpr float momentum = 0.35f, momentumPerLevel = 0.1f;
+// "Grip": bends toward your pointer when it's close.
+inline constexpr float gripTurn = 2.2f, gripTurnPerLevel = 0.4f;   // rad/s
+inline constexpr float gripRange = 230.f, gripRangePerLevel = 25.f;
+// "Ambush": the thrown first hit blinks on to the nearest other enemy and hits it x this.
+inline constexpr float ambush = 1.5f, ambushPerLevel = 0.2f;
+inline constexpr float ambushRange = 420.f;
+// "Trick shot": every chance x this until the thrown first hit lands.
+inline constexpr float trick = 3.f, trickPerLevel = 0.5f;
+// "Double down": catch a ball you threw (within releaseWindow): its next hit
+// is doubled-and-more or nothing (heads x luck).
+inline constexpr float doubleWin = 2.5f, doubleWinPerLevel = 0.3f;
+inline constexpr float doubleChance = 0.5f;
+// "Execution throw": thrown first hit on an enemy at full health x this.
+inline constexpr float execution = 2.2f, executionPerLevel = 0.3f;
+}  // namespace slinger
+
+// ==================================================================== Alchemist
+namespace alchemist {
+inline constexpr float archReaction = 1.3f;    // Archalchemist: its reactions x this
+inline constexpr float attune = 0.25f, attunePerLevel = 0.1f;          // + element potency
+inline constexpr float crucible = 1.4f, crucibleRadius = 1.2f, cruciblePerLevel = 0.12f;
+inline constexpr float aftershock = 90.f, aftershockPerLevel = 15.f;  // reach (px)
+inline constexpr float flux = 0.15f, fluxPerLevel = 0.05f;
+inline constexpr int prismEvery = 4;                                  // -1 per 2 levels, down to 2
+}  // namespace alchemist
+
+// ==================================================================== speed items
+// The other classes' speed items (sim/WorldStyle.cpp): "still" ones scale with
+// slowness (0 at cruise, 1 stopped), "moving" ones with speed over cruise.
+namespace style {
+inline constexpr float fastFull = 1.f;          // "moving" items at full strength this far over cruise (x cruise)
+// Guardian
+inline constexpr float anchor = 0.55f, anchorPerLevel = 0.08f;          // enemy slow at a standstill
+inline constexpr float anchorRadius = 150.f, anchorRadiusPerLevel = 20.f;
+inline constexpr float anchorPull = 45.f, anchorPullPerLevel = 10.f;   // px/s toward it
+inline constexpr float plow = 260.f, plowPerLevel = 50.f;              // sideways shove (px/s)
+inline constexpr float plowFrac = 0.3f, plowFracPerLevel = 0.1f;
+inline constexpr float plowReach = 2.4f;                                // x its radius
+inline constexpr float plowStagger = 0.35f;
+// Shooter
+inline constexpr float slug = 1.2f, slugPerLevel = 0.3f;
+inline constexpr float strafe = 0.6f, strafePerLevel = 0.12f;           // x a bullet
+inline constexpr float strafeEvery = 0.45f;
+// Assassin
+inline constexpr float lurk = 1.5f, lurkPerLevel = 0.3f;
+inline constexpr float lurkFill = 2.5f;                                 // s at a standstill to charge fully
+inline constexpr float blur = 1.f, blurPerLevel = 0.3f;                 // mark length x this
+inline constexpr float blurAt = 1.4f;                                   // x cruise to pass through
+// Jester
+inline constexpr float sleight = 1.4f, sleightPerLevel = 0.2f;
+inline constexpr float sleightEvery = 3.2f, sleightEveryPerLevel = -0.3f;
+// Mage
+inline constexpr float meditate = 1.f, meditatePerLevel = 0.25f;       // + recharge speed at a standstill
+inline constexpr float leyline = 0.8f, leylinePerLevel = 0.2f;
+inline constexpr float runeEvery = 0.35f, runeLife = 8.f, runeRadius = 70.f;
+inline constexpr int runesPerBall = 6;
+// Support
+inline constexpr float beacon = 0.3f, beaconPerLevel = 0.08f;
+inline constexpr float beaconRadius = 140.f, beaconRadiusPerLevel = 15.f;
+inline constexpr float beaconTime = 2.5f;
+inline constexpr float wake = 1.25f, wakePerLevel = 0.05f;
+inline constexpr float wakeEvery = 0.06f, wakeLife = 1.5f, wakeRadius = 26.f, wakeCd = 0.8f;
+inline constexpr int maxWake = 120;
+inline constexpr float pass = 1.5f, passPerLevel = 0.15f;
+inline constexpr float passCharge = 1.2f;                               // the launched ball's next hit x this
+// Summoner
+inline constexpr float kennel = 3.5f, kennelPerLevel = -0.4f;           // s between wisps at a standstill
+inline constexpr float kennelFrac = 0.5f, kennelFracPerLevel = 0.12f;
+inline constexpr float drop = 0.35f, dropPerLevel = 0.1f;               // turret shot x its hit
+inline constexpr float dropLife = 6.f, dropRate = 1.4f;
+}  // namespace style
 
 }  // namespace sb::cfg

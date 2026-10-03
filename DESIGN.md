@@ -462,16 +462,29 @@ Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
   - Perder en cualquier oleada 11-20 (nucleo a 0) = derrota directa al
     menu, sin cartel, cobra por oleada alcanzada.
 
-- **Musica de fondo. [IMPLEMENTADO 2026-09-07]**
-  - `Audio` ahora ademas streamea dos loops OGG:
-    `assets/music/menu.ogg` (menus/loadout) y `assets/music/game.ogg`
-    (run viva: Play, Choice, Pause y cartel del boss incluidos).
-  - `Audio::setTrack(Track)` cambia de loop; `App::update` lo llama cada
-    frame con `data_.run.active ? Game : Menu` (idempotente). El toggle de
-    sonido pausa/reanuda la musica.
-  - Archivos opcionales: si faltan, el juego suena igual que antes. Los
-    `.m4a` no sirven (SFML no decodifica AAC) - hay que convertir a OGG.
-    Ride junto al resto de `assets/` en el copy de CMake y el `install`.
+- **Musica de fondo. [IMPLEMENTADO 2026-09-07, por acto 2026-09-28]**
+  - Loops en `assets/music/`: `menu.ogg` (fuera de una run), un loop por
+    acto que suena todo el acto (mapa, peleas, tienda, cartas: las peleas son
+    muy cortas para cambiar en cada una) y `boss.mp3` (solo mientras corre la
+    oleada del jefe; arranca siempre de cero, al ganar vuelve el del acto).
+    Acto 1..5 -> `map.ogg`, `fight2.mp3`, `fight3.mp3`, `fight2.mp3`,
+    `fight3.mp3` (tabla `kActLoop` en `App::update`). `fight1.ogg`
+    (Pinball Royale) esta fuera por ahora, comentado en `App.cpp`.
+  - `App::update` elige el track cada frame y llama `Audio::update(dt)`, que
+    hace el cruce: el loop que sale baja en 1.5 s y el que entra sube en 2.5 s
+    recien cuando el otro ya casi no suena (curva suave), asi dos tempos no
+    chocan. Los que salen quedan en pausa y retoman desde ahi.
+  - Cada archivo lleva una ganancia (en `App.cpp`) que lo iguala a ~-17 dBFS
+    RMS; si se cambia un archivo, medirlo de nuevo.
+  - Loop sin corte: los temas que terminan con fundido (`menu.ogg`,
+    `map.ogg`, `fight1.ogg`) llevan un `Audio::Loop{start, end, seam}`: se
+    cortan antes del fundido y vuelven al inicio con un cruce de 4 s entre dos
+    copias del mismo tema (equal-power). Los que ya vienen cortados para loop
+    (`fight2`, `fight3`, `boss`) usan el loop simple de SFML.
+  - Archivos opcionales: si faltan, ese momento queda en silencio. SFML 2.6
+    lee ogg / mp3 / wav / flac; `.m4a` no (AAC). Los originales van en
+    `music/` (ignorado por git). Ride junto al resto de `assets/` en el
+    copy de CMake y el `install`.
 
 - **Fase 1f — rework de power-ups / items / web + score. [IMPLEMENTADO 2026-09-08]**
   - Detalle completo en §7. Resumen:
@@ -1672,6 +1685,203 @@ Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
     núcleos por la primera habilidad extra es poco, legibilidad de la web con
     todo comprado y con zoom mínimo.
 
+- **UI limpia + mapa con caminos (2026-09-27, rama `ui-polish`).** Regla de
+  la usuaria: pocas cosas en pantalla pero importantes, espaciado, tamaños que
+  se adaptan al contenido, texto explicativo solo al pasar el cursor.
+  - **Base:** etiquetas chicas suben dos pasos (mínimo 12 px, en
+    `makeLabel`), `theme::margin` 30, `fsSmall` 14. Atajos = tecla sola
+    (`drawKeyCap`: [TAB], [O]); lo que hacen aparece al hover.
+  - **HUD de combate:** arriba etapa + barra de **progreso de la etapa**
+    (enemigos limpiados; antes la barra era la vida del core y confundía — la
+    vida ya está en el anillo del core). Sin score (queda en Stats). Oro
+    arriba a la derecha. Abajo a la izquierda: [TAB] y una ficha por pelota
+    en su color de clase.
+  - **TAB y equipar** se agrandan según cuántas pelotas hay
+    (`panelRowZoom`, `Window::useUiZoom`: dibujan en un lienzo UI/zoom);
+    columna de reliquias/pactos solo si hay alguno.
+  - **Cartas (`drawPickCard`)**: tipo arriba a la izquierda, **rareza =
+    puntos 1–5 + borde/banda** arriba a la derecha, **clase = insignia sólida**
+    del color de la clase + lomo y tinte. El fondo ya no se tiñe por rareza.
+  - **Tienda:** agrupada por tipo (items · habilidades · elementos · reliquias
+    · modificadores · pelota · caja misteriosa) con encabezado de color, lo
+    más raro primero; 4 ofertas (antes 5).
+  - **Paleta** un punto más apagada: `theme::soften` sobre los colores vivos.
+  - **Mapa:** caminos que no se cruzan (`generateMap`: 2–4 caminos salen del
+    tronco, cada fila un camino se desvía un carril con `driftPct`, a veces se
+    bifurca con `splitPct`, se juntan al pisarse); filas de 2–4 nodos; la fila
+    previa al jefe solo conecta con carriles vecinos. Pantalla con **scroll**
+    (rueda, flechas/W S, Espacio vuelve a tu fila), nodos más grandes y
+    quietos, sin leyenda (tooltip al hover), cabecera fija con acto y estado.
+    Botón [O] de la esquina eliminado (la tecla O abre opciones).
+  - **Economía:** la **primera habilidad llega al terminar el primer combate**
+    (`App::postFight`), ya no al empezar. Se probó un pick tras cada combate y
+    **se descartó** (no convenció): los combates normales dan oro
+    (`combatBase` 7, `perRow` 2), el élite su pick. El build crece en las
+    paradas del mapa: menos tiendas (`wShop` 6), más Upgrade (`wUpgrade` 10,
+    `wCombat` 46).
+  - Mapa: además de rueda/flechas, se **arrastra** con el mouse (clic fuera de
+    un nodo).
+  - Falta playtest: si 4 ofertas dejan la tienda demasiado floja.
+
+- **Items escasos, pelotas escasas, rutas con carácter (2026-09-27, `ui-polish`).**
+  - **Items:** nivel máx. **3** (`kMaxGearLevel`), pero cada nivel vale doble:
+    un item Lv L rinde como el viejo nivel `gearPower(L)` = 1 / 3 / 5 (números
+    por nivel e `itemLevelDamage`). Elementos y habilidades siguen hasta Lv5.
+  - **De dónde sale cada cosa** (`App::RollSource`): tras un combate normal,
+    **solo modificadores** (`PostFight`); élite = **solo items**
+    ("Elite spoils"); tesoro del jefe = todo; nodos Upgrade / Recruit = todo
+    menos items; tienda = todo menos pelota (máx. 1 item). Los items solo vienen de élites,
+    tiendas (y el jefe).
+  - **Tienda:** solo se compra lo que aparece; sin reparar, sin forja, sin
+    caja misteriosa. Rolear solo con **Merchant** (1 por nivel y visita);
+    vender **1 item por visita** (+1 por nivel de **Haggler**). Los botones
+    que no aplican no se muestran.
+  - **Pelotas (máx. 5):** carta "Extra ball" con peso x0.3 dentro de su tier
+    (`newBallCardWeight`), nunca en la tienda; el nodo Recruit la ofrece
+    siempre (+3 picks sin items). La fila previa al jefe ya no tiene Recruit
+    (Shop / Rest / Upgrade / Forge).
+  - **Acto 1 más corto:** 10 filas (`mapRows`, `rowsAct1`); acto 2 sigue 14.
+  - **Rutas con carácter (sin decirlo):** cada camino se inclina a *Recruit*
+    (Recruit, pocos élites, sin tienda) o a *items* (muchos élites y tiendas,
+    sin Recruit); se alternan, una bifurcación toma la inclinación contraria,
+    nodos compartidos son neutros (`PathLean`, `cfg::map::w*Path`). El
+    Recruit **no se sortea**: `generateMap` pone exactamente 1 por ruta de
+    reclutar en el acto 1 (2 en el acto 2; `recruitsPerPathAct*`), repartidos
+    a lo largo de la ruta. Al azar salía en ~39% de mapas del acto 1 sin
+    ningún Recruit. Sim 3000 mapas acto 1: 0% sin Recruit, 1–2 por mapa; la
+    ruta con más trae ~1.1, la con menos ~0.
+  - **Items difíciles de conseguir (ajuste final):** el élite reparte **3
+    cartas** (`eliteCards`); rarezas bajas para que un raro sea un evento:
+    élite `{30,36,22,9,3}` (~3% Legendary por carta), tienda `{40,34,17,7,2}`.
+    Una carta Epic / Legendary en la mesa hace un flash de su color.
+  - **Tienda:** 3 ofertas, **máx. 1 item** (`shopMaxItems`); Merchant ya no
+    suma oferta, solo rerolls (máx. 2 = su nivel máx.) y descuento.
+  - **Élites colocados, no sorteados:** 1–2 por ruta de items en el acto 1, 2
+    en el acto 2 (`elitesPerPath*`); fuera de eso un élite suelto es raro
+    (`wEliteNeutral` 4, `wEliteRecruitPath` 3). Sim acto 1: la ruta con más
+    élites ~1.8, la de reclutar ~0.2; todo mapa tiene ≥1 élite y ≥1 Recruit.
+    Idea: pelotas e items son lo más importante de una run larga — cada
+    Recruit y cada item cuestan una decisión de ruta.
+  - TAB / equipar: zoom máx. 1.2 / 1.15 (con pocas pelotas quedaba enorme).
+  - **Élite se distingue:** en el mapa naranja propio (`ember`), más grande
+    y con doble marco; en la pelea el cartel dice "Elite - item spoils" y el
+    HUD "ELITE" con barra naranja.
+
+- **Lenguaje visual: clase / rareza / tipo / habilidad (2026-09-27).** Sin
+  texto nuevo, solo color, forma y lugar:
+  - **Rareza = brillo, arriba.** `tierColor` es una rampa gris → blanco y solo
+    Legendary es dorado pálido (nunca choca con un color de clase). En la
+    carta: banda superior que engrosa con el tier + puntos; en el casillero:
+    puntos a la derecha.
+  - **Clase = color sólido, a la izquierda.** Lomo grueso + tinte + insignia
+    en la carta; en el panel, el item es un chip teñido de su clase con lomo.
+    La cabecera del panel muestra solo las clases (ya no el elemento).
+  - **Tipo (elemento) = píldora** de su color alrededor del nombre en la
+    carta; **habilidad = corchetes cian**.
+  - **Panel de la pelota (TAB / equipar), elegido por la usuaria:** la
+    identidad arriba, el equipo abajo. Cabecera: **tipo = hexágono** de su
+    color a la izquierda (con su nombre), la pelota al medio, **habilidades =
+    rombos cian** a la derecha (1 grande o 2–3 chicos; nivel adentro, nombre
+    debajo si hay una sola y entra), clases debajo. Abajo solo los 4 items
+    como chips. Al equipar, los destinos válidos tienen un halo.
+    (`slotRect`, `kPanelHeadY`, `kPanelItemsTop`, `kPanelH` 272.)
+  - **Elemento en la pelota:** borde más grueso con halo; al ganar uno, flash
+    de su color y dos anillos que se expanden (`Ball::elemPulse`,
+    `drawElementPulse`, `KnownClasses::element`).
+
+- **3 cartas, formas por tipo, dev solo F1 (2026-09-27).**
+  - Toda elección reparte **3 cartas** (`cfg::run::choiceCards`, Recruit =
+    pelota + 2); las mejoras que ya daban más (Quartermaster: kit de 4;
+    Calling: 4ª carta en la primera habilidad) siguen igual.
+  - La tienda solo trae item en el **40% de las visitas** (`shopItemChance`).
+    Sonda de reparto (4000 tiradas por origen, SB_DEV=1): post-combate 100%
+    modificadores; Upgrade/Recruit 0 items; élite 100% items; tesoro 80% items.
+  - **Marca de tipo** discreta junto al nombre del tipo (carta, encabezado de
+    la tienda, reliquias del TAB): item = cuadrado, habilidad = rombo,
+    elemento = hexágono, reliquia = círculo, modificador = triángulo, pelota =
+    anillo (`drawKindMark`). Los textos de las cartas se mantienen.
+  - **Modo dev:** solo F1 (panel). Se sacaron la chuleta de teclas y los
+    atajos N/H/G/B/U/C; el panel suma "Cores & prisms", "Pick: after fight",
+    "Pick: elite (items)", "First ability pick", y los pactos en 2 columnas.
+
+- **Pelota de dos clases (2026-09-27).** Se probó mezclar los colores y se
+  descartó (colores barrosos, rompe "color = clase"). Ahora, de adentro a
+  afuera: **cuerpo** = color de la clase principal; **segunda clase** = banda
+  **sólida** de su color justo dentro del borde (~20% del radio); **elemento**
+  = anillo **punteado** fino afuera, tras un hilo oscuro, con halo tenue
+  (`drawBallIdentity`). Así Shooter (naranja) + fuego (naranja) se leen como
+  dos cosas por forma y lugar.
+  - **Clase principal (cuerpo):** la clase con más **niveles de item**
+    sumados; empate → la del item más arriba en los casilleros (arrastrar en
+    TAB elige el color). Una ascendida (4 items) siempre es la principal.
+    (`BallLoadout::roles` / `tagLevels`.)
+
+- **Dificultad: 5 actos, jefes duros, minijefes, modo difícil (2026-09-27, `ui-polish`).**
+  Pedido: "muy fácil, niveles cortos, jefes extremadamente fáciles". Todo en
+  `core/Config.hpp`.
+  - **5 actos** (`cfg::run::acts`, `finalWave` = 50, `actOfWave` /
+    `isBossWave`): la oleada 10 de cada acto es su jefe. Mapas: acto 1 = 11
+    filas, actos 2-5 = 13. "Continue" en el cartel del jefe lleva al acto
+    siguiente (pacto solo tras el jefe del acto 1; tesoro tras cada jefe). Oro
+    de pelea + `perAct` por acto.
+  - **Un jefe por acto** (`BossKind`, dibujo por forma): Charger (1, octógono,
+    núcleo a la izquierda), **Hive** (2, hexágono: se mece hacia el núcleo y
+    cada 4.2 s suelta un abanico de 4 runners), **Warden** (3, cuadrado: un
+    escudo que gira bloquea las pelotas de ese lado; camina / se planta),
+    **Dasher** (4, triángulo: se acerca, apunta con una línea punteada y
+    embiste; cada golpe limpio lo empuja atrás), Orbital (5, final).
+  - **Jefes mucho más duros:** vida medida en grunts de su oleada (12 / 10 /
+    12 / 12 / 14, +15% por pelota extra), i-frames 0.1 → 0.2 s. **Dos fases:**
+    bajo 50% se **enfurece** (todo x1.5 más rápido, adds más seguidos, cartel
+    ENRAGED) y al 66% y 33% **llama a un Brute**. Sim: el Charger pasó de
+    ~11 s a ~40 s con el mismo bot.
+  - **Minijefe Brute** (pentágono con núcleo naranja): x10 vida, lento, casi
+    no se empuja, x4 daño al núcleo. Todo élite trae uno (dos desde el acto 3);
+    desde la oleada 12 una pelea normal termina con uno (35%).
+  - **Enemigos nuevos:** **Blinker** (oleada 12+, triángulo: salta hacia el
+    núcleo cada 2.6 s, parpadea antes) y **Mender** (22+, cruz verde: cura a
+    los de alrededor). Desde la 12, **manadas** de 4 runners juntos.
+  - **Curva:** cantidad = 8 + 2.1·x + 0.07·x² (tope 120 hacia la 29); vida
+    x1.18 por oleada hasta la 20 y x1.04 después; cadencia al mínimo en la 30.
+    Sim (bot que clickea): acto 1 peleas ~50% más largas y 2-3x el daño al
+    núcleo; acto 2 más duro que el acto 2 viejo.
+  - **Modo difícil** (botón "Mode: Normal / Hard" en la pantalla de inicio de
+    run, se guarda como `hard` en el save, tooltip al hover; HUD "act N hard"):
+    enemigos x1.6 vida, x1.12 velocidad, x1.3 cantidad, x1.5 daño al núcleo,
+    jefes x1.8, Brutes desde la oleada 5 (50%) y dos por élite, **sin
+    reparación gratis** entre peleas. Paga x1.75 núcleos. `cfg::hard`.
+  - Panel F1: items agrupados por **clase** (encabezado y color de la clase;
+    la rareza en el tooltip); spawns de Blinker / Mender / Brute.
+  - **Onda de choque del Charger:** cada 5 s (más seguido enfurecido) avisa
+    0.8 s con un anillo que se cierra y pulsa, y despide lejos a toda pelota
+    dentro de su alcance (300 px del arena, más fuerte cuanto más cerca).
+    `cfg::boss::shock*`, `World::chargerShock`.
+  - **Arranque de cada pelea:** las pelotas se acomodan en un anillo
+    alrededor del núcleo, giran acelerando 1.9 s y salen disparadas todas
+    juntas (hacia afuera, inclinadas en el sentido del giro, x2.2 del
+    crucero). No se pueden agarrar mientras giran. Un solo anillo para todas,
+    medido con la pelota más grande (y con su tamaño real en la arena del
+    jefe): despeja el núcleo y entran todas lado a lado. Si no entra junto a
+    una pared, el centro del anillo se corre hacia adentro lo justo. En la
+    pelea del Charger el núcleo pasó a 250 px de la pared (`coreMarginX`, antes
+    110) para que el anillo quede centrado; medido con 1-5 pelotas de tamaño
+    x1-x3 en las oleadas 1/10/15/20/50 (con la cámara del App): nada sale de la
+    arena ni del cuadro. Modo foto `12a_boss_launch`. `cfg::ball::launch*`,
+    `World::updateLaunch`; modo foto `04a_launch`.
+  - **Esc siempre abre la pausa** en una run (cartas, mapa, tienda, pacto,
+    selector, cartel del jefe...); "Resume" vuelve a donde estabas. Solo la
+    pausa, lo que abre (stats / cómo jugar / opciones) y el panel de dev usan
+    Esc como "volver"; con TAB abierto, Esc lo cierra. Salir de la tienda /
+    cancelar el selector: su botón o clic derecho. (`App::onPauseMenus`.)
+  - Cerrar la pausa (o volver del selector) no repite la animación de la
+    pantalla de abajo (las cartas no se reparten de nuevo).
+  - **Selector de pelota / slot:** botón **"Back to the cards"** abajo (o clic
+    derecho): tomaste una carta pero todavía no la pusiste → volvés a las
+    cartas sin gastar nada. Una vez puesta, la elección terminó. En la tienda
+    dice "Back to the shop", en la forja "Leave the forge".
+  - Falta playtest: todo lo anterior es calibración relativa con un bot
+    mucho peor que un jugador; tocar `cfg::wave`, `cfg::boss`, `cfg::hard`.
+
 - **Fase 2 — Jefe tras la oleada 10.** Da upgrades de pelota (viento/agua/
   piedra). Extiende la run mas alla de 10 en "modo infinito" opcional.
 - **Fase 3 — Variedad.** Repulsor, bumper, rampa. Corredor, tanque, escindido.
@@ -1695,3 +1905,351 @@ Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
 - ¿La meta-moneda se gana solo al morir, o también por hitos a mitad de run?
 - ¿Cuántas ofertas por elección (3) y hay *reroll*? ¿Se puede saltar y coger
   chatarra?
+
+---
+
+## 10. Atrapar, Creeds, Pacts e items de estilo (decidido 2026-09-28)
+
+Idea de fondo: agarrar la pelota es una mecánica. Una pelota rápida es difícil
+de atrapar, así que una lenta que pega fuerte es un estilo válido. Tirar
+(click o gomera) y dejarlas estar son los dos estilos; ninguno es obligatorio.
+
+### 10.1 Atrapar y tirar
+- Radio de agarre: se queda en 130, **escalado con `arenaScale()`** (hecho:
+  después del acto 1 la cámara se aleja y antes el radio quedaba a la mitad).
+- Tiro rápido y cámara lenta al apuntar: se quedan como están.
+- **Premio por atrapar:** cuanto más rápido venía la pelota al agarrarla, más
+  pega el primer golpe del tiro que sigue (hasta +50%). Destello al atraparla.
+
+### 10.2 Creeds (los pactos de antes, renombrados)
+- Los 12 pactos actuales pasan a llamarse **Creed**. Se quedan todos,
+  incluidos Hunters y Clockwork: son para quien no quiere agarrar mucho.
+
+### 10.3 Pacts (carta nueva: te da y te saca)
+Solo gameplay, nada de plata. Lista aprobada:
+- Lead: +60% daño / la pelota va 40% más lenta.
+- Quick hands: premio por atrapar x2 / una pelota que nadie tira pierde 20% de daño.
+- Heavy arm: tiros x1,5 / sin cámara lenta al apuntar.
+- Glass edge: +30% chance de crítico / los golpes que no son crítico pegan 20%
+  menos (antes era "-1 slot de item"; se cambió porque sacar un slot pide elegir
+  pelota y romper equipamiento).
+- Stillness: cuanto más lenta, más daño carga / el tiro rápido pierde potencia.
+- Overflow: +1 pelota / todas -15% daño.
+- Tiny: +80% daño / pelotas a la mitad de tamaño.
+- Colossus: la mejor pelota x2 tamaño y daño / las demás -30% daño.
+- Hot potato: la agarrada gana daño por segundo / pasados 3 s se cae sin fuerza.
+- Juggler: atrapadas seguidas sin tocar el núcleo suman daño / tocar el núcleo
+  corta la racha y le saca vida.
+- Void walls: los bordes te pasan al otro lado / se apagan los items de rebote en pared.
+- Anchor walls: tiros x2 / la pared frena la pelota en seco.
+- Last breath: núcleo bajo 30% = todo x2 / -20% vida máxima del núcleo.
+- Mirror: cada tiro larga una copia fantasma al revés / enemigos +20% vida.
+- Elemental: elementos x2 / contacto -30%.
+- Frenzy: el combo sube el doble / agarrar corta el combo.
+- Blind: tiros +40% / sin guía de puntería.
+- Horde (antes "Swarm", chocaba con el arquetipo Swarm de Creed): +1 pelota
+  por jefe / +30% enemigos por oleada.
+
+**Dónde:** nodo **Altar** (1 de 3, o ninguno). Es raro en el mapa. Camino
+secreto: en cada acto, 3 combates seguidos (élite cuenta) sin daño al núcleo
+abren un camino al Altar antes del jefe. Tiendas y descansos no cortan la
+racha; solo la corta recibir daño. La animación del camino que se abre se
+muestra recién cuando estás a 1 nodo del jefe. (Hecho: el Altar oculto
+aparece arriba de donde estás, en la fila del jefe, y lleva al jefe. Los
+Pacts que piden agarrar no se ofrecen con Hunters / Clockwork.)
+
+### 10.4 Mapa
+- Nunca dos peleas normales seguidas: un combate que lleva a otro combate
+  convierte el segundo en una parada (Upgrade / Shop / Forge / Rest). Élites y
+  Recruit no se tocan. Resultado: ~12 nodos de pelea por mapa (antes ~17).
+- Animación mientras elegís la ruta (hover / avance), para que el camino
+  elegido quede marcado y el avance se sienta fluido.
+
+### 10.5 Items nuevos
+Regla: todo lo "si está quieta" **escala con la velocidad** (más lenta = más
+efecto), nunca es un sí/no; quedarse quieta no es obligatorio.
+**Prioridad: sinergias.** Cada item nuevo tiene que combinar con items,
+elementos o Pacts que ya existen; no hace falta que cada clase tenga los tres
+estilos (quieta / en movimiento / en pareja). "En pareja" (seguir a otra
+pelota) queda solo para Support y Summoner, que juegan solas. Las clases
+donde más sentido tiene tirar (Striker, Assassin, Jester) llevan más items de
+tiro/atrapada; el reparto final se equilibra en cada tanda. Guardian juega
+solo pero cuidando el núcleo.
+
+- Sin clase: **Ballast** (modificador que se apila: -15% velocidad, +20% daño).
+- **Clase nueva: Slinger** (la clase de tirar y atrapar; así no se tocan las
+  demás y combina con Striker / Assassin / Jester en la misma pelota). Nombre
+  elegido porque "Thrower" es un arquetipo de Creed y "Juggler" es un Pact.
+  Items: **Coil** (frena hasta 0; tirada por vos sale al doble), **Catch &
+  release** (atraparla poco después de tirarla apila daño), **Afterburner**
+  (tirada rápida deja estela de fuego que aplica el elemento Fuego de verdad:
+  mismo estado, reacciones y nodos del árbol que una pelota de fuego),
+  **Momentum** (más rápido = más daño), **Grip** (se curva hacia el cursor
+  cerca de él), **Ambush** (tirada: blink al primer golpe + golpe de Backstab),
+  **Trick shot** (chances x3 hasta el primer golpe tras un tiro), **Double
+  down** (atrapar una pelota que tiraste vos = próximo golpe doble o nada),
+  **Execution throw** (primer golpe de tiro a enemigo con vida llena = crítico).
+  Clase (2 items): atraparla paga 50% más de premio y el primer golpe tras tu
+  tiro pega +25%. Ascendida "Master Slinger" (4 items): cada atrapada recarga
+  35% de sus habilidades y el golpe tirado pega +50%. Sus items funcionan con
+  1 solo item en cualquier pelota (como Jester). En la web: ruta propia que
+  sale del centro (entre Striker y Shooter): nodo "Slinger" (18 cores) y
+  "Slinger lore". Regla por ahora: toda rama de la web sale del centro.
+  Striker también es una clase a desbloquear (nodo "Striker", 12 cores, en su
+  ruta tras Heft y Sling). Mientras no tengas ninguna clase comprada, Striker
+  queda abierta como clase de arranque (si no, una partida nueva no tendría
+  items).
+  Ballast (modificador) pasa al paso 6, con los modificadores nuevos.
+- Las demás clases solo suman items que escalan con la velocidad:
+  Guardian **Anchor**, **Plow**; Shooter **Slug** (más lenta = más cadencia y
+  rango), **Strafe**; Assassin **Lurk**, **Blur**; Jester **Sleight**, **Wild
+  ride**; Mage **Meditate**, **Leyline**; Support **Beacon**, **Wake**, **Pass**,
+  **Link**; Summoner **Kennel**, **Pack**, **Familiar**, **Drop turret**.
+  (Landslide, Recoil, Spellsling, Mark throw, Roulette quedan en reserva:
+  si hacen falta, van a Slinger.)
+  **Hecho (2026-09-28):** 14 items: Anchor, Plow, Slug, Strafe, Lurk, Blur,
+  Sleight, Meditate, Leyline, Beacon, Wake, Pass, Kennel, Drop turret.
+  Quedaron afuera por repetir algo que ya existe: Link (= Tether), Wild ride
+  (= Chaos bounce); Pack y Familiar (Summoner "en pareja") para más adelante.
+  Beacon y Pass le pasan el elemento de una pelota a otra: dos dueños
+  distintos, así que reaccionan (sinergia con elementos / Catalyst).
+  Todo lo "quieta" combina con Coil, Lead y Stillness.
+
+### 10.6 Orden de trabajo
+1. Renombre Pact -> Creed.  2. Premio por atrapar.  3. Pacts + Altar + camino
+secreto + animaciones de mapa.  4. Clase Slinger.  5. Items de velocidad en las otras clases, por tandas.
+6. Después: repasar los elementos (quedaron desactualizados) y sumar muchos
+modificadores pasivos nuevos (hoy son solo Heavy impact / Big ball / Swift y
+siempre se eligen los mismos 3).
+**Elementos rehechos (hecho 2026-09-28):**
+- Fuego = incendio que se contagia: cada golpe prende y la quemadura sube
+  (sin necesitar Ember); un enemigo que muere quemándose explota y prende a
+  los de al lado. Ember: +35% de quemadura por nivel. Golpe +25% (antes +60%).
+- Agua = mojar y empujar: el golpe empapa (camina 30% más lento, sale 50% más
+  lejos al ser golpeado, se congela el doble) y cada 1,5 s la pelota lanza una
+  OLA: un arco hacia donde va que avanza y crece, empuja hacia afuera y empapa
+  a cada enemigo que cruza (sin daño propio). Ya no tiene estela.
+  Electrocution electrifica a lo que está dentro de una ola.
+- Piedra = la pesada que agrieta (support/tanque): cada golpe agrieta (+12% de
+  daño recibido de TODO, hasta 5, 4 s); pelota 10% más lenta, empuja 30% más.
+  Ya no tira escombros. Bedrock: grietas 50% más largas y hasta 7.
+- Reacciones de piedra: Magma (charco de lava), Barro (charco que frena),
+  Polvo tóxico (nube de veneno), Esquirlas (explosión que agrieta x2), Imán
+  (junta a los enemigos).
+
+**Modificadores nuevos (hecho 2026-09-28):** Ballast, Keen, Reach, Tempered,
+Spin, Leech, Quick mind, Heavy throw, Bouncy (12 en total), para que la
+elección post-pelea no sea siempre la misma. Arreglado: un reroll en una
+elección de modificadores ya no puede dar un item.
+
+**Clase Alchemist (hecho 2026-09-28; se llamaba "Elementalist" en el plan):**
+con la clase (2 items) la pelota lleva 2 elementos que se turnan golpe a golpe
+y reaccionan entre sí (una sola pelota ya genera reacciones); ascendida
+"Archalchemist" (4): un 3er elemento y reacciones +30%. Agua y eléctrico
+actúan solos si están entre sus elementos. Los extra se guardan al lado del
+slot de tipo (hexágonos chicos) y comparten su nivel. Items: Attune, Crucible,
+Aftershock, Flux, Prism, Conflux. Su ruta de la web sale del centro y tiene
+los 6 elementos (más Ember y Prism core); el arquetipo de Creed "Alchemist"
+pasó a decir "ALCHEMY".
+
+7. **Clase nueva: Elementalist** (va junto con el repaso de elementos). Cada
+clase se trata de algo; esta es sacarle más a los tipos. Como el Mage con los
+slots de habilidad, pero con elementos: con la clase (2 items) la pelota tiene
+2 elementos, ascendida (4 items) tiene 3. Sus dos elementos reaccionan entre
+sí en la misma pelota. Sinergias: Catalyst, Chain reaction, Primed, el Creed
+Alchemy y los nodos de elemento del árbol. Nombre elegido porque "Alchemist"
+ya es un arquetipo de Creed.
+8. Después de todo esto: estudiar la progresión (qué se desbloquea y cuándo)
+y mejorar el árbol meta (la web). Clases cerradas en 10: las 8 de hoy +
+Slinger + Elementalist; las combinaciones se hacen con los items.
+
+## 11. Pasada de balance post-playtest (2026-10-01)
+
+El usuario jugó una run: "está muy duro y eso me gusta". Cambios de esa charla
+(todo en `ui-polish`):
+
+- **Más pelotas tarde:** tope de 5 pelotas (`cfg::ball::baseBalls`) y +2 desde
+  el acto 3, o sea después de vencer al jefe del acto 2 (`lateBalls`,
+  `lateBallsAct`; `App::ballCap()`, Duet sigue en 2). Al entrar al acto 3 sale
+  "+2 BALL SLOTS". `maxBalls` = 7 es el techo duro del World. El TAB con 7
+  paneles se achica (zoom mínimo 0.6).
+- **Tecla F = tirar una pelota al azar** (desde el acto 2, `cfg::app::autoThrowAct`):
+  una pelota libre al azar va al enemigo más cercano, como un click pero sin
+  premio de atrapada, con 1.6 s de recarga (`autoThrowCooldown`) para que
+  clickear siga siendo mejor. Chip "F" a la derecha de las pelotas, con la
+  recarga llenándose. No existe con Hunters / Clockwork (sin manos).
+- **Saltear elecciones:** botón "Skip" bajo las cartas (al lado de "Repair the
+  core instead" si el núcleo está herido). Prospector devuelve rerolls también
+  acá.
+- **Tiendas:** muchas menos. Como mucho `cfg::map::shopsPerAct` = 1 en los
+  caminos de cada acto, más la fija de la fila previa al jefe; las demás pasan
+  a "?" (~2.4 -> ~1.8 por mapa). En cambio, el **reroll es ilimitado** y cada
+  uno sale bastante más caro que el anterior: 15 x 1.7^n (15, 26, 43, 74, 125,
+  213...). Merchant ahora da el primer reroll gratis por nivel. La estantería
+  trae un item el 60% de las visitas (antes 40%).
+- **Eventos en los "?"** (`progression/Events.hpp`, `core/AppEvents.cpp`,
+  `ui/EventScreen.*`): el 40% de los "?" (`cfg::event::chancePct`) es "A
+  stranger" con 2 tratos a elegir o irse. Los precios suben por acto:
+  - Drifter: una pelota nueva por 120 (+40 por acto; 200 en el acto 3).
+  - Smuggler: elegir 1 de 3 items (probabilidades de élite) por 70 (+20).
+  - Blood price: +60 oro (+20) a cambio de -12% de vida máxima del núcleo.
+  - Tithe: +15% de vida máxima del núcleo (y la cura) por 50 (+15).
+  - Coin flip: apostar 40 (+15); 50% de cobrar x2.5.
+  - Wandering smith: subir de nivel un item por 40 (+10).
+  Un trato que no podés pagar se ve apagado. Los que no aplican (sin lugar
+  para pelotas, nada para forjar) no salen.
+- **Enemigos nuevos:**
+  - **Snare** (desde la oleada 13): atrapa la primera pelota que lo golpea y la
+    tiene quieta (no se puede agarrar) hasta que lo matás con otra. Nunca atrapa
+    tu última pelota libre. Al morir, la suelta a velocidad de crucero.
+  - **Andares:** grunts, runners, splitters y shielded pueden avanzar en
+    zigzag (Weave, desde la oleada 3) o en espiral alrededor del núcleo
+    (Spiral, desde la 11), y se vuelven más comunes cada acto. Medido sin
+    ventana: llegan al núcleo en tiempos parecidos a los que van derecho
+    (~9-11 s), así que la presión es la misma pero hay que leerlos distinto.
+- **Golpes de pelota más suaves:** voces propias para los golpes (8), nunca
+  dos notas a menos de 55 ms, el volumen baja cuando se amontonan (1/raíz de
+  la densidad reciente), nunca la misma nota dos veces seguidas, ataque más
+  suave en el estilo Soft, y los acordes del combo solo si no está saturado.
+
+### Habilidades del jugador: Q y E (2026-10-01)
+
+Para que el jugador haga más que atrapar. Son del jugador, no de una pelota
+ni de un build (`cfg::player`). Los chips están abajo a la izquierda, al lado
+de las pelotas: Q, el anillo de E y F.
+
+- **Q = Volley** (desde el arranque; reemplazó a "Marcar" el mismo día, a
+  pedido del usuario): como clickear todas las pelotas a la vez pero más
+  rápido. Cada pelota libre (no la que tenés en la mano, ni una atrapada por un
+  Snare o un Satellite) sale por el mismo `releaseHeld` que un click, directo
+  al enemigo más cercano **a esa pelota** (o al objetivo, si marcaste uno), a
+  1.4x la velocidad del click y sin premio de atrapada. Recarga en 1 s.
+  Medido sin ventana: con 4 pelotas, un Tank de la oleada 4 muere en 1 s. Muy
+  fuerte y spameable: vigilar en el playtest.
+- **El click a una pelota** ahora la tira al enemigo más cercano **al núcleo**
+  (el que está por pegarle), no al más cercano a la pelota.
+- **Objetivo del jugador:** click sobre un enemigo (o el jefe), sin una pelota
+  debajo, lo marca con una mira; otro click encima lo desmarca, y se limpia al
+  morir o en cada oleada. Mientras vive, todo lo que apunta va a él: el click,
+  Q, Dash, los misiles del Mage, el Shooter, el Assassin, el Summoner y sus
+  torretas, el Ambush del Slinger (los que tienen alcance, solo si está dentro
+  del alcance), Seeker, Hunter, Clockwork y los rebotes apuntados
+  (`World::focusAt / focusPos`; `nearestTarget` lo devuelve primero). Lo que
+  solo pregunta "¿hay algo cerca?" para dispararse no cambió.
+- **E = Tiempo bala** (desde el acto 2, se mantiene apretada): el combate va
+  a 0.3x mientras la tenés apretada. Es un **recurso que el jugador administra**
+  (pedido explícito): un anillo verde con 3 s reales de cámara lenta que se
+  vacía al usarlo y se recarga solo (de vacío a lleno en 14 s, empieza 0.8 s
+  después de soltar). Hace falta un 8% para volver a arrancarla. El pacto
+  Heavy Arm también la quita.
+- **Stockpile se retiró:** era la reserva de power-up en Q. Su nodo queda en el
+  enum (no se mueve ningún índice del save) con maxLevel 0, lo que lo saca de la
+  web (`metaNodeRetired`). Magnet ocupa su lugar y cuelga del mismo padre.
+- **F = Repulsión** (desde el acto 2; reemplazó al "tiro de una pelota al
+  azar", que al usuario no le gustó): el núcleo suelta una onda que empuja a
+  todo enemigo a menos de 270 px y lo aturde 1 s (los empapados vuelan x1.5).
+  Recarga 10 s. Medido: aleja ~215-230 px. En pelea F es esto; afuera sigue
+  siendo pantalla completa (F11 siempre).
+
+- **Dev (SB_DEV=1):** en el mapa podés ir a cualquier nodo, no solo a los que
+  están conectados (`App::mapNodeOpen`), para probar lo que quieras.
+
+### Guardar la run (2026-10-01)
+
+- La run en curso se guarda aparte, en `saves/run.txt` (`saveRun / loadRun /
+  clearRun` en `platform/Save.cpp`), **cada vez que se abre el mapa**
+  (`App::openMap -> saveRunNow`). Guarda la vida del núcleo, el oro, el
+  puntaje, las pelotas (items, elemento, habilidades, modificadores), las
+  reliquias, los creeds, los pactos, el mapa entero con lo recorrido, la
+  posición, la racha del Altar y los usos de Phoenix / Last stand.
+- El menú principal muestra **"Continue run"** arriba de todo si hay una run
+  guardada, y "Play" pasa a llamarse "New run". `App::resumeRun` la carga,
+  arma el World con esas pelotas y ese núcleo, y abre el mapa.
+- Si cerrás en medio de una pelea (o en una tienda o elección después de
+  ella), volvés al mapa de antes: esa pelea sigue por delante. Se puede
+  "reintentar" una pelea saliendo; aceptado por ahora.
+- Se borra al perder o ganar (`bankRun`), al abandonar, al volver al menú
+  de fin de run, al empezar una run nueva y con Reset progress. Un archivo
+  con otro formato o roto no se carga: se borra y listo.
+- El modo snapshot hace la prueba de ida y vuelta (guardar, leer, comparar
+  campo por campo, reanudar) y saca 33_menu_continue / 34_resumed_map.
+
+### Web de habilidades más grande (2026-10-01)
+
+- Anillos a 124 px (antes 56), nodos de 15 / 22 (clase) / 26 (centro) px y más
+  aire alrededor del centro: a zoom 1 la web es más grande que la pantalla y
+  se recorre, no se ve toda de un vistazo.
+- Navegación: arrastrar o WASD para moverse, rueda para zoom (suave, hacia el
+  puntero), **click en una ruta de la leyenda = volar a su clase**, flechas =
+  saltar al nodo vecino con la cámara siguiéndolo, 0 / Home = volver al centro.
+  La cámara recuerda dónde la dejaste entre visitas.
+- Cada nodo muestra su nombre (lo comprado en su color, lo que podés pagar en
+  blanco, lo demás apagado); lo comprado brilla, lo que podés pagar respira con
+  un anillo, las uniones de tus caminos se encienden.
+- Tarjeta de info más grande a la izquierda: nombre, ruta, nivel, **"what it
+  gives"** en letra legible, y abajo el costo del próximo nivel o qué te falta.
+- Una franja arriba (título y cores) y fondos detrás de la leyenda y de los
+  botones, para que la web pase por debajo sin ensuciarlos.
+- Fondo vivo, como la pantalla de inicio: el radar con orbes que flotan
+  (`MenuBackdrop`) y 5 planetas en órbitas elípticas lentas alrededor del
+  centro de la web (algunos con anillo o luna), con paralaje de 0.3x respecto de
+  la cámara (`kPlanets`, `LoadoutScreen::drawSky`). Tenues: la web es lo
+  principal.
+- **El mapa de la run tiene el mismo fondo** (orbes que flotan y planetas en
+  órbita, `drawOrbitingPlanets` en `ui/MenuBackdrop.cpp`, compartido con la
+  web); los planetas se deslizan un poco con el scroll del mapa.
+- **Los nodos de clase son distintos a todo lo demás:** un círculo geométrico
+  (disco, un círculo interior fino y una estrella de seis puntas que gira
+  adentro), resplandor fuerte en su color y una órbita propia (anillo punteado
+  que gira y tres lunas en sentido contrario). Más apagados mientras no se
+  pueden comprar.
+- **El anillo de las clases:** todas las clases están a la misma distancia del
+  centro (anillo 4, `kClassRing`; las que los datos ponían en el 3 se corren
+  hacia afuera junto con lo que cuelga de ellas, `webRing`). La web ya no se
+  estira en horizontal (`kStretchX` = 1), así que el anillo es un círculo, y un
+  aro rojo de fondo lo marca, con "CLASSES" en el hueco más grande entre dos
+  clases.
+- **Niebla:** un nodo bloqueado solo se ve si está a 2 pasos o menos de algo
+  que ya compraste (en una web nueva, del centro; `webVisible`). Lo comprado
+  siempre se ve. Lo oculto no se dibuja, ni sus uniones, ni se puede
+  seleccionar.
+- **Layout geométrico (árbol radial):** los ángulos y anillos de los datos ya
+  no se usan para ubicar (el ángulo solo ordena a los hermanos). Cada nodo
+  tiene una porción del círculo proporcional a las puntas de la web que salen
+  de él (cada ruta cuenta como al menos 5), y sus hijos se reparten esa
+  porción igual: todas las puntas quedan equiespaciadas (`webAngle`). El
+  anillo es la profundidad en el árbol, salvo que el camino de cada ruta a su
+  clase se reparte parejo entre el centro y el aro de clases, y lo que cuelga
+  después va de a un anillo por paso (`webRing`).
+- **Dev (SB_DEV=1) en la web:** F1 = +1000 cores y +10 prisms, F2 = volver a
+  bloquear todos los nodos devolviendo lo gastado, F3 = desbloquear toda la
+  web al máximo (gratis). Una línea roja bajo el
+  título lo recuerda.
+
+### 2026-10-02: bandas negras y el descanso con elección
+
+- **Bandas negras arriba y abajo de la arena** (`cfg::app::arenaBand` = 36 px
+  de UI por lado): la arena es más baja que la pantalla (1280x728), así que la
+  cámara, que siempre encuadra con el aspecto de la UI, deja una franja negra
+  arriba y abajo. Una pelota pegada a la pared de arriba o de abajo se agarra
+  cómoda. El marco, el tinte del combo y el de bullet time siguen a la arena
+  (`App::arenaRect`); las bandas se dibujan sobre el mundo y bajo el HUD
+  (`App::drawArenaBands`). La arena del jefe usa el mismo aspecto, así que
+  también tiene bandas.
+- **La honda no se corta en el borde de la pantalla:** mientras apuntás, el
+  cursor se oculta y el tiro se mide por el movimiento del mouse
+  (`Window::setMouseCapture` / `pumpCapture`), y el cursor se recentra a
+  escondidas cuando se acerca al borde. Una pelota pegada a cualquier pared,
+  en pantalla completa, se tira a toda potencia. Al soltar, el cursor vuelve
+  donde terminó el tiro (dentro de la ventana).
+- **El nodo de descanso ahora es una elección:** reparar el núcleo (Rest) o
+  subir de nivel un ítem (Forge), con las cartas del evento "?" en el color
+  del núcleo (`App::openRestStop`, `EventKind::Rest/Temper`). Si no hay nada
+  para forjar, repara directo como antes. "Move on" sale sin nada.
+
+### Anotado para después (el usuario lo pidió así)
+
+- **Progresión:** por ahora todo se desbloquea como está; se ve más adelante.
+- **5 actos:** se queda así; el balance entre actos se ve después.
+- **Música:** los tracks actuales son libres, pero el usuario quiere sumar más.
+- **Opción en español:** para lo último (ver la rama WIP pausada).

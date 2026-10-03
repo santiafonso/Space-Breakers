@@ -10,12 +10,18 @@ namespace sb {
 namespace {
 
 int waveEnemyCount(int wave) {
-    const int n = static_cast<int>(std::lround(
-        cfg::wave::baseCount * std::pow(cfg::wave::countGrowth, static_cast<float>(wave - 1))));
-    return std::clamp(n, 1, cfg::wave::maxCount);
+    namespace W = cfg::wave;
+    const float x = static_cast<float>(wave - 1);
+    const int n = static_cast<int>(std::lround(static_cast<float>(W::baseCount) + W::countPerWave * x +
+                                               W::countPerWave2 * x * x));
+    return std::clamp(n, 1, W::maxCount);
 }
 float waveEnemyHp(int wave) {
-    return cfg::wave::hpBase * std::pow(cfg::wave::hpGrowth, static_cast<float>(wave - 1));
+    namespace W = cfg::wave;
+    const int early = std::min(wave, W::hpKneeWave) - 1;
+    const int late = std::max(0, wave - W::hpKneeWave);
+    return W::hpBase * std::pow(W::hpGrowth, static_cast<float>(early)) *
+           std::pow(W::hpGrowthLate, static_cast<float>(late));
 }
 float waveEnemySpeed(int wave) {
     return std::min(cfg::wave::speedMax,
@@ -25,6 +31,12 @@ float waveEnemySpeed(int wave) {
 }  // namespace
 
 World::World(sf::Vector2f size) : baseSize_(size), size_(size) { core_.pos = size_ * 0.5f; }
+
+// The wave's enemy stats, with hard mode on top (cfg::hard).
+float World::enemyHp(int wave) const {
+    return waveEnemyHp(wave) * (hard_ ? cfg::hard::enemyHpMul : 1.f) * pact_.enemyHpMul;   // "Mirror" pact
+}
+float World::enemySpeed(int wave) const { return waveEnemySpeed(wave) * (hard_ ? cfg::hard::enemySpeedMul : 1.f); }
 
 // ---------------------------------------------------------------- speeds
 
@@ -47,11 +59,12 @@ float World::ballBaseCruise(const Ball& b, const WorldParams& p) const {
 float World::ballCruise(const Ball& b, const WorldParams& p) const {
     return cruiseSpeed(p) * b.mods.cruiseMult *
            (b.hasRole(BallRole::Guardian) ? cfg::role::guardianCruiseMul : 1.f) *
+           (b.hasElement(Element::Stone) ? cfg::element::stoneCruise : 1.f) *   // stone: the heavy one
            (b.overclockT > 0.f ? cfg::ability::overclockCruise : 1.f);   // "Overclock" ability
 }
 
 float World::ballMaxSpeed(const Ball& b, const WorldParams& p) const {
-    return std::min(cruiseBase(p) * cfg::ball::maxSpeedCruiseMul * b.mods.maxSpeedMult * p.pact.speedCeilMul,
+    return std::min(cruiseBase(p) * cfg::ball::maxSpeedCruiseMul * b.mods.maxSpeedMult * p.creed.speedCeilMul,
                     cfg::ball::hardSpeedCap * arenaScale());
 }
 
@@ -90,7 +103,13 @@ void World::applySpec(Ball& b, const BallSpec& spec) {
     b.roles = spec.roles;
     b.ascended = spec.ascended;
     b.primary = spec.primary;
-    b.element = spec.element;
+    const bool sameElems = b.elemN == spec.elemN && std::equal(b.elems, b.elems + b.elemN, spec.elems);
+    if (!sameElems) {   // a new set of elements: start over on the first
+        b.element = spec.element;
+        b.elemTurn = 0;
+    }
+    std::copy(spec.elems, spec.elems + kMaxElements, b.elems);
+    b.elemN = spec.elemN;
     b.mods = spec.mods;
     for (int i = 0; i < kMaxAbilitySlots; ++i) {
         const AbilitySpec& a = spec.abilities[i];
@@ -121,7 +140,7 @@ void World::syncBalls(const std::vector<BallSpec>& specs, const WorldParams& p) 
             continue;
         }
         Ball& b = balls_[i];
-        if (b.element != specs[i].element) {
+        if (b.elems[0] != specs[i].elems[0] || b.elemN != specs[i].elemN) {
             b.waterTrail.clear();
             b.cooldown = 0.f;
         }
@@ -130,6 +149,11 @@ void World::syncBalls(const std::vector<BallSpec>& specs, const WorldParams& p) 
         b.radius = ballRadius(b, p);
         b.color = ballTint(b, length(b.vel), p);   // a new class shows at once, even paused
     }
+}
+
+void World::pulseElement(int idx) {
+    if (idx < 0 || idx >= static_cast<int>(balls_.size())) return;
+    balls_[static_cast<std::size_t>(idx)].elemPulse = 1.f;
 }
 
 void World::pulseClass(int idx, bool ascended) {
@@ -156,8 +180,8 @@ void World::addCoreMaxHp(float delta) {
 void World::devSpawn(EnemyKind k, int n) {
     for (int i = 0; i < n; ++i) {
         spawnEnemy();
-        setEnemyKind(enemies_.back(), k, waveEnemyHp(std::max(1, wave_)) * waveHpMul_,
-                     waveEnemySpeed(std::max(1, wave_)));
+        setEnemyKind(enemies_.back(), k, enemyHp(std::max(1, wave_)) * waveHpMul_,
+                     enemySpeed(std::max(1, wave_)));
     }
     waveRunning_ = true;
 }
@@ -182,6 +206,8 @@ void World::startRun(const WorldParams& p, const std::vector<BallSpec>& balls,
     enemies_.clear();
     bolts_.clear();
     obstacles_.clear();
+    pools_.clear();
+    waves_.clear();
     blackHoles_.clear();
     tethers_.clear();
     classWorld_ = ClassWorldState{};
@@ -202,10 +228,10 @@ void World::startRun(const WorldParams& p, const std::vector<BallSpec>& balls,
     toSpawn_ = 0;
     spawnTimer_ = 0.f;
     invuln_ = false;
+    focusId_ = -1;
+    focusBoss_ = false;
     aegisChargesLeft_ = 0;
     coreHitThisWave_ = false;
-    hasReserve_ = false;
-    reserveTimer_ = cfg::powerup::reserveFillTime;
     bossWave_ = false;
     boss_ = Boss{};
     coreSlideT_ = 0.f;
@@ -227,6 +253,7 @@ void World::carryBalls(const WorldParams& p) {
     // any ball that had stopped is woken back up to cruise speed.
     for (Ball& b : balls_) {
         b.held = false;
+        b.snaredBy = -1;
         if (length(b.vel) < cfg::ball::minThrowSpeed)
             b.vel = rng_.direction() * ballBaseCruise(b, p);
         b.gluttonStacks = 0;   // "Glutton" grows per wave
@@ -242,27 +269,52 @@ void World::carryBalls(const WorldParams& p) {
     heldGrabOffset_ = {0.f, 0.f};
     grabbed_ = Grabbed::None;
     heldIndex_ = -1;
+    // The fight opens with a whirl around the core (updateLaunch).
+    launchT_ = cfg::ball::launchTime;
+    launchAng_ = rng_.range(0.f, 2.f * kPi);
+    launchFrom_.clear();
+    for (const Ball& b : balls_) launchFrom_.push_back(b.pos);
     aegisChargesLeft_ = p.aegisHits;   // "Aegis": the shield recharges each wave
     coreHitThisWave_ = false;          // "Interest": track a damage-free wave
+    for (Ball& b : balls_) b.sinceThrow = 0.f;   // "Quick Hands": every fight starts fresh
     classWaveStart(p);
 }
 
 void World::startWave(int wave, const WorldParams& p, bool elite) {
+    hard_ = p.hard;
+    pact_ = p.pact;
     bossWave_ = false;
     boss_ = Boss{};
     coreSlideT_ = 0.f;
     size_ = baseSize_;
     core_.pos = size_ * 0.5f;
 
+    beginWave(wave, elite);
+    carryBalls(p);
+}
+
+// A normal (or elite) wave's spawn plan: how many, how tough, and where in the
+// queue the minibosses (Brutes) come - an elite brings one (two from act 3),
+// halfway and at the end; from act 2 a normal fight can end with one.
+void World::beginWave(int wave, bool elite) {
     wave_ = wave;
     toSpawn_ = waveEnemyCount(wave);
     if (elite) toSpawn_ = static_cast<int>(std::lround(static_cast<float>(toSpawn_) * cfg::map::eliteCountMul));
+    if (hard_) toSpawn_ = static_cast<int>(std::lround(static_cast<float>(toSpawn_) * cfg::hard::countMul));
+    toSpawn_ = static_cast<int>(std::lround(static_cast<float>(toSpawn_) * pact_.enemyCountMul));   // "Horde" pact
     waveHpMul_ = elite ? cfg::map::eliteHpMul : 1.f;
     eliteWave_ = elite;
+    bruteSlots_.clear();
+    if (elite) {
+        bruteSlots_.push_back(1);   // the last spawn of the wave
+        if (cfg::run::actOfWave(wave) >= 3 || hard_) bruteSlots_.push_back(toSpawn_ / 2);
+    } else if (wave >= (hard_ ? cfg::hard::bruteWave : cfg::enemy::bruteWave) &&
+               rng_.range(0.f, 1.f) < (hard_ ? cfg::hard::bruteFightChance : cfg::enemy::bruteFightChance)) {
+        bruteSlots_.push_back(1);
+    }
     spawnTimer_ = cfg::wave::introDelay;
     waveRunning_ = true;
     bolts_.clear();
-    carryBalls(p);
 }
 
 // The pulled-back arena, sized to the base view's aspect ratio so the zoomed-out
@@ -279,6 +331,8 @@ sf::Vector2f World::wideArenaSize() const {
 // Waves 11..20: same wide arena and pulled-back camera as the boss, but a normal
 // (hard) wave. The core eases from the boss's far-left spot back to the centre.
 void World::startPostBossWave(int wave, const WorldParams& p, bool elite) {
+    hard_ = p.hard;
+    pact_ = p.pact;
     bossWave_ = false;
     boss_ = Boss{};
     size_ = wideArenaSize();
@@ -287,14 +341,7 @@ void World::startPostBossWave(int wave, const WorldParams& p, bool elite) {
     coreSlideTo_ = size_ * 0.5f;
     coreSlideT_ = cfg::run::coreSlideTime;
 
-    wave_ = wave;
-    toSpawn_ = waveEnemyCount(wave);
-    if (elite) toSpawn_ = static_cast<int>(std::lround(static_cast<float>(toSpawn_) * cfg::map::eliteCountMul));
-    waveHpMul_ = elite ? cfg::map::eliteHpMul : 1.f;
-    eliteWave_ = elite;
-    spawnTimer_ = cfg::wave::introDelay;
-    waveRunning_ = true;
-    bolts_.clear();
+    beginWave(wave, elite);
     enemies_.clear();
     carryBalls(p);
 }
@@ -307,10 +354,70 @@ void World::updateCoreSlide(float dt) {
     core_.pos = coreSlideFrom_ + (coreSlideTo_ - coreSlideFrom_) * u;
 }
 
-void World::startBossWave(const WorldParams& p) {
+// Every act ends on its boss (cfg::run::isBossWave): the Charger duel with the
+// core far left, the Orbital finale, and Hive / Warden / Dasher in between.
+void World::startBossWave(int wave, const WorldParams& p) {
+    hard_ = p.hard;
+    pact_ = p.pact;
+    const int act = cfg::run::actOfWave(wave);
+    if (act >= cfg::run::acts) { startFinalBossWave(p); return; }
+    if (act == 1) { startChargerWave(p); return; }
+
     bossWave_ = true;
     waveHpMul_ = 1.f;
     eliteWave_ = false;
+    bruteSlots_.clear();
+    wave_ = wave;
+    waveRunning_ = true;
+    toSpawn_ = 0;
+    spawnTimer_ = 2.0f;   // a beat before the first add
+    enemies_.clear();
+    bolts_.clear();
+    coreSlideT_ = 0.f;
+    size_ = wideArenaSize();
+    core_.pos = size_ * 0.5f;
+
+    namespace B = cfg::boss;
+    boss_ = Boss{};
+    boss_.alive = true;
+    boss_.kind = act == 2 ? BossKind::Hive : act == 3 ? BossKind::Warden : BossKind::Dasher;
+    float hp = 0.f;
+    switch (boss_.kind) {
+        case BossKind::Hive:
+            boss_.radius = B::hiveRadius; hp = B::hiveHp; boss_.timer = B::hiveBurstEvery * 0.6f;
+            break;
+        case BossKind::Warden:
+            boss_.radius = B::wardenRadius; hp = B::wardenHp; boss_.timer = B::wardenWalk;
+            break;
+        default:
+            boss_.radius = B::dasherRadius; hp = B::dasherHp; boss_.timer = B::dasherRest;
+            break;
+    }
+    boss_.hp = boss_.maxHp = bossHp(hp, wave);
+    // In from the left or right edge, level with the middle band of the arena.
+    const bool left = rng_.range(0.f, 1.f) < 0.5f;
+    boss_.pos = {left ? boss_.radius + 4.f : size_.x - boss_.radius - 4.f,
+                 rng_.range(size_.y * 0.3f, size_.y * 0.7f)};
+    boss_.shieldAng = std::atan2(core_.pos.y - boss_.pos.y, core_.pos.x - boss_.pos.x);   // starts facing the core
+    boss_.dashDir = normalized(core_.pos - boss_.pos, {-1.f, 0.f});
+
+    carryBalls(p);
+}
+
+// A boss's HP in grunts of its wave, padded for a wide squad.
+float World::bossHp(float grunts, int wave) const {
+    const float extra = static_cast<float>(std::max(0, static_cast<int>(balls_.size()) - 1));
+    return grunts * waveEnemyHp(wave) * (1.f + cfg::boss::hpPerExtraBall * extra) *
+           (hard_ ? cfg::hard::bossHpMul : 1.f);
+}
+
+void World::startChargerWave(const WorldParams& p) {
+    hard_ = p.hard;
+    pact_ = p.pact;
+    bossWave_ = true;
+    waveHpMul_ = 1.f;
+    eliteWave_ = false;
+    bruteSlots_.clear();
     wave_ = cfg::run::bossWave;
     waveRunning_ = true;
     toSpawn_ = 0;
@@ -326,20 +433,25 @@ void World::startBossWave(const WorldParams& p) {
     boss_ = Boss{};
     boss_.alive = true;
     boss_.kind = BossKind::Charger;
-    boss_.hp = boss_.maxHp = cfg::boss::hp;
+    boss_.hp = boss_.maxHp = bossHp(cfg::boss::hp, wave_);
     boss_.pos = {size_.x - boss_.radius - 4.f, size_.y * 0.5f};
     boss_.vel = {-cfg::boss::speed, 0.f};
+    boss_.timer = cfg::boss::shockEvery;   // to its first shockwave
+    boss_.shockR = cfg::boss::shockRadius * arenaScale();
 
     carryBalls(p);
 }
 
-// Wave 20: the Orbital boss. Wide arena, core centred (it is already there from
-// waves 11-19). The boss starts near the arena edge and spirals inward; a ring
-// of shield enemies spins around it and is topped up while it lives.
+// Wave 50: the Orbital boss. Wide arena, core centred (it is already there from
+// the waves before). The boss starts near the arena edge and spirals inward; a
+// ring of shield enemies spins around it and is topped up while it lives.
 void World::startFinalBossWave(const WorldParams& p) {
+    hard_ = p.hard;
+    pact_ = p.pact;
     bossWave_ = true;
     waveHpMul_ = 1.f;
     eliteWave_ = false;
+    bruteSlots_.clear();
     wave_ = cfg::run::finalWave;
     waveRunning_ = true;
     toSpawn_ = 0;
@@ -355,7 +467,7 @@ void World::startFinalBossWave(const WorldParams& p) {
     boss_.alive = true;
     boss_.kind = BossKind::Orbital;
     boss_.radius = cfg::finalBoss::radius;
-    boss_.hp = boss_.maxHp = cfg::finalBoss::hp;
+    boss_.hp = boss_.maxHp = bossHp(cfg::finalBoss::hp, wave_);
 
     // Spiral has to fit inside the arena, so cap the start radius on the shorter
     // axis. The boss slides in from off the left edge to that spiral-start point
@@ -380,7 +492,7 @@ void World::spawnOrbiter(float phase) {
     e.orbiter = true;
     e.orbitPhase = phase;
     e.radius = cfg::wave::enemyRadius;
-    e.maxHp = e.hp = cfg::finalBoss::shieldHp;
+    e.maxHp = e.hp = cfg::finalBoss::shieldHp * enemyHp(cfg::run::finalWave);
     e.speed = 0.f;
     const float a = boss_.ringAng + phase;
     e.pos = boss_.pos + sf::Vector2f{std::cos(a), std::sin(a)} * cfg::finalBoss::shieldRadius;
@@ -397,6 +509,9 @@ EnemyKind World::rollEnemyKind() {
         {EnemyKind::Splitter, w >= E::splitterWave ? E::wSplitter : 0},
         {EnemyKind::Tank,     w >= E::tankWave ? E::wTank + (eliteWave_ ? E::eliteTankBonus : 0) : 0},
         {EnemyKind::Shielded, w >= E::shieldWave ? E::wShield + (eliteWave_ ? E::eliteShieldBonus : 0) : 0},
+        {EnemyKind::Blinker,  w >= E::blinkerWave ? E::wBlinker : 0},
+        {EnemyKind::Mender,   w >= E::menderWave ? E::wMender : 0},
+        {EnemyKind::Snare,    w >= E::snareWave ? E::wSnare : 0},
     };
     int total = 0;
     for (const Wt& t : table) total += t.w;
@@ -426,6 +541,17 @@ void World::setEnemyKind(Enemy& e, EnemyKind k, float hp, float speed) {
         case EnemyKind::Splitter: hpMul = E::splitterHp; break;
         case EnemyKind::Shard:    hpMul = E::shardHp; spMul = E::shardSpeed; rMul = E::shardRadius; break;
         case EnemyKind::Shielded: hpMul = E::shieldHp; break;
+        case EnemyKind::Blinker:
+            hpMul = E::blinkerHp; spMul = E::blinkerSpeed; rMul = E::blinkerRadius;
+            e.blinkT = E::blinkEvery * (0.5f + 0.5f * static_cast<float>(e.id % 7) / 6.f);   // out of step
+            break;
+        case EnemyKind::Mender:   hpMul = E::menderHp; spMul = E::menderSpeed; rMul = E::menderRadius; break;
+        case EnemyKind::Snare:    hpMul = E::snareHp; spMul = E::snareSpeed; rMul = E::snareRadius; break;
+        case EnemyKind::Brute:
+            hpMul = E::bruteHp; spMul = E::bruteSpeed; rMul = E::bruteRadius;
+            e.knockTaken = E::bruteKnock;
+            e.coreDamage = cfg::core::enemyDamage * E::bruteCoreDamage;
+            break;
     }
     e.maxHp = e.hp = hp * hpMul;
     e.speed = speed * spMul;
@@ -441,7 +567,7 @@ bool World::shieldBlocks(const Enemy& e, sf::Vector2f from, sf::Vector2f corePos
     return dot(facing, dir) > std::cos(cfg::enemy::shieldArc);
 }
 
-void World::spawnEnemy() {
+void World::spawnEnemy(std::optional<EnemyKind> force) {
     const float r = cfg::wave::enemyRadius;
     const bool chargerWave = bossWave_ && boss_.kind == BossKind::Charger;
     const bool orbitalWave = bossWave_ && boss_.kind == BossKind::Orbital;
@@ -470,27 +596,96 @@ void World::spawnEnemy() {
     e.id = nextEnemyId_++;
     e.pos = pos;
     e.radius = cfg::wave::enemyRadius;
-    if (orbitalWave) {   // softer than a plain wave-20 enemy - the shield is the fight
-        e.maxHp = e.hp = cfg::finalBoss::addHp;
+    if (force) {
+        setEnemyKind(e, *force, enemyHp(wave_) * waveHpMul_, enemySpeed(wave_));
+    } else if (orbitalWave) {   // softer than a plain wave-50 enemy - the shield is the fight
+        e.maxHp = e.hp = cfg::finalBoss::addHpMul * enemyHp(wave_);
         e.speed = cfg::finalBoss::addSpeed;
-    } else if (bossWave_) {   // Charger adds: plain grunts
-        e.maxHp = e.hp = waveEnemyHp(wave_) * waveHpMul_;
-        e.speed = waveEnemySpeed(wave_);
+    } else if (bossWave_) {   // the other bosses' adds: plain grunts, a touch soft
+        e.maxHp = e.hp = enemyHp(wave_) * cfg::boss::addHpMul;
+        e.speed = enemySpeed(wave_);
     } else {
-        setEnemyKind(e, rollEnemyKind(), waveEnemyHp(wave_) * waveHpMul_, waveEnemySpeed(wave_));
+        setEnemyKind(e, rollEnemyKind(), enemyHp(wave_) * waveHpMul_, enemySpeed(wave_));
+        rollGait(e);
     }
     e.vel = normalized(core_.pos - pos) * e.speed;
     enemies_.push_back(e);
 }
 
+// A Snare that holds nothing catches a real ball that hits it - unless that
+// would leave you no free ball.
+bool World::trySnare(Ball& b, Enemy& e) {
+    if (e.kind != EnemyKind::Snare || e.snaring || e.hp <= 0.f || b.ghost || b.mods.satellite) return false;
+    if (&b < balls_.data() || &b >= balls_.data() + balls_.size()) return false;   // only the real balls
+    int free = 0;
+    for (const Ball& o : balls_)
+        if (o.snaredBy < 0 && !o.mods.satellite) ++free;
+    if (free < 2) return false;
+    e.snaring = true;
+    b.snaredBy = e.id;
+    b.vel = {0.f, 0.f};
+    b.trail.clear();
+    return true;
+}
+
+// A snared ball hangs on its Snare's rim; when the Snare is gone it's
+// flung away from where it was, at cruise speed.
+void World::updateSnared(Ball& b, const WorldParams& p) {
+    const Enemy* s = nullptr;
+    for (const Enemy& e : enemies_)
+        if (e.id == b.snaredBy && e.hp > 0.f) { s = &e; break; }
+    if (!s) {
+        b.snaredBy = -1;
+        b.vel = rng_.direction() * ballCruise(b, p);
+        return;
+    }
+    const sf::Vector2f n = normalized(b.pos - s->pos, {1.f, 0.f});
+    b.pos = s->pos + n * (s->radius + b.radius * 0.45f);
+    b.vel = {0.f, 0.f};
+}
+
+// Not every enemy walks straight in: some sway, some circle the core.
+void World::rollGait(Enemy& e) {
+    namespace E = cfg::enemy;
+    if (e.kind != EnemyKind::Grunt && e.kind != EnemyKind::Runner && e.kind != EnemyKind::Splitter &&
+        e.kind != EnemyKind::Shielded)
+        return;
+    const int act = (wave_ - 1) / cfg::run::bossWave;   // 0 in act 1
+    const int spiral = wave_ >= E::spiralWave ? E::spiralPct + E::gaitPctPerAct * (act - 1) : 0;
+    const int weave = wave_ >= E::weaveWave ? E::weavePct + E::gaitPctPerAct * act : 0;
+    const int roll = rng_.irange(0, 99);
+    if (roll < spiral) {
+        e.gait = Gait::Spiral;
+        e.speed *= E::spiralSpeed;
+    } else if (roll < spiral + weave) {
+        e.gait = Gait::Weave;
+        e.speed *= E::weaveSpeed;
+    }
+    e.gaitPhase = rng_.range(0.f, 2.f * kPi);
+    e.gaitSign = rng_.irange(0, 1) == 0 ? -1.f : 1.f;
+}
+
+// A pack: runners bunched around one edge point, arriving together.
+void World::spawnPack() {
+    spawnEnemy(EnemyKind::Runner);
+    const sf::Vector2f at = enemies_.back().pos;
+    for (int i = 1; i < cfg::wave::packSize; ++i) {
+        spawnEnemy(EnemyKind::Runner);
+        Enemy& e = enemies_.back();
+        e.pos = at + rng_.direction() * rng_.range(18.f, 46.f);
+        e.vel = normalized(core_.pos - e.pos) * e.speed;
+    }
+}
+
 // ---------------------------------------------------------------- grab / throw
 
 bool World::grabAt(sf::Vector2f point, float catchRadius) {
+    if (launchT_ > 0.f) return false;   // the opening whirl can't be interrupted
     int best = -1;
     float bestDist = catchRadius;
     for (std::size_t i = 0; i < balls_.size(); ++i) {
-        if (balls_[i].mods.satellite) continue;   // an orbiting Satellite can't be grabbed
-        const float d = length(balls_[i].pos - point);
+        if (balls_[i].mods.satellite || balls_[i].snaredBy >= 0) continue;   // orbiting / held by a Snare
+        const float d = length(balls_[i].pos - point) / balls_[i].mods.reach;   // "Reach": grabbed from further
         if (d < bestDist) {
             bestDist = d;
             best = static_cast<int>(i);
@@ -504,6 +699,17 @@ bool World::grabAt(sf::Vector2f point, float catchRadius) {
     // the pointer on grab - moveHeld eases this offset out.
     heldGrabOffset_ = b.pos - point;
     heldPrevVel_ = b.vel;
+    // Catch reward: the faster it was flying, the harder the throw's first hit.
+    {
+        namespace C = cfg::combat;
+        const float ratio = length(b.vel) / (cfg::ball::baseCruise * arenaScale());
+        const float t = clampf((ratio - C::catchFromRatio) / (C::catchFullRatio - C::catchFromRatio), 0.f, 1.f);
+        heldCatch_ = C::catchBonusMax * t * pact_.catchMul;   // "Quick Hands" pact
+    }
+    if (b.hasRole(BallRole::Slinger)) heldCatch_ *= cfg::slinger::catchMul;   // Slinger: made for catching
+    heldT_ = 0.f;
+    pactOnGrab(b);
+    classOnGrab(b);
     b.held = true;
     b.vel = {0.f, 0.f};
     b.trail.clear();
@@ -529,14 +735,117 @@ void World::releaseHeld(sf::Vector2f throwVel) {
     heldGrabOffset_ = {0.f, 0.f};
     if (b.hasRole(BallRole::Striker)) throwVel *= cfg::role::strikerFlingMult;   // built to be flung
     if (b.mods.cometFling > 0.f) throwVel *= b.mods.cometFling;                 // "Comet"
+    if (b.mods.cls.slinger.coil > 0.f) throwVel *= b.mods.cls.slinger.coil;     // "Coil"
     b.homing = false;
     const float s = length(throwVel);
     if (s < cfg::ball::minThrowSpeed) b.vel = rng_.direction() * cfg::ball::nudgeSpeed;
     else if (s > cfg::ball::hardSpeedCap * arenaScale())
         b.vel = throwVel * (cfg::ball::hardSpeedCap * arenaScale() / s);
     else b.vel = throwVel;
+    if (s >= cfg::ball::minThrowSpeed) {
+        if (heldCatch_ > 0.f) {   // a real throw carries the catch reward
+            b.catchBonus = heldCatch_;
+            b.catchT = cfg::combat::catchWindow;
+        }
+        classOnThrow(b);  // Slinger: armed first hit, Afterburner
+        if (b.mods.heavyThrow > 0.f) {   // "Heavy throw": rides on the throw's first hit, like the catch reward
+            b.catchBonus += b.mods.heavyThrow;
+            b.catchT = cfg::combat::catchWindow;
+        }
+        if (b.mods.cls.summoner.drop > 0.f) {   // "Drop turret": planted on its next tick (it needs the params)
+            b.cls.summoner.dropPending = true;
+            b.cls.summoner.dropAt = b.pos;
+        }
+        pactOnThrow(b);   // Quick Hands clock, Hot Potato charge, Mirror ghost
+    }
+    heldCatch_ = 0.f;
     grabbed_ = Grabbed::None;
     heldIndex_ = -1;
+}
+
+// Click an enemy / the boss: it becomes the target (again: no target).
+bool World::focusAt(sf::Vector2f point) {
+    const Enemy* hit = nullptr;
+    for (const Enemy& e : enemies_) {
+        if (e.hp <= 0.f || e.orbiter) continue;
+        const float r = e.radius + 8.f * arenaScale();
+        if (dot(e.pos - point, e.pos - point) <= r * r) hit = &e;
+    }
+    const float br = boss_.radius + 8.f * arenaScale();
+    const bool boss = !hit && boss_.alive && dot(boss_.pos - point, boss_.pos - point) <= br * br;
+    if (!hit && !boss) return false;
+    const bool same = boss ? (focusBoss_ && focusId_ == -1) : (!focusBoss_ && focusId_ == hit->id);
+    if (same) {
+        focusId_ = -1;
+        focusBoss_ = false;
+    } else {
+        focusBoss_ = boss;
+        focusId_ = boss ? -1 : hit->id;
+    }
+    return true;
+}
+
+const Enemy* World::focusEnemy() const {
+    if (focusBoss_ || focusId_ < 0) return nullptr;
+    for (const Enemy& e : enemies_)
+        if (e.id == focusId_ && e.hp > 0.f) return &e;
+    return nullptr;
+}
+
+std::optional<sf::Vector2f> World::focusPos() const {
+    if (focusBoss_) {
+        if (boss_.alive && boss_.hp > 0.f && boss_.intro <= 0.f) return boss_.pos;
+        return std::nullopt;
+    }
+    if (const Enemy* e = focusEnemy()) return e->pos;
+    return std::nullopt;
+}
+
+// Q, Volley: every free ball is thrown at the enemy (or boss) nearest to it,
+// through the same release as a click (no catch reward). A ball in your hand
+// stays there. False = nothing to aim at.
+bool World::volley(float speed) {
+    if (launchT_ > 0.f) return false;
+    const Grabbed keepKind = grabbed_;   // throw each through releaseHeld, keeping what the player holds
+    const int keepIdx = heldIndex_;
+    const float keepCatch = heldCatch_;
+    const sf::Vector2f keepOffset = heldGrabOffset_;
+    bool any = false;
+    for (std::size_t i = 0; i < balls_.size(); ++i) {
+        Ball& b = balls_[i];
+        if (b.held || b.mods.satellite || b.snaredBy >= 0) continue;
+        const std::optional<sf::Vector2f> target = nearestTarget(b.pos);
+        if (!target) continue;
+        grabbed_ = Grabbed::Ball;
+        heldIndex_ = static_cast<int>(i);
+        heldCatch_ = 0.f;
+        releaseHeld(normalized(*target - b.pos, {1.f, 0.f}) * speed);
+        any = true;
+    }
+    grabbed_ = keepKind;
+    heldIndex_ = keepIdx;
+    heldCatch_ = keepCatch;
+    heldGrabOffset_ = keepOffset;
+    return any;
+}
+
+// F, Repulse: every enemy near the core is shoved away and staggered.
+// Returns how many it hit.
+int World::repulse() {
+    namespace P = cfg::player;
+    const float R = P::repulseRadius * arenaScale();
+    int n = 0;
+    for (Enemy& e : enemies_) {
+        if (e.hp <= 0.f || e.orbiter) continue;
+        const sf::Vector2f d = e.pos - core_.pos;
+        if (length(d) > R + e.radius) continue;
+        const float soak = e.soak > 0.f ? cfg::element::soakKnock : 1.f;   // soaked: flies further
+        e.vel = normalized(d, {1.f, 0.f}) * P::repulseKnock * arenaScale() * e.knockTaken * soak;
+        e.stagger = std::max(e.stagger, P::repulseStagger);
+        e.hitFlash = std::max(e.hitFlash, 0.5f);
+        ++n;
+    }
+    return n;
 }
 
 void World::cancelHeld() {
@@ -544,12 +853,14 @@ void World::cancelHeld() {
     Ball& b = balls_[heldIndex_];
     b.held = false;
     b.vel = heldPrevVel_;
+    heldCatch_ = 0.f;
     heldGrabOffset_ = {0.f, 0.f};
     grabbed_ = Grabbed::None;
     heldIndex_ = -1;
 }
 
 std::optional<sf::Vector2f> World::nearestTarget(sf::Vector2f from) const {
+    if (const auto f = focusPos()) return f;   // the player's target first
     std::optional<sf::Vector2f> best;
     float bestD2 = 1e18f;
     for (const Enemy& e : enemies_) {
@@ -561,13 +872,13 @@ std::optional<sf::Vector2f> World::nearestTarget(sf::Vector2f from) const {
     return best;
 }
 
-// "Clockwork" pact: now and then, launch the ball that's closest to plain
+// "Clockwork" creed: now and then, launch the ball that's closest to plain
 // cruising (the one doing least) at the enemy nearest the core.
 void World::updateAutoFling(float dt, const WorldParams& p, FrameEvents& ev) {
-    if (p.pact.autoFlingEvery <= 0.f || !waveRunning_) return;
+    if (p.creed.autoFlingEvery <= 0.f || !waveRunning_) return;
     autoFlingTimer_ -= dt;
     if (autoFlingTimer_ > 0.f) return;
-    autoFlingTimer_ = p.pact.autoFlingEvery;
+    autoFlingTimer_ = p.creed.autoFlingEvery;
 
     const Enemy* target = nullptr;
     float best = 1e18f;
@@ -577,6 +888,7 @@ void World::updateAutoFling(float dt, const WorldParams& p, FrameEvents& ev) {
         if (d2 < best) { best = d2; target = &e; }
     }
     sf::Vector2f aim = target ? target->pos : (boss_.alive ? boss_.pos : sf::Vector2f{-1.f, -1.f});
+    if (const auto f = focusPos()) aim = *f;   // the player's target
     if (aim.x < 0.f) return;
 
     Ball* pick = nullptr;
@@ -584,13 +896,13 @@ void World::updateAutoFling(float dt, const WorldParams& p, FrameEvents& ev) {
     for (std::size_t i = 0; i < balls_.size(); ++i) {
         if (grabbed_ == Grabbed::Ball && static_cast<int>(i) == heldIndex_) continue;
         Ball& b = balls_[i];
-        if (b.mods.satellite) continue;
+        if (b.mods.satellite || b.snaredBy >= 0) continue;
         const float ratio = length(b.vel) / std::max(1.f, ballCruise(b, p));
         if (ratio < slowest) { slowest = ratio; pick = &b; }
     }
     if (!pick) return;
     const sf::Vector2f d = normalized(aim - pick->pos, {1.f, 0.f});
-    pick->vel = d * std::min(ballCruise(*pick, p) * p.pact.autoFlingSpeed, ballMaxSpeed(*pick, p));
+    pick->vel = d * std::min(ballCruise(*pick, p) * p.creed.autoFlingSpeed, ballMaxSpeed(*pick, p));
     ev.autoFlung = true;
 }
 
@@ -609,9 +921,9 @@ void World::forceRelease() {
 
 void World::advanceCombo(float dt, const WorldParams& p) {
     comboCapTier_ = cfg::combo::baseCapTier * (p.overcharge ? cfg::changer::overchargeMul : 1);   // "Overcharge"
-    comboExtra_ = p.pact.bloodlust ? 1 : 0;   // "Bloodlust" pact: climbs twice as fast...
+    comboExtra_ = p.creed.bloodlust || p.pact.frenzy ? 1 : 0;   // "Bloodlust" creed / "Frenzy" pact: twice as fast...
     sinceHit_ += dt;
-    if (!p.pact.bloodlust && sinceHit_ > cfg::combo::decayWindow && comboStreak_ > 0) {   // ...and never cools
+    if (!p.creed.bloodlust && sinceHit_ > cfg::combo::decayWindow && comboStreak_ > 0) {   // ...and never cools
         comboStreak_ = std::max(0, comboStreak_ - cfg::combo::bouncesPerTier);
         sinceHit_ = 0.f;
     }
@@ -640,7 +952,7 @@ void World::afterBounce(Ball& b, sf::Vector2f normal, bool countHit) {
 void World::addComboHit() {
     comboStreak_ += (effect_ && effect_->kind == PowerUp::Golden && effect_->remaining > 0.f)
                         ? cfg::powerup::goldenComboRate : 1;   // GOLDEN BOUNCE climbs faster
-    comboStreak_ += comboExtra_;   // "Bloodlust" pact
+    comboStreak_ += comboExtra_;   // "Bloodlust" creed
     sinceHit_ = 0.f;
 }
 
@@ -656,8 +968,10 @@ void World::aimBounce(Ball& b, sf::Vector2f normal, const Enemy* skip, bool forc
         const float d2 = dot(e.pos - core_.pos, e.pos - core_.pos);
         if (d2 < best) { best = d2; target = &e; }
     }
-    if (!target) return;
-    const sf::Vector2f d = normalized(target->pos - b.pos, {0.f, 0.f});
+    sf::Vector2f aimAt = target ? target->pos : sf::Vector2f{};
+    if (const auto f = focusPos(); f && focusEnemy() != skip) aimAt = *f;   // the player's target
+    else if (!target) return;
+    const sf::Vector2f d = normalized(aimAt - b.pos, {0.f, 0.f});
     if (dot(d, normal) <= 0.05f) return;   // would drive back into the wall / core
     const float sp = length(b.vel);
     const float ang = std::atan2(d.y, d.x) +
@@ -669,8 +983,22 @@ void World::aimBounce(Ball& b, sf::Vector2f normal, const Enemy* skip, bool forc
 
 // "Satellite": no bouncing - the ball rides a fixed orbit around the core at
 // cruise speed and grinds whatever comes near (each enemy on a short cooldown).
+float World::orbitTarget(float usual, float minR) const {
+    const float maxR = usual * cfg::changer::orbitMax;
+    float best = 1e9f;
+    for (const Enemy& e : enemies_)
+        if (e.hp > 0.f && !e.orbiter) best = std::min(best, length(e.pos - core_.pos));
+    if (boss_.alive && boss_.intro <= 0.f) best = std::min(best, length(boss_.pos - core_.pos));
+    return best <= maxR ? std::max(best, minR) : usual;
+}
+
 void World::advanceSatellite(Ball& b, float dt, const WorldParams& p, FrameEvents& ev) {
-    const float R = cfg::changer::satelliteRadius * arenaScale() + core_.radius;
+    // It swings its orbit out / in to meet whatever comes closest to the core.
+    const float usual = cfg::changer::satelliteRadius * arenaScale() + core_.radius;
+    if (b.orbitR <= 0.f) b.orbitR = usual;
+    const float want = orbitTarget(usual, core_.radius + b.radius + 12.f);
+    b.orbitR += (want - b.orbitR) * (1.f - std::exp(-cfg::changer::orbitEase * dt));
+    const float R = b.orbitR;
     const float sp = ballCruise(b, p) * cfg::changer::satelliteSpeed;
     b.orbitAng += sp / R * dt;
     const sf::Vector2f dir{std::cos(b.orbitAng), std::sin(b.orbitAng)};
@@ -690,13 +1018,8 @@ void World::advanceSatellite(Ball& b, float dt, const WorldParams& p, FrameEvent
         fx.color = b.color;
         ev.bounces.push_back(fx);
     }
-    if (boss_.alive && boss_.intro <= 0.f && boss_.hitCd <= 0.f &&
-        length(b.pos - boss_.pos) < b.radius + boss_.radius) {
-        boss_.hp -= ballDamage(b, p);
-        boss_.hitFlash = 1.f;
-        boss_.hitCd = cfg::boss::hitCooldown * 3.f;   // an orbit grinds, it shouldn't melt a boss
-        ev.bossHit = true;
-    }
+    if (boss_.alive && length(b.pos - boss_.pos) < b.radius + boss_.radius)
+        ballHitsBoss(b, 3.f, p, ev, false);   // an orbit grinds, it shouldn't melt a boss
     emitElement(b, dt, p, ev);
     b.color = ballTint(b, sp, p);
     b.squash *= std::exp(-cfg::ball::squashDecay * dt);
@@ -788,9 +1111,21 @@ void World::updateTwins(const WorldParams& p) {
 // "Hunter": lock onto the biggest threat (toughest, weighted toward the core)
 // and bend hard toward it until it dies; with nothing left, go for the boss.
 void World::steerHunter(Ball& b, float dt) {
-    const Enemy* prey = nullptr;
-    for (const Enemy& e : enemies_)
-        if (e.id == b.preyId && e.hp > 0.f) prey = &e;
+    const Enemy* prey = focusEnemy();   // the player's target first
+    if (!prey && focusIsBoss()) {
+        const sf::Vector2f target = boss_.pos;
+        const float sp = length(b.vel);
+        if (sp < 1e-3f) return;
+        const float cur = std::atan2(b.vel.y, b.vel.x);
+        const float want = std::atan2(target.y - b.pos.y, target.x - b.pos.x);
+        const float maxTurn = b.mods.hunterTurn * dt;
+        const float diff = clampf(std::remainder(want - cur, 2.f * kPi), -maxTurn, maxTurn);
+        b.vel = sf::Vector2f{std::cos(cur + diff), std::sin(cur + diff)} * sp;
+        return;
+    }
+    if (!prey)
+        for (const Enemy& e : enemies_)
+            if (e.id == b.preyId && e.hp > 0.f) prey = &e;
     if (!prey) {
         float best = -1.f;
         for (const Enemy& e : enemies_) {
@@ -911,11 +1246,12 @@ void World::resonate(Ball& b, float dmg, const WorldParams& p, FrameEvents& ev) 
 // ---------------------------------------------------------------- synergies
 
 bool World::chance(float base, const WorldParams& p) {
-    return rng_.range(0.f, 1.f) < std::min(base * p.luck, cfg::synergy::chanceCap);
+    return rng_.range(0.f, 1.f) < std::min(base * p.luck * trickLuck_, cfg::synergy::chanceCap);   // "Trick shot"
 }
 
 void World::damageEnemy(Enemy& e, float dmg) {
-    e.hp -= dmg * (e.brittle > 0.f ? cfg::synergy::brittleMul : 1.f);
+    e.hp -= dmg * (e.brittle > 0.f ? cfg::synergy::brittleMul : 1.f) *
+            (1.f + cfg::element::crackDamage * static_cast<float>(e.cracks));   // stone cracks
     e.hitFlash = 1.f;
 }
 
@@ -926,23 +1262,59 @@ void World::areaDamage(sf::Vector2f at, float radius, float dmg, const Enemy* sk
     }
 }
 
+// An element's own touch on a hit enemy: poison stacks, ice freezes, fire
+// burns, water soaks, stone cracks. (Electric and water's wake act on their
+// own: emitElement.)
+void World::touchElement(Enemy& e, Element el, float pot, const BallMods& m, const WorldParams& p) {
+    if (el == Element::Poison) {
+        e.poison = cfg::element::poisonDuration;
+        e.poisonDps = std::min(e.poisonDps + cfg::element::poisonDpsPerHit * pot,
+                               cfg::element::poisonDpsMax * pot);
+    } else if (el == Element::Ice) {
+        e.frozen = std::max(e.frozen, cfg::element::freezeDuration * pot *
+                                          (e.soak > 0.f ? cfg::element::soakFreeze : 1.f));   // soaked: freezes solid
+    } else if (el == Element::Fire) {   // every hit sets it alight, a little hotter each time
+        const float k = pot * (1.f + cfg::element::emberPerLevel * static_cast<float>(p.emberLevel));   // "Ember"
+        e.burn = cfg::element::burnDuration;
+        e.burnDps = std::min(e.burnDps + cfg::element::burnPerHit * k, cfg::element::burnMax * k);
+    } else if (el == Element::Water) {   // soaks it
+        e.soak = std::max(e.soak, cfg::element::soakDuration * pot);
+    } else if (el == Element::Stone) {   // cracks it ("Bedrock": longer, deeper)
+        const bool bed = m.bedrockLife > 0.f;
+        crack(e, 1, cfg::element::crackTime * pot * (bed ? m.bedrockLife : 1.f), cfg::element::crackMax + (bed ? 2 : 0));
+    }
+}
+
 bool World::strike(Ball& b, Enemy& e, sf::Vector2f normal, const WorldParams& p, FrameEvents& ev,
                    bool allowEcho) {
     namespace S = cfg::synergy;
     const BallMods& m = b.mods;
+    // "Trick shot": until a thrown ball's first hit is done, its chances are up.
+    struct Restore { float& v; float old; ~Restore() { v = old; } } restoreTrick{trickLuck_, trickLuck_};
+    if (b.cls.slinger.armed && m.cls.slinger.trick > 1.f) trickLuck_ = m.cls.slinger.trick;
     float dmg = ballDamage(b, p);   // fire / ricochet / Glutton / role bonuses are baked in
+    dmg *= classPreHit(b, e, p);    // Slinger: the thrown first hit, Execution throw, Double down
+    dmg *= stylePreHit(b, e, p, ev);   // a Beacon / Pass charge
     const bool afflicted = e.poison > 0.f || e.frozen > 0.f || e.burn > 0.f;
     if (p.primed && afflicted) dmg *= cfg::combat::primedMult;             // "Primed"
     if (m.shatterMult > 0.f && e.frozen > 0.f) dmg *= m.shatterMult;       // "Shatter"
     if (e.mark > 0.f) dmg *= p.markMul;                     // marked by a Support
     if (e.brittle > 0.f) dmg *= S::brittleMul;                             // Superconductor
+    dmg *= 1.f + cfg::element::crackDamage * static_cast<float>(e.cracks); // stone cracks
     if (m.critChance > 0.f && chance(m.critChance, p)) dmg *= m.critMult;  // "Keen eye"
+    else if (p.pact.glassEdge) dmg *= cfg::pact::glassMiss;                // "Glass Edge" pact: no crit, weaker
     if (m.executeThreshold > 0.f && e.hp < e.maxHp * m.executeThreshold)   // "Executioner"
         dmg *= m.executeMult;
     if (m.hunterMult > 0.f && e.id == b.preyId) dmg *= m.hunterMult;       // "Hunter": its prey
     if (b.charged) {                                                       // "Boomerang": the trip home paid off
         if (m.boomerangHit > 0.f) dmg *= m.boomerangHit;
         b.charged = false;
+    }
+    if (b.catchBonus > 0.f) {   // catch reward: the throw's first hit
+        dmg *= 1.f + b.catchBonus;
+        ev.bursts.push_back({e.pos, e.radius * (1.6f + 2.f * b.catchBonus), theme::textHi, nullptr});
+        b.catchBonus = 0.f;
+        b.catchT = 0.f;
     }
     if (m.berserkPerHit > 0.f) {   // "Berserk": hits in a row stack up until a wall
         dmg *= 1.f + m.berserkPerHit * static_cast<float>(b.berserkStacks);
@@ -973,24 +1345,33 @@ bool World::strike(Ball& b, Enemy& e, sf::Vector2f normal, const WorldParams& p,
     e.hitFlash = 1.f;
     const float knock = cfg::combat::knockback * m.knockMult *   // Big ball / Bumper
                         (b.hasRole(BallRole::Guardian) ? cfg::role::guardianKnockMul : 1.f) *
-                        (m.rampartKnock > 0.f ? m.rampartKnock : 1.f);    // "Rampart"
+                        (m.rampartKnock > 0.f ? m.rampartKnock : 1.f) *   // "Rampart"
+                        (b.hasElement(Element::Stone) ? cfg::element::stoneKnock : 1.f) *   // stone shoves
+                        (e.soak > 0.f ? cfg::element::soakKnock : 1.f);   // a soaked enemy flies further
     e.vel += -normal * knock * e.knockTaken;
     // (the Support mark and the Guardian stagger are their class hooks: WorldClasses.cpp)
     if (m.rampartStagger > 0.f) e.stagger = std::max(e.stagger, cfg::role::staggerDuration * m.rampartStagger);
 
-    const float pot = elemPotency(b, p);
-    if (b.element == Element::Poison) {
-        e.poison = cfg::element::poisonDuration;
-        e.poisonDps = std::min(e.poisonDps + cfg::element::poisonDpsPerHit * pot,
-                               cfg::element::poisonDpsMax * pot);
-    } else if (b.element == Element::Ice) {
-        e.frozen = std::max(e.frozen, cfg::element::freezeDuration * pot);
-    } else if (b.element == Element::Fire && p.emberLevel > 0) {   // "Ember": light it up
-        e.burn = cfg::element::burnDuration;
-        e.burnDps = cfg::element::burnDps * pot *
-                    (1.f + cfg::element::burnPerEmberLevel * static_cast<float>(p.emberLevel - 1));
+    // An Alchemist's elements take turns hit by hit ("Prism": now and then
+    // all at once); the reactions it sets off carry its items (reactBall_).
+    bool allElems = false;
+    if (b.elemN > 1) {
+        const int pr = m.cls.alchemist.prism;
+        allElems = pr > 0 && ++b.cls.alchemist.hits % pr == 0;
+        b.element = b.elems[b.elemTurn++ % b.elemN];
     }
-    applyElement(e, hitElement(b, p), b.owner, dmg, p, ev);   // a different ball's element waiting -> reaction
+    struct RestoreBall { Ball*& v; Ball* old; ~RestoreBall() { v = old; } } restoreBall{reactBall_, reactBall_};
+    reactBall_ = &b;
+    const float pot = elemPotency(b, p);
+    if (allElems) {
+        for (int i = 0; i < b.elemN; ++i) {
+            touchElement(e, b.elems[i], pot, m, p);
+            applyElement(e, b.elems[i], b.owner, dmg, p, ev);
+        }
+    } else {
+        touchElement(e, b.element, pot, m, p);
+        applyElement(e, hitElement(b, p), b.owner, dmg, p, ev);   // a different element waiting -> reaction
+    }
 
     // ---- procs
     if (m.teslaChance > 0.f && chance(m.teslaChance, p)) {   // "Tesla": zap the nearest few
@@ -1010,6 +1391,8 @@ bool World::strike(Ball& b, Enemy& e, sf::Vector2f normal, const WorldParams& p,
     }
     if (m.resonanceFrac > 0.f) resonate(b, dmg, p, ev);   // "Resonance"
     classOnHit(b, e, dmg, kill, p, ev);                   // its classes (mark, stagger, ascended forms...)
+    if (m.spin > 0.f && chance(m.spin, p)) ++comboStreak_;   // "Spin": an extra combo step
+    styleOnHit(b, e, p);                                  // "Blur" marks
     if (kill) onKill(b, e, dmg, p, ev);
     if (!kill && allowEcho && m.echoChance > 0.f && e.hp > 0.f && chance(m.echoChance, p))   // "Echo"
         return strike(b, e, normal, p, ev, false);
@@ -1021,6 +1404,7 @@ void World::onKill(Ball& b, Enemy& e, float dmg, const WorldParams& p, FrameEven
     namespace C = cfg::changer;
     const BallMods& m = b.mods;
     ev.midasGold += m.midasGold;                                    // "Midas"
+    if (m.leech > 0.f && !b.ghost) core_.hp = std::min(core_.maxHp, core_.hp + m.leech);   // "Leech"
     if (m.bomberChance > 0.f && chance(m.bomberChance, p)) {        // "Bomber": the kill goes off
         areaDamage(e.pos, m.bombRadius, dmg * cfg::synergy::bombFrac, &e);
         ev.bursts.push_back({e.pos, m.bombRadius, theme::elemFire, nullptr});
@@ -1044,7 +1428,7 @@ void World::onKill(Ball& b, Enemy& e, float dmg, const WorldParams& p, FrameEven
 // A ball leaves its element on an enemy. If a DIFFERENT ball's different
 // element is already waiting there, the two react (and the status is used up).
 Element World::hitElement(const Ball& b, const WorldParams& p) {
-    if (p.pact.alchemy && rng_.range(0.f, 1.f) < cfg::pact::alchemyChance) {   // "Alchemy" pact: a random extra element
+    if (p.creed.alchemy && rng_.range(0.f, 1.f) < cfg::creed::alchemyChance) {   // "Alchemy" creed: a random extra element
         Element e = static_cast<Element>(rng_.irange(1, kElementCount - 1));
         if (e == b.element) e = static_cast<Element>(static_cast<int>(e) % (kElementCount - 1) + 1);
         return e;
@@ -1056,7 +1440,8 @@ Element World::hitElement(const Ball& b, const WorldParams& p) {
 void World::applyElement(Enemy& e, Element el, int owner, float hitDmg, const WorldParams& p, FrameEvents& ev) {
     if (el == Element::Plain) return;
     if (e.elemT > 0.f && e.elem != Element::Plain && e.elem != el &&
-        (e.elemOwner != owner || p.pact.alchemy)) {   // "Alchemy" pact: a ball can react with itself
+        (e.elemOwner != owner || p.creed.alchemy ||   // "Alchemy" creed: a ball can react with itself...
+         (reactBall_ && reactBall_->owner == owner && reactBall_->hasRole(BallRole::Alchemist)))) {   // ...an Alchemist too
         const Element prev = e.elem;
         e.elem = Element::Plain;
         e.elemT = 0.f;
@@ -1082,8 +1467,15 @@ void World::triggerReaction(Element x, Element y, Enemy& e, float hitDmg, const 
                             FrameEvents& ev, int depth) {
     namespace S = cfg::synergy;
     auto has = [&](Element q) { return x == q || y == q; };
-    const float mul = p.catalyst ? S::catalystDamage : 1.f;
-    const float rm = p.catalyst ? S::catalystRadius : 1.f;
+    float mul = p.catalyst ? S::catalystDamage : 1.f;
+    float rm = p.catalyst ? S::catalystRadius : 1.f;
+    Ball* rb = reactBall_;   // an Alchemist's hit: its items shape the reaction
+    const AlchemistMods* am = rb ? &rb->mods.cls.alchemist : nullptr;
+    if (am) {
+        mul *= am->crucible;   // "Crucible" (1 without it)
+        rm *= am->crucibleRadius;
+        if (rb->isAscended(BallRole::Alchemist)) mul *= cfg::alchemist::archReaction;
+    }
     const sf::Vector2f at = e.pos;
     BurstFx fx;
     fx.pos = at;
@@ -1121,19 +1513,12 @@ void World::triggerReaction(Element x, Element y, Enemy& e, float hitDmg, const 
             hit.push_back(t);
             from = t;
         }
-    } else if (has(Element::Water) && has(Element::Electric)) {  // Electrocution: every wake conducts
+    } else if (has(Element::Water) && has(Element::Electric)) {  // Electrocution: every wave conducts
         fx = {at, S::electrocuteRadius * rm, theme::elemElectric, "ELECTROCUTE"};
         areaDamage(at, fx.radius, hitDmg * S::electrocuteFrac * mul, nullptr);
-        for (const Ball& wb : balls_) {
-            if (wb.element != Element::Water) continue;
-            for (Enemy& o : enemies_) {
-                if (o.hp <= 0.f || length(o.pos - at) < fx.radius + o.radius) continue;   // already hit
-                for (const sf::Vector2f& pt : wb.waterTrail)
-                    if (length(o.pos - pt) < cfg::element::waterTrailWidth * 1.5f + o.radius) {
-                        damageEnemy(o, hitDmg * S::electrocuteFrac * mul);
-                        break;
-                    }
-            }
+        for (Enemy& o : enemies_) {   // ...and everything riding a wave right now
+            if (o.hp <= 0.f || length(o.pos - at) < fx.radius + o.radius) continue;   // already hit
+            if (inWave(o)) damageEnemy(o, hitDmg * S::electrocuteFrac * mul);
         }
     } else if (has(Element::Water) && has(Element::Fire)) {   // Steam: a scalding cloud
         fx = {at, S::steamRadius * rm, theme::textHi, "STEAM"};
@@ -1149,11 +1534,69 @@ void World::triggerReaction(Element x, Element y, Enemy& e, float hitDmg, const 
             o.brittle = S::brittleTime;
             damageEnemy(o, hitDmg * S::superFrac * mul);
         }
+    } else if (has(Element::Stone) && has(Element::Fire)) {    // Magma: a pool of lava
+        namespace L = cfg::element;
+        fx = {at, L::magmaRadius * rm, theme::ember, "MAGMA"};
+        addPool(at, fx.radius, hitDmg * L::magmaFrac * mul, PoolKind::Lava);
+    } else if (has(Element::Stone) && has(Element::Water)) {   // Mud: a pool that bogs down
+        namespace L = cfg::element;
+        fx = {at, L::mudRadius * rm, theme::elemStone, "MUD"};
+        addPool(at, fx.radius, 0.f, PoolKind::Mud);
+    } else if (has(Element::Stone) && has(Element::Poison)) {  // Toxic dust: a cloud that poisons
+        namespace L = cfg::element;
+        fx = {at, L::toxicRadius * rm, theme::elemPoison, "TOXIC DUST"};
+        addPool(at, fx.radius, L::toxicDps * mul, PoolKind::Toxic);
+    } else if (has(Element::Stone) && has(Element::Ice)) {     // Shards: a burst that cracks deep
+        namespace L = cfg::element;
+        fx = {at, L::shardsRadius * rm, theme::elemIce, "SHARDS"};
+        for (Enemy& o : enemies_) {
+            if (o.hp <= 0.f || length(o.pos - at) > fx.radius + o.radius) continue;
+            damageEnemy(o, hitDmg * L::shardsFrac * mul);
+            crack(o, 2, L::crackTime, L::crackMax);
+        }
+    } else if (has(Element::Stone) && has(Element::Electric)) {   // Magnet: yanks everything together
+        namespace L = cfg::element;
+        fx = {at, L::magnetRadius * rm, theme::elemElectric, "MAGNET"};
+        for (Enemy& o : enemies_) {
+            if (o.hp <= 0.f || o.orbiter || length(o.pos - at) > fx.radius + o.radius) continue;
+            o.pos += (at - o.pos) * 0.6f;
+            o.stagger = std::max(o.stagger, 0.4f);
+            damageEnemy(o, hitDmg * L::magnetFrac * mul);
+        }
     } else {                                                  // any other pair: a clash
         fx = {at, S::clashRadius * rm, theme::accent, "CLASH"};
         areaDamage(at, fx.radius, hitDmg * S::clashFrac * mul, nullptr);
     }
     ev.bursts.push_back(fx);
+
+    if (am && am->aftershock > 0.f && rb->element != Element::Plain) {   // "Aftershock": prime the pack
+        const float R = am->aftershock * arenaScale();
+        for (Enemy& o : enemies_) {
+            if (&o == &e || o.hp <= 0.f || o.elemT > 0.f || length(o.pos - at) > R + o.radius) continue;
+            o.elem = rb->element;
+            o.elemOwner = rb->owner;
+            o.elemT = S::reactWindow;
+        }
+    }
+    if (am && am->flux > 0.f)   // "Flux": each reaction recharges its abilities
+        for (int i = 0; i < kMaxAbilitySlots; ++i)
+            if (rb->abilities[i].id != Ability::None)
+                rb->abilityCd[i] = std::max(0.f, rb->abilityCd[i] - am->flux *
+                                                     abilityCooldown(rb->abilities[i].id, rb->abilities[i].level));
+    if (am && am->conflux && depth == 0) {   // "Conflux": it leaps once to another enemy carrying an element
+        Enemy* next = nullptr;
+        float best = S::chainRange * S::chainRange;
+        for (Enemy& o : enemies_) {
+            if (&o == &e || o.hp <= 0.f || o.elemT <= 0.f) continue;
+            const float d2 = dot(o.pos - at, o.pos - at);
+            if (d2 < best) { best = d2; next = &o; }
+        }
+        if (next) {
+            if (static_cast<int>(bolts_.size()) < cfg::element::maxBolts)
+                bolts_.push_back(Bolt{at, next->pos, cfg::element::boltLife, cfg::element::boltLife});
+            triggerReaction(x, y, *next, hitDmg, p, ev, depth + 1);
+        }
+    }
 
     // "Chain reaction": it can go off again on another afflicted enemy - and again.
     if (p.chainReaction && depth < S::chainMaxDepth && chance(S::chainChance, p)) {
@@ -1199,6 +1642,7 @@ void World::spawnMitosis(const Ball& parent, const WorldParams& p) {
     g.age = 0.f;
     g.held = false;
     g.charged = false;
+    g.catchBonus = 0.f;   // a copy doesn't inherit the catch reward
     g.homing = false;
     g.gluttonStacks = 0;
     g.trail.clear();
@@ -1240,43 +1684,43 @@ float World::ballDamage(const Ball& b, const WorldParams& p) const {
     if (b.mods.satellite) dmg *= b.mods.satelliteDamage;   // "Satellite" grinds
     if (b.mods.piercing) dmg *= b.mods.pierceMult;         // "Piercing" levels
     dmg *= 1.f + b.mods.gluttonDamage * static_cast<float>(b.gluttonStacks);   // "Glutton"
-    if (b.element == Element::Fire)   // fire is a heavier hit; the burn DoT is the "Ember" node
+    if (b.element == Element::Fire)   // fire is a heavier hit (the burn comes on contact, see touchElement)
         dmg *= 1.f + cfg::element::fireDamageBonus * elemPotency(b, p);
     if (b.ricochetT > 0.f) dmg *= b.mods.ricochetMult;   // "Ricochet": fresh off a wall
-    if (b.pactCharge > 0.f) dmg *= cfg::pact::coreChargeDamage;   // "Living Core" pact: overcharged
+    if (b.creedCharge > 0.f) dmg *= cfg::creed::coreChargeDamage;   // "Living Core" creed: overcharged
+    dmg *= pactDamageMul(b, p);   // pacts
     return dmg;
 }
 
 // Fire / poison / ice act on contact (see advanceBall); water, stone and
 // electric emit into the world on a per-ball timer.
 void World::emitElement(Ball& b, float dt, const WorldParams& p, FrameEvents& ev) {
-    switch (b.element) {
-        case Element::Water: {
-            // Lay down another point of the "worm" wake behind the ball. The
-            // tail drops off once the worm is at full length; damage is done in
-            // updateWaterTrails.
-            b.cooldown -= dt;
-            if (b.cooldown > 0.f) break;
-            b.cooldown = cfg::element::waterInterval;
-            b.waterTrail.push_back(b.pos);
-            while (static_cast<int>(b.waterTrail.size()) > cfg::element::waterTrailPoints)
-                b.waterTrail.pop_front();
-            break;
+    // Water and electric act on their own (fire, poison, ice and stone act on
+    // contact, see strike). An Alchemist can carry both: each keeps its timer.
+    if (b.hasElement(Element::Water) && !b.ghost) {   // a wave, every so often, where it's heading
+        b.cooldown -= dt;
+        if (b.cooldown <= 0.f && waveRunning_ && static_cast<int>(waves_.size()) < cfg::element::maxWaves) {
+            namespace L = cfg::element;
+            b.cooldown = L::waveEvery;
+            float dir;
+            if (length(b.vel) > 1.f) dir = std::atan2(b.vel.y, b.vel.x);
+            else if (const auto t = nearestTarget(b.pos)) dir = std::atan2(t->y - b.pos.y, t->x - b.pos.x);   // a still ball
+            else dir = rng_.range(0.f, 2.f * kPi);
+            const float pot = p.elemMult[static_cast<int>(Element::Water)] * b.mods.elemMult;
+            Wave w;
+            w.origin = b.pos;
+            w.dir = dir;
+            w.r = b.radius;
+            w.reach = L::waveReach * (0.8f + 0.2f * pot) * arenaScale();
+            w.push = L::wavePush * pot * arenaScale();
+            w.hitDmg = ballDamage(b, p);
+            w.owner = b.owner;
+            waves_.push_back(std::move(w));
         }
-        case Element::Stone: {
-            b.cooldown -= dt;
-            if (b.cooldown > 0.f) break;
-            b.cooldown = cfg::element::stoneInterval;
-            if (static_cast<int>(obstacles_.size()) < cfg::element::maxObstacles) {
-                const float life = cfg::element::obstacleLife *
-                                   (b.mods.bedrockLife > 0.f ? b.mods.bedrockLife : 1.f);   // "Bedrock"
-                obstacles_.push_back(Obstacle{b.pos, cfg::element::obstacleRadius, life, life});
-            }
-            break;
-        }
-        case Element::Electric: {
-            b.cooldown -= dt;
-            if (b.cooldown > 0.f) break;
+    }
+    if (b.hasElement(Element::Electric)) [&] {
+            b.zapT -= dt;
+            if (b.zapT > 0.f) return;
             Enemy* target = nullptr;
             float bestD2 = cfg::element::boltRadius * cfg::element::boltRadius;
             for (Enemy& e : enemies_) {
@@ -1284,14 +1728,14 @@ void World::emitElement(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
                 if (d2 < bestD2) { bestD2 = d2; target = &e; }
             }
             if (!target) {
-                b.cooldown = 0.15f;   // nothing in range: check again soon
-                break;
+                b.zapT = 0.15f;   // nothing in range: check again soon
+                return;
             }
             const float zap = cfg::element::boltDamage * p.damageMult * b.mods.damageMult *
                               elemPotency(b, p);
             damageEnemy(*target, zap * (target->mark > 0.f ? p.markMul : 1.f));
             target->hitFlash = 1.f;
-            applyElement(*target, b.element, b.owner, ballDamage(b, p), p, ev);   // zaps can set off reactions too
+            applyElement(*target, Element::Electric, b.owner, ballDamage(b, p), p, ev);   // zaps can set off reactions too
             if (static_cast<int>(bolts_.size()) < cfg::element::maxBolts)
                 bolts_.push_back(Bolt{b.pos, target->pos,
                                       cfg::element::boltLife, cfg::element::boltLife});
@@ -1315,12 +1759,8 @@ void World::emitElement(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
                     bolts_.push_back(Bolt{from->pos, next->pos, cfg::element::boltLife, cfg::element::boltLife});
                 chain.push_back(next);
             }
-            b.cooldown = cfg::element::boltInterval;
-            break;
-        }
-        default:
-            break;
-    }
+            b.zapT = cfg::element::boltInterval;
+    }();
 }
 
 void World::regulateSpeed(Ball& b, float dt, const WorldParams& p) {
@@ -1330,12 +1770,17 @@ void World::regulateSpeed(Ball& b, float dt, const WorldParams& p) {
     const float vMax = ballMaxSpeed(b, p);
 
     const float sp = length(b.vel);
+    if (const float drag = b.mods.cls.slinger.coilDrag; drag > 0.f) {   // "Coil": coasts down to a stop
+        b.vel *= std::exp(-drag * dt);
+        if (length(b.vel) < cfg::ball::nudgeSpeed * 0.1f) b.vel = {0.f, 0.f};
+        return;
+    }
     if (sp < 1e-3f) {
         b.vel = rng_.direction() * cruiseS;
         return;
     }
     const float up = 1.f - std::exp(-cfg::ball::regainRate * dt);
-    const float decayRate = cfg::ball::decayRate * b.mods.flingDecay * p.pact.flingHold *   // "Hot Hands" pact
+    const float decayRate = cfg::ball::decayRate * b.mods.flingDecay * p.creed.flingHold *   // "Hot Hands" creed
                             (b.hasRole(BallRole::Striker) ? cfg::role::strikerFlingDecay : 1.f);
     const float down = 1.f - std::exp(-decayRate * dt);
     const float k = (sp < cruiseS) ? up : down;
@@ -1352,12 +1797,14 @@ void World::updateTrail(Ball& b) {
 
 void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev) {
     b.age += dt;
-    b.pactCharge = std::max(0.f, b.pactCharge - dt);   // "Living Core" overcharge wears off
+    b.sinceThrow += dt;   // "Quick Hands" pact
+    b.creedCharge = std::max(0.f, b.creedCharge - dt);   // "Living Core" overcharge wears off
     b.radius = ballRadius(b, p);   // role, "Big ball" gear, "Mass" web
     b.resonanceT = std::max(0.f, b.resonanceT - dt);
     b.overclockT = std::max(0.f, b.overclockT - dt);
     if (!b.ghost) updateAbilities(b, dt, p, ev);   // copies don't fire abilities
     classTick(b, dt, p, ev);
+    styleTick(b, dt, p, ev);   // the older classes' speed items
     if (b.mods.stormFrac > 0.f) updateStorm(b, dt, p, ev);
     if (b.mods.satellite) {
         advanceSatellite(b, dt, p, ev);
@@ -1372,10 +1819,12 @@ void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
             const float d2 = dot(e.pos - b.pos, e.pos - b.pos);
             if (d2 < best) { best = d2; t = &e; }
         }
+        std::optional<sf::Vector2f> aim = t ? std::optional<sf::Vector2f>(t->pos) : std::nullopt;
+        if (const auto f = focusPos()) aim = f;   // the player's target, wherever it is
         const float sp = length(b.vel);
-        if (t && sp > 1e-3f) {
+        if (aim && sp > 1e-3f) {
             const float cur = std::atan2(b.vel.y, b.vel.x);
-            const float want = std::atan2(t->pos.y - b.pos.y, t->pos.x - b.pos.x);
+            const float want = std::atan2(aim->y - b.pos.y, aim->x - b.pos.x);
             float diff = std::remainder(want - cur, 2.f * kPi);
             const float maxTurn = b.mods.seekerTurn * dt;
             diff = clampf(diff, -maxTurn, maxTurn);
@@ -1414,7 +1863,8 @@ void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
     for (int s = 0; s < steps; ++s) {
         b.pos += b.vel * h;
 
-        if (collision::Contact c = collision::circleVsBounds(b, size_); c.hit) {
+        if (pactWrap(b)) {   // "Void Walls" pact: no walls, the far edge instead
+        } else if (collision::Contact c = collision::circleVsBounds(b, size_); c.hit) {
             afterBounce(b, c.normal, false);
             aimBounce(b, c.normal, nullptr);
             if (b.mods.ricochetMult > 0.f) {   // "Ricochet": a speed kick and an armed hit
@@ -1424,8 +1874,9 @@ void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
             if (b.mods.splitChance > 0.f && !b.ghost && chance(b.mods.splitChance, p)) spawnGhost(b);
             b.berserkStacks = 0;   // "Berserk" resets on a wall
             if (b.mods.railFrac > 0.f) fireRail(b, p, ev);
-            pactWallBump(b, c.point, p, ev);   // "Pinball" pact
+            creedWallBump(b, c.point, p, ev);   // "Pinball" creed
             classOnWallBounce(b, c.normal, p, ev);
+            pactWallBump(b);   // "Anchor Walls" pact
             pushFx(c);
         }
         // The core is solid: balls bounce off it (no damage to the core).
@@ -1434,7 +1885,7 @@ void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
             c.hit) {
             afterBounce(b, c.normal, false);
             aimBounce(b, c.normal, nullptr, p.magneticCore);   // "Magnetic core": every ball aims
-            boostSpeed(b, p.coreBounceBoost, p);   // "Spring core" relic
+            boostSpeed(b, p.coreBounceBoost * b.mods.bouncy, p);   // "Spring core" relic, "Bouncy"
             if (b.mods.menderHeal > 0.f && !b.ghost)   // "Mender": the core patches itself up
                 core_.hp = std::min(core_.maxHp, core_.hp + b.mods.menderHeal);
             if (b.mods.boomerangHit > 0.f) {   // "Boomerang": home - charge up and fly at the threat
@@ -1443,11 +1894,13 @@ void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
                 aimBounce(b, c.normal, nullptr, true);
                 boostSpeed(b, b.mods.boomerangKick, p);
             }
-            pactCoreBounce(b, p, ev);   // "Living Core" pact
+            creedCoreBounce(b, p, ev);   // "Living Core" creed
+            pactCoreBounce(b);           // "Juggler" pact
             classOnCoreBounce(b, c.normal, p, ev);
             pushFx(c);
         }
-        if (b.mods.piercing) {   // "Piercing": no bounce - every enemy on the path takes the hit
+        const bool passThrough = b.mods.piercing || styleBlurring(b, p);   // "Piercing" / "Blur"
+        if (passThrough) {   // "Piercing": no bounce - every enemy on the path takes the hit
             for (Enemy& e : enemies_) {
                 if (e.hp <= 0.f || e.pierceCd > 0.f) continue;
                 const sf::Vector2f d = b.pos - e.pos;
@@ -1461,7 +1914,7 @@ void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
             }
         }
         for (Enemy& e : enemies_) {
-            if (b.mods.piercing) break;
+            if (passThrough) break;
             if (e.hp <= 0.f) continue;   // already dead this frame (not swept yet) - don't re-hit / double-splash
             // "Comet": flying hot it plows through instead of bouncing.
             const sf::Vector2f v0 = b.vel;
@@ -1480,6 +1933,7 @@ void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
                 continue;
             }
             const bool kill = strike(b, e, c.normal, p, ev);
+            if (!kill && trySnare(b, e)) return;   // caught: it hangs on the Snare now
             if ((b.mods.cleave && kill) || plowing) {   // "Cleave" / "Comet": keep flying straight through
                 b.vel = v0;
                 if (plowing) e.pierceCd = cfg::changer::pierceCooldown;
@@ -1501,13 +1955,7 @@ void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
             if (collision::Contact c = collision::circleVsSolidCircle(
                     b, boss_.pos, boss_.radius, cfg::combat::hitRebound);
                 c.hit) {
-                if (boss_.intro <= 0.f && boss_.hitCd <= 0.f &&
-                    length(b.vel) >= ballBaseCruise(b, p) * cfg::boss::minHitCruiseFrac) {
-                    boss_.hp -= ballDamage(b, p);
-                    boss_.hitFlash = 1.f;
-                    boss_.hitCd = cfg::boss::hitCooldown;
-                    ev.bossHit = true;
-                }
+                ballHitsBoss(b, 1.f, p, ev);
                 afterBounce(b, c.normal, true);
                 pushFx(c);
             }
@@ -1515,6 +1963,7 @@ void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
     }
 
     b.ricochetT = std::max(0.f, b.ricochetT - dt);   // "Ricochet" window ticks down
+    if (b.catchT > 0.f && (b.catchT -= dt) <= 0.f) b.catchBonus = 0.f;   // the catch reward went unused
     emitElement(b, dt, p, ev);
     regulateSpeed(b, dt, p);
     b.color = ballTint(b, length(b.vel), p);
@@ -1540,6 +1989,8 @@ void World::resolveBallPairs(FrameEvents& ev, const WorldParams& p) {
             };
             bump(b, a.mods.bumperBoost);
             bump(a, b.mods.bumperBoost);
+            stylePass(a, b, p);   // "Pass"
+            stylePass(b, a, p);
 
             const sf::Vector2f n = normalized(b.pos - a.pos);
             a.squash = b.squash = 1.f;
@@ -1552,7 +2003,7 @@ void World::resolveBallPairs(FrameEvents& ev, const WorldParams& p) {
             fx.speed = std::max(length(a.vel), length(b.vel)) / arenaScale();
             fx.ballPair = true;
             ev.bounces.push_back(fx);
-            pactClack(a, b, fx.pos, p, ev);   // "Legion" pact
+            creedClack(a, b, fx.pos, p, ev);   // "Legion" creed
         }
     }
 }
@@ -1569,31 +2020,73 @@ void World::updateBolts(float dt) {
 // A water ball drags a "worm" of recent positions. Enemies near any segment of
 // it take damage; the worm is widest at the head (nearest the ball) and tapers
 // to nothing at the tail.
-void World::updateWaterTrails(float dt, const WorldParams& p, FrameEvents& ev) {
-    for (const Ball& b : balls_) {
-        if (b.element != Element::Water) continue;
-        const float w0 = cfg::element::waterTrailWidth * elemPotency(b, p);
-        const auto& pts = b.waterTrail;
-        const int n = static_cast<int>(pts.size());
-        if (n < 2) continue;
+void World::updateWaves(float dt, const WorldParams& p, FrameEvents& ev) {
+    namespace L = cfg::element;
+    for (Wave& w : waves_) {
+        w.r += L::waveSpeed * arenaScale() * dt;
+        const float thick = (L::waveThick + L::waveThickGrow * clampf(w.r / w.reach, 0.f, 1.f)) * arenaScale();
         for (Enemy& e : enemies_) {
-            for (int i = 0; i + 1 < n; ++i) {
-                const sf::Vector2f a = pts[i], c = pts[i + 1];   // one segment
-                const sf::Vector2f seg = c - a;
-                const float len2 = dot(seg, seg);
-                float t = len2 > 1e-4f ? clampf(dot(e.pos - a, seg) / len2, 0.f, 1.f) : 0.f;
-                const sf::Vector2f closest = a + seg * t;
-                // head (i near n-1) is full width, tail (i=0) is ~0
-                const float taper = static_cast<float>(i + 1) / static_cast<float>(n);
-                if (length(e.pos - closest) < w0 * taper + e.radius) {
-                    damageEnemy(e, cfg::element::waterDps * dt);
-                    e.hitFlash = std::max(0.f, e.hitFlash - 0.6f);   // a wake doesn't flash like a hit
-                    applyElement(e, b.element, b.owner, ballDamage(b, p), p, ev);   // wading into a wake soaks it
-                    break;   // one segment's worth of damage per enemy per step
-                }
+            if (e.hp <= 0.f || e.orbiter || std::find(w.hit.begin(), w.hit.end(), e.id) != w.hit.end()) continue;
+            const sf::Vector2f d = e.pos - w.origin;
+            const float dist = length(d);
+            if (std::fabs(dist - w.r) > thick + e.radius || dist < 1e-3f) continue;
+            if (std::fabs(std::remainder(std::atan2(d.y, d.x) - w.dir, 2.f * kPi)) > L::waveArc) continue;
+            w.hit.push_back(e.id);
+            e.vel += d / dist * w.push * e.knockTaken * (e.soak > 0.f ? L::soakKnock : 1.f);
+            e.stagger = std::max(e.stagger, 0.25f);   // carried by the wave, not walking
+            e.soak = std::max(e.soak, L::soakDuration);
+            applyElement(e, Element::Water, w.owner, w.hitDmg, p, ev);   // it can set off reactions
+        }
+    }
+    waves_.erase(std::remove_if(waves_.begin(), waves_.end(), [](const Wave& w) { return w.r >= w.reach; }),
+                 waves_.end());
+}
+
+bool World::inWave(const Enemy& e) const {
+    for (const Wave& w : waves_) {
+        const sf::Vector2f d = e.pos - w.origin;
+        const float dist = length(d);
+        const float thick = cfg::element::waveThick * 2.f * arenaScale();
+        if (std::fabs(dist - w.r) < thick + e.radius &&
+            std::fabs(std::remainder(std::atan2(d.y, d.x) - w.dir, 2.f * kPi)) < cfg::element::waveArc)
+            return true;
+    }
+    return false;
+}
+
+// Stone's reaction pools: lava burns, toxic dust poisons (mud slows: poolSlow).
+void World::addPool(sf::Vector2f at, float radius, float power, PoolKind kind) {
+    if (static_cast<int>(pools_.size()) >= cfg::element::maxPools) pools_.erase(pools_.begin());
+    pools_.push_back({at, radius, cfg::element::poolLife, cfg::element::poolLife, power, kind});
+}
+
+void World::updatePools(float dt) {
+    for (Pool& q : pools_) {
+        q.life -= dt;
+        if (q.kind == PoolKind::Mud) continue;
+        for (Enemy& e : enemies_) {
+            if (e.hp <= 0.f || length(e.pos - q.pos) > q.radius + e.radius) continue;
+            if (q.kind == PoolKind::Lava) {
+                damageEnemy(e, q.power * dt);
+                e.hitFlash = std::max(0.f, e.hitFlash - 0.6f);   // standing in it doesn't flash like a hit
+            } else {
+                e.poison = std::max(e.poison, 1.f);
+                e.poisonDps = std::max(e.poisonDps, q.power);
             }
         }
     }
+    pools_.erase(std::remove_if(pools_.begin(), pools_.end(), [](const Pool& q) { return q.life <= 0.f; }), pools_.end());
+}
+
+float World::poolSlow(const Enemy& e) const {
+    for (const Pool& q : pools_)
+        if (q.kind == PoolKind::Mud && length(e.pos - q.pos) < q.radius + e.radius) return cfg::element::mudSlow;
+    return 1.f;
+}
+
+void World::crack(Enemy& e, int n, float time, int cap) {
+    e.cracks = std::min(std::max(e.cracks, 0) + n, std::max(cap, e.cracks));
+    e.crackT = std::max(e.crackT, time);
 }
 
 void World::updateObstacles(float dt) {
@@ -1612,8 +2105,19 @@ void World::updateObstacles(float dt) {
 }
 
 void World::updateEnemies(float dt, const WorldParams& p, FrameEvents& ev) {
+    // Menders knit every other live enemy near them back together (not past full).
+    for (const Enemy& m : enemies_) {
+        if (m.kind != EnemyKind::Mender || m.hp <= 0.f || m.frozen > 0.f) continue;
+        for (Enemy& e : enemies_) {
+            if (&e == &m || e.hp <= 0.f || e.hp >= e.maxHp || e.orbiter) continue;
+            if (length(e.pos - m.pos) > cfg::enemy::mendRadius) continue;
+            e.hp = std::min(e.maxHp, e.hp + e.maxHp * cfg::enemy::mendPerSec * dt);
+        }
+    }
+
     for (auto it = enemies_.begin(); it != enemies_.end();) {
         Enemy& e = *it;
+        e.blinkFx = std::max(0.f, e.blinkFx - dt * 2.5f);
 
         if (e.poison > 0.f) {
             e.poison -= dt;
@@ -1628,6 +2132,8 @@ void World::updateEnemies(float dt, const WorldParams& p, FrameEvents& ev) {
         e.age += dt;
         e.mark = std::max(0.f, e.mark - dt);
         e.brittle = std::max(0.f, e.brittle - dt);
+        e.soak = std::max(0.f, e.soak - dt);
+        if (e.cracks > 0 && (e.crackT -= dt) <= 0.f) e.cracks = 0;   // the cracks close up
         e.pierceCd = std::max(0.f, e.pierceCd - dt);
         if (e.elemT > 0.f && (e.elemT -= dt) <= 0.f) { e.elem = Element::Plain; e.elemOwner = -1; }
 
@@ -1658,6 +2164,20 @@ void World::updateEnemies(float dt, const WorldParams& p, FrameEvents& ev) {
             continue;
         }
 
+        // Blinker: every few seconds it jumps a stretch closer to the core
+        // (never onto it). Frozen or staggered, it can't.
+        if (e.kind == EnemyKind::Blinker && e.stagger <= 0.f && (e.blinkT -= dt) <= 0.f) {
+            e.blinkT = cfg::enemy::blinkEvery;
+            const sf::Vector2f d = core_.pos - e.pos;
+            const float dl = length(d);
+            const float jump = std::min(cfg::enemy::blinkDist * arenaScale(), dl - core_.radius - e.radius - 70.f);
+            if (jump > 20.f) {
+                e.blinkFrom = e.pos;
+                e.pos += d / dl * jump;
+                e.blinkFx = 1.f;
+            }
+        }
+
         if (e.stagger > 0.f) {
             // Staggered by a Guardian: no steering - it just drifts on the
             // knockback, bleeding speed, so it gets shoved clear of the core.
@@ -1667,7 +2187,19 @@ void World::updateEnemies(float dt, const WorldParams& p, FrameEvents& ev) {
         } else {
             const sf::Vector2f d = core_.pos - e.pos;
             const float dl = length(d);
-            const sf::Vector2f steer = (dl > 1e-3f ? d / dl : sf::Vector2f{0.f, 1.f}) * e.speed;
+            sf::Vector2f dir = dl > 1e-3f ? d / dl : sf::Vector2f{0.f, 1.f};
+            if (e.gait != Gait::Straight) {   // sway across the line, or circle the core
+                namespace E = cfg::enemy;
+                const sf::Vector2f side{-dir.y * e.gaitSign, dir.x * e.gaitSign};
+                if (e.gait == Gait::Weave) {
+                    dir = normalized(dir + side * (E::weaveAmp * std::sin(e.age * E::weaveFreq + e.gaitPhase)), dir);
+                } else {
+                    const float near = E::spiralNear * arenaScale();
+                    const float in = lerpf(1.f, E::spiralInward, clampf((dl - near) / near, 0.f, 1.f));
+                    dir = normalized(dir * in + side * (1.f - in) * 1.6f, dir);
+                }
+            }
+            const sf::Vector2f steer = dir * e.speed;
 
             // SLOW MOTION drags every enemy; the "Slow field" item drags only
             // those close to the core. Both just scale this enemy's time step.
@@ -1676,7 +2208,10 @@ void World::updateEnemies(float dt, const WorldParams& p, FrameEvents& ev) {
                 edt *= lerpf(1.f, cfg::powerup::slowMoEnemyMul, effStrength(p));   // eases back under "Afterglow"
             if (p.slowField && dl < cfg::combat::slowFieldRadius) edt *= cfg::combat::slowFieldMul;
             if (p.timeDilation) edt *= cfg::changer::timeDilation;   // "Time dilation"
-            edt *= p.pact.enemySpeedMul;                              // "Living Core" pact's cost
+            edt *= p.creed.enemySpeedMul;                              // "Living Core" creed's cost
+            styleEnemyDrag(e, edt, dt);                                // "Anchor" balls
+            if (e.soak > 0.f) edt *= cfg::element::soakSlow;           // soaked by water
+            edt *= poolSlow(e);                                        // stuck in mud
 
             e.vel += (steer - e.vel) * (1.f - std::exp(-8.f * edt));
             e.pos += e.vel * edt;
@@ -1708,14 +2243,15 @@ void World::updateEnemies(float dt, const WorldParams& p, FrameEvents& ev) {
         if (dist <= core_.radius + e.radius) {
             if (!invuln_) {
                 if (aegisChargesLeft_ > 0) --aegisChargesLeft_;   // "Aegis" soaks the hit
-                else core_.hp -= e.coreDamage * p.pact.coreDamageMul;   // "Bloodlust" pact's cost
+                else core_.hp -= e.coreDamage * p.creed.coreDamageMul *   // "Bloodlust" creed's cost
+                                 (hard_ ? cfg::hard::coreDamageMul : 1.f);
             }
             core_.hitFlash = 1.f;
             coreHitThisWave_ = true;   // "Interest" is off for this wave now
             ev.coreHit = true;
 
             it = enemies_.erase(it);
-            pactCoreHit(p, ev);   // "Fortress" blast / "Bloodlust" wipe
+            creedCoreHit(p, ev);   // "Fortress" blast / "Bloodlust" wipe
 
             if (core_.hp <= 0.f && phoenixLeft_ > 0) {   // "Phoenix": back from the ashes, once an act
                 --phoenixLeft_;
@@ -1765,6 +2301,17 @@ void World::sweepDeadEnemies(FrameEvents& ev, const WorldParams& p) {
                     }
                 }
             }
+            if (it->burn > 0.f && it->burnDps >= cfg::element::fireSpreadMin) {   // fire spreads on death
+                namespace L = cfg::element;
+                const float R = L::fireSpreadRadius * arenaScale();
+                for (Enemy& e : enemies_) {
+                    if (&e == &*it || e.hp <= 0.f || length(e.pos - it->pos) > R + e.radius) continue;
+                    damageEnemy(e, it->burnDps * L::fireSpreadBlast);
+                    e.burn = L::burnDuration;
+                    e.burnDps = std::max(e.burnDps, it->burnDps * L::fireSpreadKeep);
+                }
+                ev.bursts.push_back({it->pos, R, theme::elemFire, nullptr});
+            }
             ev.kills.push_back(it->pos);
             it = enemies_.erase(it);
         } else {
@@ -1780,8 +2327,23 @@ void World::updateBoss(float dt, const WorldParams& p, FrameEvents& ev) {
     boss_.hitCd = std::max(0.f, boss_.hitCd - dt);
     boss_.hitFlash *= std::exp(-6.f * dt);
 
+    // Phase two and the Brutes it calls in, as its HP drops.
+    const float frac = boss_.maxHp > 0.f ? boss_.hp / boss_.maxHp : 0.f;
+    if (boss_.hp > 0.f) {
+        while (boss_.summons < 2 && frac < cfg::boss::summonAt[boss_.summons]) {
+            ++boss_.summons;
+            spawnEnemy(EnemyKind::Brute);
+            ev.bossSummon = true;
+        }
+        if (!boss_.enraged && frac < cfg::boss::enrageAt) {
+            boss_.enraged = true;
+            ev.bossEnraged = true;
+        }
+    }
+    const float pace = boss_.pace();
+
     if (boss_.kind == BossKind::Orbital) {
-        boss_.ringAng += cfg::finalBoss::shieldOmega * dt;
+        boss_.ringAng += cfg::finalBoss::shieldOmega * dt * pace;
 
         if (boss_.intro > 0.f) {
             // Slide in from off the left edge to the spiral-start point.
@@ -1795,8 +2357,8 @@ void World::updateBoss(float dt, const WorldParams& p, FrameEvents& ev) {
             boss_.pos = entry + (spiralStart - entry) * k;
             boss_.vel = (boss_.pos - prev) / std::max(dt, 1e-4f);
         } else {
-            boss_.ang += cfg::finalBoss::spiralOmega * dt;
-            boss_.dist = std::max(0.f, boss_.dist - cfg::finalBoss::spiralShrink * dt);
+            boss_.ang += cfg::finalBoss::spiralOmega * dt * pace;
+            boss_.dist = std::max(0.f, boss_.dist - cfg::finalBoss::spiralShrink * dt * pace);
             const sf::Vector2f prev = boss_.pos;
             boss_.pos = core_.pos +
                         sf::Vector2f{std::cos(boss_.ang), std::sin(boss_.ang)} * boss_.dist;
@@ -1816,8 +2378,18 @@ void World::updateBoss(float dt, const WorldParams& p, FrameEvents& ev) {
                 boss_.shieldTimer = cfg::finalBoss::shieldRespawn;
             }
         }
+    } else if (boss_.kind == BossKind::Hive) {
+        updateHive(dt * pace * (p.timeDilation ? cfg::changer::timeDilation : 1.f));
+    } else if (boss_.kind == BossKind::Warden) {
+        updateWarden(dt * pace, p);
+    } else if (boss_.kind == BossKind::Dasher) {
+        updateDasher(dt * pace, p);
     } else {
-        boss_.pos += boss_.vel * dt * (p.timeDilation ? cfg::changer::timeDilation : 1.f);   // Charger: dead straight
+        boss_.pos += boss_.vel * dt * pace * (p.timeDilation ? cfg::changer::timeDilation : 1.f);   // Charger: dead straight
+        if ((boss_.timer -= dt * pace) <= 0.f) {
+            boss_.timer = cfg::boss::shockEvery;
+            chargerShock(ev);
+        }
     }
 
     if (boss_.hp <= 0.f) {
@@ -1846,6 +2418,182 @@ void World::updateBoss(float dt, const WorldParams& p, FrameEvents& ev) {
     }
 }
 
+// Hive (act 2): creeps at the core on a slow sway; every few seconds a fan of
+// runners bursts out of it toward the core (held back while the field is full).
+void World::updateHive(float dt) {
+    namespace B = cfg::boss;
+    boss_.ang += B::hiveWobble * dt;   // sway phase
+    const sf::Vector2f to = normalized(core_.pos - boss_.pos, {-1.f, 0.f});
+    const sf::Vector2f side{-to.y, to.x};
+    boss_.vel = to * B::hiveSpeed + side * (std::sin(boss_.ang) * B::hiveSpeed * 1.4f);
+    boss_.pos += boss_.vel * dt;
+    boss_.pos.y = clampf(boss_.pos.y, boss_.radius, size_.y - boss_.radius);
+
+    boss_.timer -= dt;
+    if (boss_.timer > 0.f) return;
+    boss_.timer = B::hiveBurstEvery;
+    if (static_cast<int>(enemies_.size()) >= B::hiveCap) return;
+    const float base = std::atan2(to.y, to.x);
+    for (int i = 0; i < B::hiveBurstCount; ++i) {
+        const float a = base + (static_cast<float>(i) / static_cast<float>(B::hiveBurstCount - 1) - 0.5f) * 1.8f;
+        const sf::Vector2f d{std::cos(a), std::sin(a)};
+        spawnEnemy(EnemyKind::Runner);
+        Enemy& e = enemies_.back();
+        e.maxHp = e.hp = e.hp * B::addHpMul;
+        e.pos = boss_.pos + d * (boss_.radius + e.radius + 2.f);
+        e.vel = d * e.speed * 1.6f;   // shot out, then they turn for the core
+        e.stagger = 0.3f;
+    }
+}
+
+// Warden (act 3): walks at the core, plants for a beat, walks again; its
+// shield arc keeps turning so the open side moves around it.
+void World::updateWarden(float dt, const WorldParams& p) {
+    namespace B = cfg::boss;
+    const float k = p.timeDilation ? cfg::changer::timeDilation : 1.f;
+    boss_.shieldAng += B::wardenShieldSpin * dt * k;
+    boss_.timer -= dt * k;
+    if (boss_.timer <= 0.f) {
+        boss_.phase = 1 - boss_.phase;
+        boss_.timer = boss_.phase == 0 ? B::wardenWalk : B::wardenPlant;
+    }
+    const sf::Vector2f to = normalized(core_.pos - boss_.pos, {-1.f, 0.f});
+    boss_.vel = boss_.phase == 0 ? to * B::wardenSpeed : sf::Vector2f{0.f, 0.f};
+    boss_.pos += boss_.vel * dt * k;
+}
+
+bool World::wardenBlocks(sf::Vector2f from) const {
+    if (boss_.kind != BossKind::Warden) return false;
+    const sf::Vector2f facing{std::cos(boss_.shieldAng), std::sin(boss_.shieldAng)};
+    return dot(facing, normalized(from - boss_.pos, {0.f, 0.f})) > std::cos(cfg::boss::wardenShieldArc);
+}
+
+// Dasher (act 4): stalk in slowly, stop and aim (the line is drawn), dash
+// along it, rest. Ball hits knock it back (ballHitsBoss).
+void World::updateDasher(float dt, const WorldParams& p) {
+    namespace B = cfg::boss;
+    const float k = p.timeDilation ? cfg::changer::timeDilation : 1.f;
+    boss_.timer -= dt * k;
+    const sf::Vector2f to = normalized(core_.pos - boss_.pos, {-1.f, 0.f});
+    switch (boss_.phase) {
+        case 0:   // stalk
+            boss_.vel = to * B::dasherStalk;
+            if (boss_.timer <= 0.f) { boss_.phase = 1; boss_.timer = B::dasherAim; }
+            break;
+        case 1:   // aim: stand still, the line locks onto the core
+            boss_.vel = {0.f, 0.f};
+            boss_.dashDir = to;
+            if (boss_.timer <= 0.f) { boss_.phase = 2; boss_.timer = B::dasherDash; }
+            break;
+        default:  // dash
+            boss_.vel = boss_.dashDir * B::dasherDashSpeed;
+            if (boss_.timer <= 0.f) { boss_.phase = 0; boss_.timer = B::dasherRest; }
+            break;
+    }
+    boss_.pos += boss_.vel * dt * k;
+    boss_.pos.x = clampf(boss_.pos.x, boss_.radius, size_.x - boss_.radius);
+    boss_.pos.y = clampf(boss_.pos.y, boss_.radius, size_.y - boss_.radius);
+}
+
+void World::ballHitsBoss(Ball& b, float cdMul, const WorldParams& p, FrameEvents& ev, bool speedGate) {
+    if (boss_.intro > 0.f || boss_.hitCd > 0.f) return;
+    if (speedGate && length(b.vel) < ballBaseCruise(b, p) * cfg::boss::minHitCruiseFrac) return;
+    if (wardenBlocks(b.pos)) { ev.shieldBlock = true; return; }
+    boss_.hp -= ballDamage(b, p);
+    boss_.hitFlash = 1.f;
+    boss_.hitCd = cfg::boss::hitCooldown * cdMul;
+    ev.bossHit = true;
+    if (boss_.kind == BossKind::Dasher) {   // knocked back along the line from the core
+        boss_.pos += normalized(boss_.pos - core_.pos, {1.f, 0.f}) * cfg::boss::dasherKnock;
+        boss_.pos.x = clampf(boss_.pos.x, boss_.radius, size_.x - boss_.radius);
+        boss_.pos.y = clampf(boss_.pos.y, boss_.radius, size_.y - boss_.radius);
+    }
+}
+
+// The Charger's shockwave: every ball (and copy) within reach is flung
+// straight away from it, harder the closer it was.
+void World::chargerShock(FrameEvents& ev) {
+    namespace B = cfg::boss;
+    const float R = B::shockRadius * arenaScale();
+    for (std::vector<Ball>* set : {&balls_, &ghosts_})
+        for (std::size_t i = 0; i < set->size(); ++i) {
+            Ball& b = (*set)[i];
+            if (b.mods.satellite) continue;
+            if (set == &balls_ && grabbed_ == Grabbed::Ball && static_cast<int>(i) == heldIndex_) continue;
+            const sf::Vector2f d = b.pos - boss_.pos;
+            const float dl = length(d);
+            if (dl > R + b.radius) continue;
+            const float push = B::shockPush * arenaScale() * (1.f - 0.5f * clampf(dl / R, 0.f, 1.f));
+            b.vel = normalized(d, {-1.f, 0.f}) * std::max(push, length(b.vel));
+            b.squash = 1.f;
+        }
+    ev.bursts.push_back({boss_.pos, R, theme::coreLow, nullptr});
+    ev.bossShock = true;
+}
+
+// The fight-opening whirl: the balls ease onto a ring around the core, spin
+// up, then all shoot out at once, tilted along the spin.
+void World::updateLaunch(float dt, const WorldParams& p, FrameEvents& ev) {
+    namespace L = cfg::ball;
+    if (launchT_ <= 0.f) return;
+    launchT_ = std::max(0.f, launchT_ - dt);
+    const float u = 1.f - launchT_ / L::launchTime;                    // 0 -> 1
+    const float omega = lerpf(L::launchSpinFrom, L::launchSpinTo, u * u);
+    launchAng_ += omega * dt;
+    const float gather = clampf(u * L::launchTime / L::launchGather, 0.f, 1.f);
+    const float ease = gather * gather * (3.f - 2.f * gather);
+
+    std::vector<Ball*> whirl;
+    for (std::size_t i = 0; i < balls_.size(); ++i)
+        if (!balls_[i].mods.satellite) whirl.push_back(&balls_[i]);
+    const float n = static_cast<float>(std::max<std::size_t>(1, whirl.size()));
+    // One ring for all, sized by the biggest ball: wide enough to clear the
+    // core, and for every ball to fit around it side by side. Near a wall
+    // (the Charger pins the core far left) the ring's centre slides inward
+    // until it fits - it stays around the core, just not dead-centred on it.
+    float rMax = 0.f;
+    for (Ball* b : whirl) {
+        b->radius = ballRadius(*b, p);   // its real size here (the boss arena grows balls) before sizing the ring
+        rMax = std::max(rMax, b->radius);
+    }
+    const float gap = 10.f * arenaScale();
+    float R = std::max({core_.radius + L::launchRing * arenaScale() + rMax,
+                        core_.radius + rMax + gap,
+                        whirl.size() > 1 ? n * (2.f * rMax + gap) / (2.f * kPi) : 0.f});
+    const float margin = rMax + 10.f;
+    R = std::min(R, std::min(size_.x, size_.y) * 0.5f - margin);   // a tiny arena: shrink as a last resort
+    const float reach = R + margin;
+    const sf::Vector2f centre{clampf(core_.pos.x, reach, size_.x - reach), clampf(core_.pos.y, reach, size_.y - reach)};
+    launchCentre_ = centre;
+    for (std::size_t k = 0; k < whirl.size(); ++k) {
+        Ball& b = *whirl[k];
+        const float a = launchAng_ + 2.f * kPi * static_cast<float>(k) / n;
+        const sf::Vector2f out{std::cos(a), std::sin(a)};
+        const sf::Vector2f tan{-out.y, out.x};
+        sf::Vector2f slot = centre + out * R;
+        slot.x = clampf(slot.x, b.radius, size_.x - b.radius);
+        slot.y = clampf(slot.y, b.radius, size_.y - b.radius);
+        const std::size_t idx = static_cast<std::size_t>(whirl[k] - balls_.data());
+        const sf::Vector2f from = idx < launchFrom_.size() ? launchFrom_[idx] : slot;
+        b.age += dt;   // (advanceBall is skipped while whirling; a new ball still pops in)
+        const sf::Vector2f prev = b.pos;
+        b.pos = from + (slot - from) * ease;
+        b.vel = gather < 1.f ? (b.pos - prev) / std::max(dt, 1e-4f) : tan * omega * R;
+        b.color = ballTint(b, length(b.vel), p);
+        updateTrail(b);
+        if (launchT_ <= 0.f) {   // let go: out and along the spin
+            const float c = std::cos(L::launchTilt), s = std::sin(L::launchTilt);
+            const sf::Vector2f dir = out * c + tan * s;
+            b.vel = dir * std::min(ballCruise(b, p) * L::launchSpeed, ballMaxSpeed(b, p));
+            b.squash = 1.f;
+        }
+    }
+    if (launchT_ <= 0.f) {
+        ev.launched = true;
+        ev.bursts.push_back({launchCentre_, core_.radius + L::launchRing * arenaScale() * 1.6f, theme::core, nullptr});
+    }
+}
+
 void World::updateWaveSpawner(float dt, FrameEvents& ev) {
     if (!waveRunning_) return;
 
@@ -1857,10 +2605,12 @@ void World::updateWaveSpawner(float dt, FrameEvents& ev) {
         if (boss_.alive) {
             spawnTimer_ -= dt;
             if (spawnTimer_ <= 0.f) {
-                if (boss_.kind == BossKind::Charger) {
+                if (boss_.kind == BossKind::Hive) {
+                    spawnTimer_ = 1e9f;   // the Hive brings its own (updateHive)
+                } else if (boss_.kind != BossKind::Orbital) {
                     if (static_cast<int>(enemies_.size()) < cfg::boss::maxAdds) {
                         spawnEnemy();
-                        spawnTimer_ = cfg::boss::addInterval;
+                        spawnTimer_ = cfg::boss::addInterval * (boss_.enraged ? cfg::boss::enrageAddMul : 1.f);
                     }
                 } else {
                     int adds = 0;
@@ -1868,7 +2618,7 @@ void World::updateWaveSpawner(float dt, FrameEvents& ev) {
                         if (!e.orbiter) ++adds;
                     if (adds < cfg::finalBoss::addCap) {
                         spawnEnemy();
-                        spawnTimer_ = cfg::finalBoss::addInterval;
+                        spawnTimer_ = cfg::finalBoss::addInterval * (boss_.enraged ? cfg::boss::enrageAddMul : 1.f);
                     }
                 }
             }
@@ -1882,11 +2632,24 @@ void World::updateWaveSpawner(float dt, FrameEvents& ev) {
     if (toSpawn_ > 0) {
         spawnTimer_ -= dt;
         if (spawnTimer_ <= 0.f) {
-            spawnEnemy();
+            namespace W = cfg::wave;
+            const float packT = clampf(static_cast<float>(wave_ - W::packWave) /
+                                           static_cast<float>(cfg::run::finalWave - W::packWave), 0.f, 1.f);
+            if (auto it = std::find_if(bruteSlots_.begin(), bruteSlots_.end(), [&](int at) { return at >= toSpawn_; });
+                it != bruteSlots_.end()) {   // (>=: a pack can step over the exact slot)
+                bruteSlots_.erase(it);
+                spawnEnemy(EnemyKind::Brute);   // the miniboss
+            } else if (wave_ >= W::packWave && toSpawn_ > 2 &&
+                       rng_.range(0.f, 1.f) < lerpf(W::packChance, W::packChanceMax, packT)) {
+                spawnPack();
+                --toSpawn_;   // a pack takes two places in the queue
+            } else {
+                spawnEnemy();
+            }
             --toSpawn_;
-            // Later waves spawn denser: ease the cadence down toward the final wave.
+            // Later waves spawn denser: ease the cadence down toward spawnMinWave.
             const float t = clampf(static_cast<float>(wave_ - 1) /
-                                       static_cast<float>(cfg::run::finalWave - 1),
+                                       static_cast<float>(cfg::wave::spawnMinWave - 1),
                                    0.f, 1.f);
             spawnTimer_ = lerpf(cfg::wave::spawnInterval, cfg::wave::spawnIntervalMin, t);
         }
@@ -1903,13 +2666,6 @@ void World::activateEffect(PowerUp k, const WorldParams& p) {
     effect_ = ActiveEffect{k, dur, dur};
 }
 
-void World::useReserve(const WorldParams& p) {
-    if (!hasReserve_) return;
-    activateEffect(reservePu_, p);
-    hasReserve_ = false;
-    reserveTimer_ = cfg::powerup::reserveFillTime;
-}
-
 float World::effStrength(const WorldParams& p) const {
     if (!effect_) return 0.f;
     if (effect_->remaining >= 0.f) return 1.f;   // still live
@@ -1919,21 +2675,6 @@ float World::effStrength(const WorldParams& p) const {
 }
 
 void World::updatePickups(float dt, const WorldParams& p, FrameEvents& ev) {
-    if (p.stockpile && !hasReserve_) {   // "Stockpile": slowly refill the reserve slot at random
-        reserveTimer_ -= dt;
-        if (reserveTimer_ <= 0.f) {
-            int enabled[kPowerUpCount];
-            int n = 0;
-            for (int i = 0; i < kPowerUpCount; ++i)
-                if (p.powerUpMask & (1u << i)) enabled[n++] = i;
-            if (n > 0) {
-                reservePu_ = static_cast<PowerUp>(enabled[rng_.irange(0, n - 1)]);
-                hasReserve_ = true;
-            }
-            reserveTimer_ = cfg::powerup::reserveFillTime;
-        }
-    }
-
     if (!effect_ && pickups_.empty()) {
         pickupTimer_ -= dt;
         if (pickupTimer_ <= 0.f) {
@@ -2012,20 +2753,33 @@ FrameEvents World::step(float dt, const WorldParams& p) {
         return ev;
     }
 
+    pact_ = p.pact;
     advanceCombo(dt, p);
     updateCoreSlide(dt);
     updateAutoFling(dt, p, ev);
-    updateHunters(dt, p);                 // "Hunters" pact
+    updateHunters(dt, p);                 // "Hunters" creed
 
     for (std::size_t i = 0; i < balls_.size(); ++i) {
         Ball& b = balls_[i];
         b.classPulse = std::max(0.f, b.classPulse - dt / (b.pulseAscend ? 1.4f : 0.9f));   // class-gain flare
+        b.elemPulse = std::max(0.f, b.elemPulse - dt / 1.2f);                               // element-gain rings
         if (grabbed_ == Grabbed::Ball && static_cast<int>(i) == heldIndex_) {
+            b.squash *= std::exp(-cfg::ball::squashDecay * dt);
+            pactHeldTick(dt);   // "Hot Potato": held too long, it slips
+            continue;
+        }
+        if (b.snaredBy >= 0) {   // held by a Snare until it dies
+            updateSnared(b, p);
+            b.squash *= std::exp(-cfg::ball::squashDecay * dt);
+            if (b.snaredBy >= 0) continue;
+        }
+        if (launchT_ > 0.f && !b.mods.satellite) {   // whirling (updateLaunch): let the last bounce's squash settle
             b.squash *= std::exp(-cfg::ball::squashDecay * dt);
             continue;
         }
         advanceBall(b, dt, p, ev);
     }
+    updateLaunch(dt, p, ev);
     updateTwins(p);
     for (Ball& g : ghosts_) {   // "Split shot" copies fly and hit like the real thing, then fade
         advanceBall(g, dt, p, ev);
@@ -2038,14 +2792,16 @@ FrameEvents World::step(float dt, const WorldParams& p) {
     pendingGhosts_.clear();
 
     classWorldTick(dt, p, ev);   // bullets, summons... (WorldClasses.cpp)
+    styleWorldTick(dt, p);       // Wake trails, Leyline runes
     resolveBallPairs(ev, p);
     updateTethers(dt, p, ev);
     updateBlackHoles(dt, p, ev);
     updateBolts(dt);
-    updateWaterTrails(dt, p, ev);
+    updateWaves(dt, p, ev);
     updateObstacles(dt);
+    updatePools(dt);
     updateEnemies(dt, p, ev);
-    updateCoreZap(dt, p, ev);   // "Living Core" pact
+    updateCoreZap(dt, p, ev);   // "Living Core" creed
     sweepDeadEnemies(ev, p);
     updateBoss(dt, p, ev);
     updateWaveSpawner(dt, ev);

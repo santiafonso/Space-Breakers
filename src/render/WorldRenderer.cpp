@@ -126,32 +126,36 @@ void WorldRenderer::drawCore(sf::RenderWindow& window, const Core& c) const {
     draw::disc(window, c.pos, c.radius * 0.26f, withAlpha(lighten(tint, 0.7f), 0.95f), withAlpha(tint, 0.8f));
 }
 
-// The water ball's "worm" wake: a tapering ribbon along its recent path, widest
-// at the head (by the ball), fading to nothing at the tail.
-void WorldRenderer::drawWaterTrail(sf::RenderWindow& window, const Ball& b) const {
-    const auto& pts = b.waterTrail;
-    const int n = static_cast<int>(pts.size());
-    if (n < 2) return;
-    const float w0 = cfg::element::waterTrailWidth;
-
-    sf::VertexArray ribbon(sf::TriangleStrip, static_cast<std::size_t>(n) * 2);
-    for (int i = 0; i < n; ++i) {
-        const sf::Vector2f prev = pts[i > 0 ? i - 1 : i];
-        const sf::Vector2f next = pts[i < n - 1 ? i + 1 : i];
-        sf::Vector2f dir = next - prev;
-        const float dl = std::sqrt(dir.x * dir.x + dir.y * dir.y);
-        dir = dl > 1e-4f ? dir / dl : sf::Vector2f{1.f, 0.f};
-        const sf::Vector2f nrm{-dir.y, dir.x};
-
-        const float taper = static_cast<float>(i + 1) / static_cast<float>(n);  // 0 tail -> ~1 head
-        const float half = w0 * taper;
-        const sf::Color col = withAlpha(theme::elemWater, (0.10f + 0.28f * taper));
-        ribbon[static_cast<std::size_t>(i) * 2].position = pts[i] + nrm * half;
-        ribbon[static_cast<std::size_t>(i) * 2].color = col;
-        ribbon[static_cast<std::size_t>(i) * 2 + 1].position = pts[i] - nrm * half;
-        ribbon[static_cast<std::size_t>(i) * 2 + 1].color = col;
+// A water ball's wave: an arc of water rolling out, thicker as it goes, with a
+// bright crest; it fades toward the arc's tips and over its last stretch.
+void WorldRenderer::drawWave(sf::RenderWindow& window, const Wave& w, float as) const {
+    namespace L = cfg::element;
+    const float k = clampf(w.r / std::max(1.f, w.reach), 0.f, 1.f);
+    const float fade = std::min(1.f, (1.f - k) * 4.f);   // holds, then fades over the last quarter
+    const float thick = (L::waveThick + L::waveThickGrow * k) * as;
+    constexpr int kSeg = 24;
+    sf::VertexArray band(sf::TriangleStrip, (kSeg + 1) * 2);
+    for (int i = 0; i <= kSeg; ++i) {
+        const float u = static_cast<float>(i) / kSeg;                 // 0..1 across the arc
+        const float a = w.dir + (u * 2.f - 1.f) * L::waveArc;
+        const float tip = std::sin(u * kPi);                          // 0 at the tips, 1 in the middle
+        const sf::Vector2f d{std::cos(a), std::sin(a)};
+        const sf::Color col = withAlpha(theme::elemWater, 0.30f * fade * tip);
+        band[static_cast<std::size_t>(i) * 2].position = w.origin + d * (w.r + thick * tip);
+        band[static_cast<std::size_t>(i) * 2].color = col;
+        band[static_cast<std::size_t>(i) * 2 + 1].position = w.origin + d * std::max(0.f, w.r - thick * tip);
+        band[static_cast<std::size_t>(i) * 2 + 1].color = withAlpha(theme::elemWater, 0.05f * fade * tip);
     }
-    window.draw(ribbon);
+    window.draw(band);
+    const sf::Color crest = lerpColor(theme::elemWater, sf::Color::White, 0.5f);
+    for (int i = 0; i < kSeg; ++i) {   // the crest along the front
+        const float u0 = static_cast<float>(i) / kSeg, u1 = static_cast<float>(i + 1) / kSeg;
+        const float a0 = w.dir + (u0 * 2.f - 1.f) * L::waveArc, a1 = w.dir + (u1 * 2.f - 1.f) * L::waveArc;
+        const float tip = std::sin((u0 + u1) * 0.5f * kPi);
+        draw::line(window, w.origin + sf::Vector2f{std::cos(a0), std::sin(a0)} * (w.r + thick * 0.8f * tip),
+                   w.origin + sf::Vector2f{std::cos(a1), std::sin(a1)} * (w.r + thick * 0.8f * tip), 2.f * as,
+                   withAlpha(crest, 0.7f * fade * tip));
+    }
 }
 
 void WorldRenderer::drawObstacle(sf::RenderWindow& window, const Obstacle& o) const {
@@ -216,16 +220,56 @@ void WorldRenderer::drawBoss(sf::RenderWindow& window, const Boss& b, sf::Vector
         }
     }
 
-    // A heavy armoured octagon: dark plated body with a bright rim, a slow
-    // counter-turning inner ring and a single glowing eye.
+    // Charger: before a shockwave, its reach tightens in as a pulsing ring.
+    if (b.kind == BossKind::Charger && b.timer < cfg::boss::shockWarn) {
+        const float k = 1.f - clampf(b.timer / cfg::boss::shockWarn, 0.f, 1.f);   // 0 -> 1
+        const float pulse = 0.5f + 0.5f * std::sin(t * 30.f);
+        draw::ring(window, b.pos, b.shockR, 2.f, withAlpha(theme::coreLow, 0.15f + 0.45f * k * pulse));
+        draw::ring(window, b.pos, b.radius + (b.shockR - b.radius) * (1.f - k), 3.f,
+                   withAlpha(theme::coreLow, 0.25f + 0.5f * k));
+    }
+
+    // Dasher: while it aims, the dash line it's about to take (brightening).
+    if (b.kind == BossKind::Dasher && b.phase == 1) {
+        const float k = 1.f - clampf(b.timer / cfg::boss::dasherAim, 0.f, 1.f);
+        const float len = cfg::boss::dasherDashSpeed * cfg::boss::dasherDash + b.radius;
+        for (int i = 1; i <= 14; ++i) {
+            const sf::Vector2f pt = b.pos + b.dashDir * (b.radius + len * static_cast<float>(i) / 14.f);
+            draw::disc(window, pt, 2.5f, withAlpha(theme::coreLow, 0.2f + 0.6f * k),
+                       withAlpha(theme::coreLow, 0.2f + 0.6f * k), {1.f, 1.f}, 8);
+        }
+    }
+
+    // A heavy armoured body: dark plated, bright rim, a slow counter-turning
+    // inner ring and a single glowing eye. The sides tell the bosses apart:
+    // Charger / Orbital octagon, Hive hexagon, Warden square, Dasher triangle.
     const sf::Color col = lerpColor(theme::enemy, sf::Color::White, b.hitFlash * 0.7f);
     const float intro = b.intro > 0.f ? 0.5f + 0.5f * std::sin(b.intro * 12.f) : 0.f;
-    draw::glow(window, b.pos, b.radius * 1.8f, theme::coreLow, 0.08f + 0.12f * intro + 0.25f * b.hitFlash);
-    const float rot = t * 0.25f;
-    draw::polygon(window, b.pos, b.radius * 1.04f, 8, rot, withAlpha(darken(col, 0.45f), 0.97f),
+    // The Hive swells before a burst.
+    const float swell = b.kind == BossKind::Hive ? clampf(1.f - b.timer / 0.7f, 0.f, 1.f) : 0.f;
+    const float rage = b.enraged ? 0.18f + 0.12f * std::sin(t * 7.f) : 0.f;   // phase two: a hot pulse
+    draw::glow(window, b.pos, b.radius * (b.enraged ? 2.2f : 1.8f), theme::coreLow,
+               0.08f + 0.12f * intro + 0.25f * b.hitFlash + 0.3f * swell + rage);
+    int sides = 8;
+    float rot = t * 0.25f;
+    switch (b.kind) {
+        case BossKind::Hive:   sides = 6; rot = t * 0.15f; break;
+        case BossKind::Warden: sides = 4; rot = b.shieldAng + kPi * 0.25f; break;
+        case BossKind::Dasher: sides = 3; rot = std::atan2(b.dashDir.y, b.dashDir.x); break;
+        default: break;
+    }
+    const float br = b.radius * 1.04f * (1.f + 0.06f * swell);
+    draw::polygon(window, b.pos, br, sides, rot, withAlpha(darken(col, 0.45f), 0.97f),
                   withAlpha(darken(col, 0.72f), 0.97f));
-    draw::polygonOutline(window, b.pos, b.radius * 1.04f, 8, rot, 3.f, withAlpha(lighten(col, 0.15f), 0.9f));
-    draw::polygonOutline(window, b.pos, b.radius * 0.8f, 8, rot, 1.f, withAlpha(col, 0.35f));
+    draw::polygonOutline(window, b.pos, br, sides, rot, 3.f, withAlpha(lighten(col, 0.15f), 0.9f));
+    draw::polygonOutline(window, b.pos, br * 0.77f, sides, rot, 1.f, withAlpha(col, 0.35f));
+    if (b.kind == BossKind::Warden) {   // the shield: a thick bright arc that turns around it
+        const float arc = cfg::boss::wardenShieldArc;
+        draw::ring(window, b.pos, b.radius + 10.f, 6.f, withAlpha(theme::textHi, 0.95f), b.shieldAng - arc,
+                   b.shieldAng + arc, 40);
+        draw::ring(window, b.pos, b.radius + 18.f, 1.5f, withAlpha(theme::textHi, 0.35f), b.shieldAng - arc * 0.7f,
+                   b.shieldAng + arc * 0.7f, 32);
+    }
     for (int k = 0; k < 4; ++k) {
         const float a = -t * 0.9f + static_cast<float>(k) * kPi * 0.5f;
         draw::ring(window, b.pos, b.radius * 0.58f, 3.f, withAlpha(col, 0.7f), a, a + 0.9f, 24);
@@ -266,6 +310,7 @@ void WorldRenderer::drawEnemy(sf::RenderWindow& window, const Enemy& e, sf::Vect
     sf::Color fill = base;
     if (e.poison > 0.f) fill = lerpColor(fill, theme::elemPoison, 0.5f);
     if (e.burn > 0.f)   fill = lerpColor(fill, theme::elemFire, 0.5f);
+    if (e.soak > 0.f)   fill = lerpColor(fill, theme::elemWater, 0.4f);
     if (e.frozen > 0.f) fill = lerpColor(fill, theme::elemIce, 0.65f);
     fill = lerpColor(fill, sf::Color::White, e.hitFlash * 0.8f);
     const float hull = 0.42f * (1.f - e.hitFlash);   // how dark the body sits under its rim
@@ -280,11 +325,42 @@ void WorldRenderer::drawEnemy(sf::RenderWindow& window, const Enemy& e, sf::Vect
         case EnemyKind::Shard:
             dart(window, e.pos, r, heading, inner, outer, rim, rimW);
             break;
+        case EnemyKind::Blinker: {   // a triangle pointing at the core; flickers just before a jump
+            const float face = std::atan2(corePos.y - e.pos.y, corePos.x - e.pos.x);
+            const float warn = e.blinkT < 0.45f ? 0.5f + 0.5f * std::sin(e.blinkT * 40.f) : 0.f;
+            draw::polygon(window, e.pos, r * 1.15f, 3, face, inner, outer);
+            draw::polygonOutline(window, e.pos, r * 1.15f, 3, face, rimW, withAlpha(rim, 1.f - 0.6f * warn));
+            if (e.blinkFx > 0.f) {   // where it jumped from: a fading outline
+                draw::polygonOutline(window, e.blinkFrom, r * 1.15f, 3, face, 1.5f, withAlpha(rim, 0.5f * e.blinkFx));
+                draw::line(window, e.blinkFrom, e.pos, 1.f, withAlpha(rim, 0.25f * e.blinkFx));
+            }
+            break;
+        }
+        case EnemyKind::Brute: {     // the miniboss: a big heavy pentagon with an ember core
+            const float spin = e.age * 0.25f;
+            draw::glow(window, e.pos, r * 1.5f, theme::ember, 0.12f);
+            draw::polygon(window, e.pos, r * 1.06f, 5, spin, inner, outer);
+            draw::polygonOutline(window, e.pos, r * 1.06f, 5, spin, 3.5f, rim);
+            draw::polygonOutline(window, e.pos, r * 0.7f, 5, -spin, 1.5f, withAlpha(theme::ember, 0.6f));
+            draw::disc(window, e.pos, r * 0.22f, withAlpha(theme::ember, 0.95f), withAlpha(darken(theme::ember, 0.3f), 0.9f));
+            break;
+        }
         case EnemyKind::Tank: {
             const float spin = e.age * 0.4f;
             draw::polygon(window, e.pos, r * 1.08f, 6, spin, inner, outer);
             draw::polygonOutline(window, e.pos, r * 1.08f, 6, spin, 3.f, rim);
             draw::polygonOutline(window, e.pos, r * 0.62f, 6, spin, 1.5f, withAlpha(fill, 0.6f));
+            break;
+        }
+        case EnemyKind::Snare: {   // a disc ringed by hooks curling inward; they close around a caught ball
+            const float spin = e.age * (e.snaring ? 0.2f : 0.9f);
+            draw::disc(window, e.pos, r * 0.78f, inner, outer);
+            draw::ring(window, e.pos, r * 0.78f, rimW, rim);
+            const sf::Color hc = e.snaring ? lighten(fill, 0.3f) : rim;
+            for (int k = 0; k < 4; ++k) {
+                const float a = spin + static_cast<float>(k) * kPi * 0.5f;
+                draw::ring(window, e.pos, r * (e.snaring ? 1.0f : 1.12f), 3.f, withAlpha(hc, 0.95f), a, a + 0.9f, 10);
+            }
             break;
         }
         default:
@@ -293,6 +369,12 @@ void WorldRenderer::drawEnemy(sf::RenderWindow& window, const Enemy& e, sf::Vect
             break;
     }
 
+    if (e.kind == EnemyKind::Mender) {   // a plus, and a faint ring where it heals
+        const sf::Color pc = withAlpha(theme::venom, 0.9f);
+        draw::line(window, e.pos - sf::Vector2f{r * 0.45f, 0.f}, e.pos + sf::Vector2f{r * 0.45f, 0.f}, 3.f, pc);
+        draw::line(window, e.pos - sf::Vector2f{0.f, r * 0.45f}, e.pos + sf::Vector2f{0.f, r * 0.45f}, 3.f, pc);
+        draw::ring(window, e.pos, cfg::enemy::mendRadius, 1.f, withAlpha(theme::venom, 0.10f), 0.f, 2.f * kPi, 48);
+    }
     if (e.kind == EnemyKind::Grunt)   // a small bright eye
         draw::disc(window, e.pos, r * 0.26f, withAlpha(lighten(fill, 0.3f), 0.95f), withAlpha(fill, 0.8f), {1.f, 1.f}, 16);
     if (e.kind == EnemyKind::Splitter) {   // a zig-zag crack right through the middle
@@ -313,6 +395,13 @@ void WorldRenderer::drawEnemy(sf::RenderWindow& window, const Enemy& e, sf::Vect
         draw::disc(window, e.pos, r * 0.22f, withAlpha(lighten(fill, 0.3f), 0.9f), withAlpha(fill, 0.8f), {1.f, 1.f}, 12);
     }
     if (e.frozen > 0.f) draw::ring(window, e.pos, r + 2.f, 2.f, withAlpha(theme::elemIce, 0.7f));
+    for (int c = 0; c < std::min(e.cracks, 7); ++c) {   // stone cracks: fine lines from the rim inward
+        const float a = 0.6f + static_cast<float>(c) * 2.39996f;   // golden-angle spread
+        const sf::Vector2f d{std::cos(a), std::sin(a)};
+        const sf::Vector2f side{-d.y, d.x};
+        draw::line(window, e.pos + d * (r * 0.95f), e.pos + d * (r * 0.5f) + side * (r * 0.12f), 1.5f,
+                   withAlpha(lighten(theme::elemStone, 0.35f), 0.9f));
+    }
     if (frac < 0.999f)   // health left, as a thin arc - only once it's been hurt
         draw::ring(window, e.pos, r + 8.f, 2.f, withAlpha(lighten(fill, 0.4f), 0.75f), -kPi * 0.5f,
                    -kPi * 0.5f + 2.f * kPi * frac, 32);
@@ -378,6 +467,7 @@ void WorldRenderer::drawBall(sf::RenderWindow& window, const Ball& b,
     const float heading = std::atan2(b.vel.y, b.vel.x);
     drawBallIdentity(window, look, b.pos, r, heading, alpha, b.held);
     if (!b.ghost) drawClassPulse(window, look.lead, b.pulseAscend, b.pos, r, b.classPulse);
+    if (!b.ghost) drawElementPulse(window, b.element, b.pos, r, b.elemPulse);
 
     // Ability charge: a hairline arc per ability slot just outside the rim,
     // filling as it recharges; it flashes when one fires.
@@ -423,9 +513,16 @@ void WorldRenderer::draw(sf::RenderWindow& window, const World& world) const {
     const float as = world.arenaScale();
     draw::radar(window, world.core().pos, length(sz) * 0.6f, 120.f * as, 12, theme::grid, 0.10f);
 
-    for (const Ball& b : world.balls())
-        if (b.element == Element::Water) drawWaterTrail(window, b);
+    for (const Wave& wv : world.waves()) drawWave(window, wv, as);
     for (const Obstacle& o : world.obstacles()) drawObstacle(window, o);
+    for (const Pool& q : world.pools()) {   // stone reactions: lava / mud / toxic dust, fading out
+        const float f = clampf(q.life / std::max(0.01f, q.maxLife), 0.f, 1.f);
+        const float a = std::min(1.f, f * 3.f);   // hold, then fade over the last third
+        const sf::Color c = q.kind == PoolKind::Lava ? theme::ember
+                            : q.kind == PoolKind::Mud ? darken(theme::elemStone, 0.2f) : theme::elemPoison;
+        draw::disc(window, q.pos, q.radius, withAlpha(c, 0.28f * a), withAlpha(c, 0.12f * a), {1.f, 1.f}, 40);
+        draw::ring(window, q.pos, q.radius, 1.5f * as, withAlpha(c, 0.45f * a));
+    }
     for (const BlackHole& h : world.blackHoles()) drawBlackHole(window, h);
     drawCore(window, world.core());
     drawBoss(window, world.boss(), world.core().pos);

@@ -139,9 +139,123 @@ inline const ItemDef* jesterItemDef(UpgradeKind k) {
     return findItemDef(defs, k);
 }
 
+// ==================================================================== Slinger
+inline const ItemDef* slingerItemDef(UpgradeKind k) {
+    static const std::vector<ItemDef> defs = {
+        // Every Slinger item acts on your throws and catches, so it works on
+        // any ball you like to handle.
+        {UpgradeKind::Momentum, "Momentum", "Momentum",
+         "the faster it flies, the harder it hits: +35% per cruise of speed above its own, no cap",
+         "+10% per cruise", Tier::Common, ItemTag::Slinger},
+        {UpgradeKind::Grip, "Grip", "Grip",
+         "when it's near your pointer it curves toward it - easier to catch",
+         "turns harder, from further", Tier::Common, ItemTag::Slinger},
+        {UpgradeKind::CatchRelease, "CatchRelease", "Catch & release",
+         "catch it within 2.5 s of your throw: +15% damage, stacking up to 5 (a slow catch drops the stacks)",
+         "+4% per stack", Tier::Common, ItemTag::Slinger},
+        {UpgradeKind::Coil, "Coil", "Coil",
+         "left alone it slows down to a stop - but when you throw it, it flies twice as fast",
+         "throws +20% faster, coasts longer", Tier::Uncommon, ItemTag::Slinger},
+        {UpgradeKind::Afterburner, "Afterburner", "Afterburner",
+         "for 1.4 s after your throw, while it flies fast, it leaves a trail of fire: it burns (60% of its hit per s) and sets off fire reactions",
+         "hotter (+15%) and longer (+0.2 s)", Tier::Uncommon, ItemTag::Slinger},
+        {UpgradeKind::ExecutionThrow, "ExecutionThrow", "Execution throw",
+         "the first hit after your throw, on an enemy at full health, deals x2.2",
+         "+0.3x", Tier::Uncommon, ItemTag::Slinger},
+        {UpgradeKind::Ambush, "Ambush", "Ambush",
+         "the first hit after your throw blinks it on to the nearest other enemy, striking it for x1.5",
+         "+0.2x", Tier::Rare, ItemTag::Slinger},
+        {UpgradeKind::TrickShot, "TrickShot", "Trick shot",
+         "from your throw until its first hit, every chance it has (crits, echoes, zaps, Jester rolls) is x3",
+         "x0.5 more", Tier::Rare, ItemTag::Slinger},
+        {UpgradeKind::DoubleDown, "DoubleDown", "Double down",
+         "catch it within 2.5 s of your throw and its next hit is double or nothing: x2.5 or a miss (luck favours the win)",
+         "the win +0.3x", Tier::Epic, ItemTag::Slinger},
+    };
+    return findItemDef(defs, k);
+}
+
+// ==================================================================== speed items
+// The other classes' speed items (2026-09-28): a "still" one grows as the
+// ball slows (full at a standstill), a "moving" one as it speeds up. None is
+// on / off - a slow ball just leans into it.
+inline const ItemDef* styleItemDef(UpgradeKind k) {
+    static const std::vector<ItemDef> defs = {
+        {UpgradeKind::Anchor, "Anchor", "Anchor",
+         "the slower it moves, the more the enemies near it are slowed (up to 55%) and drawn toward it",
+         "+8% slow, wider, a stronger pull", Tier::Uncommon, ItemTag::Guardian},
+        {UpgradeKind::Plow, "Plow", "Plow",
+         "flying faster than its cruise, it shoves aside every enemy it passes and hits it for 30% of its hit",
+         "a harder shove, +10% of its hit", Tier::Uncommon, ItemTag::Guardian},
+        {UpgradeKind::Slug, "Slug", "Slug",
+         "the slower it moves, the faster it fires (up to x2.2) and the further it reaches",
+         "+30% fire rate at a standstill", Tier::Common, ItemTag::Shooter},
+        {UpgradeKind::Strafe, "Strafe", "Strafe",
+         "flying faster than its cruise, it fires volleys out to both sides (60% of a bullet)",
+         "+12% of a bullet", Tier::Uncommon, ItemTag::Shooter},
+        {UpgradeKind::Lurk, "Lurk", "Lurk",
+         "staying slow charges its next hit after a blink: up to +150% after 2.5 s nearly still",
+         "+30% at full charge", Tier::Uncommon, ItemTag::Assassin},
+        {UpgradeKind::Blur, "Blur", "Blur",
+         "well above its cruise it passes through enemies instead of bouncing, marking every one it cuts",
+         "marks last longer", Tier::Rare, ItemTag::Assassin},
+        {UpgradeKind::Sleight, "Sleight", "Sleight",
+         "the slower it moves, the sooner it vanishes and reappears on a random enemy, striking it for x1.4",
+         "sooner, +0.2x", Tier::Uncommon, ItemTag::Jester},
+        {UpgradeKind::Meditate, "Meditate", "Meditate",
+         "the slower it moves, the faster its abilities recharge (twice as fast at a standstill)",
+         "+25% at a standstill", Tier::Common, ItemTag::Mage},
+        {UpgradeKind::Leyline, "Leyline", "Leyline",
+         "moving, it drops runes (up to 6); each ability it casts bursts every rune for 80% of its hit, with its element",
+         "+20% of its hit", Tier::Uncommon, ItemTag::Mage},
+        {UpgradeKind::Beacon, "Beacon", "Beacon",
+         "the slower it moves, the wider its glow: balls passing through it hit +30% harder next and leave its element (reactions!)",
+         "+8% harder, wider", Tier::Uncommon, ItemTag::Support},
+        {UpgradeKind::Wake, "Wake", "Wake",
+         "flying fast, it leaves a trail: any other ball crossing it is sped up x1.25",
+         "+5% speed", Tier::Common, ItemTag::Support},
+        {UpgradeKind::Pass, "Pass", "Pass",
+         "a ball it clacks into is launched x1.5, its next hit +20% with this ball's element - billiards",
+         "+15% launch", Tier::Rare, ItemTag::Support},
+        {UpgradeKind::Kennel, "Kennel", "Kennel",
+         "the slower it moves, the more often it lets loose a homing wisp (50% of its hit), every 3.5 s at a standstill",
+         "sooner, +12% of its hit", Tier::Uncommon, ItemTag::Summoner},
+        {UpgradeKind::DropTurret, "DropTurret", "Drop turret",
+         "when you throw it, a turret is left where you let go (6 s, 35% of its hit per shot)",
+         "+10% of its hit", Tier::Common, ItemTag::Summoner},
+    };
+    return findItemDef(defs, k);
+}
+
+// ==================================================================== Alchemist
+inline const ItemDef* alchemistItemDef(UpgradeKind k) {
+    static const std::vector<ItemDef> defs = {
+        {UpgradeKind::Attune, "Attune", "Attune",
+         "its elements are 25% stronger (burns, soaks, cracks, freezes, poison, zaps)",
+         "+10%", Tier::Common, ItemTag::Alchemist},
+        {UpgradeKind::Crucible, "Crucible", "Crucible",
+         "the reactions it sets off hit 40% harder and 20% wider",
+         "+12% harder", Tier::Uncommon, ItemTag::Alchemist},
+        {UpgradeKind::Aftershock, "Aftershock", "Aftershock",
+         "a reaction it sets off leaves its element on every enemy around - the next hit reacts again",
+         "reaches further", Tier::Uncommon, ItemTag::Alchemist},
+        {UpgradeKind::Flux, "Flux", "Flux",
+         "each reaction it sets off recharges its abilities by 15%",
+         "+5%", Tier::Uncommon, ItemTag::Alchemist},
+        {UpgradeKind::PrismHit, "Prism", "Prism",
+         "every 4th hit carries all its elements at once",
+         "one hit sooner every 2 levels", Tier::Rare, ItemTag::Alchemist},
+        {UpgradeKind::Conflux, "Conflux", "Conflux",
+         "every reaction it sets off leaps once to the nearest other enemy carrying an element",
+         "its reactions +10% harder", Tier::Epic, ItemTag::Alchemist},
+    };
+    return findItemDef(defs, k);
+}
+
 // ---------------------------------------------------------------- lookup
 inline const ItemDef* classItemDef(UpgradeKind k) {
-    for (const ItemDef* (*f)(UpgradeKind) : {mageItemDef, shooterItemDef, assassinItemDef, summonerItemDef, jesterItemDef})
+    for (const ItemDef* (*f)(UpgradeKind) : {mageItemDef, shooterItemDef, assassinItemDef, summonerItemDef, jesterItemDef,
+                                             slingerItemDef, styleItemDef, alchemistItemDef})
         if (const ItemDef* d = f(k)) return d;
     return nullptr;
 }

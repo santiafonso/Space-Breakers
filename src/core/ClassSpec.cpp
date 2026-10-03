@@ -18,7 +18,7 @@ bool foldMage(UpgradeKind k, int level, BallMods& m) {
     const float n = static_cast<float>(level - 1);   // levels past the first
     MageMods& g = m.cls.mage;
     switch (k) {
-        case UpgradeKind::Focus: g.focus = M::focus + M::focusPerLevel * n; return true;
+        case UpgradeKind::Focus: g.focus += M::focus + M::focusPerLevel * n; return true;   // += : "Quick mind" too
         case UpgradeKind::ArcaneMissile:   // "Barrage"
             g.barrage = 1 + (level >= 3 ? 1 : 0) + (level >= 5 ? 1 : 0);
             g.barrageFrac = M::barrageFrac + M::barrageFracPerLevel * n;
@@ -146,11 +146,109 @@ bool foldJester(UpgradeKind k, int level, BallMods& m) {
     }
 }
 
+// ==================================================================== Slinger
+bool foldSlinger(UpgradeKind k, int level, BallMods& m) {
+    namespace S = cfg::slinger;
+    const float n = static_cast<float>(level - 1);
+    SlingerMods& s = m.cls.slinger;
+    // Its items act on any ball you throw: the hooks run with one item too
+    // (the role's own catch / throw bonus still needs the class).
+    if (itemTag(k) == ItemTag::Slinger) m.cls.loose |= roleBit(BallRole::Slinger);
+    switch (k) {
+        case UpgradeKind::Coil:
+            s.coil = S::coilThrow + S::coilThrowPerLevel * n;
+            s.coilDrag = std::max(0.15f, S::coilDrag + S::coilDragPerLevel * n);
+            return true;
+        case UpgradeKind::CatchRelease:
+            s.releasePer = S::releasePer + S::releasePerPerLevel * n;
+            s.releaseMax = S::releaseMax;
+            return true;
+        case UpgradeKind::Afterburner:
+            s.burnFrac = S::burnFrac + S::burnFracPerLevel * n;
+            s.burnTime = S::burnTime + S::burnTimePerLevel * n;
+            return true;
+        case UpgradeKind::Momentum:   s.momentum = S::momentum + S::momentumPerLevel * n; return true;
+        case UpgradeKind::Grip:
+            s.gripTurn = S::gripTurn + S::gripTurnPerLevel * n;
+            s.gripRange = S::gripRange + S::gripRangePerLevel * n;
+            return true;
+        case UpgradeKind::Ambush:     s.ambush = S::ambush + S::ambushPerLevel * n; return true;
+        case UpgradeKind::TrickShot:  s.trick = S::trick + S::trickPerLevel * n; return true;
+        case UpgradeKind::DoubleDown: s.doubleDown = S::doubleWin + S::doubleWinPerLevel * n; return true;
+        case UpgradeKind::ExecutionThrow: s.execution = S::execution + S::executionPerLevel * n; return true;
+        default: return false;
+    }
+}
+
+// ==================================================================== speed items
+bool foldStyle(UpgradeKind k, int level, BallMods& m) {
+    namespace S = cfg::style;
+    const float n = static_cast<float>(level - 1);
+    ClassMods& c = m.cls;
+    switch (k) {
+        case UpgradeKind::Anchor:
+            c.guardian.anchor = std::min(0.9f, S::anchor + S::anchorPerLevel * n);
+            c.guardian.anchorRadius = S::anchorRadius + S::anchorRadiusPerLevel * n;
+            c.guardian.anchorPull = S::anchorPull + S::anchorPullPerLevel * n;
+            return true;
+        case UpgradeKind::Plow:
+            c.guardian.plow = S::plow + S::plowPerLevel * n;
+            c.guardian.plowFrac = S::plowFrac + S::plowFracPerLevel * n;
+            return true;
+        case UpgradeKind::Slug:     c.shooter.slug = S::slug + S::slugPerLevel * n; return true;
+        case UpgradeKind::Strafe:   c.shooter.strafe = S::strafe + S::strafePerLevel * n; return true;
+        case UpgradeKind::Lurk:     c.assassin.lurk = S::lurk + S::lurkPerLevel * n; return true;
+        case UpgradeKind::Blur:     c.assassin.blur = S::blur + S::blurPerLevel * n; return true;
+        case UpgradeKind::Sleight:
+            c.jester.sleight = S::sleight + S::sleightPerLevel * n;
+            c.jester.sleightEvery = std::max(1.2f, S::sleightEvery + S::sleightEveryPerLevel * n);
+            c.loose |= roleBit(BallRole::Jester);   // like every Jester item: works on any ball
+            return true;
+        case UpgradeKind::Meditate: c.mage.meditate = S::meditate + S::meditatePerLevel * n; return true;
+        case UpgradeKind::Leyline:  c.mage.leyline = S::leyline + S::leylinePerLevel * n; return true;
+        case UpgradeKind::Beacon:
+            c.support.beacon = S::beacon + S::beaconPerLevel * n;
+            c.support.beaconRadius = S::beaconRadius + S::beaconRadiusPerLevel * n;
+            return true;
+        case UpgradeKind::Wake:     c.support.wake = S::wake + S::wakePerLevel * n; return true;
+        case UpgradeKind::Pass:     c.support.pass = S::pass + S::passPerLevel * n; return true;
+        case UpgradeKind::Kennel:
+            c.summoner.kennel = std::max(1.2f, S::kennel + S::kennelPerLevel * n);
+            c.summoner.kennelFrac = S::kennelFrac + S::kennelFracPerLevel * n;
+            return true;
+        case UpgradeKind::DropTurret: c.summoner.drop = S::drop + S::dropPerLevel * n; return true;
+        default: return false;
+    }
+}
+
+// ==================================================================== Alchemist
+bool foldAlchemist(UpgradeKind k, int level, BallMods& m) {
+    namespace A = cfg::alchemist;
+    const float n = static_cast<float>(level - 1);
+    AlchemistMods& a = m.cls.alchemist;
+    switch (k) {
+        case UpgradeKind::Attune:     m.elemMult *= 1.f + A::attune + A::attunePerLevel * n; return true;
+        case UpgradeKind::Crucible:
+            a.crucible *= A::crucible + A::cruciblePerLevel * n;
+            a.crucibleRadius = A::crucibleRadius;
+            return true;
+        case UpgradeKind::Aftershock: a.aftershock = A::aftershock + A::aftershockPerLevel * n; return true;
+        case UpgradeKind::Flux:       a.flux = A::flux + A::fluxPerLevel * n; return true;
+        case UpgradeKind::PrismHit:   a.prism = std::max(2, A::prismEvery - (level - 1) / 2); return true;
+        case UpgradeKind::Conflux:
+            a.conflux = true;
+            a.crucible *= 1.f + 0.1f * n;
+            return true;
+        default: return false;
+    }
+}
+
 }  // namespace
 
 bool foldClassItem(UpgradeKind k, int level, BallMods& m) {
     return foldMage(k, level, m) || foldShooter(k, level, m) || foldAssassin(k, level, m) ||
-           foldSummoner(k, level, m) || foldJester(k, level, m);
+           foldSummoner(k, level, m) || foldJester(k, level, m) || foldSlinger(k, level, m) || foldStyle(k, level, m) ||
+           foldAlchemist(k, level, m);
 }
 
 }  // namespace sb

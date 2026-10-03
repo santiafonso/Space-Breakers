@@ -1,141 +1,93 @@
 #pragma once
 
-#include "progression/Offers.hpp"
-
 namespace sb {
 
-// ---- pacts: run-defining global rules --------------------------------------
+// ---- pacts: a gift with a price (2026-09-28) --------------------------------
 //
-// After the act-1 boss (and, with the "Covenant" web node, at the start of a
-// run) you pick one pact out of three. A pact is not a stat bump: it changes
-// what the run is ABOUT - throwing a lot, watching the balls work on their own,
-// two huge balls, a swarm, a core that fights... Every one has a real cost.
-// Pacts live in RunState::pacts (a run holds at most two) and reach the sim as
-// WorldParams::pact (see sim/PactRules.hpp); App folds the rest (damage,
-// cruise, luck, ball count) into the usual params.
+// Smaller than a creed and only about how the fight plays: each one gives
+// something and takes something. Found at an Altar on the map - rare, or down
+// the hidden path that opens before the boss after three flawless fights in a
+// row (see App::openMap). A run can hold any number of them. They reach the
+// sim as WorldParams::pact (sim/PactRules.hpp); App folds the plain numbers.
 //
 // Order is free to change: pacts are never saved (a run is never resumed).
 
 enum class PactId {
-    HotHands,     // Thrower:   flings much faster and longer; idle balls slow
-    Nova,         // Thrower:   an active ring-burst from the core; smaller core
-    Hunters,      // Spectator: each ball chases its own prey; no grabbing
-    Clockwork,    // Spectator: constant auto-throws; no grabbing
-    Pinball,      // Spectator: walls are bumpers; weaker throws
-    Duet,         // Few & mighty: two balls absorb the rest; max 2 balls
-    Legion,       // Swarm:     +2 balls, clacks spark; less damage
-    LivingCore,   // Core:      the core zaps and overcharges balls; faster enemies
-    Fortress,     // Core:      a huge core that explodes on contact; no healing
-    LoadedDice,   // Gambler:   +12 luck; fight gold is double or nothing
-    Alchemy,      // Alchemist: random extra elements, self-reactions; weaker hits
-    Bloodlust,    // Berserker: the combo never cools; core hits wipe it
+    Lead,        // +damage / balls much slower
+    QuickHands,  // catch reward x2 / a ball you leave alone hits softer
+    HeavyArm,    // stronger throws / no slow motion while aiming
+    GlassEdge,   // +crit chance / hits that don't crit are weaker
+    Stillness,   // the slower a ball, the harder it hits / weaker quick throws
+    Overflow,    // +1 ball / every ball hits softer
+    Tiny,        // much more damage / balls half as big
+    Colossus,    // your best ball twice as big and strong / the rest weaker
+    HotPotato,   // a held ball charges up / held too long it drops dead
+    Juggler,     // catches in a row stack damage / the core breaks the streak and hurts
+    VoidWalls,   // balls pass through the edges / wall-bounce items stop working
+    AnchorWalls, // throws x2 / walls stop a ball dead
+    LastBreath,  // everything x2 while the core is low / smaller core
+    Mirror,      // every throw sends a ghost the other way / tougher enemies
+    Elemental,   // elements x2 / contact hits weaker
+    Frenzy,      // the combo climbs twice as fast / grabbing a ball breaks it
+    Blind,       // stronger throws / no aim guide
+    Horde,       // a ball for every boss you kill / more enemies per fight
 };
-inline constexpr int kPactCount = 12;
-inline constexpr int kMaxPacts = 2;   // one from the run start (Covenant) + one from the boss
-
-enum class PactArchetype { Thrower, Spectator, FewMighty, Swarm, Core, Gambler, Alchemist, Berserker };
+inline constexpr int kPactCount = 18;
 
 struct PactDef {
     const char* name;
-    PactArchetype archetype;
     const char* gain;      // what you get
     const char* cost;      // what it takes
-    const char* synergy;   // "works well with" - hover help
-    int unlockNode;        // MetaUnlock that must be bought for it to be offered, -1 = always
+    const char* synergy;   // "pairs well with" - hover help
+    bool needsHands;       // only worth it if you grab balls (not offered under Hunters / Clockwork)
 };
-
-inline const char* pactArchetypeName(PactArchetype a) {
-    switch (a) {
-        case PactArchetype::Thrower:   return "THROWER";
-        case PactArchetype::Spectator: return "SPECTATOR";
-        case PactArchetype::FewMighty: return "FEW BUT MIGHTY";
-        case PactArchetype::Swarm:     return "SWARM";
-        case PactArchetype::Core:      return "CORE";
-        case PactArchetype::Gambler:   return "GAMBLER";
-        case PactArchetype::Alchemist: return "ALCHEMIST";
-        case PactArchetype::Berserker: return "BERSERKER";
-    }
-    return "";
-}
-
-// How the archetype plays, one line (card subtitle).
-inline const char* pactArchetypeHint(PactArchetype a) {
-    switch (a) {
-        case PactArchetype::Thrower:   return "for runs where you throw a lot";
-        case PactArchetype::Spectator: return "for runs where you watch the balls work";
-        case PactArchetype::FewMighty: return "for a few balls, built very high";
-        case PactArchetype::Swarm:     return "for many balls at once";
-        case PactArchetype::Core:      return "for runs built around the core";
-        case PactArchetype::Gambler:   return "for runs that live on luck";
-        case PactArchetype::Alchemist: return "for runs built on element reactions";
-        case PactArchetype::Berserker: return "for runs that never stop hitting";
-    }
-    return "";
-}
 
 inline const PactDef& pactDef(PactId id) {
     static const PactDef defs[kPactCount] = {
-        {"Hot Hands", PactArchetype::Thrower,
-         "flung balls leave your hand x1.7 faster, can fly three times past the usual speed cap and hold their speed far longer",
-         "left alone, every ball cruises 35% slower",
-         "Striker items, Battering, Reflexes, Strong arm, Ceiling break", -1},
-        {"Nova", PactArchetype::Thrower,
-         "SPACE or right-click: every ball bursts out of the core in a ring at triple speed and the core shoves enemies away (7 s cooldown)",
-         "the core loses 20% of its max health",
-         "Spring core, Magnetic core, Iron Guardian, Piercing", -1},
-        {"Hunters", PactArchetype::Spectator,
-         "every ball locks onto its own prey and chases it until it dies, then picks the next one. +20% damage",
-         "you can no longer grab or throw balls",
-         "Piercing, Cleave, Executioner, Berserk", MetaPactHunters},
-        {"Clockwork", PactArchetype::Spectator,
-         "a ball is flung for you at the enemy nearest the core every 0.6 s, at 2.5x its cruise. +15% damage",
-         "you can no longer grab or throw balls",
-         "Striker items, Battering, Keen eye, many balls", -1},
-        {"Pinball", PactArchetype::Spectator,
-         "walls are bumpers: every wall bounce speeds the ball up, feeds the combo and sparks a blast on enemies near the wall",
-         "your throws are 40% weaker",
-         "Wall rush, Ricochet, Railgun, Split shot, Berserk", -1},
-        {"Duet", PactArchetype::FewMighty,
-         "your two best balls absorb the rest (items become forge levels, modifiers move over), 2 items of a tag give the ascended class, x1.5 damage, 20% bigger",
-         "never more than two balls",
-         "Forge nodes, Gemini, Giant, any ascended class", -1},
-        {"Legion", PactArchetype::Swarm,
-         "two more balls right now, each with a random item. Balls clacking together throw sparks that hurt enemies and feed the combo",
-         "every ball deals 25% less damage",
-         "Carom, Big ball, Split shot, Gemini", MetaPactLegion},
-        {"Living Core", PactArchetype::Core,
-         "the core zaps the nearest enemy every 0.8 s, and a ball bouncing off the core is overcharged: faster and +60% damage for 2 s",
-         "enemies march 15% faster",
-         "Magnetic core, Spring core, Guardian items, Mender", -1},
-        {"Fortress", PactArchetype::Core,
-         "core max health x1.75, and anything that reaches the core blows up, hurting and shoving everything around it",
-         "the core no longer heals before fights, and rests repair only half",
-         "Aegis, Regen, Mender, Slow field", -1},
-        {"Loaded Dice", PactArchetype::Gambler,
-         "+12 luck: every chance (crits, echoes, zaps, bombs, ghosts) almost doubles and cards roll much rarer",
-         "each fight's gold is a coin flip: double or nothing",
-         "Keen eye, Echo, Tesla, Bomber, Split shot, Lucky clover", MetaPactDice},
-        {"Alchemy", PactArchetype::Alchemist,
-         "half of all hits leave a random extra element, and a ball can react with itself - reactions everywhere",
-         "contact hits deal 25% less damage",
-         "Catalyst, Chain reaction, Primed, Contagion, Storm", MetaPactAlchemy},
-        {"Bloodlust", PactArchetype::Berserker,
-         "the damage combo never cools down on its own and climbs twice as fast",
-         "anything reaching the core wipes the combo and hits the core 50% harder",
-         "Overcharge, Golden bounce, fast balls, Guardian items", -1},
+        {"Lead", "every ball hits 60% harder", "every ball cruises 40% slower",
+         "Stillness, Guardian items, Slug, catching", false},
+        {"Quick Hands", "the catch reward is doubled: snatch a fast ball and its next hit lands up to twice as hard",
+         "a ball you haven't thrown for 10 s hits 20% softer", "Juggler, Hot Potato, Striker items, fast balls", true},
+        {"Heavy Arm", "your throws leave your hand 50% faster", "no slow motion: none while you aim, and no bullet time (E)",
+         "Striker items, Comet, Catch reward", true},
+        {"Glass Edge", "+30% crit chance on every ball", "hits that don't crit deal 20% less",
+         "Keen eye, Echo, Jester items", false},
+        {"Stillness", "the slower a ball moves, the harder it hits (up to +60% when nearly still)",
+         "quick throws (a click) are 40% weaker", "Lead, Guardian items, Ballast, Totem", true},
+        {"Overflow", "one more ball, right now", "every ball deals 15% less damage",
+         "Legion, Support items, Bumper", false},
+        {"Tiny", "every ball hits 80% harder", "every ball is half as big - harder to catch, easier to miss",
+         "Big ball, Giant, Keen eye", false},
+        {"Colossus", "your most built-up ball is twice as big and hits twice as hard",
+         "every other ball deals 30% less damage", "Guardian items, Giant, Duet", false},
+        {"Hot Potato", "a ball you hold charges up: its throw's first hit +25% per second held",
+         "hold it past 3 s and it slips out of your hand with no throw", "Heavy Arm, Quick Hands, Striker items", true},
+        {"Juggler", "every catch in a row stacks +12% damage on that ball (up to 8)",
+         "a juggled ball touching the core drops its streak and chips the core", "Quick Hands, Hot Potato", true},
+        {"Void Walls", "balls fly out one edge and come back through the other - no wall stops them",
+         "wall-bounce items (Ricochet, Split shot, Railgun...) never fire", "Seeker, Hunter, Piercing, Comet", false},
+        {"Anchor Walls", "your throws leave your hand twice as fast", "a wall stops a ball almost dead",
+         "Heavy Arm, catching, Striker items", true},
+        {"Last Breath", "while the core is under 30% health, every ball hits twice as hard",
+         "the core loses 20% of its max health", "Regen, Aegis, Mender, Glass cannon", false},
+        {"Mirror", "every throw also sends a ghost copy the opposite way", "enemies have 20% more health",
+         "Split shot, Brood, Striker items", true},
+        {"Elemental", "every element is twice as strong", "contact hits deal 30% less",
+         "Support items, element nodes, Catalyst, Chain reaction", false},
+        {"Frenzy", "the combo climbs twice as fast", "grabbing a ball resets the combo",
+         "Overcharge, Bloodlust, many balls", true},
+        {"Blind", "your throws leave your hand 40% faster", "the slingshot shows no aim guide",
+         "Heavy Arm, Anchor Walls", true},
+        {"Horde", "every boss you beat adds a ball", "30% more enemies in every fight",
+         "Overflow, Legion, Support items", false},
     };
     return defs[static_cast<int>(id)];
 }
 
-// Pacts that can't sit together in one run.
+// Two pacts that can't sit in the same run.
 inline bool pactsConflict(PactId a, PactId b) {
     auto pair = [&](PactId x, PactId y) { return (a == x && b == y) || (a == y && b == x); };
-    auto noGrab = [](PactId p) { return p == PactId::Hunters || p == PactId::Clockwork; };
-    if (a == b) return true;
-    if (pair(PactId::Duet, PactId::Legion)) return true;          // two balls vs a swarm
-    if ((a == PactId::HotHands && noGrab(b)) || (b == PactId::HotHands && noGrab(a))) return true;  // nothing to throw
-    if (noGrab(a) && noGrab(b)) return true;                     // one hands-off rule is enough
-    return false;
+    return pair(PactId::VoidWalls, PactId::AnchorWalls) || pair(PactId::Tiny, PactId::Colossus);
 }
 
 }  // namespace sb

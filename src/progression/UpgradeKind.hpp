@@ -35,6 +35,16 @@ enum class UpgradeKind {
     HeavyImpact,       // +contact damage
     BigBall,           // +radius, +knockback
     Swift,             // +cruise and top speed, holds a fling longer
+    // (2026-09-28: more modifiers, so a post-fight pick isn't always the same three)
+    Ballast,           // slower, but hits harder
+    Keen,              // + crit chance
+    Reach,             // you can grab it from further away
+    Tempered,          // its element is stronger
+    Spin,              // its hits may climb the combo an extra step
+    Leech,             // its kills patch the core up a little
+    QuickMind,         // its abilities recharge faster
+    HeavyThrow,        // the first hit after your throw lands harder
+    Bouncy,            // leaves the core faster after a bounce
 
     // ---- items (take one of the 4 item slots; a duplicate levels it up) ----
     Ricochet,          // a wall bounce speeds it up and arms a harder hit [Striker]
@@ -44,7 +54,7 @@ enum class UpgradeKind {
     Overkill,          // a kill's leftover damage splashes                [Support]
     Shatter,           // bonus damage vs frozen enemies (needs Frost)     [Support]
     Conductor,         // its electric arc jumps on to more enemies        [Striker]
-    Bedrock,           // its stone rubble lasts far longer                [Guardian]
+    Bedrock,           // its stone cracks last longer and go deeper       [Guardian]
     Echo,              // chance a hit strikes twice                       [Striker]
     Tesla,             // chance a hit zaps nearby enemies                 [Support]
     Bomber,            // chance a kill explodes                           [Support]
@@ -111,6 +121,42 @@ enum class UpgradeKind {
     ChaosBounce,       // wall bounces fly off at random, arming a harder hit [Jester]
     Jackpot,           // a kill may hit the jackpot: gold and a big blast [Jester]
 
+    // ---- Slinger items (the class of throwing and catching, 2026-09-28) ----
+    Coil,              // coasts to a stop; thrown by you it flies twice as fast [Slinger]
+    CatchRelease,      // caught soon after your throw: stacks damage         [Slinger]
+    Afterburner,       // thrown by you, it leaves a trail of real fire        [Slinger]
+    Momentum,          // the faster it flies, the harder it hits (no cap)     [Slinger]
+    Grip,              // curves toward your pointer when it's near            [Slinger]
+    Ambush,            // a thrown ball's first hit blinks it onto the next enemy [Slinger]
+    TrickShot,         // until the first hit after a throw, every chance x3   [Slinger]
+    DoubleDown,        // catch a ball you threw: its next hit is double or nothing [Slinger]
+    ExecutionThrow,    // a thrown ball's first hit on an unhurt enemy crits   [Slinger]
+
+    // ---- speed items for the other classes (2026-09-28): "still" ones grow
+    // as the ball slows, "moving" ones as it speeds up - never on / off ----
+    Anchor,            // slow: enemies near it are slowed and drawn in       [Guardian]
+    Plow,              // fast: shoves and hits the enemies it passes         [Guardian]
+    Slug,              // slow: fires faster and further                      [Shooter]
+    Strafe,            // fast: fires side volleys                            [Shooter]
+    Lurk,              // slow: charges its next hit after a blink            [Assassin]
+    Blur,              // fast: passes through enemies, marking them          [Assassin]
+    Sleight,           // slow: now and then teleports onto an enemy and hits [Jester]
+    Meditate,          // slow: abilities recharge faster                     [Mage]
+    Leyline,           // moving: drops runes that burst on each cast         [Mage]
+    Beacon,            // slow: balls passing near it hit harder with its element [Support]
+    Wake,              // fast: its trail speeds up the balls that cross it   [Support]
+    Pass,              // a ball it clacks is launched with its element       [Support]
+    Kennel,            // slow: lets loose homing wisps                       [Summoner]
+    DropTurret,        // your throw leaves a turret where you let go         [Summoner]
+
+    // ---- Alchemist items (the class of elements, 2026-09-28) ----
+    Attune,            // its elements are stronger                          [Alchemist]
+    Crucible,          // its reactions hit harder and wider                 [Alchemist]
+    Aftershock,        // its reactions leave its element on the pack        [Alchemist]
+    Flux,              // each of its reactions recharges its abilities      [Alchemist]
+    PrismHit,          // "Prism": every 4th hit carries all its elements    [Alchemist]
+    Conflux,           // its reactions leap once to another afflicted enemy [Alchemist]
+
     // ---- relics (keep CoreSpring first and Overcharge last) ----
     CoreSpring,        // balls ricochet off the core faster
     CoreSlowField,     // a zone around the core slows enemies inside it
@@ -139,7 +185,7 @@ inline constexpr int kTierCount = 5;
 
 // ---- item tags: a ball's classes come from them -----------------------------
 // Same order as BallRole (sim/Entities.hpp), None = Normal.
-enum class ItemTag { None, Striker, Guardian, Support, Mage, Shooter, Assassin, Summoner, Jester };
+enum class ItemTag { None, Striker, Guardian, Support, Mage, Shooter, Assassin, Summoner, Jester, Slinger, Alchemist };
 
 // Everything the UI and the roll need to know about one class item. The five
 // newer classes describe their items with these (ClassItems.hpp); the older

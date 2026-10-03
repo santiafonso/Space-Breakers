@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <deque>
 #include <vector>
 
@@ -7,6 +8,7 @@
 #include "core/Math.hpp"
 #include "core/Theme.hpp"
 #include "sim/Classes.hpp"
+#include "sim/CreedRules.hpp"
 #include "sim/PactRules.hpp"
 
 namespace sb {
@@ -42,9 +44,10 @@ sf::Color elementColor(Element e);
 // Guardian: big, shoves, staggers, aims its bounces; Support: marks enemies +
 // a stronger element (see cfg::role). The other five are built per class in
 // sim/Classes.hpp + sim/WorldClasses.cpp.
-enum class BallRole { Normal, Striker, Guardian, Support, Mage, Shooter, Assassin, Summoner, Jester };
-inline constexpr int kBallRoleCount = 9;
-inline constexpr int kClassCount = 8;   // every role but Normal
+enum class BallRole { Normal, Striker, Guardian, Support, Mage, Shooter, Assassin, Summoner, Jester, Slinger, Alchemist };
+inline constexpr int kBallRoleCount = 11;
+inline constexpr int kClassCount = 10;   // every role but Normal
+inline constexpr int kMaxElements = 3;   // elements one ball can carry (the Alchemist: 2, its ascended form 3)
 
 // A set of classes, one bit per BallRole (Normal has no bit).
 using RoleMask = unsigned;
@@ -91,6 +94,12 @@ struct BallMods {
     float knockMult = 1.f;     // Big ball, Bumper
     float elemMult = 1.f;      // element item level
     float copyLife = 1.f;      // web "Brood": its ghost copies (Split shot, Split, Mitosis, Phantom) last x this
+    // modifiers (2026-09-28)
+    float reach = 1.f;         // "Reach": grabbed from this x further
+    float spin = 0.f;          // "Spin": chance a hit climbs the combo an extra step
+    float leech = 0.f;         // "Leech": core hp per kill
+    float heavyThrow = 0.f;    // "Heavy throw": the thrown first hit + this
+    float bouncy = 1.f;        // "Bouncy": speed x this off the core
     // items
     float ricochetMult = 0.f;  // Ricochet: armed-hit damage x this...
     float wallBoost = 1.f;     // ...and speed x this per wall bounce
@@ -158,6 +167,8 @@ struct BallSpec {
     BallRole primary = BallRole::Normal;   // its first class (slot order): the body colour
     RoleMask ascended = 0;     // classes it has in ascended form (4 items of a tag)
     Element element = Element::Plain;
+    Element elems[kMaxElements] = {};   // every element it carries (elems[0] = element); an Alchemist holds more
+    int elemN = 0;
     BallMods mods;
     AbilitySpec abilities[kMaxAbilitySlots];   // active ability slots only
 };
@@ -169,20 +180,35 @@ struct Ball {
     sf::Vector2f vel;
     float radius = cfg::ball::radius;
     bool held = false;
+    int snaredBy = -1;       // a Snare's id while one holds it (it can't move or be grabbed)
     RoleMask roles = 0;      // its classes (see BallRole)
     RoleMask ascended = 0;   // ...and which of them are ascended
     BallRole primary = BallRole::Normal;   // its first class (see leadRole)
     float classPulse = 0.f;  // 1 -> 0: it just gained a class, a flare in its class colour
+    float elemPulse = 0.f;   // 1 -> 0: it just took an element, rings in the element's colour
     bool pulseAscend = false;   // ...and that gain was the ascended form (a bigger flare)
-    Element element = Element::Plain;
+    Element element = Element::Plain;   // the element of its next hit (an Alchemist's turns over hit by hit)
+    Element elems[kMaxElements] = {};   // every element it carries; elems[0] is its own
+    int elemN = 0;
+    int elemTurn = 0;                   // Alchemist: whose turn it is
+    bool hasElement(Element e) const {
+        for (int i = 0; i < elemN; ++i)
+            if (elems[i] == e) return true;
+        return false;
+    }
     BallMods mods;          // this ball's items + modifiers
-    float cooldown = 0.f;   // water drip / stone drop / electric zap timer
+    float cooldown = 0.f;   // water wake timer
+    float zapT = 0.f;       // electric zap timer
     float squash = 0.f;
     sf::Vector2f squashAxis{1.f, 0.f};
     sf::Color color = theme::ballSlow;
     float ricochetT = 0.f;   // "Ricochet": seconds of post-wall-bounce damage bonus left
+    float catchBonus = 0.f;  // catch reward: the next hit x (1 + this) (0 = unarmed)...
+    float catchT = 0.f;      // ...for this many more seconds
+    float sinceThrow = 0.f;  // "Quick Hands" pact: seconds since you last threw it
+    int juggle = 0;          // "Juggler" pact: catches in a row without touching the core
     std::deque<sf::Vector2f> trail;
-    std::deque<sf::Vector2f> waterTrail;   // water ball only: the damaging "worm" wake
+    std::deque<sf::Vector2f> waterTrail;   // (unused since water sends waves - kept for the copies' clears)
     int owner = -1;          // index of the (real) ball this is / was copied from - reactions need two owners
     bool ghost = false;      // "Split shot" / "Mitosis" copy: temporary, fades out
     float ghostLife = 0.f;
@@ -191,7 +217,8 @@ struct Ball {
     int twinIdx = 0;         // which of its parent's twins
     int berserkStacks = 0;   // "Berserk": hits in a row since the last wall
     float stormT = 0.f;      // "Storm": time to the next zap
-    float orbitAng = 0.f;    // "Satellite": angle around the core
+    float orbitAng = 0.f;    // "Satellite": angle around the core...
+    float orbitR = 0.f;      // ...and its current radius (0 = not set yet)
     float age = 0.f;         // seconds since it appeared (spawn pop-in)
     int preyId = -1;         // "Hunter": the enemy it's locked on (Enemy::id)
     bool homing = false;     // "Boomerang": flying home to the core
@@ -199,7 +226,7 @@ struct Ball {
     int gluttonStacks = 0;   // "Glutton": kills this wave
     float tetherT = 0.f;     // "Tether": time to the next damage tick
     float resonanceT = 0.f;  // "Resonance": cooldown
-    float pactCharge = 0.f;  // "Living Core" pact: seconds left overcharged after a core bounce
+    float creedCharge = 0.f;  // "Living Core" creed: seconds left overcharged after a core bounce
     // abilities (sim/WorldAbilities.cpp)
     AbilitySpec abilities[kMaxAbilitySlots];
     float abilityCd[kMaxAbilitySlots] = {};   // seconds until each can fire again
@@ -231,7 +258,12 @@ struct Ball {
 sf::Color ballHue(const Ball& b);
 
 // Grunt = the plain walker. The rest each want a different answer (cfg::enemy).
-enum class EnemyKind { Grunt, Runner, Tank, Splitter, Shard, Shielded };
+// Brute is the miniboss: elite fights bring one (cfg::enemy).
+enum class EnemyKind { Grunt, Runner, Tank, Splitter, Shard, Shielded, Blinker, Mender, Brute, Snare };
+
+// How an enemy walks to the core: straight, zig-zagging across its line, or
+// circling the core as it closes in (World::rollGait).
+enum class Gait { Straight, Weave, Spiral };
 
 const char* enemyName(EnemyKind k);
 const char* enemyDesc(EnemyKind k);
@@ -254,6 +286,9 @@ struct Enemy {
     float frozen = 0.f;     // seconds left frozen in place (from an ice ball)
     float burn = 0.f;       // seconds of burn remaining ("Ember": fire ball DoT)
     float burnDps = 0.f;    // current burn damage/s while it lasts
+    float soak = 0.f;       // seconds left soaked by water (slower, knocked further, frozen longer)
+    int cracks = 0;         // stone cracks: takes more from every hit...
+    float crackT = 0.f;     // ...until this runs out
     float mark = 0.f;       // seconds left marked by a Support ball (takes more damage)
     float brittle = 0.f;    // seconds left brittle (Superconductor reaction): takes more damage
     Element elem = Element::Plain;   // last element a ball left on it, waiting for a reaction
@@ -264,6 +299,13 @@ struct Enemy {
     float stagger = 0.f;    // seconds left staggered by a Guardian (drifts, doesn't advance)
     bool orbiter = false;   // wave-20 shield: orbits the boss instead of seeking the core
     float orbitPhase = 0.f; // its slot angle on the ring
+    float blinkT = 0.f;     // Blinker: seconds to its next jump
+    float blinkFx = 0.f;    // Blinker: 1 right after a jump, fades (the render's flicker)
+    sf::Vector2f blinkFrom; // Blinker: where it jumped from (a fading afterimage)
+    bool snaring = false;   // Snare: it's holding a ball (until it dies)
+    Gait gait = Gait::Straight;
+    float gaitPhase = 0.f;  // Weave: where in its sway it started
+    float gaitSign = 1.f;   // Weave / Spiral: which way it leans
 };
 
 // An electric ball's arc: a brief line from the ball to the enemy it zapped.
@@ -276,12 +318,37 @@ struct Bolt {
     bool beam = false;   // a Railgun beam: straight and thick instead of a jagged arc
 };
 
-// A stone ball's rubble: enemies are pushed out of it and take chip damage.
+// Rubble: enemies are pushed out of it and take chip damage. (Stone used to
+// drop it; unused for now.)
 struct Obstacle {
     sf::Vector2f pos;
     float radius = cfg::element::obstacleRadius;
     float life = cfg::element::obstacleLife;
     float maxLife = cfg::element::obstacleLife;
+};
+
+// A water ball's wave: an arc rolling out from where it was sent, growing
+// wider, shoving and soaking each enemy it crosses once.
+struct Wave {
+    sf::Vector2f origin;
+    float dir = 0.f;        // heading (rad)
+    float r = 0.f;          // how far it has rolled
+    float reach = 300.f;    // ...and how far it goes
+    float push = 0.f;       // knock on each enemy it crosses
+    float hitDmg = 0.f;     // the ball's hit, for reactions
+    int owner = -1;
+    std::vector<int> hit;   // Enemy::ids it already crossed
+};
+
+// A patch of ground left by a stone reaction: lava burns, mud slows, toxic
+// dust poisons whatever stands in it.
+enum class PoolKind { Lava, Mud, Toxic };
+struct Pool {
+    sf::Vector2f pos;
+    float radius = 60.f;
+    float life = 1.f, maxLife = 1.f;
+    float power = 0.f;      // lava dps / toxic dps
+    PoolKind kind = PoolKind::Lava;
 };
 
 // "Black hole": left where a kill landed. Pulls enemies in, then bursts with
@@ -313,12 +380,22 @@ struct Core {
     float hitFlash = 0.f;
 };
 
-// Two bosses share this struct:
-//  - Charger  (wave 10): walks dead straight at the core from the right.
-//  - Orbital  (wave 20): spirals in toward the core behind a spinning ring of
-//    shield enemies; smaller and lower HP, the ring is the real problem.
-// Either one touching the core loses the run outright.
-enum class BossKind { Charger, Orbital };
+// One boss per act, all sharing this struct:
+//  - Charger  (act 1): walks dead straight at the core from the right.
+//  - Hive     (act 2): drifts in on a sway, bursting fans of runners.
+//  - Warden   (act 3): a turning shield arc blocks balls on one side; walks, plants, walks.
+//  - Dasher   (act 4): stalks, telegraphs a line, dashes; every hit knocks it back.
+//  - Orbital  (act 5): spirals in toward the core behind a spinning ring of
+//    shield enemies; the ring is the real problem.
+// Any of them touching the core loses the run outright.
+enum class BossKind { Charger, Hive, Warden, Dasher, Orbital };
+const char* bossName(BossKind k);
+const char* bossDesc(BossKind k);
+inline BossKind bossOfAct(int act) {   // act 1..cfg::run::acts
+    static const BossKind kinds[] = {BossKind::Charger, BossKind::Hive, BossKind::Warden, BossKind::Dasher,
+                                     BossKind::Orbital};
+    return kinds[std::clamp(act, 1, 5) - 1];
+}
 
 struct Boss {
     sf::Vector2f pos;
@@ -335,6 +412,14 @@ struct Boss {
     float shieldTimer = 0.f;  // Orbital: countdown to the next orbiter refill
     float intro = 0.f;        // Orbital: >0 while sliding in from the edge (invulnerable, no spiral yet)
     float hitCd = 0.f;        // i-frames after a ball lands, so it can't be melted in place
+    float timer = 0.f;        // Hive: to the next burst; Warden / Dasher: to the next phase
+    int phase = 0;            // Warden: 0 walk / 1 plant; Dasher: 0 stalk / 1 aim / 2 dash
+    float shieldAng = 0.f;    // Warden: centre of its shield arc
+    sf::Vector2f dashDir{-1.f, 0.f};   // Dasher: the line it's aiming / dashing along
+    bool enraged = false;     // below cfg::boss::enrageAt: faster everything
+    int summons = 0;          // Brutes it has called in (cfg::boss::summonAt)
+    float shockR = 0.f;       // Charger: its shockwave's reach (world units; the render's warning ring)
+    float pace() const { return enraged ? cfg::boss::enragePace : 1.f; }
 };
 
 struct Pickup {
@@ -381,7 +466,11 @@ struct FrameEvents {
     PowerUp pickupKind = PowerUp::Points2x;
     bool coreHit = false;
     bool shieldBlock = false;             // a hit bounced off a Shielded enemy's shield
-    bool autoFlung = false;               // the "Clockwork" pact launched a ball
+    bool bossEnraged = false;             // the boss just entered its second phase
+    bool bossSummon = false;              // the boss just called in a Brute
+    bool bossShock = false;               // the Charger's shockwave went off
+    bool launched = false;                // the fight-opening whirl just let the balls fly
+    bool autoFlung = false;               // the "Clockwork" creed launched a ball
     int midasGold = 0;                    // extra gold from kills by Midas balls
     bool phoenix = false;                 // the Phoenix relic just saved the core
     bool bossHit = false;                 // a ball landed on the miniboss this step
@@ -392,6 +481,7 @@ struct FrameEvents {
 // Per-step tuning handed to the simulation: the wave number plus whatever
 // between-wave upgrades the player has picked this run.
 struct WorldParams {
+    bool hard = false;            // hard mode (cfg::hard)
     float damageMult = 1.f;       // Heft (web): every ball
     float cruiseMult = 1.f;
     int wave = 1;
@@ -413,7 +503,6 @@ struct WorldParams {
     // Meta web (Fase A).
     int  aegisHits = 0;           // Aegis: core ignores this many hits at the start of each wave
     float coreRegenPerSec = 0.f;  // Regen: core heals this fast during a wave
-    bool stockpile = false;       // Stockpile: a random power-up refills a reserve slot (key Q)
     bool magnetPickups = false;   // Magnet: power-up orbs drift toward the nearest ball
     int  afterglowLevel = 0;      // Afterglow: continuous buffs fade out instead of cutting
     float chargedFrac = 0.f;      // Charged: power-ups start with + this fraction of duration
@@ -423,7 +512,8 @@ struct WorldParams {
     float pickupDurMult = 1.f;    // scales how long a power-up lasts
     float markMul = 1.35f;        // any hit vs a Support-marked enemy x this (cfg::role::markDamageMul + web "Rally")
 
-    PactRules pact;               // the run's pacts (sim/PactRules.hpp); defaults = none
+    CreedRules creed;               // the run's creeds (sim/CreedRules.hpp); defaults = none
+    PactRules pact;                 // the run's pacts (sim/PactRules.hpp); defaults = none
 };
 
 }  // namespace sb

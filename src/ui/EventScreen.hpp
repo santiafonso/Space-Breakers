@@ -2,14 +2,13 @@
 
 #include <SFML/Graphics.hpp>
 
-#include "progression/Pacts.hpp"
 #include "ui/Screen.hpp"
 
 namespace sb {
 
-// The Altar (2026-09-28): three pacts, each a gift with a price. Take one or
-// walk away with nothing.
-class PactScreen : public Screen {
+// A "?" stop's event (2026-10-01): a couple of deals for gold (rule cards, in
+// the "?" colour). Take one or walk away. App::openEvent / takeEventDeal.
+class EventScreen : public Screen {
 public:
     void handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) override;
     void update(App& app, float dt, sf::Vector2f mouse) override;

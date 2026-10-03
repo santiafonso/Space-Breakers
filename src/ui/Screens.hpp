@@ -26,12 +26,13 @@ private:
     Menu menu_;
     MenuBackdrop backdrop_;   // balls drifting behind the menu
     float resetArm_ = 0.f;   // >0 while "Reset progress" waits for a confirming click
+    bool hasRun_ = false;    // a saved run: "Continue run" heads the list
 };
 
 // The game menu: a radial skill web. Spend cores (and prisms on a few key
 // nodes) to unlock permanent buffs, then start a run. The centre node is
 // "Calling"; around it one route per class radiates outward, each class near
-// the end of its own route (plus the Pacts) - and each node stays locked until
+// the end of its own route (plus the Creeds) - and each node stays locked until
 // the node that gates it toward the centre has a level. Routes are tinted by
 // their class; hovering one in the legend lights it alone.
 class LoadoutScreen : public Screen {
@@ -51,11 +52,18 @@ private:
     sf::Vector2f webCentre(App& app) const;             // the root node, after panning
     void zoomAt(App& app, sf::Vector2f mouse, float factor);
     int legendAt(App& app, sf::Vector2f mouse) const;   // branch legend row under the pointer, -1 none
+    void flyTo(App& app, int node, float zoom);          // ease the camera onto a node
+    sf::Vector2f panFor(App& app, int node, float zoom) const;   // the pan that centres `node`
+    void clampPan(App& app);
+    void drawSky(App& app, sf::RenderWindow& w, float alpha) const;   // drifting orbs + orbiting planets
 
     Menu menu_;
     // Pan / zoom: the web grows past one screen, so it can be dragged around
     // and zoomed with the wheel. Labels keep their size; only the layout scales.
     float zoom_ = 1.f;
+    float zoomT_ = 1.f;                   // the zoom it eases toward...
+    sf::Vector2f zoomAnchor_{0.f, 0.f};   // ...keeping this screen point still
+    int flyNode_ = -1;                    // >= 0: the camera glides to centre this node
     sf::Vector2f pan_{0.f, 0.f};
     bool panning_ = false;
     sf::Vector2f panStart_{0.f, 0.f};
@@ -67,18 +75,25 @@ private:
     bool keyNav_ = false;                 // arrows in use - light selNode_ until the mouse moves
     sf::Vector2f lastMouse_{-1.f, -1.f};
     float glow_[MetaUnlockCount] = {};    // 0 = idle, 1 = lit; only the active node rises
+    MenuBackdrop backdrop_;               // the start screen's drifting balls, behind the web
+    float skyT_ = 0.f;                    // drives the planets' orbits
 };
 
-// The peek itself: every ball's loadout, the relics and the pacts, dimming
+// The peek itself: every ball's loadout, the relics and the creeds, dimming
 // whatever is underneath. `paused` adds the fight's "paused" note.
 void drawLoadoutOverlay(App& app, sf::RenderWindow& w, bool paused, const TabPeek& peek);
 // Mouse input while the peek is open: press on a filled slot picks it up,
 // letting go on another slot / ball moves or swaps it (App::moveSlot).
 // True if it used the event.
 bool loadoutDragEvent(App& app, TabPeek& peek, const sf::Event& e);
-sf::Vector2f loadoutPanelCenter(App& app, int i);   // ball i's panel in the peek, UI units
+// The peek scales up to fill the screen when there are few balls: it lays out
+// in UI units / loadoutZoom(app). Ball i's panel centre is in those units.
+float loadoutZoom(App& app);
+sf::Vector2f loadoutPanelCenter(App& app, int i);
 // A small [tab] key cap with "loadout" beside it; `topLeft` in UI units.
 void drawTabHint(App& app, sf::RenderWindow& w, sf::Vector2f topLeft);
+// The fight's bottom-left ball tally: [TAB] cap on top, a chip per ball below.
+sf::FloatRect ballTallyRect(App& app, int balls);
 
 // Combat. One or more balls bounce freely; you fling them into the enemies.
 // The fight holds still while the TAB peek is open.
@@ -102,7 +117,7 @@ private:
 
     WorldRenderer renderer_;
     bool dragging_ = false;
-    TabPeek peek_;             // TAB: the balls' loadouts + relics + pacts
+    TabPeek peek_;             // TAB: the balls' loadouts + relics + creeds
     sf::Vector2f worldMouse_;  // pointer in arena units (enemy hover help)
     sf::Vector2f anchor_;      // slingshot: where the held ball sits
     bool aimCommitted_ = false; // the pointer moved off the ball: aiming by hand
@@ -115,7 +130,7 @@ private:
     float bannerT_ = 999.f;    // time since the banner started (large = inactive)
 };
 
-// Overlay after an Elite fight or on an Upgrade node: pick 1 of 4 (or skip to
+// Overlay after a fight or on an Upgrade node: pick 1 of 3 (or skip to
 // repair the core). Picks that go on a ball open the Equip picker.
 class ChoiceScreen : public Screen {
 public:
@@ -127,12 +142,14 @@ public:
 private:
     int cardAt(App& app, sf::Vector2f mouse) const;  // 0..3, -1 none
     sf::FloatRect healRect(sf::Vector2f size) const;  // "repair core" button, when the core isn't full
-    sf::FloatRect rerollRect(sf::Vector2f size, int i) const;  // "reroll" strip under card i
+    sf::FloatRect skipRect(App& app) const;           // "skip": take nothing (beside the repair button)
+    sf::FloatRect rerollRect(sf::Vector2f size, int i, int n) const;  // "reroll" strip under card i of n
     bool coreHurt(App& app) const;
 
     float hover_[4] = {};
     float rerollHover_[4] = {};
     float healHover_ = 0.f;
+    float skipHover_ = 0.f;
     sf::Vector2f mouse_;
 };
 
@@ -164,6 +181,7 @@ public:
 
 private:
     void targetAt(App& app, sf::Vector2f mouse, int& ball, int& slot) const;
+    static sf::FloatRect backRect(sf::Vector2f s);   // "Back": undo the pick's target step (bottom centre)
     int hoverBall_ = -1;
     int hoverSlot_ = -1;
     sf::Vector2f mouse_;
@@ -181,11 +199,32 @@ public:
 private:
     sf::Vector2f nodePos(App& app, int node) const;
     int nodeAt(App& app, sf::Vector2f mouse, bool openOnly = true) const;
+    float scrollMax(App& app) const;
+    float scrollFor(App& app, int row) const;   // the scroll that puts `row` in view, a bit below centre
     int hover_ = -1;          // open node under the pointer
+    float scroll_ = 0.f;      // how far the map is scrolled up (px): 0 = row 1 at the bottom
+    float scrollTarget_ = 0.f;
+    bool scrollInit_ = false;
+    bool dragging_ = false;   // the map held with the mouse: it follows the pointer
+    float dragY0_ = 0.f, dragScroll0_ = 0.f;
     int info_ = -1;           // any node under the pointer (for the tooltip)
     float clock_ = 0.f;
     sf::Vector2f mouse_;
     TabPeek peek_;            // TAB: the same loadout overlay as in a fight
+    // Choosing the way: the link to the node under the pointer lights up and
+    // flows (hoverGlow_ eases in); a click sends a spark along it before the
+    // stop opens (travelTo_ / travelT_).
+    int glowNode_ = -1;
+    float hoverGlow_ = 0.f;
+    int travelTo_ = -1;
+    float travelT_ = 0.f;
+    // The hidden Altar path: revealT_ >= 0 while it draws itself in.
+    int altarNode_ = -1;
+    float revealT_ = -1.f;
+    sf::Vector2f travelFrom(App& app) const;   // where a trip starts: your node, or below row 1
+    bool ready() const;                        // the opening has played out: nodes can be picked
+    MenuBackdrop backdrop_;                    // drifting balls + orbiting planets behind the map
+    bool backdropInit_ = false;
 };
 
 // The F1 dev panel (SB_DEV): grant any pick to a chosen ball, spawn enemy
@@ -209,7 +248,8 @@ private:
     };
     void rebuild(App& app);
     std::vector<Button> buttons_;
-    std::vector<std::pair<sf::Vector2f, std::string>> heads_;   // section titles, laid out with the buttons
+    struct Head { sf::Vector2f pos; std::string text; sf::Color color; };
+    std::vector<Head> heads_;   // section titles, laid out with the buttons
     int hover_ = -1;
     sf::Vector2f mouse_;
 };
@@ -225,7 +265,7 @@ public:
 private:
     int cardCount(App& app) const;                 // offers + the mystery box while it's there
     sf::FloatRect offerRect(App& app, int i) const;
-    sf::FloatRect buttonRect(App& app, int b) const;   // 0 repair, 1 forge, 2 sell, 3 reroll, 4 leave
+    sf::FloatRect buttonRect(App& app, int b) const;   // 0 sell, 1 reroll, 2 leave; empty = not offered
     int hover_ = -1;          // card index, 100 + b = a button
     float clock_ = 0.f;
     sf::Vector2f mouse_;
@@ -258,7 +298,7 @@ public:
     void draw(App& app, sf::RenderWindow& w) override;
 };
 
-// Shown when the miniboss dies, and again when wave 20 is cleared. "Continue"
+// Shown when an act's boss dies, and again when the last one (wave 50) does. "Continue"
 // only appears once a run has been won before (App::bossWinCanContinue) and
 // resumes the run at wave 11; otherwise the only option is "Back to menu".
 // Opaque so the camera / mouse mapping is the plain UI one, not the wide framing.

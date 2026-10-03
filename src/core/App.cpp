@@ -15,6 +15,8 @@
 #include "platform/Paths.hpp"
 #include "platform/Save.hpp"
 #include "render/Draw.hpp"
+#include "ui/CreedScreen.hpp"
+#include "ui/EventScreen.hpp"
 #include "ui/PactScreen.hpp"
 #include "ui/Screens.hpp"
 #include "ui/SoundScreen.hpp"
@@ -65,7 +67,7 @@ std::string findAsset(const std::string& rel) {
 
 }  // namespace
 
-App::App() : window_(kLogical()), world_(kLogical()) {
+App::App() : window_(kLogical()), world_({kLogical().x, kLogical().y - 2.f * cfg::app::arenaBand}) {
     savePath_ = (exeDir() / "saves" / "save.txt").string();
 
     // Lato Bold for the UI, Lato Black for titles (Widgets picks it for big
@@ -83,7 +85,16 @@ App::App() : window_(kLogical()), world_(kLogical()) {
         setTitleFont(&titleFont_);
     if (!audio_.init())
         std::cerr << "Space-Breakers: audio unavailable, continuing without sound\n";
-    audio_.loadMusic(findAsset("music/menu.ogg"), findAsset("music/game.ogg"));
+    // Gains bring every loop to about -17 dBFS RMS; the songs that fade out at
+    // the end loop back before the fade over a 4 s seam. Both measured per
+    // file - re-measure when a file is swapped. The rest are cut to loop.
+    audio_.addMusic(Audio::Track::Menu, findAsset("music/menu.ogg"), 1.05f, {0.2f, 376.f, 4.f});
+    audio_.addMusic(Audio::Track::Run, findAsset("music/map.ogg"), 1.17f, {0.f, 112.5f, 4.f});
+    // Out for now (the user is trying the others): Pinball Royale.
+    // audio_.addMusic(Audio::Track::Run, findAsset("music/fight1.ogg"), 1.08f, {0.3f, 242.f, 4.f});
+    audio_.addMusic(Audio::Track::Run, findAsset("music/fight2.mp3"), 0.76f);
+    audio_.addMusic(Audio::Track::Run, findAsset("music/fight3.mp3"), 0.67f);
+    audio_.addMusic(Audio::Track::Boss, findAsset("music/boss.mp3"), 0.65f);
 
     loadGame(savePath_, data_);
     audio_.setEnabled(data_.meta.soundOn);
@@ -105,6 +116,7 @@ WorldParams App::params() const {
     const RunMods& m = data_.run.mods;
     const int* u = data_.meta.unlock;
     WorldParams p;
+    p.hard = data_.run.hard;
     p.damageMult = 1.f + cfg::combat::heftPerLevel * static_cast<float>(u[MetaHeft]);
     p.wave = std::max(1, data_.run.wave);
     p.ballRadiusMult = 1.f + cfg::combat::massPerLevel * static_cast<float>(u[MetaMass]);
@@ -125,7 +137,6 @@ WorldParams App::params() const {
     p.emberLevel = u[MetaEmber];
     p.aegisHits = u[MetaAegis];
     p.coreRegenPerSec = cfg::core::regenPerLevel * static_cast<float>(u[MetaRegen]);
-    p.stockpile = u[MetaStockpile] > 0;
     p.magnetPickups = u[MetaMagnet] > 0;
     p.afterglowLevel = u[MetaAfterglow];
     p.chargedFrac = cfg::powerup::chargedFracPerLevel * static_cast<float>(u[MetaCharged]);
@@ -145,7 +156,8 @@ WorldParams App::params() const {
         const int lvl = u[kElemNode[i]];
         p.elemMult[i + 1] = 1.f + cfg::element::powerPerLevel * static_cast<float>(std::max(0, lvl - 1));
     }
-    foldPacts(p);   // Fase O: the run's pacts
+    foldCreeds(p);   // Fase O: the run's creeds
+    foldPacts(p);    // the run's pacts
     return p;
 }
 
@@ -161,8 +173,9 @@ BallSpec App::ballSpec(const BallLoadout& L) const {
     s.roles = L.roleMask();   // from its item tags: 2 = the class, 4 = ascended
     s.primary = tagRole(L.leadTag());
     if (const ItemTag asc = L.ascended(); asc != ItemTag::None) s.ascended = roleBit(tagRole(asc));
-    if (hasPact(PactId::Duet)) s.ascended = s.roles;   // "Duet": every class it has is ascended
-    s.element = L.element();
+    if (hasCreed(CreedId::Duet)) s.ascended = s.roles;   // "Duet": every class it has is ascended
+    s.elemN = L.elements(s.elems);   // an Alchemist carries more than one
+    s.element = s.elemN > 0 ? s.elems[0] : Element::Plain;
     BallMods& m = s.mods;
     // The type slot: the element's own level makes it stronger.
     if (L.type >= 0)
@@ -178,10 +191,22 @@ BallSpec App::ballSpec(const BallLoadout& L) const {
     m.cruiseMult = 1.f + C::swiftPerStack * stacks(UpgradeKind::Swift);
     m.maxSpeedMult = 1.f + C::swiftTopPerStack * stacks(UpgradeKind::Swift);
     m.flingDecay = std::pow(C::swiftFlingPerStack, stacks(UpgradeKind::Swift));
+    if (const float n = stacks(UpgradeKind::Ballast); n > 0.f) {   // the 2026-09-28 modifiers
+        m.cruiseMult *= std::max(C::ballastMinCruise, std::pow(C::ballastCruise, n));
+        m.damageMult *= 1.f + C::ballastDamage * n;
+    }
+    m.critChance += C::keenCrit * stacks(UpgradeKind::Keen);
+    m.reach = 1.f + C::reachPerStack * stacks(UpgradeKind::Reach);
+    m.spin = C::spinChance * stacks(UpgradeKind::Spin);
+    m.leech = C::leechHeal * stacks(UpgradeKind::Leech);
+    m.cls.mage.focus += C::quickMindPerStack * stacks(UpgradeKind::QuickMind);
+    m.heavyThrow = C::heavyThrowPerStack * stacks(UpgradeKind::HeavyThrow);
+    m.bouncy = 1.f + C::bouncyPerStack * stacks(UpgradeKind::Bouncy);
+    m.elemMult *= 1.f + C::temperedPerStack * stacks(UpgradeKind::Tempered);
 
     for (int i = 0; i < kBallSlots; ++i) {
         if (L.gear[i] < 0) continue;
-        const int lvl = std::clamp(L.gearLvl[i], 1, kMaxItemLevel);
+        const int lvl = gearPower(L.gearLvl[i]);       // Lv1-3 play as the old 1 / 3 / 5
         const float n = static_cast<float>(lvl - 1);   // levels past the first
         m.damageMult *= 1.f + C::itemLevelDamage * n;
         switch (static_cast<UpgradeKind>(L.gear[i])) {
@@ -194,7 +219,7 @@ BallSpec App::ballSpec(const BallLoadout& L) const {
                 m.cleaveExec = C::cleaveExecPerLevel * n;
                 break;
             case UpgradeKind::Crit:
-                m.critChance = C::critChance + C::critChancePerLevel * n;
+                m.critChance += C::critChance + C::critChancePerLevel * n;   // += : "Keen" stacks on top
                 m.critMult = C::critMult + C::critMultPerLevel * n;
                 break;
             case UpgradeKind::Executioner:
@@ -322,6 +347,20 @@ BallSpec App::ballSpec(const BallLoadout& L) const {
 std::vector<BallSpec> App::ballSpecs() const {
     std::vector<BallSpec> v;
     for (const BallLoadout& b : data_.run.balls) v.push_back(ballSpec(b));
+    if (hasPact(PactId::GlassEdge))   // "Glass Edge": every ball crits more
+        for (BallSpec& s : v) s.mods.critChance += cfg::pact::glassCrit;
+    if (hasPact(PactId::Colossus)) {   // "Colossus": one giant, the rest carry less
+        const int big = colossusBall();
+        for (int i = 0; i < static_cast<int>(v.size()); ++i) {
+            BallMods& m = v[static_cast<std::size_t>(i)].mods;
+            if (i == big) {
+                m.damageMult *= cfg::pact::colossusMul;
+                m.radiusMult *= cfg::pact::colossusMul;
+            } else {
+                m.damageMult *= cfg::pact::colossusOthers;
+            }
+        }
+    }
     return v;
 }
 
@@ -333,7 +372,7 @@ void App::syncWorldBalls() {
 
 void App::rememberClasses() {
     knownClasses_.clear();
-    for (const BallLoadout& L : data_.run.balls) knownClasses_.push_back({L.roleMask(), L.ascended()});
+    for (const BallLoadout& L : data_.run.balls) knownClasses_.push_back({L.roleMask(), L.ascended(), L.element()});
 }
 
 // "FIRE BALL > STRIKER", "STRIKER > STRIKER + SUPPORT", "ASCENDED: MEGA
@@ -351,6 +390,11 @@ void App::announceClassGains() {
         const ItemTag asc = L.ascended();
         const RoleMask gained = now & ~was.roles;
         const bool ascends = asc != ItemTag::None && asc != was.ascended;
+        // A new element: a flash of its colour, and rings off the ball when the fight runs.
+        if (L.element() != Element::Plain && L.element() != was.element) {
+            effects_.flash(elementColor(L.element()), 0.35f);
+            world_.pulseElement(static_cast<int>(i));
+        }
         if (!gained && !ascends) continue;
 
         std::string caption = "BALL " + std::to_string(i + 1);
@@ -414,7 +458,7 @@ void App::grantMageMissiles() {
     }
 }
 
-int App::startBallCount() const { return cfg::run::startBalls; }   // one ball: more come from picks and pacts
+int App::startBallCount() const { return cfg::run::startBalls; }   // one ball: more come from picks and creeds
 
 float App::startCoreHp() const {
     return cfg::core::baseHp +
@@ -451,9 +495,11 @@ std::unique_ptr<Screen> App::makeScreen(ScreenId id) {
         case ScreenId::Shop:    return std::make_unique<ShopScreen>();
         case ScreenId::Equip:   return std::make_unique<EquipScreen>();
         case ScreenId::Dev:     return std::make_unique<DevScreen>();
-        case ScreenId::Pact:    return std::make_unique<PactScreen>();
+        case ScreenId::Creed:    return std::make_unique<CreedScreen>();
         case ScreenId::Sound:   return std::make_unique<SoundScreen>();
         case ScreenId::AbilityPick: return std::make_unique<AbilityPickScreen>();
+        case ScreenId::Altar:   return std::make_unique<PactScreen>();
+        case ScreenId::Event:   return std::make_unique<EventScreen>();
     }
     return std::make_unique<MenuScreen>();
 }
@@ -468,7 +514,8 @@ void App::replaceStack(ScreenId id) {
 
 void App::push(ScreenId id) {
     switch (id) {   // a soft cue as it opens: cards being dealt, or a plain panel
-        case ScreenId::Choice: case ScreenId::Shop: case ScreenId::Pact: case ScreenId::AbilityPick:
+        case ScreenId::Choice: case ScreenId::Shop: case ScreenId::Creed: case ScreenId::AbilityPick: case ScreenId::Altar:
+        case ScreenId::Event:
             audio_.cardsDealt();
             break;
         case ScreenId::Play: case ScreenId::Dev: break;
@@ -481,10 +528,16 @@ void App::push(ScreenId id) {
 }
 
 void App::back() {
+    // Closing the pause menu (or what it opened, or the dev panel) just
+    // uncovers the screen underneath: no fade, no replayed intro - a card
+    // hand mustn't be dealt again every time you peek at the options.
+    const bool overlay = onPauseMenus() ||   // (and backing out of the ball / slot picker)
+                         (!stack_.empty() && dynamic_cast<const EquipScreen*>(stack_.back().get()));
     if (stack_.size() > 1) {
         stack_.pop_back();
         audio_.uiClose();
     }
+    if (overlay) return;
     fade_ = 1.f;
     if (!stack_.empty()) stack_.back()->beginIntro();   // replay the intro on the way back
 }
@@ -497,10 +550,57 @@ bool App::simulating() const {
 
 void App::openLoadout() { push(ScreenId::Loadout); }
 
+std::string App::runPath() const {
+    return (std::filesystem::path(savePath_).parent_path() / "run.txt").string();
+}
+
+bool App::hasSavedRun() const {
+    std::error_code ec;
+    return std::filesystem::exists(runPath(), ec);
+}
+
+void App::saveRunNow() {
+    if (!data_.run.active || runBanked_) return;
+    data_.run.coreHp = world_.core().hp;
+    data_.run.coreMaxHp = world_.core().maxHp;
+    saveRun(runPath(), data_.run);
+}
+
+// "Continue run": the saved run, back on its map as it was when the map last
+// opened (a fight you quit in the middle of is still ahead of you).
+bool App::resumeRun() {
+    RunState loaded;
+    if (!loadRun(runPath(), loaded)) {
+        clearRun(runPath());
+        return false;
+    }
+    data_.run = loaded;
+    RunState& r = data_.run;
+    novaCd_ = 0.f;
+    repulseCd_ = 0.f;
+    markCd_ = 0.f;
+    bulletGauge_ = 1.f;
+    bulletOn_ = false;
+    introStep_ = -1;
+    runBanked_ = false;
+    continueUnlocked_ = data_.meta.stats.wins > 0 || r.map.act > 1;
+    world_.startRun(params(), ballSpecs(), r.coreHp, r.coreMaxHp);
+    rememberClasses();   // its classes are old news: no gain banners
+    world_.setPhoenix((r.mods.phoenix && !r.phoenixUsedAct ? 1 : 0) + r.lastStandLeft);
+    effects_.clear();
+    hitstop_ = 0.f;
+    camKick_ = 0.f;
+    replaceStack(ScreenId::Play);
+    openMap();
+    return true;
+}
+
 void App::newRun() {
+    clearRun(runPath());   // a fresh run replaces any saved one
     RunState& r = data_.run;
     r = RunState{};
     r.active = true;
+    r.hard = data_.meta.hardMode;
     r.wave = 0;
     r.coreMaxHp = startCoreHp();
     r.coreHp = r.coreMaxHp;
@@ -514,6 +614,10 @@ void App::newRun() {
     r.gold = cfg::meta::treasuryGoldPerLevel * data_.meta.unlock[MetaTreasury];   // "Treasury"
     r.lastStandLeft = data_.meta.unlock[MetaLastStand] > 0 ? 1 : 0;               // "Last stand"
     novaCd_ = 0.f;
+    repulseCd_ = 0.f;
+    markCd_ = 0.f;
+    bulletGauge_ = 1.f;
+    bulletOn_ = false;
     introStep_ = -1;
 
     runBanked_ = false;
@@ -522,7 +626,7 @@ void App::newRun() {
     int startWave = 1;
     if (devMode()) {
         const int nb = envInt("SB_BALLS", 0);
-        if (nb > 0) r.balls = startLoadout(std::min(nb, cfg::ball::maxBalls));
+        if (nb > 0) r.balls = startLoadout(std::min(nb, cfg::ball::baseBalls));
         startWave = std::clamp(envInt("SB_WAVE", 1), 1, cfg::run::finalWave);
     }
 
@@ -558,15 +662,15 @@ void App::newRun() {
     }
 
     // The act's path map. A dev SB_WAVE start drops you at the row before it.
-    const int act = (startWave - 1) / cfg::run::bossWave + 1;
+    const int act = cfg::run::actOfWave(startWave);
     r.map = generateMap(rng_, act);
     r.mapNode = -1;
     r.mapRow = 0;   // stand just before the first row that plays as startWave
-    while (r.mapRow <= cfg::map::rows && mapRowWave(act, r.mapRow + 1) < startWave) ++r.mapRow;
+    while (r.mapRow <= mapRows(act) && mapRowWave(act, r.mapRow + 1) < startWave) ++r.mapRow;
     r.wave = startWave - 1;
     replaceStack(ScreenId::Play);
     introStep_ = 0;
-    advanceRunIntro();   // Covenant pact, Quartermaster pick, then the map
+    advanceRunIntro();   // Covenant creed, Quartermaster pick, then the map
     save();
 }
 
@@ -574,20 +678,18 @@ void App::startWaveAt(int wave, bool elite) {
     data_.run.wave = wave;
     data_.run.eliteWave = elite;
     waveIntro_ = cfg::app::waveIntroTime;   // ease the sim in instead of snapping
-    if (!hasPact(PactId::Fortress))   // "Fortress" pact: no free healing before a fight
+    if (!hasCreed(CreedId::Fortress) && !data_.run.hard)   // "Fortress" creed / hard mode: no free healing before a fight
         world_.repairCore(cfg::core::waveHeal +
                           cfg::core::mendPerLevel * static_cast<float>(data_.meta.unlock[MetaMend]));
     if (const int bastion = data_.meta.unlock[MetaBastion]; bastion > 0)   // "Bastion": max HP grows each wave
         world_.addCoreMaxHp(cfg::core::bastionPerWavePerLevel * static_cast<float>(bastion));
     const int w = data_.run.wave;
-    if (w == cfg::run::bossWave || w == cfg::run::finalWave) audio_.bossAppear();
+    if (cfg::run::isBossWave(w)) audio_.bossAppear();
     else audio_.waveStart();
-    if (w == cfg::run::bossWave)
-        world_.startBossWave(params());              // wave 10: Charger miniboss
-    else if (w == cfg::run::finalWave)
-        world_.startFinalBossWave(params());         // wave 20: Orbital boss + shield ring
+    if (cfg::run::isBossWave(w))
+        world_.startBossWave(w, params());           // the act's boss (Charger ... Orbital)
     else if (w > cfg::run::bossWave)
-        world_.startPostBossWave(w, params(), elite);   // waves 11..19: wide arena, core slides to centre
+        world_.startPostBossWave(w, params(), elite);   // acts 2-5: wide arena, core slides to centre
     else
         world_.startWave(w, params(), elite);
     data_.meta.stats.bestWave =
@@ -598,7 +700,7 @@ UpgradeCtx App::buildUpgradeCtx() const {
     const RunState& r = data_.run;
     UpgradeCtx c;
     c.balls = &r.balls;
-    c.maxBalls = hasPact(PactId::Duet) ? cfg::pact::duetBalls : cfg::ball::maxBalls;   // "Duet": two, ever
+    c.maxBalls = ballCap();
     static const int kElemNode[kElementItemCount] = {MetaFireItem, MetaVenom, MetaTide,
                                                      MetaFrost, MetaQuarry, MetaArc};
     for (int i = 0; i < kElementItemCount; ++i)
@@ -635,12 +737,12 @@ UpgradeCtx App::buildUpgradeCtx() const {
 int App::luck() const {
     int l = cfg::luck::luckyStarPerLevel * data_.meta.unlock[MetaLuckyStar];
     if (data_.run.mods.luckyClover) l += cfg::luck::cloverPoints;
-    if (hasPact(PactId::LoadedDice)) l += cfg::luck::dicePoints;
+    if (hasCreed(CreedId::LoadedDice)) l += cfg::luck::dicePoints;
     // ---- Jester: every "Lucky charm" on every ball adds its points.
     for (const BallLoadout& b : data_.run.balls)
         for (int i = 0; i < kBallSlots; ++i)
             if (b.gear[i] == static_cast<int>(UpgradeKind::LuckyCharm))
-                l += cfg::jester::charmPoints(std::clamp(b.gearLvl[i], 1, kMaxItemLevel));
+                l += cfg::jester::charmPoints(gearPower(b.gearLvl[i]));
     // web "Fool's luck": some luck always, more for every Jester ball
     if (const int fool = data_.meta.unlock[MetaFoolsLuck]; fool > 0) {
         l += cfg::meta::foolsLuckPerLevel * fool;
@@ -655,6 +757,7 @@ UpgradeKind App::rollPick(RollSource src, const std::vector<UpgradeKind>& exclud
     const UpgradeCtx c = buildUpgradeCtx();
     const int* base = src == RollSource::Elite ? cfg::tier::weightsElite
                     : src == RollSource::Boss  ? cfg::tier::weightsBoss
+                    : src == RollSource::Shop  ? cfg::tier::weightsShop
                                                : cfg::tier::weightsNormal;
     float w[kTierCount];
     for (int t = 0; t < kTierCount; ++t) w[t] = static_cast<float>(base[t]);
@@ -669,11 +772,31 @@ UpgradeKind App::rollPick(RollSource src, const std::vector<UpgradeKind>& exclud
             w[t + 1] += moved;
         }
 
-    // Eligible picks by tier.
+    // What this source may offer (see RollSource).
+    auto allowed = [src](UpgradeKind k) {
+        const UpgradeCat cat = upgradeCat(k);
+        switch (src) {
+            case RollSource::Normal:    return cat != UpgradeCat::Item;
+            case RollSource::PostFight: return cat == UpgradeCat::Modifier;
+            case RollSource::Elite:     return cat == UpgradeCat::Item;
+            case RollSource::Shop:      return cat != UpgradeCat::NewBall;
+            case RollSource::Boss:      return true;
+        }
+        return true;
+    };
+    // Eligible picks by tier. (An Elite with no item that fits anywhere falls
+    // back to anything. Cards already on the table don't count here: a reroll
+    // that runs out of modifiers finds nothing new - it never turns into an item.)
     std::vector<UpgradeKind> byTier[kTierCount];
+    bool anyAllowed = false;
+    for (int i = 0; i < kUpgradeKindCount && !anyAllowed; ++i) {
+        const auto k = static_cast<UpgradeKind>(i);
+        anyAllowed = allowed(k) && upgradeEligible(k, c) && (!filter || filter(k));
+    }
     for (int i = 0; i < kUpgradeKindCount; ++i) {
         const auto k = static_cast<UpgradeKind>(i);
         if (!upgradeEligible(k, c) || (filter && !filter(k))) continue;
+        if (anyAllowed && !allowed(k)) continue;
         if (std::find(exclude.begin(), exclude.end(), k) != exclude.end()) continue;
         byTier[static_cast<int>(upgradeTier(k))].push_back(k);
     }
@@ -698,6 +821,7 @@ UpgradeKind App::rollPick(RollSource src, const std::vector<UpgradeKind>& exclud
                 if (upgradeCat(v[j]) == UpgradeCat::Item)
                     if (const int lore = classLoreNode(itemTag(v[j])); lore >= 0)
                         wk[j] += cfg::meta::lorePerLevel * static_cast<float>(u[lore]);
+                if (upgradeCat(v[j]) == UpgradeCat::NewBall) wk[j] *= cfg::run::newBallCardWeight;   // balls are rare
                 sum += wk[j];
             }
             float pick = rng_.range(0.f, sum);
@@ -714,8 +838,9 @@ UpgradeKind App::rollPick(RollSource src, const std::vector<UpgradeKind>& exclud
 void App::rollChoices(RollSource src) {
     rollSource_ = src;
     choiceTitle_.clear();
+    choiceCount_ = cfg::run::choiceCards;
     std::vector<UpgradeKind> taken;
-    for (int i = 0; i < kChoiceCount; ++i) {
+    for (int i = 0; i < choiceCount_; ++i) {
         choices_[i] = rollPick(src, taken);
         taken.push_back(choices_[i]);
     }
@@ -724,7 +849,7 @@ void App::rollChoices(RollSource src) {
 // "reroll" button under a Choice card: swap that one card for a different
 // eligible item that isn't already on the table. Costs one Foresight charge.
 void App::rerollChoice(int idx) {
-    if (idx < 0 || idx >= kChoiceCount || data_.run.rerollsLeft <= 0) return;
+    if (idx < 0 || idx >= choiceCount_ || data_.run.rerollsLeft <= 0) return;
     const std::vector<UpgradeKind> shown(choices_.begin(), choices_.end());
     const UpgradeKind k = rollPick(rollSource_, shown);   // same odds as the card it replaces
     if (std::find(shown.begin(), shown.end(), k) != shown.end()) return;   // nothing new - keep the charge
@@ -734,9 +859,9 @@ void App::rerollChoice(int idx) {
     effects_.flash(theme::accent, 0.25f);
 }
 
-// Recruit node: a new ball plus one item of three different unlocked classes,
-// so you can push a ball toward the class you want. With the arena full the
-// ball card becomes a random modifier instead.
+// Recruit node: a new ball (the sure way to get one) plus two free picks
+// (no items - those come from elites and shops). With the arena full the ball
+// card becomes a random modifier instead.
 void App::rollRecruitChoices() {
     const UpgradeCtx c = buildUpgradeCtx();
     choices_[0] = upgradeEligible(UpgradeKind::AddBall, c)
@@ -744,31 +869,10 @@ void App::rollRecruitChoices() {
         : static_cast<UpgradeKind>(static_cast<int>(UpgradeKind::HeavyImpact) + rng_.irange(0, kModifierCount - 1));
     rollSource_ = RollSource::Normal;
     choiceTitle_.clear();
-    // One filter per class (rollPick takes a plain function pointer).
-    static bool (*const tagFilters[kClassCount])(UpgradeKind) = {
-        [](UpgradeKind k) { return itemTag(k) == ItemTag::Striker; },
-        [](UpgradeKind k) { return itemTag(k) == ItemTag::Guardian; },
-        [](UpgradeKind k) { return itemTag(k) == ItemTag::Support; },
-        [](UpgradeKind k) { return itemTag(k) == ItemTag::Mage; },
-        [](UpgradeKind k) { return itemTag(k) == ItemTag::Shooter; },
-        [](UpgradeKind k) { return itemTag(k) == ItemTag::Assassin; },
-        [](UpgradeKind k) { return itemTag(k) == ItemTag::Summoner; },
-        [](UpgradeKind k) { return itemTag(k) == ItemTag::Jester; },
-    };
-    std::vector<int> classes;   // unlocked classes that have an item to offer
-    for (int t = 0; t < kClassCount; ++t) {
-        bool any = false;
-        for (int i = 0; i < kUpgradeKindCount && !any; ++i)
-            any = tagFilters[t](static_cast<UpgradeKind>(i)) && upgradeEligible(static_cast<UpgradeKind>(i), c);
-        if (any) classes.push_back(t);
-    }
-    for (int i = static_cast<int>(classes.size()) - 1; i > 0; --i)
-        std::swap(classes[static_cast<std::size_t>(i)], classes[static_cast<std::size_t>(rng_.irange(0, i))]);
-    std::vector<UpgradeKind> taken{choices_[0]};
-    for (int t = 0; t < kChoiceCount - 1; ++t) {
-        // A different class per card while there are enough; any pick after that.
-        const auto filter = t < static_cast<int>(classes.size()) ? tagFilters[classes[static_cast<std::size_t>(t)]] : nullptr;
-        choices_[t + 1] = rollPick(RollSource::Normal, taken, filter);
+    choiceCount_ = cfg::run::choiceCards;
+    std::vector<UpgradeKind> taken{choices_[0], UpgradeKind::AddBall};
+    for (int t = 0; t < choiceCount_ - 1; ++t) {
+        choices_[t + 1] = rollPick(RollSource::Normal, taken);
         taken.push_back(choices_[t + 1]);
     }
 }
@@ -776,6 +880,10 @@ void App::rollRecruitChoices() {
 void App::openChoice(RollSource src) {
     rollChoices(src);
     push(ScreenId::Choice);
+    // An Epic / Legendary on the table: a flash in its colour as the cards land.
+    Tier top = Tier::Common;
+    for (int i = 0; i < choiceCount_; ++i) top = std::max(top, upgradeTier(choices_[static_cast<std::size_t>(i)]));
+    if (top >= Tier::Epic) effects_.flash(tierColor(top), top == Tier::Legendary ? 0.7f : 0.4f);
 }
 
 // First ball the pick fits, preferring one with a free slot (dev tools use
@@ -809,8 +917,9 @@ void App::applyUpgradeKind(UpgradeKind k, int ball, int slot) {
         if (const int mi = modifierIndex(k); mi >= 0) {
             ++b.mods[mi];
         } else if (upgradeLevelsUp(k, b)) {
-            // A duplicate levels up the copy the ball already has.
-            const int lvl = b.levelUp(b.slotOf(k));
+            // A duplicate levels up the copy the ball already has (an
+            // Alchemist's extra elements share the type slot's level).
+            const int lvl = b.levelUp(b.has(k) ? b.slotOf(k) : kSlotType);
             audio_.levelUp(lvl);
             effects_.addLabel(std::string(upgradeInfo(k).title) + "  Lv " + std::to_string(lvl),
                               {size().x * 0.5f, size().y * 0.36f}, tierColor(upgradeTier(k)), 26, 1.3f);
@@ -818,14 +927,25 @@ void App::applyUpgradeKind(UpgradeKind k, int ball, int slot) {
             // Items go in an item slot, an element in the type slot (swapping
             // the old one), an ability in an open ability slot.
             if (!slotAccepts(k, slot, b)) slot = defaultSlot(k, b);
-            b.setSlot(slot, static_cast<int>(k), 1);
+            Element have[kMaxElements];
+            const int nEl = b.elements(have);
+            if (upgradeCat(k) == UpgradeCat::Element && b.type >= 0 && nEl < b.elementCap()) {
+                // An Alchemist with room: a new element joins the ones it has.
+                int kept[kMaxElements - 1] = {-1, -1}, m = 0;   // close any gaps, then append
+                for (int x : b.extraType)
+                    if (x >= 0) kept[m++] = x;
+                std::copy(kept, kept + kMaxElements - 1, b.extraType);
+                b.extraType[nEl - 1] = static_cast<int>(k);   // right after the ones that count
+            } else {
+                b.setSlot(slot, static_cast<int>(k), 1);
+            }
         }
         syncWorldBalls();
         return;
     }
     switch (k) {
         case UpgradeKind::AddBall:
-            if (static_cast<int>(r.balls.size()) >= cfg::ball::maxBalls) return;
+            if (static_cast<int>(r.balls.size()) >= ballCap()) return;
             r.balls.push_back(BallLoadout{});
             if (data_.meta.unlock[MetaMuster] > 0) {   // web "Muster": it joins with a Common item
                 const int item = randomItemFor(r.balls.back(), Tier::Common);
@@ -856,13 +976,40 @@ void App::applyUpgradeKind(UpgradeKind k, int ball, int slot) {
 
 // "Repair core" button on the Item screen: heal to full, but forfeit the pick.
 void App::repairCoreSkipItem() {
-    playerRepair(hasPact(PactId::Fortress) ? world_.core().maxHp * cfg::pact::fortressRestHeal : 1e9f);
+    playerRepair(hasCreed(CreedId::Fortress) ? world_.core().maxHp * cfg::creed::fortressRestHeal : 1e9f);
     if (const int prospector = data_.meta.unlock[MetaProspector]; prospector > 0)
         data_.run.rerollsLeft += prospector;   // "Prospector": skipping refunds reroll charges
     audio_.purchase();
     effects_.flash(theme::core, 0.4f);
     back();
     afterChoice();
+}
+
+// "Skip" on the Choice: nothing taken ("Prospector" still refunds rerolls).
+void App::skipChoice() {
+    if (const int prospector = data_.meta.unlock[MetaProspector]; prospector > 0)
+        data_.run.rerollsLeft += prospector;
+    audio_.letGo();
+    back();
+    afterChoice();
+}
+
+int App::ballCap() const {
+    if (hasCreed(CreedId::Duet)) return cfg::creed::duetBalls;   // "Duet": two, ever
+    return cfg::ball::baseBalls + (data_.run.map.act >= cfg::ball::lateBallsAct ? cfg::ball::lateBalls : 0);
+}
+
+bool App::repulseOpen() const { return data_.run.map.act >= cfg::player::repulseAct; }
+
+// F: the core's shockwave - every enemy near it is shoved away and staggered.
+void App::repulse() {
+    if (!repulseOpen() || !data_.run.active || !simulating() || repulseCd_ > 0.f) return;
+    world_.repulse();
+    repulseCd_ = cfg::player::repulseCooldown;
+    effects_.addBurst(world_.core().pos, cfg::player::repulseRadius * world_.arenaScale(), theme::core);
+    effects_.flash(theme::core, 0.25f);
+    camKick_ = std::max(camKick_, 5.f);
+    audio_.thrown(1.f);
 }
 
 // A repair the player chose (rest, shop, the Choice repair-skip). If it
@@ -874,13 +1021,18 @@ void App::playerRepair(float amount) {
     if (world_.core().hp > before + 0.01f) data_.run.repairedThisAct = true;
 }
 
-// "Stockpile" web node: fire the reserved power-up (Q during play).
-void App::useReserve() {
-    if (!world_.hasReserve()) return;
-    world_.useReserve(params());
-    audio_.pickup();
-    effects_.flash(theme::accent, 0.5f);
+// Q, Volley: like clicking every ball at once, faster - each free ball flies
+// at the enemy nearest to it.
+void App::playerMark() {
+    if (!data_.run.active || !simulating() || markCd_ > 0.f) return;
+    const float speed = lerpf(cfg::app::slingMinSpeed, cfg::app::slingMaxSpeed, cfg::app::quickThrowPower) *
+                        cfg::player::volleySpeedMul * quickThrowMul() * world_.arenaScale() * flingPower();
+    if (!world_.volley(speed)) return;
+    markCd_ = cfg::player::markCooldown;
+    audio_.thrown(1.f);
 }
+
+bool App::bulletOpen() const { return data_.run.map.act >= cfg::player::bulletAct && aimSlows(); }   // "Heavy Arm": none
 
 void App::finishChoice() {
     audio_.cardPick();
@@ -890,7 +1042,7 @@ void App::finishChoice() {
 }
 
 void App::applyUpgrade(int idx) {
-    if (idx < 0 || idx >= kChoiceCount) return;
+    if (idx < 0 || idx >= choiceCount_) return;
     if (upgradeNeedsTarget(choices_[idx])) {
         beginEquip(EquipSource::Choice, choices_[idx], idx);
         return;
@@ -901,11 +1053,16 @@ void App::applyUpgrade(int idx) {
 
 // ---------------------------------------------------------------- path map
 
-void App::openMap() { push(ScreenId::Map); }
+void App::openMap() {
+    revealAltarPath();   // one step from the boss with the streak earned: the hidden Altar
+    push(ScreenId::Map);
+    saveRunNow();        // quitting from here resumes here
+}
 
 bool App::mapNodeOpen(int node) const {
     const RunState& r = data_.run;
     if (node < 0 || node >= static_cast<int>(r.map.nodes.size())) return false;
+    if (devMode()) return node != r.mapNode;   // SB_DEV: step onto any node, to test what's there
     if (r.mapNode < 0) return r.map.nodes[static_cast<std::size_t>(node)].row == r.mapRow + 1;
     const auto& nx = r.map.nodes[static_cast<std::size_t>(r.mapNode)].next;
     return std::find(nx.begin(), nx.end(), node) != nx.end();
@@ -928,17 +1085,13 @@ void App::travelTo(int node) {
         case MapNodeType::Boss:
             startWaveAt(wave, n.type == MapNodeType::Elite);
             break;
-        case MapNodeType::Rest:
+        case MapNodeType::Rest:   // repair the core, or forge an item
             r.wave = wave;
-            playerRepair(hasPact(PactId::Fortress) ? world_.core().maxHp * cfg::pact::fortressRestHeal : 1e9f);
-            audio_.purchase();
-            effects_.flash(theme::core, 0.5f);
-            effects_.addLabel(hasPact(PactId::Fortress) ? "Core half repaired" : "Core repaired", mid, theme::core, 26, 1.2f);
-            openMap();
+            openRestStop();
             break;
-        case MapNodeType::Upgrade:
+        case MapNodeType::Upgrade:   // a free pick - or now and then a stranger with deals
             r.wave = wave;
-            openChoice();
+            if (rng_.irange(0, 99) >= cfg::event::chancePct || !openEvent()) openChoice();
             break;
         case MapNodeType::Recruit:
             r.wave = wave;
@@ -950,25 +1103,37 @@ void App::travelTo(int node) {
             rollShop();
             push(ScreenId::Shop);
             break;
-        case MapNodeType::Forge: {
+        case MapNodeType::Altar:   // a pact; the hidden one sits on the boss row, so the wave stays put
+            if (n.row < r.map.bossRow()) r.wave = wave;
+            if (!openPactChoice()) {
+                effects_.addLabel("the altar is silent", mid, theme::textLo, 22, 1.2f);
+                openMap();
+            }
+            break;
+        case MapNodeType::Forge:
             r.wave = wave;
-            bool any = false;
-            for (int b = 0; b < runBallCount() && !any; ++b)
-                for (int sl = 0; sl < kLoadoutSlots; ++sl)
-                    if (r.balls[static_cast<std::size_t>(b)].kindAt(sl) >= 0 &&
-                        r.balls[static_cast<std::size_t>(b)].levelAt(sl) < forgeCap()) any = true;
-            if (any) {
-                equipSrc_ = EquipSource::Forge;
-                equipRef_ = -1;
-                push(ScreenId::Equip);
-            } else {
+            if (!openForgePicker()) {
                 effects_.addLabel("nothing to forge yet", mid, theme::textLo, 22, 1.2f);
                 openMap();
             }
             break;
-        }
     }
     save();
+}
+
+// The Forge's picker: an item a ball carries that can still level up.
+bool App::openForgePicker() {
+    const RunState& r = data_.run;
+    bool any = false;
+    for (int b = 0; b < runBallCount() && !any; ++b)
+        for (int sl = 0; sl < kLoadoutSlots; ++sl)
+            if (r.balls[static_cast<std::size_t>(b)].kindAt(sl) >= 0 &&
+                r.balls[static_cast<std::size_t>(b)].levelAt(sl) < forgeCap()) any = true;
+    if (!any) return false;
+    equipSrc_ = EquipSource::Forge;
+    equipRef_ = -1;
+    push(ScreenId::Equip);
+    return true;
 }
 
 // ---------------------------------------------------------------- equip picker
@@ -1050,6 +1215,7 @@ void App::confirmEquip(int ball, int slot) {
             L.gear[slot] = -1;
             L.gearLvl[slot] = 0;
             r.gold += value;
+            ++r.shopSells;
             syncWorldBalls();
             audio_.purchase();
             effects_.flash(theme::puGolden, 0.35f);
@@ -1073,6 +1239,14 @@ void App::cancelEquip() {
 // result that breaks the pick rules - two copies of one pick on a ball, or
 // Conductor / Bedrock without their element (upgradeFitsBall). The type slot
 // is one per ball, so a drop on a ball's panel swaps elements.
+// An element dropped on an Alchemist with room (and without that element)
+// joins its elements instead of swapping.
+static bool alchemistTakes(const BallLoadout& src, int fromSlot, const BallLoadout& dst, bool sameBall) {
+    if (sameBall || fromSlot != kSlotType || src.type < 0 || dst.type < 0) return false;
+    Element have[kMaxElements];
+    return dst.elements(have) < dst.elementCap() && !dst.carriesElement(static_cast<UpgradeKind>(src.type));
+}
+
 int App::slotMoveTarget(int fromBall, int fromSlot, int toBall, int toSlot) const {
     const int n = runBallCount();
     if (fromBall < 0 || fromBall >= n || toBall < 0 || toBall >= n) return -1;
@@ -1080,6 +1254,7 @@ int App::slotMoveTarget(int fromBall, int fromSlot, int toBall, int toSlot) cons
     const BallLoadout& src = data_.run.balls[static_cast<std::size_t>(fromBall)];
     const BallLoadout& dst = data_.run.balls[static_cast<std::size_t>(toBall)];
     if (src.kindAt(fromSlot) < 0) return -1;
+    if ((toSlot < 0 || toSlot == kSlotType) && alchemistTakes(src, fromSlot, dst, fromBall == toBall)) return kSlotType;
     auto sameKind = [&](int s) {
         if (isItemSlot(fromSlot)) return isItemSlot(s);
         if (fromSlot == kSlotType) return s == kSlotType;
@@ -1116,6 +1291,25 @@ bool App::moveSlot(int fromBall, int fromSlot, int toBall, int toSlot) {
     if (toSlot < 0) return false;
     BallLoadout& a = data_.run.balls[static_cast<std::size_t>(fromBall)];
     BallLoadout& b = data_.run.balls[static_cast<std::size_t>(toBall)];
+    if (alchemistTakes(a, fromSlot, b, fromBall == toBall)) {
+        // An Alchemist takes it as one more element (sharing the type slot's
+        // level: the higher of the two). The giver's next element steps up.
+        Element have[kMaxElements];
+        const int nEl = b.elements(have);
+        int kept[kMaxElements - 1] = {-1, -1}, m = 0;
+        for (int x : b.extraType)
+            if (x >= 0) kept[m++] = x;
+        std::copy(kept, kept + kMaxElements - 1, b.extraType);
+        b.extraType[nEl - 1] = a.type;
+        b.typeLvl = std::max(b.typeLvl, a.typeLvl);
+        const int keepLvl = a.typeLvl;   // its other elements shared this level
+        a.type = -1;
+        a.typeLvl = 0;
+        for (int& x : a.extraType)
+            if (x >= 0) { a.type = x; a.typeLvl = keepLvl; x = -1; break; }
+        syncWorldBalls();
+        return true;
+    }
     const int ka = a.kindAt(fromSlot), la = a.levelAt(fromSlot);
     const int kb = b.kindAt(toSlot), lb = b.levelAt(toSlot);
     a.setSlot(fromSlot, kb, kb < 0 ? 0 : lb);
@@ -1137,14 +1331,15 @@ int App::shopPrice(UpgradeKind k) const {
     return std::max(1, static_cast<int>(std::lround(static_cast<float>(base) * (1.f - off))));
 }
 
-// A fresh shop visit: new stock, a mystery box, rerolls back to full price.
+// A fresh shop visit: new stock, rerolls and sells back to full.
 void App::rollShop() {
     RunState& r = data_.run;
     r.shopOffers.clear();
     r.shopSold.clear();
     r.shopDeal.clear();
-    r.shopMystery = 1;
+    r.shopMystery = 0;
     r.shopRerolls = 0;
+    r.shopSells = 0;
     rollShopOffers();
 }
 
@@ -1168,15 +1363,6 @@ int App::repairAmount() const {
     return static_cast<int>(std::lround(world_.core().maxHp * cfg::gold::repairFrac));
 }
 
-void App::buyRepair() {
-    const Core& c = world_.core();
-    if (data_.run.gold < cfg::gold::priceRepair || c.hp >= c.maxHp - 0.5f) return;
-    data_.run.gold -= cfg::gold::priceRepair;
-    playerRepair(static_cast<float>(repairAmount()));
-    audio_.purchase();
-    effects_.flash(theme::core, 0.35f);
-}
-
 void App::leaveShop() {
     back();
     openMap();
@@ -1195,6 +1381,7 @@ void App::bankRun(bool won) {
 
     int cores = r.wave * cfg::meta::coresPerWave + (won ? cfg::meta::winBonus : 0);
     cores += static_cast<int>(r.bountyCores);   // "Fortune" node: cores per enemy killed
+    if (r.hard) cores = static_cast<int>(std::lround(static_cast<float>(cores) * cfg::hard::coresMul));
     lastRunCores_ = cores;
 
     lastRunPrisms_ = 0;
@@ -1214,10 +1401,12 @@ void App::bankRun(bool won) {
         std::max(data_.meta.stats.bestScore, static_cast<std::uint32_t>(r.score));
     if (won) ++data_.meta.stats.wins;
 
+    clearRun(runPath());   // it's over: nothing to resume
     save();
 }
 
 void App::finishToMenu() {
+    clearRun(runPath());
     data_.run = RunState{};
     save();
     replaceStack(ScreenId::Menu);
@@ -1226,23 +1415,40 @@ void App::finishToMenu() {
 
 bool App::bossWinCanContinue() const {
     return continueUnlocked_ && data_.run.active && !runBanked_ &&
-           data_.run.wave == cfg::run::bossWave;
+           cfg::run::isBossWave(data_.run.wave) && data_.run.wave < cfg::run::finalWave;
 }
 
-// "Continue" on the BossWin card: on to act 2 (a fresh map, waves 11-20).
+// "Continue" on the BossWin card: on to the next act (a fresh map, 10 more waves).
 // Nothing is banked - the run is still live and pays out when it truly ends.
 void App::continuePastBoss() {
     back();   // drop the BossWin card, back to the PlayScreen underneath
     RunState& r = data_.run;
     r.gold += cfg::gold::bossPay;
-    r.map = generateMap(rng_, 2);
+    const int act = r.map.act + 1;
+    r.map = generateMap(rng_, act);
     r.mapNode = -1;
     r.mapRow = 0;
     r.phoenixUsedAct = false;
     r.repairedThisAct = false;   // "Iron core": a fresh streak for the new act
+    r.cleanStreak = 0;           // the hidden Altar path starts over
+    r.altarState = 0;
+    r.altarReveal = false;
+    if (r.map.act == cfg::ball::lateBallsAct && !hasCreed(CreedId::Duet))   // room for more balls from here on
+        effects_.addLabel("+" + std::to_string(cfg::ball::lateBalls) + " BALL SLOTS", {size().x * 0.5f, size().y * 0.24f},
+                          theme::ballMid, 26, 2.f);
+    if (r.map.act == cfg::player::bulletAct && aimSlows())
+        effects_.addLabel("NEW  hold E: bullet time", {size().x * 0.5f, size().y * 0.30f}, theme::bulletTime, 22, 2.6f);
+    if (r.map.act == cfg::player::repulseAct)
+        effects_.addLabel("NEW  F: the core repulses", {size().x * 0.5f, size().y * 0.35f}, theme::core, 22, 2.6f);
+    if (hasPact(PactId::Horde) && static_cast<int>(r.balls.size()) < ballCap()) {   // "Horde": a ball per boss
+        r.balls.push_back(BallLoadout{});
+        syncWorldBalls();
+        effects_.addLabel("HORDE  a new ball joins", {size().x * 0.5f, size().y * 0.18f}, theme::pact, 24, 1.6f);
+    }
     world_.setPhoenix((r.mods.phoenix ? 1 : 0) + r.lastStandLeft);   // "Phoenix" recharges for the new act
-    // A pact first (Fase O), then the boss treasure (an Epic / Legendary pick), then the map.
-    if (!openPactChoice(PactSource::Boss)) openChoice(RollSource::Boss);
+    // After act 1 a creed first (Fase O); every boss: the treasure (an Epic /
+    // Legendary pick), then the map.
+    if (act != 2 || !openCreedChoice(CreedSource::Boss)) openChoice(RollSource::Boss);
 }
 
 // "Back to menu" on the BossWin card. If the run wasn't banked yet (miniboss just
@@ -1253,6 +1459,7 @@ void App::leaveBossWin() {
 }
 
 void App::abandonRun() {
+    clearRun(runPath());
     data_.run = RunState{};
     save();
     replaceStack(ScreenId::Menu);
@@ -1262,6 +1469,7 @@ void App::abandonRun() {
 void App::wipeSave() {
     std::error_code ec;
     std::filesystem::remove(savePath_, ec);   // start the next save from nothing
+    clearRun(runPath());
 
     const SoundSettings sound = data_.meta.sound;   // a preference, not progress: keep the mix
     data_ = GameData{};                        // cores, prisms, unlocks, stats, run
@@ -1291,12 +1499,6 @@ bool App::devMode() const {
 void App::devWinWave() {
     if (!devMode() || !data_.run.active) return;
     world_.devWinWave();
-}
-
-void App::devGrantCores(int n) {
-    if (!devMode()) return;
-    data_.meta.cores += static_cast<std::uint32_t>(std::max(0, n));
-    effects_.flash(theme::accent, 0.3f);
 }
 
 void App::devGrantCurrency() {
@@ -1381,12 +1583,17 @@ void App::devOpen(DevOpen what) {
         case DevOpen::Shop:         rollShop(); push(ScreenId::Shop); break;
         case DevOpen::Forge:        equipSrc_ = EquipSource::Forge; equipRef_ = -1; push(ScreenId::Equip); break;
         case DevOpen::Upgrade:      openChoice(RollSource::Normal); break;
+        case DevOpen::PostFight:    openChoice(RollSource::PostFight); break;
         case DevOpen::Elite:        openChoice(RollSource::Elite); break;
         case DevOpen::BossTreasure: openChoice(RollSource::Boss); break;
         case DevOpen::Recruit:      rollRecruitChoices(); push(ScreenId::Choice); break;
-        case DevOpen::PactBoss:     // the pact choice; after it the boss treasure / map follow as usual
-        case DevOpen::PactStart:
-            if (!openPactChoice(what == DevOpen::PactBoss ? PactSource::Boss : PactSource::Start))
+        case DevOpen::CreedBoss:     // the creed choice; after it the boss treasure / map follow as usual
+        case DevOpen::CreedStart:
+            if (!openCreedChoice(what == DevOpen::CreedBoss ? CreedSource::Boss : CreedSource::Start))
+                effects_.addLabel("no creed left to offer", {size().x * 0.5f, size().y * 0.5f}, theme::coreLow, 22, 1.2f);
+            break;
+        case DevOpen::Altar:
+            if (!openPactChoice(false))
                 effects_.addLabel("no pact left to offer", {size().x * 0.5f, size().y * 0.5f}, theme::coreLow, 22, 1.2f);
             break;
         case DevOpen::AbilityPick:  // the first-ability pick, on the first ball, as at the run start
@@ -1395,21 +1602,12 @@ void App::devOpen(DevOpen what) {
                                   theme::textLo, 22, 1.2f);
             break;
         case DevOpen::JumpToBoss:   // stand right before the boss row and open the map
-            data_.run.mapRow = cfg::map::rows;
+            data_.run.mapRow = mapRows(data_.run.map.act);
             data_.run.mapNode = -1;
             world_.devWinWave();
             openMap();
             break;
     }
-}
-
-void App::devCycleGrant() {
-    if (!devMode() || !data_.run.active) return;
-    const auto k = static_cast<UpgradeKind>(devGrantNext_ % kUpgradeKindCount);
-    devGrantNext_ = (devGrantNext_ + 1) % kUpgradeKindCount;
-    applyUpgradeKind(k);
-    effects_.addLabel(std::string("+ ") + upgradeInfo(k).title, {size().x * 0.5f, size().y * 0.4f},
-                      theme::accent, 22, 1.0f);
 }
 
 void App::openPause() {
@@ -1420,26 +1618,19 @@ void App::openPause() {
 void App::openStats() { push(ScreenId::Stats); }
 void App::openSound() { push(ScreenId::Sound); }
 
+// The pause menu, what it opens (stats, how to play, options) and the dev
+// panel: these take Esc as "back" themselves.
+bool App::onPauseMenus() const {
+    if (stack_.empty()) return false;
+    const Screen* top = stack_.back().get();
+    return dynamic_cast<const PauseScreen*>(top) || dynamic_cast<const StatsScreen*>(top) ||
+           dynamic_cast<const HowToScreen*>(top) || dynamic_cast<const DevScreen*>(top) || onOptions();
+}
+
 bool App::onOptions() const {
     return !stack_.empty() && dynamic_cast<const SoundScreen*>(stack_.back().get()) != nullptr;
 }
 
-sf::FloatRect App::optionsButton() const {
-    return {size().x - theme::margin - 96.f, size().y - theme::margin - 17.f, 96.f, 17.f};
-}
-
-// A quiet [o] key cap + "options" in the bottom-right corner of every screen.
-void App::drawOptionsButton(sf::RenderWindow& w) const {
-    const sf::FloatRect r = optionsButton();
-    const bool hot = r.contains(window_.uiMousePosition());
-    const sf::FloatRect key{r.left, r.top, 22.f, r.height};
-    const sf::Color c = hot ? theme::textLo : theme::textDim;
-    draw::box(w, key, 0.f, withAlpha(c, 0.18f), withAlpha(c, hot ? 0.12f : 0.05f), withAlpha(c, 0.8f), 1.f);
-    drawLabel(w, font_, "o", 10, {key.left + key.width * 0.5f + 1.f, key.top + key.height * 0.5f},
-              hot ? theme::textHi : theme::textLo);
-    drawLabel(w, font_, "options", 10, {key.left + key.width + 8.f, key.top + key.height * 0.5f},
-              hot ? theme::textLo : theme::textDim, -1);
-}
 void App::openHowTo() { push(ScreenId::HowTo); }
 
 void App::quit() {
@@ -1462,6 +1653,39 @@ void App::buyMetaUnlock(int u) {
     ++data_.meta.unlock[u];
     audio_.purchase();
     effects_.flash(theme::accent, 0.4f);
+    save();
+}
+
+void App::devGiveCurrency() {
+    if (!devMode()) return;
+    data_.meta.cores += 1000;
+    data_.meta.prisms += 10;
+    audio_.purchase();
+    effects_.addLabel("DEV  +1000 cores  +10 prisms", {size().x * 0.5f, size().y * 0.16f}, theme::accent, 20, 1.2f);
+    save();
+}
+
+void App::devRelockWeb() {
+    if (!devMode()) return;
+    MetaState& m = data_.meta;
+    for (int u = 0; u < MetaUnlockCount; ++u) {
+        for (int lvl = 0; lvl < m.unlock[u]; ++lvl) {
+            const std::uint32_t c = metaUnlockCost(u, lvl);
+            (metaUnlockCurrency(u) == MetaCurrency::Prisms ? m.prisms : m.cores) += c;
+        }
+        m.unlock[u] = 0;
+    }
+    audio_.letGo();
+    effects_.addLabel("DEV  web locked again, cost refunded", {size().x * 0.5f, size().y * 0.16f}, theme::coreLow, 20, 1.4f);
+    save();
+}
+
+void App::devUnlockWeb() {
+    if (!devMode()) return;
+    for (int u = 0; u < MetaUnlockCount; ++u) data_.meta.unlock[u] = metaUnlockDef(u).maxLevel;   // retired ones stay 0
+    audio_.purchase();
+    effects_.flash(theme::accent, 0.4f);
+    effects_.addLabel("DEV  the whole web unlocked", {size().x * 0.5f, size().y * 0.16f}, theme::accent, 20, 1.2f);
     save();
 }
 
@@ -1496,20 +1720,25 @@ void App::handleEvent(const sf::Event& e) {
         return;
     }
     if (e.type == sf::Event::KeyPressed &&
-        (e.key.code == sf::Keyboard::F11 || e.key.code == sf::Keyboard::F)) {
+        (e.key.code == sf::Keyboard::F11 || (e.key.code == sf::Keyboard::F && !simulating()))) {   // in a fight F throws
         toggleFullscreen();
         return;
     }
     if (!stack_.empty()) {
-        // Options from anywhere: the O key or the corner button (not mid-throw).
+        // Options from anywhere: the O key (not mid-throw).
         const bool pressO = e.type == sf::Event::KeyPressed && e.key.code == sf::Keyboard::O &&
                             !sf::Mouse::isButtonPressed(sf::Mouse::Left);
-        const bool clickO = e.type == sf::Event::MouseButtonPressed && e.mouseButton.button == sf::Mouse::Left &&
-                            !peek_.open && optionsButton().contains(window_.uiMousePosition());
-        if (!onOptions() && (pressO || clickO)) {
-            if (clickO) audio_.uiClick();
+        if (!onOptions() && pressO) {
             peek_.close();
             openSound();
+            return;
+        }
+        // Esc anywhere in a live run opens the pause menu (options, abandon,
+        // quit) over whatever is up - a card, the map, the shop, a creed. Resume
+        // comes back to it. The pause menu and what it opens handle their own
+        // Esc (back); the TAB overlay's Esc just closes it.
+        if (e.type == sf::Event::KeyPressed && e.key.code == sf::Keyboard::Escape && data_.run.active && !peek_.open && !onPauseMenus()) {
+            openPause();
             return;
         }
         // TAB anywhere in a live run: screens without their own peek get the App's.
@@ -1539,6 +1768,34 @@ sf::Vector2f App::worldToUi(sf::Vector2f p) const {
     return {(p.x - tl.x) * kLogical().x / camSize_.x, (p.y - tl.y) * kLogical().y / camSize_.y};
 }
 
+// The arena's walls in UI units (the black bands lie outside it); the frame
+// holds still while the camera shakes.
+sf::FloatRect App::arenaRect() const {
+    const sf::Vector2f tl = worldToUi({0.f, 0.f}) + camShake_ * (kLogical().x / camSize_.x);
+    const sf::Vector2f br = worldToUi(world_.size()) + camShake_ * (kLogical().x / camSize_.x);
+    return {tl.x, tl.y, br.x - tl.x, br.y - tl.y};
+}
+
+// The black bands above and below the arena, drawn over the world (so nothing
+// spills into them) and under the HUD.
+void App::drawArenaBands(sf::RenderTarget& t) const {
+    const sf::FloatRect arena = arenaRect();
+    sf::RectangleShape band({size().x, std::max(0.f, arena.top)});
+    band.setFillColor(sf::Color::Black);
+    t.draw(band);
+    const float bottom = arena.top + arena.height;
+    band.setSize({size().x, std::max(0.f, size().y - bottom)});
+    band.setPosition(0.f, bottom);
+    t.draw(band);
+}
+
+// A kill's coin: a little bigger with the combo, capped, and shrunk with the
+// camera when it pulls back (so gold never outweighs the fight).
+float App::coinRadius(int comboTier) const {
+    const float zoom = std::min(1.f, kLogical().x / std::max(1.f, camSize_.x));
+    return std::min(cfg::gold::coinMax, cfg::gold::coinBase + cfg::gold::coinPerTier * static_cast<float>(comboTier)) * zoom;
+}
+
 sf::Vector2f App::goldCounterPos() const {
     return {size().x - theme::margin - 30.f, theme::margin + 30.f};
 }
@@ -1549,10 +1806,10 @@ void App::flushMultiKill() {
         data_.run.gold += bonus;
         effects_.addLabel("x" + std::to_string(multiKillN_) + " MULTI-KILL  +" + std::to_string(bonus),
                           multiKillPos_ + sf::Vector2f{0.f, -24.f}, theme::puGolden,
-                          static_cast<unsigned>(std::min(34, 18 + 2 * multiKillN_)), 1.0f);
+                          static_cast<unsigned>(std::min(24, 16 + multiKillN_)), 0.9f);
         audio_.comboUp(std::min(multiKillN_, cfg::combo::baseCapTier));
-        for (int i = 0; i < std::min(multiKillN_, 6); ++i)
-            effects_.addCoin(multiKillPos_, goldCounterPos(), 7.f);
+        for (int i = 0; i < std::min(multiKillN_, 3); ++i)
+            effects_.addCoin(multiKillPos_, goldCounterPos(), coinRadius(0) * 1.2f);
     }
     multiKillN_ = 0;
     multiKillT_ = 0.f;
@@ -1568,7 +1825,7 @@ void App::processEvents(const FrameEvents& ev) {
         if (!data_.run.active) continue;
         data_.run.goldFrac += cfg::gold::perKill * comboGold;
         const sf::Vector2f ui = worldToUi(k);
-        effects_.addCoin(ui, goldCounterPos(), 3.5f + 1.2f * static_cast<float>(ev.comboTier));
+        effects_.addCoin(ui, goldCounterPos(), coinRadius(ev.comboTier));
         multiKillPos_ = ui;
         ++multiKillN_;
         multiKillT_ = cfg::gold::multiKillWindow;
@@ -1642,6 +1899,23 @@ void App::processEvents(const FrameEvents& ev) {
         hitstop_ = std::max(hitstop_, cfg::app::hitstopBossHit);
         camKick_ = std::max(camKick_, cfg::app::camKickBossHit);
     }
+    if (ev.bossEnraged) {   // phase two
+        effects_.flash(theme::coreLow, 0.6f);
+        effects_.addLabel("ENRAGED", {size().x * 0.5f, size().y * 0.3f}, theme::coreLow, 34, 1.4f);
+        audio_.bossAppear();
+        camKick_ = std::max(camKick_, 8.f);
+    }
+    if (ev.bossShock) {   // the Charger's shockwave
+        effects_.flash(theme::coreLow, 0.35f);
+        audio_.coreThud();
+        camKick_ = std::max(camKick_, 9.f);
+    }
+    if (ev.launched) {    // the fight-opening whirl lets go
+        audio_.thrown(0.9f);
+        camKick_ = std::max(camKick_, 5.f);
+    }
+    if (ev.bossSummon)
+        effects_.addLabel("a Brute joins the fight", {size().x * 0.5f, size().y * 0.36f}, theme::ember, 22, 1.3f);
     data_.meta.stats.bestCombo =
         std::max(data_.meta.stats.bestCombo, static_cast<std::uint32_t>(world_.comboStreak()));
     data_.meta.stats.maxSpeed = std::max(data_.meta.stats.maxSpeed, world_.fastestBall());
@@ -1659,18 +1933,18 @@ void App::processEvents(const FrameEvents& ev) {
             data_.run.bountyCores += cfg::meta::interestPerLevel * static_cast<float>(interest);
         const int w = data_.run.wave;
         const bool flawless = world_.coreCleanWave();   // nothing reached the core this fight
-        if (w == cfg::run::bossWave || w >= cfg::run::finalWave) {
-            // Boss down: a flawless act-1 boss pays gold for act 2, and an act
+        if (cfg::run::isBossWave(w)) {
+            // Boss down: a flawless boss pays gold for the next act, and an act
             // with no deliberate repair banks "Iron core" cores (before bankRun).
             RunState& r = data_.run;
-            bossFlawlessGold_ = flawless && w == cfg::run::bossWave ? cfg::gold::flawlessBoss : 0;
+            bossFlawlessGold_ = flawless && w < cfg::run::finalWave ? cfg::gold::flawlessBoss : 0;
             bossIronCores_ = r.repairedThisAct ? 0 : cfg::meta::ironCoreCores;
             r.gold += bossFlawlessGold_;
             r.bountyCores += static_cast<float>(bossIronCores_);
         }
-        if (w == cfg::run::bossWave) {
-            // Miniboss down. First win ever: bank it now, card offers only "Back".
-            // Otherwise leave the run live so "Continue" can carry it to wave 11.
+        if (cfg::run::isBossWave(w) && w < cfg::run::finalWave) {
+            // An act's boss down. First win ever: bank it now, card offers only
+            // "Back". Otherwise leave the run live so "Continue" carries it on.
             if (!continueUnlocked_) bankRun(true);
             push(ScreenId::BossWin);
             return;
@@ -1685,17 +1959,18 @@ void App::processEvents(const FrameEvents& ev) {
         // (outside "Loaded Dice"'s gamble).
         RunState& r = data_.run;
         const int row = w - (r.map.act - 1) * cfg::run::bossWave;
-        int pay = cfg::gold::combatBase + cfg::gold::perRow * row;
+        int pay = cfg::gold::combatBase + cfg::gold::perRow * row + cfg::gold::perAct * (r.map.act - 1);
         if (r.eliteWave)
             pay = static_cast<int>(std::lround(static_cast<float>(pay * cfg::gold::elitePerRowMul) *
                 (1.f + cfg::meta::eliteSpoilsPerLevel * static_cast<float>(data_.meta.unlock[MetaEliteSpoils]))));
-        if (hasPact(PactId::LoadedDice)) {   // "Loaded Dice": double or nothing
+        if (hasCreed(CreedId::LoadedDice)) {   // "Loaded Dice": double or nothing
             const bool win = rng_.range(0.f, 1.f) < 0.5f;
             pay = win ? pay * 2 : 0;
             effects_.addLabel(win ? "DOUBLE!" : "NOTHING", {size().x * 0.5f, size().y * 0.4f - 36.f},
                               win ? theme::puGolden : theme::coreLow, 24, 1.3f);
         }
         r.gold += pay;
+        notePactFight(flawless);   // the hidden Altar path
         effects_.addLabel("+" + std::to_string(pay) + " gold", {size().x * 0.5f, size().y * 0.4f},
                           theme::puGolden, 26, 1.2f);
         if (flawless) {
@@ -1706,22 +1981,53 @@ void App::processEvents(const FrameEvents& ev) {
                               theme::core, 24, 1.5f);
             effects_.flash(theme::core, 0.3f);
         }
-        if (r.eliteWave) openChoice(RollSource::Elite);
-        else openMap();
+        postFight();
     }
 }
 
+// After a cleared fight: the run's first fight hands the first ball its first
+// ability; then a plain fight offers a modifier pick, an Elite an item pick.
+void App::postFight() {
+    RunState& r = data_.run;
+    const bool firstFight = r.map.act == 1 && r.mapRow <= 1;
+    const bool abilityless = !r.balls.empty() && std::all_of(std::begin(r.balls[0].ability),
+                                                             std::end(r.balls[0].ability),
+                                                             [](int a) { return a < 0; });
+    if (firstFight && abilityless && openAbilityChoice()) {
+        abilityAfterFight_ = true;
+        return;
+    }
+    afterFightPick();
+}
+
+void App::afterFightPick() {
+    openChoice(data_.run.eliteWave ? RollSource::Elite : RollSource::PostFight);
+}
+
 void App::update(float frameDt) {
+    // The slingshot pull reads mouse motion while aiming (see Window::setMouseCapture);
+    // let go of it the moment aiming stops for any reason.
+    window_.setMouseCapture(aiming_ && simulating() && window_.handle().hasFocus());
+    window_.pumpCapture();
     // World units for the play screen, fixed UI units for menus / cards (see
     // handleEvent) - the world view can be zoomed out on the boss arena.
     const sf::Vector2f mouse =
-        simulating() ? window_.mousePosition() : window_.uiMousePosition();
+        simulating() ? window_.mousePosition() : uiMouse();   // uiMouse: the snapshot pointer when staged
     effects_.update(frameDt);
     fade_ *= std::exp(-cfg::app::fadeRate * frameDt);
 
-    // Music follows the run: the play track through a live run (Choice / Pause /
-    // BossWin card included), the menu track everywhere else.
-    audio_.setTrack(data_.run.active ? Audio::Track::Game : Audio::Track::Menu);
+    // Music follows the run: one loop carries a whole act (map, fights, shops
+    // alike - fights are too short to switch on), the boss fight has its own,
+    // the menu loop outside a run. They crossfade.
+    static constexpr int kActLoop[] = {0, 1, 2, 1, 2};   // act 1..5 -> Run loop (see addMusic above)
+    const int act = std::clamp(data_.run.map.act, 1, 5);
+    if (!data_.run.active)
+        audio_.setTrack(Audio::Track::Menu);
+    else if (world_.waveRunning() && cfg::run::isBossWave(data_.run.wave))
+        audio_.setTrack(Audio::Track::Boss);
+    else
+        audio_.setTrack(Audio::Track::Run, kActLoop[act - 1]);
+    audio_.update(frameDt);
 
     // A quiet hum under a live fight; a soft two-note warning while the core is low.
     audio_.setAmbience(simulating() && data_.run.active);
@@ -1741,9 +2047,6 @@ void App::update(float frameDt) {
         stack_.back()->update(*this, frameDt, peek_.open ? sf::Vector2f{-1e6f, -1e6f} : mouse);
         stack_.back()->advanceIntro(frameDt);
     }
-    static const int optionsTag = 0;   // the corner button's hover tick
-    uisound::hover(&optionsTag,
-                   !onOptions() && optionsButton().contains(window_.uiMousePosition()) ? 0 : -1);
 
     if (simulating() && !stack_.back()->frozen()) {
         // A fresh wave eases in: feed the fixed-step accumulator slowly at first
@@ -1754,12 +2057,28 @@ void App::update(float frameDt) {
             const float t = 1.f - waveIntro_ / cfg::app::waveIntroTime;  // 0 -> 1
             simDt *= cfg::app::waveIntroSlow + (1.f - cfg::app::waveIntroSlow) * t;
         }
-        if (aiming_ && aimT_ < cfg::app::aimSlowMax) {   // slingshot aim: bullet time, briefly
+        float slow = 1.f;
+        if (aiming_ && aimSlows() && aimT_ < cfg::app::aimSlowMax) {   // "Heavy Arm" pact: none   // slingshot aim: bullet time, briefly
             aimT_ += frameDt;
-            simDt *= cfg::app::aimTimeScale;
+            slow = cfg::app::aimTimeScale;
         }
+        {   // E: bullet time runs off its gauge while held, and refills after a pause
+            namespace P = cfg::player;
+            bulletOn_ = bulletHeld_ && bulletOpen() && bulletGauge_ > 0.f &&
+                        (bulletOn_ || bulletGauge_ >= P::bulletMinStart);
+            if (bulletOn_) {
+                bulletGauge_ = std::max(0.f, bulletGauge_ - frameDt / P::bulletMax);
+                bulletIdle_ = 0.f;
+                slow = std::min(slow, P::bulletScale);
+            } else if ((bulletIdle_ += frameDt) > P::bulletRechargeDelay) {
+                bulletGauge_ = std::min(1.f, bulletGauge_ + frameDt / P::bulletRecharge);
+            }
+        }
+        simDt *= slow;
         simDt *= devTimeScale_;   // dev panel: slow motion / fast forward
-        novaCd_ = std::max(0.f, novaCd_ - frameDt);   // "Nova" pact recharges while you fight
+        novaCd_ = std::max(0.f, novaCd_ - frameDt);   // "Nova" creed recharges while you fight
+        repulseCd_ = std::max(0.f, repulseCd_ - frameDt);
+        markCd_ = std::max(0.f, markCd_ - frameDt);
         if (hitstop_ > 0.f) {  // an impact landed: hold the frame, no catch-up after
             hitstop_ = std::max(0.f, hitstop_ - frameDt);
             simDt = 0.f;
@@ -1795,12 +2114,16 @@ void App::update(float frameDt) {
     // wave Choice and the "Continue" card too - so the view doesn't zoom in and
     // straight back out. It snaps to the fixed view once the run is banked (a
     // loss, or the final "Back to menu") or gone.
+    // The arena is wider than the screen's aspect, so the framing (always kept at
+    // the UI's aspect) leaves the black bands above and below it.
     sf::Vector2f tgtSize = kLogical();
-    sf::Vector2f tgtCenter = kLogical() * 0.5f;
+    sf::Vector2f tgtCenter = world_.viewCenter();
     bool snap = true;
     if (data_.run.active && !runBanked_) {
-        tgtSize = world_.viewSize();
-        tgtCenter = world_.viewCenter();
+        const sf::Vector2f vs = world_.viewSize();
+        const float ratio = kLogical().x / kLogical().y;
+        const float fw = std::max(vs.x, vs.y * ratio);
+        tgtSize = {fw, fw / ratio};
         snap = false;
     }
     if (snap) {
@@ -1838,10 +2161,14 @@ void App::update(float frameDt) {
     if (const int n = effects_.takeArrivedCoins(); n > 0) hud_.pulseGold();
 
     const Core& c = world_.core();
-    hud_.update(frameDt, data_.run.map.act, data_.run.mapRow, cfg::map::rows + 1, world_.enemiesLeft(),
+    hud_.setHard(data_.run.hard);
+    {   // the boss's health for the top bar
+        const Boss& bs = world_.boss();
+        hud_.setBoss(bs.alive && bs.maxHp > 0.f ? clampf(bs.hp / bs.maxHp, 0.f, 1.f) : -1.f);
+    }
+    hud_.update(frameDt, data_.run.map.act, data_.run.mapRow, mapRows(data_.run.map.act) + 1, world_.enemiesLeft(),
                 c.maxHp > 0.f ? c.hp / c.maxHp : 0.f, world_.comboMultiplier(),
-                data_.run.score, data_.run.gold, world_.effect(), world_.bossWave(),
-                world_.hasReserve(), world_.reservePu());
+                data_.run.score, data_.run.gold, world_.effect(), world_.bossWave(), data_.run.eliteWave);
 }
 
 void App::render() {
@@ -1849,12 +2176,14 @@ void App::render() {
     window_.useUiView();
     w.clear(theme::bg);
     backdrop::draw(w, size());
+    const sf::FloatRect arena = arenaRect();
     if (heat_ > 0.01f) {   // warm tint over the arena (not the letterbox bars)
-        sf::RectangleShape hot(size());
+        sf::RectangleShape hot({arena.width, arena.height});
+        hot.setPosition(arena.left, arena.top);
         hot.setFillColor(withAlpha(theme::bgHot, heat_ * cfg::app::heatAlpha));
         w.draw(hot);
     }
-    effects_.drawBorder(w);
+    effects_.drawBorder(w, arena);
 
     std::size_t start = 0;
     for (std::size_t i = stack_.size(); i-- > 0;) {
@@ -1865,11 +2194,9 @@ void App::render() {
     }
     for (std::size_t i = start; i < stack_.size(); ++i) stack_[i]->draw(*this, w);
     if (peek_.open) drawLoadoutOverlay(*this, w, false, peek_);
-    if (!onOptions() && !peek_.open) drawOptionsButton(w);
 
     effects_.drawOverlay(w);
     if (fade_ > 0.01f) drawDim(w, size(), fade_ * 0.5f);
-    if (devMode()) drawDevOverlay(w);
     if (!capturePath_.empty()) {   // photo mode: grab the finished frame before it's shown
         sf::Texture shot;
         if (shot.create(w.getSize().x, w.getSize().y)) {
@@ -1938,7 +2265,10 @@ int App::runSnapshots(const std::string& dir) {
     syncWorldBalls();
     for (int i = 0; i < static_cast<int>(r.map.nodes.size()); ++i)
         if (mapNodeOpen(i)) { travelTo(i); break; }
-    for (int i = 0; i < 300; ++i) update(1.f / 60.f);   // five seconds of fighting
+    for (int i = 0; i < 50 && world_.launching(); ++i) update(1.f / 60.f);   // mid-whirl at the fight's start
+    capturePath_ = d + "04a_launch.png";
+    render();
+    for (int i = 0; i < 250; ++i) update(1.f / 60.f);   // then fighting
     capturePath_ = d + "04_play.png";
     render();
 
@@ -1988,7 +2318,7 @@ int App::runSnapshots(const std::string& dir) {
     {   // a drag in the peek: ball 1's Cleave in hand over ball 3's free item slot
         auto slotMid = [&](int ball, int slot) {
             const sf::FloatRect sr = slotRect(loadoutPanelCenter(*this, ball), slot, r.balls[static_cast<std::size_t>(ball)]);
-            return sf::Vector2f{sr.left + sr.width * 0.6f, sr.top + sr.height * 0.5f};
+            return sf::Vector2f{sr.left + sr.width * 0.6f, sr.top + sr.height * 0.5f} * loadoutZoom(*this);
         };
         sf::Event press{};
         press.type = sf::Event::MouseButtonPressed;
@@ -2008,11 +2338,20 @@ int App::runSnapshots(const std::string& dir) {
 
     push(ScreenId::Dev);
     snapFrame(d + "09_dev.png");
+    {   // its second page (the "Run" tab, top right), then back to the first
+        sf::Event click{};
+        click.type = sf::Event::MouseButtonPressed;
+        click.mouseButton.button = sf::Mouse::Left;
+        const sf::Vector2f runTab{size().x - 330.f + 98.f + 30.f, 71.f}, itemsTab{size().x - 330.f + 30.f, 71.f};
+        stack_.back()->handleEvent(*this, click, runTab);
+        snapFrame(d + "09b_dev_run.png");
+        stack_.back()->handleEvent(*this, click, itemsTab);
+    }
     back();
 
     // A crowded field with every enemy kind, to judge readability under load.
     for (EnemyKind k : {EnemyKind::Grunt, EnemyKind::Runner, EnemyKind::Tank, EnemyKind::Splitter,
-                        EnemyKind::Shielded})
+                        EnemyKind::Shielded, EnemyKind::Blinker, EnemyKind::Mender, EnemyKind::Snare})
         world_.devSpawn(k, 3);
     for (int i = 0; i < 90; ++i) update(1.f / 60.f);
     capturePath_ = d + "10_horde.png";
@@ -2026,7 +2365,7 @@ int App::runSnapshots(const std::string& dir) {
         n.visited = true;
         r.mapNode = node;
         r.mapRow = n.row;
-        if (n.row >= cfg::map::rows || n.next.empty()) break;
+        if (n.row >= mapRows(r.map.act) || n.next.empty()) break;
         node = n.next[static_cast<std::size_t>(n.row) % n.next.size()];
     }
     world_.devWinWave();
@@ -2034,7 +2373,10 @@ int App::runSnapshots(const std::string& dir) {
     snapFrame(d + "11_map_late.png");
     for (int i = 0; i < static_cast<int>(r.map.nodes.size()); ++i)
         if (mapNodeOpen(i)) { travelTo(i); break; }
-    for (int i = 0; i < 240; ++i) update(1.f / 60.f);
+    for (int i = 0; i < 70 && world_.launching(); ++i) update(1.f / 60.f);   // the opening whirl, core pinned left
+    capturePath_ = d + "12a_boss_launch.png";
+    render();
+    for (int i = 0; i < 170; ++i) update(1.f / 60.f);
     capturePath_ = d + "12_boss.png";
     render();
 
@@ -2042,27 +2384,147 @@ int App::runSnapshots(const std::string& dir) {
     snapFrame(d + "13_pause.png");
     openStats();
     snapFrame(d + "14_stats.png");
+    while (stack_.size() > 1 && !simulating()) back();   // close Stats and Pause: back in the fight
 
-    // Fase O: the pact choice (Oath: 4 cards), a fight under two pacts, the
-    // shop's extras, the sell picker, the map with pacts and the bigger web.
-    for (int u : {MetaOath, MetaCovenant, MetaPactHunters, MetaPactLegion, MetaPactDice, MetaPactAlchemy})
+    // Fase O: the creed choice (Oath: 4 cards), a fight under two creeds, the
+    // shop's extras, the sell picker, the map with creeds and the bigger web.
+    for (int u : {MetaOath, MetaCovenant, MetaCreedHunters, MetaCreedLegion, MetaCreedDice, MetaCreedAlchemy})
         data_.meta.unlock[u] = 1;
-    if (openPactChoice(PactSource::Boss)) {
-        snapFrame(d + "10_pact.png");
+    if (openCreedChoice(CreedSource::Boss)) {
+        snapFrame(d + "10_creed.png");
         back();
     }
-    grantPact(PactId::Hunters);
-    grantPact(PactId::LivingCore);
+    grantCreed(CreedId::Hunters);
+    grantCreed(CreedId::LivingCore);
     world_.devSpawn(EnemyKind::Grunt, 8);
-    world_.devSpawn(EnemyKind::Tank, 1);
+    world_.devSpawn(EnemyKind::Brute, 1);
     for (int i = 0; i < 150; ++i) update(1.f / 60.f);
-    capturePath_ = d + "11_pact_fight.png";
+    capturePath_ = d + "11_creed_fight.png";
     render();
+    for (PactId id : {PactId::VoidWalls, PactId::Mirror, PactId::Frenzy, PactId::Stillness, PactId::LastBreath,
+                      PactId::Colossus, PactId::Elemental, PactId::Horde})
+        grantPact(id);
+    world_.devSpawn(EnemyKind::Grunt, 10);
+    for (int i = 0; i < 240; ++i) update(1.f / 60.f);
+    capturePath_ = d + "23_pact_fight.png";
+    render();
+    {   // Slinger: a thrown ball with Coil, Afterburner, Ambush and Momentum
+        data_.run.pacts.clear();
+        BallLoadout& L = data_.run.balls[0];
+        const UpgradeKind ks[] = {UpgradeKind::Coil, UpgradeKind::Afterburner, UpgradeKind::Ambush, UpgradeKind::Momentum};
+        for (int sl = 0; sl < 4; ++sl) {
+            L.gear[sl] = static_cast<int>(ks[sl]);
+            L.gearLvl[sl] = 1;
+        }
+        syncWorldBalls();
+        world_.devSpawn(EnemyKind::Grunt, 10);
+        for (int i = 0; i < 120; ++i) update(1.f / 60.f);   // Coil: it coasts down
+        capturePath_ = d + "24a_slinger_coil.png";
+        render();
+        const sf::Vector2f at = world_.balls()[0].pos;
+        if (world_.grabAt(at, 40.f)) {
+            const std::optional<sf::Vector2f> t = world_.nearestTarget(at);
+            const sf::Vector2f dir = t ? normalized(*t - at, {1.f, 0.f}) : sf::Vector2f{1.f, 0.f};
+            world_.releaseHeld(dir * 700.f * world_.arenaScale());
+        }
+        for (int i = 0; i < 16; ++i) update(1.f / 60.f);
+        capturePath_ = d + "24b_slinger_throw.png";
+        render();
+    }
+    {   // speed items: a still ball (Coil) with Anchor / Beacon / Kennel, a Shooter
+        // with Slug / Strafe / Leyline, a fast one with Wake / Pass / Plow / Blur
+        using K = UpgradeKind;
+        const K sets[3][4] = {{K::Coil, K::Anchor, K::Beacon, K::Kennel},
+                              {K::Slug, K::Strafe, K::Meditate, K::Leyline},
+                              {K::Wake, K::Pass, K::Plow, K::Blur}};
+        for (int i = 0; i < 3 && i < static_cast<int>(data_.run.balls.size()); ++i)
+            for (int sl = 0; sl < 4; ++sl) {
+                data_.run.balls[static_cast<std::size_t>(i)].gear[sl] = static_cast<int>(sets[i][sl]);
+                data_.run.balls[static_cast<std::size_t>(i)].gearLvl[sl] = 2;
+            }
+        syncWorldBalls();
+        world_.devSpawn(EnemyKind::Grunt, 14);
+        for (int i = 0; i < 200; ++i) update(1.f / 60.f);
+        capturePath_ = d + "25_speed_items.png";
+        render();
+    }
+    {   // the reworked elements: fire (spreads), water (soaks, sweeps), stone (cracks), and their reactions
+        using K = UpgradeKind;
+        const K types[3] = {K::ElemFire, K::ElemWater, K::ElemStone};
+        for (int i = 0; i < 3 && i < static_cast<int>(data_.run.balls.size()); ++i) {
+            BallLoadout& L = data_.run.balls[static_cast<std::size_t>(i)];
+            for (int sl = 0; sl < 4; ++sl) L.gear[sl] = -1;
+            L.type = static_cast<int>(types[i]);
+            L.typeLvl = 1;
+        }
+        syncWorldBalls();
+        world_.devSpawn(EnemyKind::Grunt, 16);
+        world_.devSpawn(EnemyKind::Tank, 2);
+        for (int i = 0; i < 220; ++i) update(1.f / 60.f);
+        capturePath_ = d + "26_elements.png";
+        render();
+    }
+    {   // an Archalchemist: fire + water + stone taking turns, reacting with itself
+        using K = UpgradeKind;
+        data_.run.balls.resize(1);
+        BallLoadout& L = data_.run.balls[0];
+        const K items[4] = {K::Attune, K::Crucible, K::Aftershock, K::PrismHit};
+        for (int sl = 0; sl < 4; ++sl) { L.gear[sl] = static_cast<int>(items[sl]); L.gearLvl[sl] = 1; }
+        L.type = static_cast<int>(K::ElemFire);
+        L.typeLvl = 1;
+        L.extraType[0] = static_cast<int>(K::ElemWater);
+        L.extraType[1] = static_cast<int>(K::ElemStone);
+        for (int mi = 0; mi < 8; ++mi) L.mods[mi] = 1 + mi % 3;   // plenty of modifiers: the panel line shrinks to fit
+        world_.trimBalls(1);
+        syncWorldBalls();
+        world_.devSpawn(EnemyKind::Grunt, 14);
+        for (int i = 0; i < 220; ++i) update(1.f / 60.f);
+        capturePath_ = d + "27_alchemist.png";
+        render();
+        tab.type = sf::Event::KeyPressed;   // its loadout: the extra elements beside the type slot
+        stack_.back()->handleEvent(*this, tab, {0.f, 0.f});
+        snapFrame(d + "27b_alchemist_tab.png");
+        tab.type = sf::Event::KeyReleased;
+        stack_.back()->handleEvent(*this, tab, {0.f, 0.f});
+    }
+    {   // an Ancient Mage beside it (3 abilities: the big one + two small), and its
+        // ice dragged onto the Alchemist, which takes it as one more element
+        using K = UpgradeKind;
+        data_.run.balls[0].extraType[0] = data_.run.balls[0].extraType[1] = -1;
+        data_.run.balls.resize(2);
+        BallLoadout& M = data_.run.balls[1];
+        M = BallLoadout{};
+        const K items[4] = {K::Focus, K::ArcaneMissile, K::Attunement, K::Twincast};
+        for (int sl = 0; sl < 4; ++sl) { M.gear[sl] = static_cast<int>(items[sl]); M.gearLvl[sl] = 1; }
+        M.ability[0] = static_cast<int>(K::AbilityDash);  M.abilityLvl[0] = 2;
+        M.ability[1] = static_cast<int>(K::AbilityNova);  M.abilityLvl[1] = 1;
+        M.ability[2] = static_cast<int>(K::AbilityArc);   M.abilityLvl[2] = 1;
+        M.type = static_cast<int>(K::ElemIce);
+        M.typeLvl = 1;
+        moveSlot(1, kSlotType, 0, -1);
+        syncWorldBalls();
+        tab.type = sf::Event::KeyPressed;
+        stack_.back()->handleEvent(*this, tab, {0.f, 0.f});
+        snapFrame(d + "28_mage_alchemist_tab.png");
+        tab.type = sf::Event::KeyReleased;
+        stack_.back()->handleEvent(*this, tab, {0.f, 0.f});
+    }
+    {   // orbits: a Satellite ball and Warden spirits swing out to meet the enemies closing in
+        using K = UpgradeKind;
+        BallLoadout& L = data_.run.balls[0];
+        L = BallLoadout{};
+        L.gear[0] = static_cast<int>(K::Satellite); L.gearLvl[0] = 1;
+        L.gear[1] = static_cast<int>(K::SummonWarden); L.gearLvl[1] = 2;
+        syncWorldBalls();
+        world_.devSpawn(EnemyKind::Grunt, 12);
+        for (int i = 0; i < 180; ++i) update(1.f / 60.f);
+        capturePath_ = d + "29_orbits.png";
+        render();
+    }
 
     r.gold = 240;
     rollShop();
     push(ScreenId::Shop);
-    buyMystery();
     snapFrame(d + "12_shop_extras.png");
     beginSell();
     snapFrame(d + "13_sell.png");
@@ -2070,7 +2532,7 @@ int App::runSnapshots(const std::string& dir) {
     back();
 
     openMap();
-    snapFrame(d + "14_map_pacts.png");
+    snapFrame(d + "14_map_creeds.png");
     tab.type = sf::Event::KeyPressed;   // the TAB loadout peek, on the map
     stack_.back()->handleEvent(*this, tab, {0.f, 0.f});
     snapFrame(d + "14_map_tab.png");
@@ -2078,22 +2540,126 @@ int App::runSnapshots(const std::string& dir) {
     stack_.back()->handleEvent(*this, tab, {0.f, 0.f});
     back();
 
+    // Pacts: the Altar, then the hidden path opening beside the boss.
+    if (openPactChoice(false)) {
+        snapFrame(d + "21_altar.png");
+        back();
+    }
+    {   // a "?" stop's event, then a 7-ball squad (act 3 on) on the TAB peek
+        RunState& rr = data_.run;
+        const int gold = rr.gold, act = rr.map.act;
+        const std::vector<BallLoadout> balls = rr.balls;
+        rr.gold = 100;
+        rr.map.act = 3;
+        eventDeals_ = {EventKind::Drifter, EventKind::Gamble};
+        push(ScreenId::Event);
+        snapFrame(d + "30_event.png");
+        back();
+        eventDeals_ = {EventKind::Rest, EventKind::Temper};
+        push(ScreenId::Event);
+        snapFrame(d + "35_rest_stop.png");
+        back();
+        while (runBallCount() < ballCap()) rr.balls.push_back(BallLoadout{});
+        syncWorldBalls();
+        sf::Event t{};
+        t.type = sf::Event::KeyPressed;
+        t.key.code = sf::Keyboard::Tab;
+        stack_.back()->handleEvent(*this, t, {0.f, 0.f});
+        snapFrame(d + "31_tab_seven.png");
+        t.type = sf::Event::KeyReleased;
+        stack_.back()->handleEvent(*this, t, {0.f, 0.f});
+        bulletGauge_ = 0.55f;   // the E gauge part spent
+        markCd_ = 0.f;
+        playerMark();
+        for (int i = 0; i < 30; ++i) update(1.f / 60.f);
+        capturePath_ = d + "32_play_seven.png";
+        render();
+        rr.balls = balls;
+        rr.gold = gold;
+        rr.map.act = act;
+        syncWorldBalls();
+    }
+    grantPact(PactId::Juggler);
+    {
+        RunState& rr = data_.run;
+        for (int i = 0; i < static_cast<int>(rr.map.nodes.size()); ++i)
+            if (rr.map.nodes[static_cast<std::size_t>(i)].row == mapRows(rr.map.act)) {
+                rr.mapNode = i;
+                rr.mapRow = rr.map.nodes[static_cast<std::size_t>(i)].row;
+                rr.map.nodes[static_cast<std::size_t>(i)].visited = true;
+                break;
+            }
+        rr.altarState = 1;
+        openMap();
+        snapFrame(d + "22a_altar_path.png");   // 1.2 s in: the path is drawing itself
+        snapFrame(d + "22b_altar_open.png");   // done: the Altar is lit
+        back();
+    }
+
+    {   // the run on disk: write it, read it back, compare, then resume it from the menu
+        saveRunNow();
+        RunState back;
+        const RunState& r0 = data_.run;
+        bool same = loadRun(runPath(), back) && back.balls.size() == r0.balls.size() && back.gold == r0.gold &&
+                    back.map.act == r0.map.act && back.map.nodes.size() == r0.map.nodes.size() &&
+                    back.mapNode == r0.mapNode && back.mapRow == r0.mapRow && back.creeds == r0.creeds &&
+                    back.pacts == r0.pacts && back.wave == r0.wave && back.score == r0.score &&
+                    std::fabs(back.coreHp - world_.core().hp) < 0.01f && back.mods.catalyst == r0.mods.catalyst;
+        for (std::size_t i = 0; same && i < r0.balls.size(); ++i) {
+            const BallLoadout &a = r0.balls[i], &b = back.balls[i];
+            for (int k = 0; k < kLoadoutSlots; ++k) same = same && a.kindAt(k) == b.kindAt(k) && a.levelAt(k) == b.levelAt(k);
+            for (int k = 0; k < kModifierCount; ++k) same = same && a.mods[k] == b.mods[k];
+            for (int k = 0; k < kMaxElements - 1; ++k) same = same && a.extraType[k] == b.extraType[k];
+        }
+        for (std::size_t i = 0; same && i < r0.map.nodes.size(); ++i) {
+            const MapNode &a = r0.map.nodes[i], &b = back.map.nodes[i];
+            same = a.type == b.type && a.row == b.row && a.lane == b.lane && a.visited == b.visited && a.next == b.next;
+        }
+        std::cerr << "snapshot: run save round-trip " << (same ? "ok" : "MISMATCH") << '\n';
+        replaceStack(ScreenId::Menu);
+        snapFrame(d + "33_menu_continue.png");
+        std::cerr << "snapshot: resume " << (resumeRun() ? "ok" : "FAILED") << '\n';
+        snapFrame(d + "34_resumed_map.png");
+    }
+
     data_.run = RunState{};   // back in the game menu, a well-grown web
     for (int u : {MetaChannel, MetaClassMage, MetaLoreMage, MetaAbilityBulwark, MetaFireItem, MetaVenom, MetaReroll,
-                  MetaLuckyStar, MetaClassJester, MetaTreasury, MetaHaggler, MetaCharged, MetaClassSupport, MetaRally,
+                  MetaLuckyStar, MetaClassJester, MetaSling, MetaClassSlinger, MetaHeft, MetaClassStriker, MetaVenom, MetaClassAlchemist, MetaTreasury, MetaHaggler, MetaCharged, MetaClassSupport, MetaRally,
                   MetaKinetics, MetaClassShooter, MetaBrood, MetaMend, MetaAegis, MetaMomentum, MetaKeenInstinct})
         data_.meta.unlock[u] = 1;
     replaceStack(ScreenId::Menu);
     openLoadout();
     snapFrame(d + "15_web_grown.png");
+    snapMouseOn_ = true;   // the pointer on the centre node: its info card
+    snapMouse_ = {size().x * 0.5f, size().y * 0.5f};
+    snapFrame(d + "15b_web_card.png");
+    snapMouseOn_ = false;
+    {   // zoomed right out: the whole web, to judge the routes' spacing
+        sf::Event wheel{};
+        wheel.type = sf::Event::MouseWheelScrolled;
+        wheel.mouseWheelScroll.delta = -12.f;
+        wheel.mouseWheelScroll.x = static_cast<int>(size().x * 0.5f);
+        wheel.mouseWheelScroll.y = static_cast<int>(size().y * 0.5f);
+        stack_.back()->handleEvent(*this, wheel, {size().x * 0.5f, size().y * 0.53f});
+        snapFrame(d + "15c_web_overview.png");
+        // a fresh web (only the centre bought): the fog hides what's far away
+        const MetaState keep = data_.meta;
+        for (int u = 0; u < MetaUnlockCount; ++u) data_.meta.unlock[u] = 0;
+        data_.meta.unlock[MetaCalling] = 1;
+        data_.meta.unlock[MetaHeft] = 1;
+        snapFrame(d + "15d_web_fresh.png");
+        for (int u = 0; u < MetaUnlockCount; ++u) data_.meta.unlock[u] = metaUnlockDef(u).maxLevel;   // and all of it
+        snapFrame(d + "15e_web_all.png");
+        data_.meta = keep;
+    }
 
-    // The run intro: Covenant pact -> Quartermaster starter pick -> the map.
+    // The run intro: Covenant creed -> Quartermaster starter pick -> the map.
     data_.meta.unlock[MetaQuartermaster] = 1;
     data_.meta.unlock[MetaStarterKit] = 1;
     newRun();
-    snapFrame(d + "16_start_pact.png");
-    choosePact(0);
-    snapFrame(d + "17_start_ability.png");   // the first-ability pick comes between the pact and the starter item
+    snapFrame(d + "16_start_creed.png");
+    chooseCreed(0);
+    snapFrame(d + "17_start_ability.png");   // the first-ability pick comes between the creed and the starter item
     chooseAbility(1);
     if (introStep_ >= 0) {   // the Quartermaster pick is up (it needs 4 items to choose from)
         snapFrame(d + "17_starter_pick.png");
@@ -2114,37 +2680,6 @@ int App::runSnapshots(const std::string& dir) {
     openSound();
     snapFrame(d + "20_sound.png");
     return 0;
-}
-
-// A fixed cheat-sheet of the dev keys, top-right on every screen, so there's no
-// need to remember which key does what. Keys are screen-specific: the "run" ones
-// only do anything on the Play screen, "menu" ones on the game menu.
-void App::drawDevOverlay(sf::RenderWindow& w) const {
-    const bool invuln = world_.devInvuln();
-    const std::array<std::pair<const char*, bool>, 11> lines = {{
-        {"- DEV -", true},
-        {"menu / web:", false},
-        {"  C   +999999 cores & prisms", false},
-        {"in a run:", false},
-        {"  N win wave   H heal core", false},
-        {invuln ? "  G invuln: ON   B add ball" : "  G invuln: off   B add ball", invuln},
-        {"  F1  DEV PANEL (items, spawns, speed)", true},
-        {"  U grant next item   C +25 cores", false},
-        {"  TAB   items taken", false},
-        {"env (on Start):", false},
-        {"  SB_WAVE  SB_BALLS  SB_UPGRADES", false},
-    }};
-    const float right = size().x - theme::margin;
-    float y = theme::margin;
-    for (const auto& [text, hot] : lines) {
-        sf::Text t = makeText(font_, text, theme::fsSmall,
-                              hot ? theme::core : theme::accent);
-        const sf::FloatRect b = t.getLocalBounds();
-        t.setOrigin(b.left + b.width, b.top);
-        t.setPosition(right, y);
-        w.draw(t);
-        y += 16.f;
-    }
 }
 
 int App::run() {

@@ -195,7 +195,7 @@ void SoundScreen::draw(App& app, sf::RenderWindow& w) {
                withAlpha(theme::arenaEdge, a));
     drawLabel(w, f, "Category", 11, {cx + kNameX, kHeadY}, withAlpha(theme::textDim, a), -1);
     drawLabel(w, f, "Volume", 11, {cx + kSliderX0, kHeadY}, withAlpha(theme::textDim, a), -1);
-    drawLabel(w, f, "Style  -  click to hear it", 11, {cx + kChipX, kHeadY}, withAlpha(theme::textDim, a), -1);
+    drawLabel(w, f, "Style", 11, {cx + kChipX, kHeadY}, withAlpha(theme::textDim, a), -1);
 
     int rowHover = -1;
     if (hover_ >= 100 && hover_ < 200) rowHover = hover_ - 100;

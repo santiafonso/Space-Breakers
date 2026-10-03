@@ -18,7 +18,13 @@ inline constexpr float radius = 18.f;
 inline constexpr float baseCruise = 300.f;       // px/s orbit speed at level 0
 inline constexpr float hardSpeedCap = 2600.f;
 inline constexpr float maxSpeedCruiseMul = 4.0f; // ceiling = cruise * this (capped by hardSpeedCap)
-inline constexpr int maxBalls = 5;   // few balls, each one a built-up "character" (classes, 4 items, type, abilities)
+// Few balls, each one a built-up "character" (classes, 4 items, type, abilities).
+// The arena holds baseBalls; beating act 2's boss makes room for lateBalls more
+// (App::ballCap). maxBalls is the hard ceiling the World is sized for.
+inline constexpr int baseBalls = 5;
+inline constexpr int lateBalls = 2;
+inline constexpr int lateBallsAct = 3;   // from this act on
+inline constexpr int maxBalls = baseBalls + lateBalls;
 
 // Speed regulation: cruise is a floor the ball climbs back to quickly and a
 // target it eases down to slowly, so a fling stays fast for a moment.
@@ -34,6 +40,14 @@ inline constexpr float squashDecay = 9.f;
 // min-axis floor keep those bounces lively instead of a flat ping-pong.
 inline constexpr float bounceAngleJitter = 0.13f;
 inline constexpr float minAxisFraction = 0.20f;
+// Every fight opens with the balls whirling around the core, spinning up,
+// then shooting out all at once.
+inline constexpr float launchTime = 1.9f;       // seconds of whirl
+inline constexpr float launchGather = 0.3f;     // ...the first of them easing onto the ring
+inline constexpr float launchRing = 62.f;       // ring gap outside the core
+inline constexpr float launchSpinFrom = 2.5f, launchSpinTo = 11.f;   // rad/s
+inline constexpr float launchSpeed = 2.2f;      // x cruise on release (capped at the ball's max)
+inline constexpr float launchTilt = 0.6f;       // release heading: outward, tilted this far (rad) along the spin
 inline constexpr float substepPerRadius = 0.5f;
 inline constexpr int maxSubsteps = 8;
 }  // namespace ball
@@ -68,6 +82,16 @@ inline constexpr float heavyImpactPerStack = 0.15f;  // "Heavy impact": + this c
 inline constexpr float bigBallPerStack = 0.10f;      // "Big ball": + this radius...
 inline constexpr float bigBallKnockPerStack = 0.25f; // ...and + this knockback
 inline constexpr float bigBallMaxMult = 2.0f;        // radius up to x this (so a ball can't fill the arena)
+// The 2026-09-28 modifiers, per stack.
+inline constexpr float ballastCruise = 0.88f, ballastDamage = 0.2f, ballastMinCruise = 0.45f;
+inline constexpr float keenCrit = 0.04f;
+inline constexpr float reachPerStack = 0.2f;
+inline constexpr float temperedPerStack = 0.12f;
+inline constexpr float spinChance = 0.15f;
+inline constexpr float leechHeal = 0.3f;
+inline constexpr float quickMindPerStack = 0.07f;
+inline constexpr float heavyThrowPerStack = 0.12f;
+inline constexpr float bouncyPerStack = 0.08f;
 inline constexpr float swiftPerStack = 0.08f;        // "Swift": + this cruise speed...
 inline constexpr float swiftTopPerStack = 0.15f;     // ...+ this top speed...
 inline constexpr float swiftFlingPerStack = 0.85f;   // ...and fling decay x this per stack
@@ -75,6 +99,13 @@ inline constexpr float heftPerLevel = 0.08f;      // "Heft" web node: + this con
 inline constexpr float massPerLevel = 0.10f;      // "Mass" web node: + this radius, every ball
 inline constexpr float slowFieldRadius = 210.f;   // "Slow field": zone around the core...
 inline constexpr float slowFieldMul = 0.55f;      // ...enemies inside move at this fraction of speed
+
+// Catch reward: grabbing a ball in flight arms its next hit. The bonus grows
+// with how fast it was going (on-screen, x the base cruise) when caught.
+inline constexpr float catchFromRatio = 1.1f;   // no bonus at or under this speed...
+inline constexpr float catchFullRatio = 2.6f;   // ...full bonus from this speed up
+inline constexpr float catchBonusMax = 0.5f;    // first hit of the throw x (1 + this) at most
+inline constexpr float catchWindow = 2.5f;      // s after the throw the armed hit stays armed
 
 // Item numbers at level 1, then + perLevel for each level past it.
 inline constexpr float ricochetWindow = 0.6f;     // "Ricochet": a wall bounce arms a damage bonus for this long...
@@ -85,7 +116,7 @@ inline constexpr float conductorRange = 240.f;    // "Conductor": the electric a
 inline constexpr float conductorFalloff = 0.6f;   // ...for this fraction of the bolt's damage; one more jump per level
 inline constexpr float shatterBonus = 1.8f, shatterPerLevel = 0.4f;   // "Shatter": frozen enemies take x this
 inline constexpr float contagionRadius = 90.f;    // "Contagion": a poisoned enemy dying re-poisons others within this
-inline constexpr float bedrockLifeMult = 4.f, bedrockPerLevel = 1.5f; // "Bedrock": stone rubble lasts x this long
+inline constexpr float bedrockLifeMult = 1.5f, bedrockPerLevel = 0.25f; // "Bedrock": its cracks last x this long (and stack to 7)
 inline constexpr float primedMult = 1.35f;        // "Primed": +damage to an enemy already under an element effect
 inline constexpr float critChance = 0.12f, critChancePerLevel = 0.07f;  // "Keen eye": chance a hit deals...
 inline constexpr float critMult = 2.0f, critMultPerLevel = 0.25f;       // ...x this damage
@@ -133,7 +164,7 @@ inline constexpr float tierShiftPerPoint = 0.035f;
 inline constexpr float tierShiftCap = 0.6f;
 inline constexpr int cloverPoints = 6;        // "Lucky clover" relic (chances x1.48)
 inline constexpr int luckyStarPerLevel = 2;   // "Lucky star" web node, per level
-inline constexpr int dicePoints = 12;         // "Loaded Dice" pact (chances x1.96)
+inline constexpr int dicePoints = 12;         // "Loaded Dice" creed (chances x1.96)
 }  // namespace luck
 
 // Synergies (Fase I): procs, element reactions, ascended classes and the big
@@ -250,7 +281,9 @@ inline constexpr int maxMissiles = 40;
 // Rare and up were made scarcer (2026-09-26, usuario): the good stuff is earned.
 namespace tier {
 inline constexpr int weightsNormal[5] = {53, 30, 12, 4, 1};   // upgrade nodes, shops (was 45/30/16/7/2)
-inline constexpr int weightsElite[5]  = {26, 35, 24, 11, 4};  // elite fights (was 18/32/28/15/7)
+// Rare tiers stay rare so one landing is an event: ~3% Legendary per elite card.
+inline constexpr int weightsElite[5]  = {30, 36, 22, 9, 3};   // elite fights (their item pick)
+inline constexpr int weightsShop[5]   = {40, 34, 17, 7, 2};   // the shop's shelf
 inline constexpr int weightsBoss[5]   = {0, 0, 0, 65, 35};    // the treasure after a boss
 }  // namespace tier
 
@@ -267,8 +300,13 @@ inline constexpr float berserkPerHit = 0.15f, berserkPerLevel = 0.05f;  // Berse
 inline constexpr int   berserkMax = 12, berserkMaxPerLevel = 3;         // ...up to this many
 inline constexpr float giantRadius = 1.8f, giantDamage = 1.3f, giantCruise = 0.8f;
 inline constexpr float giantDamagePerLevel = 0.15f;
-inline constexpr float satelliteRadius = 150.f;    // Satellite: orbit radius around the core
-inline constexpr float satelliteSpeed = 1.1f;      // ...orbit speed x its cruise
+inline constexpr float satelliteRadius = 150.f;    // Satellite: orbit radius around the core (with nothing close)...
+inline constexpr float satelliteSpeed = 1.6f;      // ...orbit speed x its cruise
+// Anything orbiting the core (Satellite, Warden spirits) swings its radius out
+// or in toward the enemy closest to the core, within [orbitMin, orbitMax x its
+// usual radius], easing there at orbitEase per second.
+inline constexpr float orbitMax = 1.9f;
+inline constexpr float orbitEase = 3.5f;
 inline constexpr float satelliteDamage = 1.8f, satellitePerLevel = 0.35f;   // ...its hits x this
 inline constexpr float gravityRadius = 230.f;      // Gravity well: pull radius...
 inline constexpr float gravityPull = 210.f;        // ...px/s drag toward the ball at its centre (fades to 0 at the edge)
@@ -339,34 +377,64 @@ inline constexpr int perKill = 100;   // per enemy killed; x2 while DOUBLE POINT
 // levels 2-3 raise its potency (elemMult). Unlock order, each gating the next:
 // fire -> poison -> water -> ice -> stone -> electric.
 namespace element {
-// fire: a heavier contact hit (used to be a burn) - scales the ball's damage
-inline constexpr float fireDamageBonus = 0.60f;   // + this * elemMult on top of normal contact damage
+// fire (2026-09-28): a fire that spreads. Every hit sets the enemy alight
+// (the burn climbs with each hit); a burning enemy that dies bursts and sets
+// the ones around it alight. A slightly heavier hit on top.
+inline constexpr float fireDamageBonus = 0.25f;   // + this * elemMult on top of normal contact damage
+inline constexpr float burnPerHit = 1.3f;         // each fire hit adds this burn dps (x potency, x Ember)...
+inline constexpr float burnMax = 6.5f;            // ...up to this
+inline constexpr float emberPerLevel = 0.35f;     // "Ember" web node: the burn x (1 + this * level)
+inline constexpr float fireSpreadRadius = 85.f;   // a burning enemy's death sets alight the ones this close...
+inline constexpr float fireSpreadKeep = 0.7f;     // ...at this share of its burn...
+inline constexpr float fireSpreadBlast = 1.2f;    // ...and hits them for this x its burn dps
+inline constexpr float fireSpreadMin = 0.4f;      // a burn weaker than this dps doesn't spread
+// water (2026-09-28): soaks and sweeps. A hit soaks the enemy (slower, flies
+// further when hit, freezes twice as long), and every so often the ball sends
+// out a wave: an arc ahead of it that rolls outward, growing wider, shoving
+// and soaking every enemy it crosses (no damage of its own).
+inline constexpr float soakDuration = 3.f;        // x potency
+inline constexpr float soakSlow = 0.7f;           // a soaked enemy moves at this x speed
+inline constexpr float soakKnock = 1.5f;          // ...and takes knockback x this
+inline constexpr float soakFreeze = 2.f;          // ...and stays frozen x this
+inline constexpr float waveEvery = 1.5f;          // s between waves
+inline constexpr float waveSpeed = 340.f;         // px/s it rolls out
+inline constexpr float waveReach = 330.f;         // how far it rolls (x (0.8 + 0.2 potency))
+inline constexpr float waveArc = 0.55f;           // half-angle of the arc (rad): it widens as it rolls
+inline constexpr float waveThick = 10.f, waveThickGrow = 20.f;   // crest half-thickness, + this by the end
+inline constexpr float wavePush = 300.f;          // knock (px/s) on each enemy it crosses (x potency)
+inline constexpr int maxWaves = 10;
+// stone (2026-09-28): the heavy ball that cracks. Every hit cracks the enemy:
+// each crack makes it take more from EVERY source. Slower, shoves harder.
+inline constexpr float crackDamage = 0.12f;       // + damage taken per crack...
+inline constexpr int crackMax = 5;                // ...up to this many ("Bedrock": more)
+inline constexpr float crackTime = 4.f;           // cracks close up this long after the last one
+inline constexpr float stoneCruise = 0.9f;        // a stone ball cruises x this...
+inline constexpr float stoneKnock = 1.3f;         // ...and shoves x this
+// stone's reactions (pools and bursts)
+inline constexpr float poolLife = 4.5f;
+inline constexpr float magmaRadius = 70.f, magmaFrac = 0.35f;   // lava: dps x the hit
+inline constexpr float mudRadius = 85.f, mudSlow = 0.35f;       // mud: enemies inside move x this
+inline constexpr float toxicRadius = 75.f, toxicDps = 3.f;      // dust: poisons what's inside
+inline constexpr float shardsRadius = 110.f, shardsFrac = 0.9f; // shards: a burst that cracks twice
+inline constexpr float magnetRadius = 150.f, magnetFrac = 0.5f; // magnet: yanks enemies together
+inline constexpr int maxPools = 12;
 // poison: stacking damage-over-time, refreshed and stacked on every hit
 inline constexpr float poisonDuration = 3.5f;
 inline constexpr float poisonDpsPerHit = 1.1f;    // each hit adds this much dps...
 inline constexpr float poisonDpsMax = 7.0f;       // ...capped here
 // ice: a hit freezes the enemy in place for a moment
 inline constexpr float freezeDuration = 1.3f;
-// "Ember" web node: fire hits also light the enemy for a short burn (fire has no
-// damage-over-time on its own). Scales with elemMult[Fire] (Ignition level) and
-// the Ember node level.
-inline constexpr float burnDuration = 2.5f;
-inline constexpr float burnDps = 2.0f;
-inline constexpr float burnPerEmberLevel = 0.5f;  // + this * (emberLevel - 1) to burn dps
-// water: drags a damaging "worm" wake that follows the ball's path and tapers
-// from head to tail
-inline constexpr float waterInterval = 0.035f;    // time between trail points laid down
-inline constexpr int   waterTrailPoints = 30;     // worm length (~1s of travel)
-inline constexpr float waterTrailWidth = 16.f;    // damage half-width at the head; tapers toward the tail
-inline constexpr float waterDps = 3.2f;
+// fire's burn: refreshed by every fire hit (see burnPerHit above); the "Ember"
+// web node heats it (emberPerLevel), Ignition's level scales it (potency).
+inline constexpr float burnDuration = 3.f;
 // electric: zaps the nearest enemy inside an (invisible) radius, on a timer
 inline constexpr float boltRadius = 190.f;
 inline constexpr float boltInterval = 0.7f;
 inline constexpr float boltDamage = 2.4f;
 inline constexpr float boltLife = 0.13f;          // the arc is just a brief visual flash
 inline constexpr int   maxBolts = 40;
-// stone: drops rubble that blocks enemies AND grinds any standing in it
-inline constexpr float stoneInterval = 1.7f;
+// rubble (Obstacle): blocks enemies and grinds any standing in it. Stone no
+// longer drops it (it cracks now); the system stays for later use.
 inline constexpr float obstacleRadius = 18.f;
 inline constexpr float obstacleLife = 5.0f;
 inline constexpr float stoneDps = 2.2f;
@@ -388,49 +456,100 @@ inline constexpr float bastionPerWavePerLevel = 1.0f;  // "Bastion" meta node: +
 
 // A run is a fixed sprint: survive to the final wave and you win.
 namespace run {
-inline constexpr int startBalls = 1;   // every run starts with one ball (more come from picks / pacts)
-inline constexpr int bossWave = 10;    // the miniboss duel
-inline constexpr int finalWave = 20;   // last wave once "Continue" past the boss is unlocked
+inline constexpr int choiceCards = 3;  // every pick deals 3 cards (Quartermaster's starter pick and Calling's
+                                       // first-ability pick are the upgrades that deal more)
+inline constexpr float newBallCardWeight = 0.3f;   // an "Extra ball" card weighs this vs 1 for other picks of its tier
+inline constexpr int startBalls = 1;   // every run starts with one ball (more come from picks / creeds)
+// Five acts of 10 difficulty waves each; wave 10 of every act is its boss
+// (Charger, Hive, Warden, Dasher, Orbital). "Continue" carries the run past
+// each boss once a run has been won before.
+inline constexpr int bossWave = 10;    // waves per act = the act-1 boss wave
+inline constexpr int acts = 5;
+inline constexpr int finalWave = bossWave * acts;   // the Orbital, the last boss
+constexpr int actOfWave(int w) { return w <= 0 ? 1 : (w - 1) / bossWave + 1; }
+constexpr bool isBossWave(int w) { return w > 0 && w % bossWave == 0; }
 inline constexpr float coreSlideTime = 1.4f;  // core eases left -> arena centre entering wave 11
 inline constexpr int rerollsPerLevel = 2;     // "Foresight" web node: reroll charges per run, per level
 }  // namespace run
 
+// Hard mode (toggled on the run-start screen, saved): everything hits harder,
+// comes in bigger numbers and the core gets no free repair between fights.
+// Pays more cores.
+namespace hard {
+inline constexpr float enemyHpMul = 1.6f;
+inline constexpr float enemySpeedMul = 1.12f;
+inline constexpr float countMul = 1.3f;
+inline constexpr float coreDamageMul = 1.5f;
+inline constexpr float bossHpMul = 1.8f;
+inline constexpr int bruteWave = 5;               // Brutes show up in normal fights from here...
+inline constexpr float bruteFightChance = 0.5f;   // ...this often; elites always bring two
+inline constexpr float coresMul = 1.75f;
+}  // namespace hard
+
 // The path map between waves (one per act) and the run's gold.
 namespace map {
-inline constexpr int rows = 14;         // choosable rows per act; the boss is row rows+1
+inline constexpr int rows = 13;         // choosable rows per act (acts 2-5); the boss is row rows+1
+inline constexpr int rowsAct1 = 11;     // act 1 is a shorter climb (see mapRows)
 inline constexpr int lanes = 4;         // max nodes per row
-inline constexpr int minPerRow = 2;
+inline constexpr int minPerRow = 2;     // and min, between the trunk and the pre-boss row
+inline constexpr int splitPct = 22;     // % chance per row that a path forks into a free neighbouring lane
+inline constexpr int driftPct = 34;     // % chance a path drifts a lane over each row (else it goes straight)
 // Node weights for rows 2..rows-1 (row 1 is always a fight; the last row is
 // shop / rest / upgrade / recruit, see kPreBossRow in progression/RunMap.hpp).
-inline constexpr int wCombat = 44;
+// Between fights the map mostly offers build stops (Upgrade / Recruit /
+// Forge); shops are rare.
+inline constexpr int wCombat = 46;
 inline constexpr int wElite = 16;
-inline constexpr int wShop = 13;
+inline constexpr int wShop = 6;
 inline constexpr int wForge = 9;
 inline constexpr int wRest = 9;
-inline constexpr int wUpgrade = 8;
-inline constexpr int wRecruit = 8;      // a new ball or a role
+inline constexpr int wUpgrade = 10;
+inline constexpr int wRecruit = 8;      // a new ball or a free pick (unused: see the path leanings below)
+// Every path leans one way, never said out loud: a "recruit" path turns up
+// Recruit stops (new balls) and few elites; an "item" path turns up elites and
+// shops (the only places items come from) and no Recruit. Where two paths
+// share a node it's neutral. Balls stay scarce: exactly one Recruit per
+// recruit path in act 1, two in act 2.
+inline constexpr int recruitsPerPathAct1 = 1;   // Recruit stops placed on each recruit path (not rolled)
+inline constexpr int recruitsPerPathAct2 = 2;
+inline constexpr int elitesPerPathAct1Min = 1;  // Elite stops placed on each item path: 1-2 in act 1...
+inline constexpr int elitesPerPathAct1Max = 2;
+inline constexpr int elitesPerPathAct2 = 2;     // ...2 in act 2 (not rolled)
+inline constexpr int wEliteRecruitPath = 3;     // a stray elite elsewhere stays a rare find
+inline constexpr int wEliteItemPath = 0;
+inline constexpr int wShopItemPath = 9;
+inline constexpr int wEliteNeutral = 4;
+inline constexpr int wShopNeutral = 5;
 // Elite waves: tougher and more of them.
 inline constexpr float eliteHpMul = 1.6f;
 inline constexpr float eliteCountMul = 1.3f;
+// Altar (pacts): rare on the map, or down the hidden path before the boss.
+inline constexpr int altarPct = 22;            // % chance an act's map has one Altar (rows 4+, not the pre-boss row)
+inline constexpr int altarStreak = 3;          // flawless fights in a row (per act) that open the hidden path
+// Shops are rare: at most this many on an act's paths (the pre-boss row's
+// shop aside); extras turn into "?" stops.
+inline constexpr int shopsPerAct = 1;
 }  // namespace map
 
 namespace gold {
-inline constexpr int combatBase = 8;      // a cleared fight pays this + perRow * row
+inline constexpr int combatBase = 7;      // a cleared fight pays this + perRow * row
 inline constexpr int elitePerRowMul = 2;  // an elite pays 2x a fight (and a pick)
 inline constexpr int perRow = 2;
+inline constexpr int perAct = 5;          // + this per act past the first (prices don't move, the act does)
 inline constexpr int bossPay = 40;
 // Playing well pays: every kill drops gold that grows with the damage combo,
 // kills in a quick burst pay a multi-kill bonus, a flawless fight (nothing
 // reached the core) pays a bonus on top.
 inline constexpr float perKill = 0.5f;
 inline constexpr float comboBonusPerTier = 0.25f;  // per-kill gold x (1 + this * combo tier)
+inline constexpr float coinBase = 3.f, coinPerTier = 0.35f, coinMax = 6.f;   // a kill's coin radius (UI px)
 inline constexpr float multiKillWindow = 0.35f;    // kills this close together chain into one burst
 inline constexpr int multiKillMin = 3;
 inline constexpr int multiKillGoldPer = 1;         // bonus gold per enemy in a multi-kill
 inline constexpr int flawlessBase = 5;             // flawless fight: this + flawlessPerRow * row (~75% of its pay)
 inline constexpr int flawlessPerRow = 2;
 inline constexpr int flawlessEliteMul = 2;         // a flawless elite pays this x
-inline constexpr int flawlessBoss = 30;            // a flawless act-1 boss (the final boss ends the run)
+inline constexpr int flawlessBoss = 30;            // a flawless boss (the final boss ends the run)
 // Shop prices.
 inline constexpr int priceNewBall = 60;
 inline constexpr int priceModifier = 22;
@@ -438,14 +557,19 @@ inline constexpr int priceModifier = 22;
 inline constexpr int priceByTier[5] = {30, 45, 65, 95, 150};
 inline constexpr int priceRepair = 20;     // repairs repairFrac of the core's max HP
 inline constexpr float repairFrac = 0.30f;
-inline constexpr int shopOffers = 5;
+inline constexpr int shopOffers = 3;   // a small shelf...
+inline constexpr int shopMaxItems = 1; // ...with at most one item on it (items are scarce)...
+inline constexpr float shopItemChance = 0.6f;   // ...and only on this share of visits
 inline constexpr int maxItemLevel = 3;     // forge cap
 // Shop extras (Fase O): one offer is on sale, a mystery box, a paid reroll,
 // selling an item back, and the forge as a paid service.
 inline constexpr float saleOff = 0.40f;    // the sale offer costs this much less ("Merchant" deepens it)
 inline constexpr int mysteryPrice = 55;    // a pick rolled at elite odds, revealed on purchase
-inline constexpr int rerollBase = 12;      // shop reroll: this, +rerollStep per reroll at this shop
-inline constexpr int rerollStep = 6;
+// Shop reroll: as many as you can pay for, each dearer than the last:
+// rerollBase * rerollGrowth^n (15, 26, 43, 74, 125, 213 ...). "Merchant": the
+// first one per level at each shop is free.
+inline constexpr int rerollBase = 15;
+inline constexpr float rerollGrowth = 1.7f;
 inline constexpr float sellFrac = 0.45f;   // selling an item pays this of its tier price, x its level
 inline constexpr int forgeServicePrice = 45;   // level up an item without a Forge node
 }  // namespace gold
@@ -454,18 +578,65 @@ inline constexpr int forgeServicePrice = 45;   // level up an item without a For
 namespace boss {
 inline constexpr float arenaScaleX = 1.95f;   // boss arena vs the normal one (camera pulls way back)
 inline constexpr float arenaScaleY = 1.45f;
-inline constexpr float coreMarginX = 110.f;   // core sits this far from the left wall
+inline constexpr float coreMarginX = 250.f;   // core sits this far from the left wall (room for the opening whirl)
 // The wide arena (boss wave on) is framed by a pulled-back camera. Ball speeds
 // scale with it so they look and bounce the same on screen; radius grows by
 // this fraction of the extra scale.
 inline constexpr float ballRadiusArenaFrac = 0.5f;
-inline constexpr float hp = 40.f;             // small bar - a handful of clean hits
+// Boss HP is counted in plain enemies of its wave (cfg::wave), so it follows
+// the curve: "hp = 5" is five grunts' worth.
+inline constexpr float hp = 12.f;             // the Charger (act 1)
 inline constexpr float radius = 58.f;         // fat target - you are meant to fling at it
 inline constexpr float speed = 54.f;          // px/s, dead straight at the core, no steering
-inline constexpr float addInterval = 1.15f;   // infinite adds cadence while the boss lives
-inline constexpr int   maxAdds = 16;          // concurrent cap so it stays fair
+// Charger shockwave: every so often (faster when enraged) it pulses and
+// flings every ball near it away. Telegraphed for shockWarn seconds.
+inline constexpr float shockEvery = 5.0f;
+inline constexpr float shockWarn = 0.8f;
+inline constexpr float shockRadius = 300.f;
+inline constexpr float shockPush = 1100.f;    // px/s a ball right next to it leaves at (less at the edge)
+inline constexpr float addInterval = 0.95f;   // infinite adds cadence while the boss lives
+inline constexpr int   maxAdds = 18;          // concurrent cap so it stays fair
+inline constexpr float addHpMul = 0.8f;       // boss adds are a touch softer than that act's grunts
+// Acts 2-4 (bosses in a centred core arena; each enters from an edge).
+// Hive (act 2): drifts in on a slow wobble and every few seconds bursts a fan
+// of runners at the core - the swarm is the fight.
+inline constexpr float hiveHp = 10.f;
+inline constexpr float hiveRadius = 64.f;
+inline constexpr float hiveSpeed = 26.f;
+inline constexpr float hiveWobble = 0.9f;       // rad/s of the side-to-side sway
+inline constexpr float hiveBurstEvery = 4.2f;   // seconds between bursts
+inline constexpr int   hiveBurstCount = 4;      // runners per burst
+inline constexpr int   hiveCap = 20;            // no burst while this many enemies are up
+// Warden (act 3): a shield arc slowly turns around it and blocks any ball
+// that lands on that side; it walks in, stops to plant, walks again.
+inline constexpr float wardenHp = 12.f;
+inline constexpr float wardenRadius = 60.f;
+inline constexpr float wardenSpeed = 34.f;
+inline constexpr float wardenShieldArc = 1.3f;   // radians either side of the shield's centre
+inline constexpr float wardenShieldSpin = 0.8f;  // rad/s the shield turns
+inline constexpr float wardenWalk = 3.0f, wardenPlant = 1.6f;   // seconds walking / standing
+// Dasher (act 4): circles at range, telegraphs a line, then dashes at the
+// core. Every clean hit knocks it back - keep hitting it or it gets through.
+inline constexpr float dasherHp = 12.f;
+inline constexpr float dasherRadius = 50.f;
+inline constexpr float dasherStalk = 40.f;       // px/s creeping in between dashes
+inline constexpr float dasherAim = 1.3f;         // seconds of telegraph before a dash
+inline constexpr float dasherDash = 0.45f;       // seconds a dash lasts...
+inline constexpr float dasherDashSpeed = 420.f;  // ...at this speed
+inline constexpr float dasherRest = 2.4f;        // seconds between dashes
+inline constexpr float dasherKnock = 34.f;       // px pushed back per ball hit
+// Each boss's HP grows by this per player ball past the first, so a wide
+// squad doesn't just melt it.
+inline constexpr float hpPerExtraBall = 0.15f;
+// Every boss fights in two phases: below enrageAt of its HP it moves and
+// attacks enragePace x faster and its adds come quicker; at each of
+// summonAt a Brute (the miniboss) joins the fight.
+inline constexpr float enrageAt = 0.5f;
+inline constexpr float enragePace = 1.5f;
+inline constexpr float enrageAddMul = 0.6f;     // add interval x this once enraged
+inline constexpr float summonAt[2] = {0.66f, 0.33f};
 inline constexpr float camEase = 2.1f;        // camera zoom transition rate (lower = slower pull-back)
-inline constexpr float hitCooldown = 0.1f;      // i-frames: a ball trapped against a boss can't melt it
+inline constexpr float hitCooldown = 0.2f;      // i-frames: a ball trapped against a boss can't melt it
 inline constexpr float minHitCruiseFrac = 0.9f; // a ball must be at ~cruise speed to hurt a boss, so a
                                                 // just-released "nudge" ball dropped on it does nothing
                                                 // (kills the "put the cursor on the boss and spam-click" cheese)
@@ -476,7 +647,7 @@ inline constexpr float minHitCruiseFrac = 0.9f; // a ball must be at ~cruise spe
 // rushes the core - clear them to win.
 namespace finalBoss {
 inline constexpr float radius = 46.f;           // a touch smaller than the wave-10 boss (58)
-inline constexpr float hp = 64.f;               // takes real work - shouldn't fall to one burst
+inline constexpr float hp = 14.f;               // the last boss (act 5), in wave-50 grunts
 inline constexpr float introTime = 1.2f;        // slides in from the left edge, invulnerable, before it spirals
 inline constexpr float startAngle = 3.14159265f; // enters from the left of the centred core
 inline constexpr float spiralOmega = 1.0f;      // rad/s around the core (more loops = longer path)
@@ -486,26 +657,39 @@ inline constexpr int   shieldCount = 6;         // orbiters kept alive around th
 inline constexpr float shieldRadius = 118.f;    // orbiter ring radius around the boss
 inline constexpr float shieldOmega = 1.5f;      // rad/s the ring spins
 inline constexpr float shieldRespawn = 2.0f;    // seconds to replace a downed orbiter
-inline constexpr float shieldHp = 6.f;
+inline constexpr float shieldHp = 0.5f;         // in wave-50 grunts
 inline constexpr float deathBurst = 260.f;      // outward shove on the ring when the boss dies
-inline constexpr float addInterval = 1.4f;      // enemies pour in from the screen edges
-inline constexpr int   addCap = 16;             // concurrent edge adds (orbiters not counted)
-inline constexpr float addHp = 10.f;            // softer than a plain wave-20 enemy would be
-inline constexpr float addSpeed = 95.f;
+inline constexpr float addInterval = 1.0f;      // enemies pour in from the screen edges
+inline constexpr int   addCap = 22;             // concurrent edge adds (orbiters not counted)
+inline constexpr float addHpMul = 0.6f;         // softer than a plain wave-50 enemy
+inline constexpr float addSpeed = 110.f;
 }  // namespace finalBoss
 
+// Difficulty over the 50 waves. Count grows fast early then linearly (longer
+// fights from the start); HP grows steeply through act 2 and gentler after,
+// so acts 3-5 lean on the new kinds, minibosses and density, not just bigger
+// numbers.
 namespace wave {
-inline constexpr int baseCount = 4;
-inline constexpr float countGrowth = 1.24f;
-inline constexpr int maxCount = 100;
-inline constexpr float spawnInterval = 0.95f;      // cadence on the early waves
-inline constexpr float spawnIntervalMin = 0.45f;   // cadence by the final wave (denser, not a trickle)
+inline constexpr int baseCount = 8;
+inline constexpr float countPerWave = 2.1f;        // + this per wave...
+inline constexpr float countPerWave2 = 0.07f;      // ...+ this x (wave-1)^2
+inline constexpr int maxCount = 120;               // reached around wave 29
+inline constexpr float spawnInterval = 0.85f;      // cadence on the early waves...
+inline constexpr float spawnIntervalMin = 0.28f;   // ...tightening to this by spawnMinWave (denser, not a trickle)
+inline constexpr int spawnMinWave = 30;
 inline constexpr float introDelay = 1.15f;   // calm beat before the first enemy of a wave
-inline constexpr float hpBase = 3.f;
-inline constexpr float hpGrowth = 1.17f;
-inline constexpr float speedBase = 34.f;
-inline constexpr float speedGrowth = 1.06f;
-inline constexpr float speedMax = 165.f;
+inline constexpr float hpBase = 3.5f;
+inline constexpr float hpGrowth = 1.18f;      // per wave up to hpKneeWave...
+inline constexpr int   hpKneeWave = 20;
+inline constexpr float hpGrowthLate = 1.04f;  // ...and this per wave after
+inline constexpr float speedBase = 36.f;
+inline constexpr float speedGrowth = 1.05f;
+inline constexpr float speedMax = 150.f;
+// From act 2 some spawns come as a pack of runners bunched together.
+inline constexpr int packWave = 12;
+inline constexpr float packChance = 0.12f;     // per spawn, grows to packChanceMax by the final wave
+inline constexpr float packChanceMax = 0.25f;
+inline constexpr int packSize = 4;
 inline constexpr float enemyRadius = 19.f;
 }  // namespace wave
 
@@ -527,9 +711,42 @@ inline constexpr float shardHp = 0.35f, shardSpeed = 1.4f, shardRadius = 0.65f;
 // flank or behind.
 inline constexpr float shieldArc = 1.05f;
 inline constexpr float shieldHp = 1.3f;
+// Blinker (act 2+): every few seconds it vanishes and reappears a jump
+// closer to the core - catch it between jumps.
+inline constexpr float blinkerHp = 0.8f, blinkerSpeed = 0.8f, blinkerRadius = 0.85f;
+inline constexpr float blinkEvery = 2.6f;     // seconds between jumps
+inline constexpr float blinkDist = 150.f;     // px per jump (stops short of the core)
+// Mender (act 3+): slow; knits every other enemy near it back together.
+inline constexpr float menderHp = 1.4f, menderSpeed = 0.7f, menderRadius = 1.05f;
+inline constexpr float mendRadius = 170.f;
+inline constexpr float mendPerSec = 0.10f;    // of the target's max HP per second
+// Snare (act 2+): catches the first ball that hits it (never your last free
+// one) and holds it until another ball kills it.
+inline constexpr float snareHp = 1.5f, snareSpeed = 0.75f, snareRadius = 1.15f;
+// Gaits: some enemies don't walk straight in. Weave = sways across its line;
+// Spiral = circles the core as it closes in (a bit faster, so it arrives in
+// about the same time). Rolled per spawn on grunts, runners, splitters and
+// shielded enemies; the chance grows over the run.
+inline constexpr int weaveWave = 3, spiralWave = 11;
+inline constexpr int weavePct = 18, spiralPct = 14;       // at their first wave...
+inline constexpr int gaitPctPerAct = 4;                    // ...+ this per act after
+inline constexpr float weaveAmp = 0.85f, weaveFreq = 2.4f; // sideways lean (x speed), sway rate (rad/s)
+inline constexpr float weaveSpeed = 1.3f;
+inline constexpr float spiralInward = 0.5f;                // inward share far out (straightens up close)
+inline constexpr float spiralNear = 260.f;                 // px from the core where it goes straight in
+inline constexpr float spiralSpeed = 1.3f;
+// Brute (the miniboss): huge, very tough, barely moves when hit, flattens a
+// chunk of the core. Every elite fight brings one (two from act 3); from act 2
+// a normal fight can end with one.
+inline constexpr float bruteHp = 10.f, bruteSpeed = 0.45f, bruteRadius = 2.2f;
+inline constexpr float bruteKnock = 0.12f, bruteCoreDamage = 4.f;
+inline constexpr int   bruteWave = 12;            // first normal wave that may roll one
+inline constexpr float bruteFightChance = 0.35f;  // ...this chance per normal fight
 // First wave each kind can show up, and its roll weight (grunts fill the rest).
-inline constexpr int runnerWave = 2, splitterWave = 4, tankWave = 5, shieldWave = 6;
-inline constexpr int wGrunt = 50, wRunner = 20, wSplitter = 14, wTank = 10, wShield = 12;
+inline constexpr int runnerWave = 2, splitterWave = 3, tankWave = 4, shieldWave = 5;
+inline constexpr int blinkerWave = 12, menderWave = 22, snareWave = 13;
+inline constexpr int wGrunt = 46, wRunner = 20, wSplitter = 14, wTank = 11, wShield = 12;
+inline constexpr int wBlinker = 12, wMender = 6, wSnare = 7;
 inline constexpr int eliteTankBonus = 10, eliteShieldBonus = 8;   // elites lean on the tough ones
 }  // namespace enemy
 
@@ -567,12 +784,12 @@ inline constexpr float stonewallPerLevel = 0.5f;     // "Stonewall": core HP per
 inline constexpr int abilityPickCards = 3;           // the run's first-ability pick (+1 with "Calling")
 }  // namespace meta
 
-// Pacts (Fase O): run-defining rules picked after the act-1 boss (and at the
-// run start with "Covenant"). Definitions in progression/Pacts.hpp, sim hooks
-// in sim/WorldPacts.cpp.
-namespace pact {
-inline constexpr int offered = 3;            // cards per pact choice ("Oath": +1)
-inline constexpr int refuseGold = 40;        // turning every pact down pays this
+// Creeds (Fase O): run-defining rules picked after the act-1 boss (and at the
+// run start with "Covenant"). Definitions in progression/Creeds.hpp, sim hooks
+// in sim/WorldCreeds.cpp.
+namespace creed {
+inline constexpr int offered = 3;            // cards per creed choice ("Oath": +1)
+inline constexpr int refuseGold = 40;        // turning every creed down pays this
 // Hot Hands
 inline constexpr float hotFling = 1.7f;      // throw speed x this
 inline constexpr float hotCeil = 3.0f;       // top speed x this (so the throw isn't clipped)
@@ -626,6 +843,77 @@ inline constexpr float alchemyChance = 0.5f;
 inline constexpr float alchemyDamage = 0.75f;
 // Bloodlust
 inline constexpr float bloodCoreDamage = 1.5f;
+}  // namespace creed
+
+// The player's own abilities (2026-10-01): Q = Mark from the start, E =
+// bullet time from act 2. They belong to you, not to a ball or a build.
+namespace player {
+// Q, Volley: like clicking every ball at once - each free ball is thrown
+// straight at the enemy (or boss) nearest to it, faster than a click throw,
+// with no catch reward.
+inline constexpr float markCooldown = 1.f;
+inline constexpr float volleySpeedMul = 1.4f;   // x the click throw's speed
+// E, Bullet time: hold it and the fight runs slow. A gauge: it drains while
+// held and refills on its own a moment after you let go, so you choose
+// where to spend it.
+inline constexpr int bulletAct = 2;
+inline constexpr float bulletScale = 0.3f;        // sim speed while it runs
+inline constexpr float bulletMax = 3.f;           // real s of slow motion in a full gauge
+inline constexpr float bulletRecharge = 14.f;     // real s from empty to full
+inline constexpr float bulletRechargeDelay = 0.8f;
+inline constexpr float bulletMinStart = 0.08f;    // gauge needed to start it again
+// F, Repulse (act 2 on): the core sends out a shockwave - every enemy near it
+// is shoved away (soaked ones further) and staggered. The panic button.
+inline constexpr int repulseAct = 2;
+inline constexpr float repulseCooldown = 10.f;
+inline constexpr float repulseRadius = 270.f;   // px (x arena scale)
+inline constexpr float repulseKnock = 800.f;    // outward speed given (x knockTaken): ~230 px with the stagger drag
+inline constexpr float repulseStagger = 1.0f;   // s it drifts instead of walking
+}  // namespace player
+
+// "?" stops (progression/Events.hpp): now and then a stranger with deals for
+// gold instead of the free pick. Prices and payouts are base + perAct * (act - 1).
+namespace event {
+inline constexpr int chancePct = 40;          // % of "?" stops that hold an event
+inline constexpr int deals = 2;               // deals on offer (plus walking away)
+inline constexpr int ballPrice = 120, ballPerAct = 40;        // a new ball
+inline constexpr int smugglerPrice = 70, smugglerPerAct = 20; // an item pick at elite odds
+inline constexpr int bloodGold = 60, bloodPerAct = 20;        // gold for core max HP...
+inline constexpr float bloodHpFrac = 0.12f;                   // ...this share of it
+inline constexpr int tithePrice = 50, tithePerAct = 15;       // core max HP for gold...
+inline constexpr float titheHpFrac = 0.15f;                   // ...this much more (and healed)
+inline constexpr int gambleStake = 40, gamblePerAct = 15;     // coin flip: lose it or win...
+inline constexpr float gambleWinMul = 2.5f;                   // ...this times it back
+inline constexpr int gambleWinPct = 50;
+inline constexpr int smithPrice = 40, smithPerAct = 10;       // level up an item
+}  // namespace event
+
+// Pacts (progression/Pacts.hpp): a gift with a price.
+namespace pact {
+inline constexpr int offered = 3;              // cards at an Altar
+inline constexpr float leadDamage = 1.6f, leadCruise = 0.6f;
+inline constexpr float quickCatchMul = 2.f;    // Quick Hands: catch reward x this...
+inline constexpr float quickIdleAfter = 10.f;  // ...a ball not thrown for this long (s)...
+inline constexpr float quickIdleDamage = 0.8f; // ...hits x this
+inline constexpr float heavyArmFling = 1.5f;
+inline constexpr float glassCrit = 0.3f, glassMiss = 0.8f;
+inline constexpr float stillnessMax = 0.6f;    // + damage at a standstill (0 at cruise)
+inline constexpr float stillnessQuick = 0.6f;  // quick throws x this
+inline constexpr float overflowDamage = 0.85f;
+inline constexpr float tinyDamage = 1.8f, tinyRadius = 0.5f;
+inline constexpr float colossusMul = 2.f, colossusOthers = 0.7f;
+inline constexpr float potatoPerSec = 0.25f;   // Hot Potato: first-hit bonus per second held...
+inline constexpr float potatoMax = 3.f;        // ...up to this long, then it slips
+inline constexpr float jugglePer = 0.12f;      // Juggler: + damage per catch in a row...
+inline constexpr int juggleMax = 8;            // ...up to this many
+inline constexpr float juggleCoreChip = 0.03f; // a juggled ball on the core: the core loses this x max HP
+inline constexpr float anchorFling = 2.f;
+inline constexpr float anchorKeep = 0.12f;     // Anchor Walls: speed kept off a wall
+inline constexpr float lastBreathAt = 0.3f, lastBreathMul = 2.f, lastBreathCore = 0.8f;
+inline constexpr float mirrorEnemyHp = 1.2f;
+inline constexpr float elementalMul = 2.f, elementalContact = 0.7f;
+inline constexpr float blindFling = 1.4f;
+inline constexpr float hordeCount = 1.3f;
 }  // namespace pact
 
 // Power-up orbs drift in and buff the balls for a few seconds. Spawn cadence is
@@ -654,7 +942,6 @@ inline constexpr int   goldenComboRate = 2;        // GOLDEN BOUNCE: combo climb
 inline constexpr float overdriveDamageMul = 2.0f;  // OVERDRIVE: ball contact damage x this
 
 // Pickups web branch, Fase A.
-inline constexpr float reserveFillTime = 22.f;     // "Stockpile": seconds to refill the reserve slot
 inline constexpr float chargedFracPerLevel = 0.15f;// "Charged": + this fraction of duration per level
 inline constexpr float afterglowPerLevel = 1.5f;   // "Afterglow": a continuous effect fades over this many s past 0, per level
 inline constexpr float magnetAccel = 900.f;        // "Magnet": pickup steering toward the nearest ball
@@ -684,6 +971,9 @@ inline constexpr float aimSlowMax = 2.5f;
 inline constexpr float catchRadius = 130.f;   // grab a ball from near it, not only dead-on
 inline constexpr float grabSettle = 16.f;     // how fast the grab offset eases out (per s)
 inline constexpr float fadeRate = 14.f;
+// A black band above and below the arena (UI px at normal zoom): a ball pinned
+// to the top or bottom wall still has room around it for the pointer.
+inline constexpr float arenaBand = 36.f;
 
 // Impact juice: freeze the sim for a beat and kick the camera on a hit. Kept
 // short so the game still feels fast.
