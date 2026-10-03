@@ -501,6 +501,7 @@ std::unique_ptr<Screen> App::makeScreen(ScreenId id) {
         case ScreenId::Stats:   return std::make_unique<StatsScreen>();
         case ScreenId::HowTo:   return std::make_unique<HowToScreen>();
         case ScreenId::BossWin: return std::make_unique<BossWinScreen>();
+        case ScreenId::RunOver: return std::make_unique<RunOverScreen>();
         case ScreenId::Map:     return std::make_unique<MapScreen>();
         case ScreenId::Shop:    return std::make_unique<ShopScreen>();
         case ScreenId::Equip:   return std::make_unique<EquipScreen>();
@@ -593,6 +594,7 @@ bool App::resumeRun() {
     bulletOn_ = false;
     introStep_ = -1;
     runBanked_ = false;
+    startRunTally();
     continueUnlocked_ = data_.meta.stats.wins > 0 || r.map.act > 1;
     world_.startRun(params(), ballSpecs(), r.coreHp, r.coreMaxHp);
     rememberClasses();   // its classes are old news: no gain banners
@@ -631,6 +633,7 @@ void App::newRun() {
     introStep_ = -1;
 
     runBanked_ = false;
+    startRunTally();
 
     // Dev overrides: SB_BALLS / SB_WAVE / SB_UPGRADES=Name,Name,...
     int startWave = 1;
@@ -1468,6 +1471,21 @@ void App::continuePastBoss() {
 
 // "Back to menu" on the BossWin card. If the run wasn't banked yet (miniboss just
 // cleared on a run that had "Continue" available), it counts as a win now.
+void App::startRunTally() {
+    runStartKills_ = data_.meta.stats.enemiesKilled;
+    runStartTime_ = data_.meta.stats.timePlayed;
+    runBestCombo_ = 0;
+}
+
+// The run-over card's buttons. The run is already banked (bankRun on the loss).
+void App::leaveRunOver(bool toWeb) {
+    clearRun(runPath());
+    data_.run = RunState{};
+    save();
+    replaceStack(ScreenId::Menu);
+    if (toWeb) push(ScreenId::Loadout);
+}
+
 void App::leaveBossWin() {
     if (!runBanked_) bankRun(true);
     finishToMenu();
@@ -1933,11 +1951,29 @@ void App::processEvents(const FrameEvents& ev) {
         effects_.addLabel("a Brute joins the fight", {size().x * 0.5f, size().y * 0.36f}, theme::ember, 22, 1.3f);
     data_.meta.stats.bestCombo =
         std::max(data_.meta.stats.bestCombo, static_cast<std::uint32_t>(world_.comboStreak()));
+    runBestCombo_ = std::max(runBestCombo_, world_.comboStreak());
     data_.meta.stats.maxSpeed = std::max(data_.meta.stats.maxSpeed, world_.fastestBall());
 
     if (ev.runOver) {
+        // The core fell: bank the run, then the run-over card over the frozen
+        // fight. The run stops being live (no pause / TAB; menu music).
+        const RunState& r = data_.run;
+        summary_ = RunSummary{};
+        summary_.act = r.map.act;
+        summary_.row = r.mapRow;
+        summary_.rows = r.map.rowCount();
+        summary_.boss = cfg::run::isBossWave(r.wave);
+        summary_.elite = r.eliteWave;
+        summary_.hard = r.hard;
+        summary_.killer = world_.lastCoreHitBy();
+        summary_.kills = data_.meta.stats.enemiesKilled - runStartKills_;
+        summary_.bestCombo = runBestCombo_;
+        summary_.time = data_.meta.stats.timePlayed - runStartTime_;
         bankRun(false);
-        finishToMenu();
+        summary_.cores = lastRunCores_;
+        summary_.prisms = lastRunPrisms_;
+        data_.run.active = false;
+        push(ScreenId::RunOver);
         return;
     }
     if (ev.waveCleared) {
@@ -2584,6 +2620,18 @@ int App::runSnapshots(const std::string& dir) {
         eventDeals_ = {EventKind::Rest, EventKind::Temper};
         push(ScreenId::Event);
         snapFrame(d + "35_rest_stop.png");
+        back();
+        summary_ = RunSummary{};   // the run-over card, over the fight
+        summary_.act = 2;
+        summary_.row = 5;
+        summary_.rows = 13;
+        summary_.killer = static_cast<int>(EnemyKind::Tank);
+        summary_.kills = 214;
+        summary_.bestCombo = 37;
+        summary_.time = 412.f;
+        summary_.cores = 28;
+        push(ScreenId::RunOver);
+        snapFrame(d + "36_run_over.png");
         back();
         while (runBallCount() < ballCap()) rr.balls.push_back(BallLoadout{});
         syncWorldBalls();

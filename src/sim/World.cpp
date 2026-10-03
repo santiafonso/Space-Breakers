@@ -204,6 +204,7 @@ void World::startRun(const WorldParams& p, const std::vector<BallSpec>& balls,
     ghosts_.clear();
     pendingGhosts_.clear();
     enemies_.clear();
+    lastCoreHitBy_ = -1;
     bolts_.clear();
     obstacles_.clear();
     pools_.clear();
@@ -2249,6 +2250,7 @@ void World::updateEnemies(float dt, const WorldParams& p, FrameEvents& ev) {
             core_.hitFlash = 1.f;
             coreHitThisWave_ = true;   // "Interest" is off for this wave now
             ev.coreHit = true;
+            lastCoreHitBy_ = static_cast<int>(e.kind);
 
             it = enemies_.erase(it);
             creedCoreHit(p, ev);   // "Fortress" blast / "Bloodlust" wipe
@@ -2414,6 +2416,7 @@ void World::updateBoss(float dt, const WorldParams& p, FrameEvents& ev) {
         core_.hp = 0.f;
         core_.hitFlash = 1.f;
         ev.coreHit = true;
+        lastCoreHitBy_ = kCoreHitByBoss;
         runOver_ = true;   // reaching the core loses the run outright
     }
 }

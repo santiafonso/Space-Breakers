@@ -139,6 +139,9 @@ public:
     bool launching() const { return launchT_ > 0.f; }   // the fight-opening whirl is on
     bool bossWave() const { return bossWave_; }
     bool runOver() const { return runOver_; }
+    // What last reached the core: an EnemyKind, kCoreHitByBoss, or -1 (nothing yet).
+    static constexpr int kCoreHitByBoss = -2;
+    int lastCoreHitBy() const { return lastCoreHitBy_; }
     int wave() const { return wave_; }
     // What's left of the fight for the HUD: still to come + alive, not
     // counting a Splitter's shards (it counts as one, done once it splits -
@@ -351,6 +354,7 @@ private:
     bool waveRunning_ = false;
     bool bossWave_ = false;
     bool runOver_ = false;
+    int lastCoreHitBy_ = -1;
     float coreSlideT_ = 0.f;   // >0 while the core is easing to the wide-arena centre
     sf::Vector2f coreSlideFrom_{0.f, 0.f};
     sf::Vector2f coreSlideTo_{0.f, 0.f};

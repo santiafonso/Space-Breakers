@@ -18,7 +18,7 @@
 
 namespace sb {
 
-enum class ScreenId { Menu, Loadout, Play, Choice, Pause, Stats, HowTo, BossWin, Map, Shop, Equip, Dev, Creed, Sound, AbilityPick, Altar, Event };
+enum class ScreenId { Menu, Loadout, Play, Choice, Pause, Stats, HowTo, BossWin, Map, Shop, Equip, Dev, Creed, Sound, AbilityPick, Altar, Event, RunOver };
 
 // Who opened the ball / slot picker, and so what confirming it does.
 // ShopForge / Sell are the shop's paid forge and its "sell an item" counter.
@@ -62,6 +62,18 @@ public:
     int lastRunCores() const { return lastRunCores_; }
     int lastRunPrisms() const { return lastRunPrisms_; }
     bool lastRunWon() const { return lastRunWon_; }
+    // A lost run, as the run-over card shows it (filled when the core falls).
+    struct RunSummary {
+        int act = 1, row = 0, rows = 0;
+        bool boss = false, elite = false, hard = false;
+        int killer = -1;          // World::lastCoreHitBy
+        std::uint32_t kills = 0;
+        int bestCombo = 0;
+        float time = 0.f;         // seconds
+        int cores = 0, prisms = 0;
+    };
+    const RunSummary& runSummary() const { return summary_; }
+    void leaveRunOver(bool toWeb);   // the run-over card: to the skill web, or the menu
     int bossFlawlessGold() const { return bossFlawlessGold_; }   // BossWin card: flawless boss bonus (0 = none)
     int bossIronCores() const { return bossIronCores_; }         // BossWin card: "Iron core" cores (0 = none)
     bool ironCoreAlive() const { return data_.run.active && !data_.run.repairedThisAct; }
@@ -314,6 +326,11 @@ private:
     int lastRunCores_ = 0;
     int lastRunPrisms_ = 0;
     bool lastRunWon_ = false;
+    RunSummary summary_;
+    std::uint32_t runStartKills_ = 0;   // stats at the run start (or resume), for the summary
+    float runStartTime_ = 0.f;
+    int runBestCombo_ = 0;
+    void startRunTally();
     int bossFlawlessGold_ = 0;       // set when a boss falls, for the BossWin card
     int bossIronCores_ = 0;
     bool continueUnlocked_ = false;  // snapshot at newRun: has a run ever been won before?

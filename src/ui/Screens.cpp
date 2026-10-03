@@ -1977,4 +1977,98 @@ void BossWinScreen::draw(App& app, sf::RenderWindow& w) {
     menu_.draw(w, it);
 }
 
+// ================================================================ RunOver
+
+void RunOverScreen::onEnter(App& app) {
+    const sf::Vector2f s = app.size();
+    menu_.init(app.font(), theme::fsItem, s.y * 0.06f);
+    menu_.setItems({{"Skill web", true}, {"Menu", true}});
+    menu_.layout({s.x * 0.5f, s.y * 0.80f});
+}
+
+void RunOverScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
+    if (isKey(e, sf::Keyboard::Enter) || isKey(e, sf::Keyboard::Space)) { app.leaveRunOver(true); return; }
+    if (isKey(e, sf::Keyboard::Escape)) { app.leaveRunOver(false); return; }
+    if (!isLeftClick(e)) return;
+    const int i = menu_.clickIndex(mouse);
+    if (i >= 0) app.leaveRunOver(i == 0);
+}
+
+void RunOverScreen::update(App&, float dt, sf::Vector2f mouse) { menu_.update(dt, mouse); }
+
+void RunOverScreen::draw(App& app, sf::RenderWindow& w) {
+    const sf::Vector2f s = app.size();
+    const App::RunSummary& r = app.runSummary();
+    const float it = intro();
+    drawDim(w, s, 0.86f * clampf(introPop(it, 0.f, 0.3f), 0.f, 1.f));
+    const float cx = s.x * 0.5f;
+
+    drawCenteredPop(w, app.font(), "The core fell", theme::fsTitle, {cx, s.y * 0.20f}, theme::coreLow,
+                    introPop(it, 0.05f, 0.34f));
+
+    // Where, and what got through.
+    std::string where = "act " + std::to_string(r.act) + "   ";
+    if (r.boss) where += bossName(bossOfAct(r.act));
+    else if (r.elite) where += "elite fight";
+    else where += "stage " + std::to_string(std::max(r.row, 1)) + " / " + std::to_string(r.rows + 1);
+    if (r.hard) where += "   hard";
+    std::string cause;
+    if (r.killer == World::kCoreHitByBoss) cause = "the boss reached the core";
+    else if (r.killer >= 0) cause = std::string("a ") + enemyName(static_cast<EnemyKind>(r.killer)) + " got through";
+    const float sa = clampf(introPop(it, 0.14f), 0.f, 1.f);
+    drawLabel(w, app.font(), where, 14, {cx, s.y * 0.20f + 50.f}, withAlpha(theme::textLo, sa));
+    if (!cause.empty())
+        drawCenteredPop(w, app.font(), cause, theme::fsBody, {cx, s.y * 0.20f + 76.f}, theme::textDim,
+                        introPop(it, 0.18f));
+
+    // The run in numbers: three readouts in a row.
+    {
+        const float ra = clampf(introPop(it, 0.24f), 0.f, 1.f);
+        const int secs = static_cast<int>(r.time);
+        char t[16];
+        std::snprintf(t, sizeof(t), "%d:%02d", secs / 60, secs % 60);
+        const std::pair<const char*, std::string> cells[] = {
+            {"kills", std::to_string(r.kills)}, {"best combo", std::to_string(r.bestCombo)}, {"time", t}};
+        const float gap = 170.f, y = s.y * 0.44f;
+        for (int i = 0; i < 3; ++i) {
+            const float x = cx + (static_cast<float>(i) - 1.f) * gap;
+            drawLabel(w, app.font(), cells[i].first, 11, {x, y - 16.f}, withAlpha(theme::textDim, ra));
+            sf::Text v = makeText(app.font(), cells[i].second, theme::fsHeading, withAlpha(theme::textHi, ra));
+            centerOrigin(v);
+            v.setPosition(std::round(x), std::round(y + 12.f));
+            w.draw(v);
+        }
+    }
+
+    // Your balls: one disc each in its class colour, its classes under it.
+    {
+        const float ba = clampf(introPop(it, 0.32f), 0.f, 1.f);
+        const std::vector<Ball>& balls = app.world().balls();
+        const std::vector<BallLoadout>& lo = app.data().run.balls;
+        const int n = static_cast<int>(balls.size());
+        const float step = 110.f, y = s.y * 0.58f;
+        float x = cx - step * 0.5f * static_cast<float>(n - 1);
+        for (int i = 0; i < n; ++i, x += step) {
+            const sf::Color ec = ballHue(balls[static_cast<std::size_t>(i)]);
+            draw::disc(w, {x, y}, 13.f, withAlpha(lerpColor(ec, sf::Color::White, 0.2f), ba), withAlpha(ec, ba),
+                       {1.f, 1.f}, 28);
+            std::string cls;
+            if (i < static_cast<int>(lo.size())) {
+                ItemTag roles[2];
+                for (int k = 0, m = lo[static_cast<std::size_t>(i)].roles(roles); k < m; ++k)
+                    cls += (k ? " / " : "") + std::string(itemTagName(roles[k]));
+            }
+            drawLabel(w, app.font(), cls.empty() ? "no class" : cls, 11, {x, y + 28.f},
+                      withAlpha(cls.empty() ? theme::textDim : theme::textLo, ba));
+        }
+    }
+
+    // What it paid.
+    std::string pay = "+" + std::to_string(r.cores) + " cores";
+    if (r.prisms > 0) pay += "      +" + std::to_string(r.prisms) + (r.prisms == 1 ? " prism" : " prisms");
+    drawCenteredPop(w, app.font(), pay, theme::fsHeading, {cx, s.y * 0.69f}, theme::accent, introPop(it, 0.4f));
+
+    menu_.draw(w, it);
+}
+
 }  // namespace sb

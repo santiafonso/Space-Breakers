@@ -302,6 +302,20 @@ public:
 // only appears once a run has been won before (App::bossWinCanContinue) and
 // resumes the run at wave 11; otherwise the only option is "Back to menu".
 // Opaque so the camera / mouse mapping is the plain UI one, not the wide framing.
+// A lost run: what got through, how far you came, the run in numbers, your
+// balls and the cores it paid - over the frozen fight.
+class RunOverScreen : public Screen {
+public:
+    void onEnter(App& app) override;
+    void handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) override;
+    void update(App& app, float dt, sf::Vector2f mouse) override;
+    void draw(App& app, sf::RenderWindow& w) override;
+    bool opaque() const override { return false; }
+
+private:
+    Menu menu_;
+};
+
 class BossWinScreen : public Screen {
 public:
     void onEnter(App& app) override;

@@ -2283,6 +2283,14 @@ de las pelotas: Q, el anillo de E y F.
   Ganarle al jefe paga 30 cores (Slinger 18, o la ruta de Striker 30); morir
   en el jefe, ~18.
 
+- **Pantalla de derrota (`RunOverScreen`):** cuando cae el núcleo, la run se
+  cobra (`bankRun(false)`) y sobre la pelea congelada sale "The core fell":
+  acto y stage (o el jefe), qué llegó al núcleo (`World::lastCoreHitBy`),
+  kills / mejor combo / tiempo de esa run (contados desde el arranque o el
+  resume, `App::startRunTally`), las pelotas con sus clases y los cores
+  ganados. "Skill web" (Enter) o "Menu" (Esc). Mientras está arriba la run ya
+  no está activa: sin pausa ni TAB, suena el menú.
+
 ### Anotado para después (el usuario lo pidió así)
 
 - **Progresión:** por ahora todo se desbloquea como está; se ve más adelante.
