@@ -340,6 +340,7 @@ private:
     float runStartTime_ = 0.f;
     int runBestCombo_ = 0;
     void startRunTally();
+    int houseEdge(int gold);   // "House edge": maybe double it
     int hint_ = -1;          // the hint on screen (a Hint), -1 none
     float hintA_ = 0.f;      // its fade
     float hintGap_ = 1.f;    // a breath before the next one

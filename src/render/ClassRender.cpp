@@ -251,6 +251,11 @@ void worldStyle(sf::RenderTarget& t, const World& world) {
         draw::disc(t, pd.pos, pd.r, withAlpha(c, 0.14f * a), withAlpha(c, 0.03f * a), {1.f, 1.f}, 28);
         draw::ring(t, pd.pos, pd.r, 1.2f * k, withAlpha(c, 0.3f * a));
     }
+    for (const CommonWorld::Glyph& g : world.classWorld().common.glyphs) {   // "Sigil"
+        const float a = clampf(g.life / 0.6f, 0.f, 1.f);
+        draw::polygonOutline(t, g.pos, g.r, 6, g.life * 0.8f, 1.6f * k, withAlpha(theme::classMage, 0.75f * a));
+        draw::polygonOutline(t, g.pos, g.r * 0.5f, 3, -g.life * 1.2f, 1.2f * k, withAlpha(theme::classMage, 0.5f * a));
+    }
 }
 
 // ==================================================================== Jester

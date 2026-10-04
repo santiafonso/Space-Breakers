@@ -201,6 +201,24 @@ enum class UpgradeKind {
     Medic,             // a clack with another ball patches the core         [Support]
     Sync,              // its casts shorten the other balls' cooldowns       [Support]
     HandOff,           // its kills charge the nearest ball's next hit       [Support]
+    // ---- uncommons (2026-10-04), same home and same rule ----
+    Fission,           // an enemy dying under its element spreads it         [Alchemist]
+    Elixir,            // its reactions make every ball hit harder a moment  [Alchemist]
+    HouseEdge,         // gold you earn may come double                      [Jester]
+    Mirror,            // the nearest ball may copy its hit                   [Jester]
+    Sigil,             // a cast leaves a glyph the other balls set off       [Mage]
+    ArcaneCharge,      // wall bounces shorten its cooldowns                  [Mage]
+    Conduit,           // a cast primes enemies with another ball's element   [Mage]
+    Martyr,            // its turrets and totems burst when they end          [Summoner]
+    GuardDog,          // its summons go for the enemy nearest the core       [Summoner]
+    ChainKill,         // a kill right after a blink recharges the blink      [Assassin]
+    VenomBlade,        // the first hit after a blink leaves its element twice [Assassin]
+    SuppressingFire,   // bullets slow what they hit                          [Shooter]
+    AmmoFeed,          // a wall bounce fires a volley                        [Shooter]
+    WindUp,            // held longer before your throw, it flies faster      [Slinger]
+    BankThrow,         // wall bounces after your throw charge its first hit  [Slinger]
+    Bully,             // + damage vs bigger enemies                          [Striker]
+    Carom,             // a hit right after a clack hits harder               [Striker]
 
     // ---- relics (keep CoreSpring first and Overcharge last) ----
     CoreSpring,        // balls ricochet off the core faster

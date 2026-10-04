@@ -2353,7 +2353,15 @@ de las pelotas: Q, el anillo de E y F.
   - Striker: Edge, First blood, Combo hit, Adrenaline.
   - Support: Spotter, Anthem (era "Rally", chocaba con el nodo de la web),
     Medic, Sync (era "Uplink", ídem), Hand-off.
-- **Lo que falta:** poco comunes 17, raros 19, épicos 20, legendarios 15.
+- **Tanda 2 - poco comunes (hecha):** Fission, Elixir (Alchemist); House edge,
+  Mirror (Jester); Sigil, Arcane charge, Conduit (Mage); Martyr, Guard dog
+  (Summoner); Chain kill, Venom blade (Assassin); Suppressing fire, Ammo feed
+  (Shooter); Wind-up, Bank throw (Slinger); Bully, Carom (Striker). Mismo
+  archivo y misma regla que los comunes.
+  - Bajados de rareza por la pirámide: Mender (→ común); Cleave, Executioner,
+    Overkill, Midas, Pass (→ poco común).
+- **Lo que falta:** raros 19, épicos 20, legendarios 15 (más bajar 2 épicos de
+  Support a raro).
 - **F (Repulse) se abre en el acto 4** (antes en el 2, igual que la E). La E sigue en el 2.
 
 ### Anotado para después (el usuario lo pidió así)

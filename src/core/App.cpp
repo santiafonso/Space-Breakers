@@ -376,6 +376,13 @@ std::vector<BallSpec> App::ballSpecs() const {
     return v;
 }
 
+// "House edge" (a Jester uncommon): gold you earn may come double.
+int App::houseEdge(int gold) {
+    const float c = world_.commonHouseEdge();
+    if (gold <= 0 || c <= 0.f) return gold;
+    return rng_.range(0.f, 1.f) < std::min(c * params().luck, 0.9f) ? gold * 2 : gold;
+}
+
 void App::syncWorldBalls() {
     grantMageMissiles();
     world_.syncBalls(ballSpecs(), params());
@@ -1905,7 +1912,7 @@ void App::processEvents(const FrameEvents& ev) {
     }
     if (data_.run.goldFrac >= 1.f) {
         const int whole = static_cast<int>(data_.run.goldFrac);
-        data_.run.gold += whole;
+        data_.run.gold += houseEdge(whole);
         data_.run.goldFrac -= static_cast<float>(whole);
         audio_.gold();
     }
@@ -1941,7 +1948,7 @@ void App::processEvents(const FrameEvents& ev) {
     }
     if (ev.autoFlung) audio_.thrown(0.35f);
     if (ev.midasGold > 0 && data_.run.active)   // "Midas": extra gold per kill
-        data_.run.gold += ev.midasGold;
+        data_.run.gold += houseEdge(ev.midasGold);
     if (ev.phoenix) {
         // The Phoenix relic (once per act) goes first; "Last stand" is the once-per-run spare.
         RunState& rr = data_.run;
@@ -2059,6 +2066,10 @@ void App::processEvents(const FrameEvents& ev) {
             pay = win ? pay * 2 : 0;
             effects_.addLabel(win ? "DOUBLE!" : "NOTHING", {size().x * 0.5f, size().y * 0.4f - 36.f},
                               win ? theme::puGolden : theme::coreLow, 24, 1.3f);
+        }
+        if (const int edged = houseEdge(pay); edged > pay) {
+            effects_.addLabel("HOUSE EDGE  x2", {size().x * 0.5f, size().y * 0.4f + 72.f}, theme::classJester, 22, 1.3f);
+            pay = edged;
         }
         r.gold += pay;
         notePactFight(flawless);   // the hidden Altar path

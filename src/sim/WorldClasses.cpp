@@ -293,6 +293,7 @@ template <> struct ClassHooks<BallRole::Shooter> : NoClassHooks {
         u.hopKeep = m.hopKeep;
         u.banks = b.mods.cls.common.bankShots;   // "Bank shot"
         u.hollow = b.mods.cls.common.hollow;     // "Hollow point"
+        u.suppress = b.mods.cls.common.suppress; // "Suppressing fire"
         if (m.tracerChance > 0.f && b.element != Element::Plain && w.chance(m.tracerChance, p))
             u.elem = static_cast<int>(b.element);
         bullets.push_back(u);
@@ -444,6 +445,10 @@ template <> struct ClassHooks<BallRole::Shooter> : NoClassHooks {
                                                    e.cracks > 0 || (e.elemT > 0.f && e.elem != Element::Plain));
             w.damageEnemy(e, u.dmg * (e.mark > 0.f ? p.markMul : 1.f) * (hollow ? 1.f + u.hollow : 1.f));   // "Hollow point"
             e.hitFlash = std::max(flash, 0.55f);   // a bullet is a tick, not a big hit
+            if (u.suppress > 0.f) {   // "Suppressing fire": each one slows it a little more
+                e.braceT = std::max(e.braceT, cfg::common::braceTime);
+                e.braceSlow = std::min(cfg::common::suppressMax, e.braceSlow + u.suppress);
+            }
             if (u.elem != 0) w.applyElement(e, static_cast<Element>(u.elem), u.owner, u.dmg, p, ev);
             u.lastHit = e.id;
             if (u.pierce > 0) { --u.pierce; continue; }
@@ -696,6 +701,7 @@ template <> struct ClassHooks<BallRole::Summoner> : NoClassHooks {
     static void touch(World& w, Enemy& e, float dmg, int elem, int owner, bool full, const WorldParams& p,
                       FrameEvents& ev) {
         namespace E = cfg::element;
+        if (const Ball* o = ownerBall(w, owner)) dmg *= 1.f + o->mods.cls.common.guardDog;   // "Guard dog"
         w.damageEnemy(e, dmg);
         const Element el = static_cast<Element>(elem);
         if (el == Element::Plain) return;
@@ -725,6 +731,29 @@ template <> struct ClassHooks<BallRole::Summoner> : NoClassHooks {
     }
 
     // The nearest live enemy (or the boss) to a point, within range.
+    static const Ball* ownerBall(const World& w, int owner) {
+        for (const Ball& b : w.balls_)
+            if (b.owner == owner) return &b;
+        return nullptr;
+    }
+
+    // Where a summon of `owner` aims: "Guard dog" = the enemy nearest the core
+    // (in range of it), else the usual target().
+    static bool aim(const World& w, int owner, sf::Vector2f from, float range, sf::Vector2f& out) {
+        const Ball* o = ownerBall(w, owner);
+        if (!o || o->mods.cls.common.guardDog <= 0.f) return target(w, from, range, out);
+        const Enemy* best = nullptr;
+        float bd = 1e18f;
+        for (const Enemy& e : w.enemies_) {
+            if (e.hp <= 0.f || e.orbiter || dot(e.pos - from, e.pos - from) > range * range) continue;
+            const float d2 = dot(e.pos - w.core_.pos, e.pos - w.core_.pos);
+            if (d2 < bd) { bd = d2; best = &e; }
+        }
+        if (!best) return target(w, from, range, out);
+        out = best->pos;
+        return true;
+    }
+
     static bool target(const World& w, sf::Vector2f from, float range, sf::Vector2f& out) {
         if (const auto f = w.focusPos(); f && dot(*f - from, *f - from) <= range * range) {
             out = *f;   // the player's target, when it's in range
@@ -738,6 +767,17 @@ template <> struct ClassHooks<BallRole::Summoner> : NoClassHooks {
             return true;
         }
         return e != nullptr;
+    }
+
+    // "Martyr": a turret / totem that runs out bursts with its element.
+    static void martyr(World& w, sf::Vector2f at, int elem, int owner, const WorldParams& p, FrameEvents& ev) {
+        const Ball* o = ownerBall(w, owner);
+        if (!o || o->mods.cls.common.martyr <= 0.f) return;
+        const float R = cfg::common::martyrRadius * w.arenaScale();
+        const float dmg = w.ballDamage(*o, p) * o->mods.cls.common.martyr;
+        for (Enemy& e : w.enemies_)
+            if (e.hp > 0.f && length(e.pos - at) <= R + e.radius) touch(w, e, dmg, elem, owner, false, p, ev);
+        ev.bursts.push_back({at, R, elem != 0 ? elementColor(static_cast<Element>(elem)) : theme::classSummoner, nullptr});
     }
 
     static int ownedBy(const std::vector<SummonTurret>& v, int owner) {
@@ -981,7 +1021,7 @@ template <> struct ClassHooks<BallRole::Summoner> : NoClassHooks {
             t.life -= dt;
             t.fireT -= dt;
             sf::Vector2f to;
-            if (!target(w, t.pos, S::turretRange, to)) continue;
+            if (!aim(w, t.owner, t.pos, S::turretRange, to)) continue;
             t.aim = std::atan2(to.y - t.pos.y, to.x - t.pos.x);
             if (t.fireT > 0.f || static_cast<int>(sw.shots.size()) >= S::maxShots) continue;
             t.fireT = 1.f / std::max(0.1f, t.rate);
@@ -994,6 +1034,8 @@ template <> struct ClassHooks<BallRole::Summoner> : NoClassHooks {
             s.owner = t.owner;
             sw.shots.push_back(s);
         }
+        for (const SummonTurret& t : sw.turrets)
+            if (t.life <= 0.f) martyr(w, t.pos, t.elem, t.owner, p, ev);   // "Martyr"
         sw.turrets.erase(std::remove_if(sw.turrets.begin(), sw.turrets.end(),
                                         [](const SummonTurret& t) { return t.life <= 0.f; }),
                          sw.turrets.end());
@@ -1003,7 +1045,7 @@ template <> struct ClassHooks<BallRole::Summoner> : NoClassHooks {
             s.life -= dt;
             if (s.wisp) {
                 sf::Vector2f to;
-                if (target(w, s.pos, 1e9f, to)) {
+                if (aim(w, s.owner, s.pos, 1e9f, to)) {
                     const float sp = S::wispSpeed;
                     const float cur = std::atan2(s.vel.y, s.vel.x);
                     const float want = std::atan2(to.y - s.pos.y, to.x - s.pos.x);
@@ -1050,6 +1092,8 @@ template <> struct ClassHooks<BallRole::Summoner> : NoClassHooks {
                 if (pulse) touch(w, e, t.dmg, t.elem, t.owner, false, p, ev);
             }
         }
+        for (const SummonTotem& t : sw.totems)
+            if (t.life <= 0.f) martyr(w, t.pos, t.elem, t.owner, p, ev);   // "Martyr"
         sw.totems.erase(std::remove_if(sw.totems.begin(), sw.totems.end(),
                                        [](const SummonTotem& t) { return t.life <= 0.f; }),
                         sw.totems.end());
@@ -1426,16 +1470,15 @@ template <> struct ClassHooks<BallRole::Slinger> : NoClassHooks {
     static void waveStart(World& w, const WorldParams&) { w.classWorld_.slinger.flames.clear(); }
 };
 
-// "Covering fire" (a common, sim/WorldCommons.cpp): you threw another ball, so
-// this one fires a fan at the enemy nearest the core - the Shooter's gun, any ball.
-void World::commonCoverFire(Ball& b, const WorldParams& p) {
-    const int n = b.mods.cls.common.cover;
+// "Covering fire" / "Ammo feed" (commons, sim/WorldCommons.cpp): a fan at the
+// enemy nearest `from` - the Shooter's gun, on any ball.
+void World::commonVolley(Ball& b, const WorldParams& p, int n, sf::Vector2f from) {
     if (n <= 0) return;
     const Enemy* t = nullptr;
     float best = 1e18f;
     for (const Enemy& e : enemies_) {
         if (e.hp <= 0.f || e.orbiter) continue;
-        const float d2 = dot(e.pos - core_.pos, e.pos - core_.pos);
+        const float d2 = dot(e.pos - from, e.pos - from);
         if (d2 < best) { best = d2; t = &e; }
     }
     if (!t) return;

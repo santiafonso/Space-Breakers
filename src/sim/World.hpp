@@ -88,6 +88,7 @@ public:
     float heldCatch() const { return heldCatch_; }   // the grab just made: its catch reward (0 = none)
     float takeQRefund() { const float r = qRefund_; qRefund_ = 0.f; return r; }   // "Second wind"
     float commonPlating() const;   // "Plating": the core max hp the balls' items add
+    float commonHouseEdge() const; // "House edge": chance the gold you earn comes double
     bool hasHeld() const { return grabbed_ != Grabbed::None; }
     Grabbed grabbedKind() const { return grabbed_; }
     void moveHeld(sf::Vector2f target, float dt);
@@ -274,7 +275,10 @@ private:
     void commonOnGrab(Ball& b);                              // Relay / Second wind
     void commonOnThrow(Ball& b, float pullFrac);             // Long pull / Covering fire
     void commonWaveStart();
-    void commonCoverFire(Ball& b, const WorldParams& p);     // "Covering fire" (WorldClasses.cpp: it's the Shooter's gun)
+    // A fan of n bullets from b at the enemy nearest `from` (WorldClasses.cpp:
+    // it's the Shooter's gun) - "Covering fire" (from the core), "Ammo feed".
+    void commonVolley(Ball& b, const WorldParams& p, int n, sf::Vector2f from);
+    void commonOnDeath(const Enemy& dead, FrameEvents& ev);  // "Fission"
     float qRefund_ = 0.f;                                    // "Second wind": share of the Q cooldown to refund
     // Pacts (sim/WorldPacts.cpp).
     float pactDamageMul(const Ball& b, const WorldParams& p) const;   // Lead / Stillness / Quick Hands / Juggler / Last Breath

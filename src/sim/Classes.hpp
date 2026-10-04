@@ -147,6 +147,7 @@ struct ShooterBullet {
     int lastHit = -1;         // Enemy::id it last hit (no double hits while passing through)
     int banks = 0;            // "Bank shot": wall bounces left
     float hollow = 0.f;       // "Hollow point": + damage vs an enemy under an element
+    float suppress = 0.f;     // "Suppressing fire": slow per hit
 };
 struct ShooterRail {          // Deadeye's rail shot, kept only to be drawn
     sf::Vector2f a, b;
@@ -414,6 +415,24 @@ struct CommonMods {
     float medic = 0.f;         // "Medic": core hp per clack
     float sync = 0.f;          // "Sync": s off the others' cooldowns per cast
     float handOff = 0.f;       // "Hand-off": its kill gives the nearest ball + this
+    // uncommons (2026-10-04)
+    float fission = 0.f;       // "Fission": a death under its element spreads it this far
+    float elixir = 0.f;        // "Elixir": its reactions give every ball + this for a moment
+    float houseEdge = 0.f;     // "House edge": chance gold comes double (App reads it)
+    float mirror = 0.f;        // "Mirror": chance the nearest ball copies its hit
+    float sigil = 0.f;         // "Sigil": a cast leaves a glyph that bursts for this x its hit
+    float arcaneCharge = 0.f;  // "Arcane charge": s off its cooldowns per wall bounce
+    float conduit = 0.f;       // "Conduit": a cast primes enemies this far with another ball's element
+    float martyr = 0.f;        // "Martyr": an ending turret / totem bursts for this x its hit
+    float guardDog = 0.f;      // "Guard dog": its summons + this damage, aimed at the core's threat
+    float chainKill = 0.f;     // "Chain kill": a kill this soon after a blink recharges it
+    float venomBlade = 0.f;    // "Venom blade": the first hit after a blink + this, its element twice
+    float suppress = 0.f;      // "Suppressing fire": slow per bullet
+    int ammoFeed = 0;          // "Ammo feed": bullets per wall bounce
+    float windUp = 0.f;        // "Wind-up": a throw + up to this when held long enough
+    float bankThrow = 0.f;     // "Bank throw": + this per wall before the thrown first hit
+    float bully = 0.f;         // "Bully": + damage vs bigger enemies (and bosses)
+    float carom = 0.f;         // "Carom": + damage right after a clack
 };
 struct CommonState {
     bool doubled = false;      // this hit was doubled (crit, coin heads, a Jester double)
@@ -429,6 +448,11 @@ struct CommonState {
     float landingCd = 0.f;     // "Heavy landing": between shockwaves
     int reactions = 0;         // "Distill": reactions it set off
     bool coverPending = false; // "Covering fire": fire on the next tick (it needs the params)
+    float chainT = 0.f;        // "Chain kill": s left to land a kill after a blink
+    bool venom = false;        // "Venom blade": armed by a blink
+    bool bankArmed = false;    // "Bank throw": thrown, first hit not landed yet...
+    int banks = 0;             // ...walls since
+    float caromT = 0.f;        // "Carom": s left after a clack
 };
 struct CommonWorld {
     struct Puddle {            // "Seep"
@@ -437,6 +461,13 @@ struct CommonWorld {
         int elem = 0, owner = -1;
     };
     std::vector<Puddle> puddles;
+    struct Glyph {             // "Sigil"
+        sf::Vector2f pos;
+        float r = 0.f, life = 0.f, dmg = 0.f;
+        int elem = 0, owner = -1;
+    };
+    std::vector<Glyph> glyphs;
+    float elixirT = 0.f, elixir = 0.f;   // "Elixir": every ball + elixir while elixirT runs
 };
 
 // On BallMods (`mods.cls`): what the ball's class items add up to.

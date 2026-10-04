@@ -382,6 +382,24 @@ inline constexpr float anthem = 0.06f, anthemPerLevel = 0.03f;
 inline constexpr float medic = 1.f, medicPerLevel = 0.5f, medicCd = 0.5f;
 inline constexpr float sync = 0.5f, syncPerLevel = 0.25f;
 inline constexpr float handOff = 0.25f, handOffPerLevel = 0.1f;
+// uncommons
+inline constexpr float fission = 110.f, fissionPerLevel = 30.f;
+inline constexpr float elixir = 0.1f, elixirPerLevel = 0.05f, elixirTime = 3.f;
+inline constexpr float houseEdge = 0.2f, houseEdgePerLevel = 0.08f, houseEdgeCap = 0.6f;
+inline constexpr float mirror = 0.12f, mirrorPerLevel = 0.04f;
+inline constexpr float sigil = 0.4f, sigilPerLevel = 0.15f, sigilLife = 4.f, sigilRadius = 30.f, sigilNova = 110.f;
+inline constexpr int maxGlyphs = 10;
+inline constexpr float arcaneCharge = 0.3f, arcaneChargePerLevel = 0.1f;
+inline constexpr float conduit = 150.f, conduitPerLevel = 35.f;
+inline constexpr float martyr = 0.5f, martyrPerLevel = 0.2f, martyrRadius = 90.f;
+inline constexpr float guardDog = 0.3f, guardDogPerLevel = 0.1f;
+inline constexpr float chainKill = 1.f, chainKillPerLevel = 0.3f;
+inline constexpr float venomBlade = 0.f, venomBladePerLevel = 0.15f;   // the hit's bonus (the element twice is the item)
+inline constexpr float suppress = 0.1f, suppressPerLevel = 0.05f, suppressMax = 0.4f;
+inline constexpr float windUp = 0.5f, windUpPerLevel = 0.15f, windUpTime = 1.5f;
+inline constexpr float bankThrow = 0.15f, bankThrowPerLevel = 0.05f;
+inline constexpr float bully = 0.3f, bullyPerLevel = 0.1f;
+inline constexpr float carom = 0.4f, caromPerLevel = 0.15f, caromWindow = 0.5f;
 }  // namespace common
 
 }  // namespace sb::cfg

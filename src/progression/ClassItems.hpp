@@ -216,7 +216,7 @@ inline const ItemDef* styleItemDef(UpgradeKind k) {
          "+5% speed", Tier::Common, ItemTag::Support},
         {UpgradeKind::Pass, "Pass", "Pass",
          "a ball it clacks into is launched x1.5, its next hit +20% with this ball's element - billiards",
-         "+15% launch", Tier::Rare, ItemTag::Support},
+         "+15% launch", Tier::Uncommon, ItemTag::Support},
         {UpgradeKind::Kennel, "Kennel", "Kennel",
          "the slower it moves, the more often it lets loose a homing wisp (50% of its hit), every 3.5 s at a standstill",
          "sooner, +12% of its hit", Tier::Uncommon, ItemTag::Summoner},
@@ -253,7 +253,7 @@ inline const ItemDef* alchemistItemDef(UpgradeKind k) {
 }
 
 // ---------------------------------------------------------------- lookup
-// ==================================================================== commons (2026-10-04)
+// ==================================================================== commons + uncommons (2026-10-04)
 // One line each, every class: the base a build stands on. Each one is meant
 // to combine with other classes' items too (DESIGN.md, "comunes").
 inline const ItemDef* commonItemDef(UpgradeKind k) {
@@ -347,6 +347,41 @@ inline const ItemDef* commonItemDef(UpgradeKind k) {
          "+0.25 s", Tier::Common, ItemTag::Support},
         {K::HandOff, "HandOff", "Hand-off", "its kills give the nearest other ball +25% on its next hit",
          "+10%", Tier::Common, ItemTag::Support},
+        // ---- uncommons (2026-10-04) ----
+        {K::Fission, "Fission", "Fission", "an enemy that dies carrying its element spreads that element to the enemies around it",
+         "wider", Tier::Uncommon, ItemTag::Alchemist},
+        {K::Elixir, "Elixir", "Elixir", "each reaction it sets off makes every ball hit 10% harder for 3 s",
+         "+5%", Tier::Uncommon, ItemTag::Alchemist},
+        {K::HouseEdge, "HouseEdge", "House edge", "20% chance (luck raises it) that gold you earn comes double - kills, Midas, the fight's pay",
+         "+8% chance", Tier::Uncommon, ItemTag::Jester},
+        {K::Mirror, "Mirror", "Mirror", "12% chance (luck raises it) the nearest other ball copies its hit onto the same enemy",
+         "+4% chance", Tier::Uncommon, ItemTag::Jester},
+        {K::Sigil, "Sigil", "Sigil", "each ability it casts leaves a glyph for 4 s; another ball crossing it sets off a small nova (40% of its hit)",
+         "+15% of the hit", Tier::Uncommon, ItemTag::Mage},
+        {K::ArcaneCharge, "ArcaneCharge", "Arcane charge", "each wall bounce takes 0.3 s off its ability cooldowns",
+         "+0.1 s", Tier::Uncommon, ItemTag::Mage},
+        {K::Conduit, "Conduit", "Conduit", "each ability it casts leaves the nearest other ball's element on the enemies around it - its own hits then set off reactions",
+         "wider", Tier::Uncommon, ItemTag::Mage},
+        {K::Martyr, "Martyr", "Martyr", "its turrets and totems burst with its element when they run out, for 50% of its hit",
+         "+20% of the hit", Tier::Uncommon, ItemTag::Summoner},
+        {K::GuardDog, "GuardDog", "Guard dog", "its summons go for the enemy nearest the core and hit 30% harder",
+         "+10%", Tier::Uncommon, ItemTag::Summoner},
+        {K::ChainKill, "ChainKill", "Chain kill", "a kill within 1 s of a blink recharges the blink at once",
+         "+0.3 s window", Tier::Uncommon, ItemTag::Assassin},
+        {K::VenomBlade, "VenomBlade", "Venom blade", "the first hit after a blink leaves its element twice over (two burns, two poison stacks, two cracks...)",
+         "+15% damage on that hit", Tier::Uncommon, ItemTag::Assassin},
+        {K::SuppressingFire, "SuppressingFire", "Suppressing fire", "each bullet that hits slows the enemy 10% more for 2 s, up to 40%",
+         "+5% per bullet", Tier::Uncommon, ItemTag::Shooter},
+        {K::AmmoFeed, "AmmoFeed", "Ammo feed", "each wall bounce fires a volley at the enemy nearest it",
+         "+1 bullet", Tier::Uncommon, ItemTag::Shooter},
+        {K::WindUp, "WindUp", "Wind-up", "the longer you hold it before throwing (up to 1.5 s), the faster it flies: up to +50%",
+         "+15%", Tier::Uncommon, ItemTag::Slinger},
+        {K::BankThrow, "BankThrow", "Bank throw", "each wall it bounces off after your throw adds +15% to the throw's first hit",
+         "+5% per wall", Tier::Uncommon, ItemTag::Slinger},
+        {K::Bully, "Bully", "Bully", "+30% damage to enemies bigger than it - Tanks, Brutes, bosses",
+         "+10%", Tier::Uncommon, ItemTag::Striker},
+        {K::Carom, "Carom", "Carom", "a hit within 0.5 s of clacking off another ball deals +40%",
+         "+15%", Tier::Uncommon, ItemTag::Striker},
     };
     return findItemDef(defs, k);
 }

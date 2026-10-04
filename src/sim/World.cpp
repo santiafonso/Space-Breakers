@@ -743,6 +743,8 @@ void World::releaseHeld(sf::Vector2f throwVel) {
     if (b.hasRole(BallRole::Striker)) throwVel *= cfg::role::strikerFlingMult;   // built to be flung
     if (b.mods.cometFling > 0.f) throwVel *= b.mods.cometFling;                 // "Comet"
     if (b.mods.cls.slinger.coil > 0.f) throwVel *= b.mods.cls.slinger.coil;     // "Coil"
+    if (b.mods.cls.common.windUp > 0.f)                                         // "Wind-up": held a while
+        throwVel *= 1.f + b.mods.cls.common.windUp * clampf(heldT_ / cfg::common::windUpTime, 0.f, 1.f);
     b.homing = false;
     const float s = length(throwVel);
     if (s < cfg::ball::minThrowSpeed) b.vel = rng_.direction() * cfg::ball::nudgeSpeed;
@@ -2338,6 +2340,7 @@ void World::sweepDeadEnemies(FrameEvents& ev, const WorldParams& p) {
                 }
                 ev.bursts.push_back({it->pos, R, theme::elemFire, nullptr});
             }
+            commonOnDeath(*it, ev);   // "Fission"
             ev.kills.push_back(it->pos);
             it = enemies_.erase(it);
         } else {
@@ -2526,7 +2529,7 @@ void World::ballHitsBoss(Ball& b, float cdMul, const WorldParams& p, FrameEvents
     if (boss_.intro > 0.f || boss_.hitCd > 0.f) return;
     if (speedGate && length(b.vel) < ballBaseCruise(b, p) * cfg::boss::minHitCruiseFrac) return;
     if (wardenBlocks(b.pos)) { ev.shieldBlock = true; return; }
-    boss_.hp -= ballDamage(b, p);
+    boss_.hp -= ballDamage(b, p) * (1.f + b.mods.cls.common.bully);   // "Bully": bosses are bigger
     boss_.hitFlash = 1.f;
     boss_.hitCd = cfg::boss::hitCooldown * cdMul;
     ev.bossHit = true;

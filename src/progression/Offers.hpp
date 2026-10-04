@@ -93,7 +93,7 @@ inline const char* upgradeCatDesc(UpgradeCat c) {
 
 inline Tier upgradeTier(UpgradeKind k) {
     switch (k) {
-        case UpgradeKind::Ricochet: case UpgradeKind::Crit:
+        case UpgradeKind::Ricochet: case UpgradeKind::Crit: case UpgradeKind::Mender:
         case UpgradeKind::HeavyImpact: case UpgradeKind::BigBall: case UpgradeKind::Swift:
         case UpgradeKind::Ballast: case UpgradeKind::Keen: case UpgradeKind::Reach: case UpgradeKind::Tempered:
         case UpgradeKind::Spin: case UpgradeKind::Leech: case UpgradeKind::QuickMind: case UpgradeKind::HeavyThrow:
@@ -105,15 +105,16 @@ inline Tier upgradeTier(UpgradeKind k) {
         case UpgradeKind::ElemIce: case UpgradeKind::ElemStone: case UpgradeKind::ElemElectric:
         case UpgradeKind::AbilityDash: case UpgradeKind::AbilityBulwark: case UpgradeKind::AbilityArc:
         case UpgradeKind::AbilityMissile:
-        case UpgradeKind::Rampart: case UpgradeKind::Mender: case UpgradeKind::Bedrock:
+        case UpgradeKind::Rampart: case UpgradeKind::Bedrock:
+        case UpgradeKind::Cleave: case UpgradeKind::Executioner:   // (2026-10-04: down from Rare - the rarity pyramid)
+        case UpgradeKind::Overkill: case UpgradeKind::Midas:
         case UpgradeKind::Conductor: case UpgradeKind::Shatter: case UpgradeKind::Bumper:
         case UpgradeKind::CoreSlowField: case UpgradeKind::Contagion: case UpgradeKind::Primed:
             return Tier::Uncommon;
         case UpgradeKind::AbilityNova: case UpgradeKind::AbilitySplit: case UpgradeKind::AbilityOverclock:
         case UpgradeKind::AbilityMeteor:
-        case UpgradeKind::Cleave: case UpgradeKind::Executioner: case UpgradeKind::Overkill:
         case UpgradeKind::Tesla: case UpgradeKind::Bomber: case UpgradeKind::Echo:
-        case UpgradeKind::Berserk: case UpgradeKind::Giant: case UpgradeKind::Midas:
+        case UpgradeKind::Berserk: case UpgradeKind::Giant:
         case UpgradeKind::Comet: case UpgradeKind::Mitosis: case UpgradeKind::Boomerang:
         case UpgradeKind::Glutton:
         case UpgradeKind::LuckyClover: case UpgradeKind::MagneticCore: case UpgradeKind::Overcharge:

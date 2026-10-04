@@ -301,6 +301,24 @@ bool foldCommon(UpgradeKind k, int level, BallMods& m) {
         case K::Medic:       c.medic = C::medic + C::medicPerLevel * n; return true;
         case K::Sync:        c.sync = C::sync + C::syncPerLevel * n; return true;
         case K::HandOff:     c.handOff = C::handOff + C::handOffPerLevel * n; return true;
+        // uncommons
+        case K::Fission:     c.fission = C::fission + C::fissionPerLevel * n; return true;
+        case K::Elixir:      c.elixir = C::elixir + C::elixirPerLevel * n; return true;
+        case K::HouseEdge:   c.houseEdge = C::houseEdge + C::houseEdgePerLevel * n; return true;
+        case K::Mirror:      c.mirror = C::mirror + C::mirrorPerLevel * n; return true;
+        case K::Sigil:       c.sigil = C::sigil + C::sigilPerLevel * n; return true;
+        case K::ArcaneCharge: c.arcaneCharge = C::arcaneCharge + C::arcaneChargePerLevel * n; return true;
+        case K::Conduit:     c.conduit = C::conduit + C::conduitPerLevel * n; return true;
+        case K::Martyr:      c.martyr = C::martyr + C::martyrPerLevel * n; return true;
+        case K::GuardDog:    c.guardDog = C::guardDog + C::guardDogPerLevel * n; return true;
+        case K::ChainKill:   c.chainKill = C::chainKill + C::chainKillPerLevel * n; return true;
+        case K::VenomBlade:  c.venomBlade = 1.f + C::venomBlade + C::venomBladePerLevel * n; return true;   // > 0 = on
+        case K::SuppressingFire: c.suppress = C::suppress + C::suppressPerLevel * n; return true;
+        case K::AmmoFeed:    c.ammoFeed = level; return true;
+        case K::WindUp:      c.windUp = C::windUp + C::windUpPerLevel * n; return true;
+        case K::BankThrow:   c.bankThrow = C::bankThrow + C::bankThrowPerLevel * n; return true;
+        case K::Bully:       c.bully = C::bully + C::bullyPerLevel * n; return true;
+        case K::Carom:       c.carom = C::carom + C::caromPerLevel * n; return true;
         default: return false;
     }
 }
