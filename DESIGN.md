@@ -2360,8 +2360,14 @@ de las pelotas: Q, el anillo de E y F.
   archivo y misma regla que los comunes.
   - Bajados de rareza por la pirámide: Mender (→ común); Cleave, Executioner,
     Overkill, Midas, Pass (→ poco común).
-- **Lo que falta:** raros 19, épicos 20, legendarios 15 (más bajar 2 épicos de
-  Support a raro).
+- **Tanda 3 - raros (hecha):** Transmute, Residue, Aurum (Alchemist); High
+  roller, Lucky seven, Fortune (Jester); Projection, Spellweave, Cascade (Mage);
+  Hatchery, Golem, Soulbind (Summoner); Predator (salto al doble de rango, al
+  más débil), Flicker (Assassin); Frag rounds, Marksman (Shooter); Skipping
+  stone, Formation (Slinger); Shield bash (Guardian). Golem es una invocación
+  nueva: cuenta para Guard dog, Soulbind, Lingering, Martyr y Pack leader.
+  - Storm y Tether bajan de épico a raro (pirámide de Support).
+- **Lo que falta:** épicos 20, legendarios 15.
 - **F (Repulse) se abre en el acto 4** (antes en el 2, igual que la E). La E sigue en el 2.
 
 ### Anotado para después (el usuario lo pidió así)

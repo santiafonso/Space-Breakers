@@ -347,7 +347,7 @@ BallSpec App::ballSpec(const BallLoadout& L) const {
     m.copyLife = 1.f + W::broodPerLevel * lv(MetaBrood);                       // "Brood"
     m.mitosisLife *= m.copyLife;
     m.cls.mage.focus += W::channelPerLevel * lv(MetaChannel);                  // "Channel"
-    m.cls.summoner.bond = 1.f + W::bondPerLevel * lv(MetaBond);                // "Bond"
+    m.cls.summoner.bond *= 1.f + W::bondPerLevel * lv(MetaBond);               // "Bond" (x "Soulbind" levels)
     if (L.hasRole(ItemTag::Striker)) m.damageMult *= 1.f + W::momentumPerLevel * lv(MetaMomentum);   // "Momentum"
     if (L.hasRole(ItemTag::Shooter)) m.cls.shooter.dmgMul *= 1.f + W::caliberPerLevel * lv(MetaCaliber);   // "Caliber"
     if (L.hasRole(ItemTag::Assassin)) m.cls.assassin.cull += W::deathmarkPerLevel * lv(MetaDeathmark);    // "Deathmark"

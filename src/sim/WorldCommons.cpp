@@ -44,6 +44,13 @@ float World::commonPreHit(Ball& b, Enemy& e, const WorldParams&) {
     }
     if (c.bully > 0.f && e.radius > b.radius) k *= 1.f + c.bully;   // "Bully"
     if (s.caromT > 0.f) { k *= 1.f + c.carom; s.caromT = 0.f; }   // "Carom"
+    if (c.highRoller > 0.f) k *= cfg::common::highRollerPlain;     // "High roller": every hit a little less...
+    if (c.luckySeven > 0 && ++s.hits7 >= c.luckySeven) {           // "Lucky seven": a sure double
+        s.hits7 = 0;
+        s.forcedDouble = true;
+        k *= 2.f;
+    }
+    if (s.predArmed) { k *= 1.f + c.predator; s.predArmed = false; }   // "Predator"
     return k;
 }
 
@@ -71,6 +78,10 @@ void World::commonOnHit(Ball& b, Enemy& e, float dmg, bool kill, const WorldPara
             if (static_cast<int>(bolts_.size()) < cfg::element::maxBolts)
                 bolts_.push_back(Bolt{e.pos, t->pos, cfg::element::boltLife, cfg::element::boltLife});
         }
+    }
+    if (s.doubled) {
+        if (c.highRoller > 0.f && !kill && e.hp > 0.f) damageEnemy(e, dmg * c.highRoller);   // ...a double far more
+        if (c.fortune > 0.f) s.fortune = std::min(s.fortune + 1, C::fortuneMax);         // "Fortune"
     }
     s.doubled = false;
     if (c.pickpocket > 0.f && !b.ghost && chance(c.pickpocket, p)) ++ev.midasGold;   // "Pickpocket"
@@ -100,6 +111,11 @@ void World::commonOnHit(Ball& b, Enemy& e, float dmg, bool kill, const WorldPara
             if (static_cast<int>(bolts_.size()) < cfg::element::maxBolts)
                 bolts_.push_back(Bolt{o->pos, e.pos, cfg::element::boltLife, cfg::element::boltLife});
         }
+    }
+    if (c.shieldBash > 0.f &&   // "Shield bash": too close to the core - off you go
+        length(e.pos - core_.pos) < C::bashRange * arenaScale() + core_.radius) {
+        e.vel += normalized(e.pos - core_.pos, {1.f, 0.f}) * c.shieldBash * arenaScale() * e.knockTaken;
+        e.stagger = std::max(e.stagger, c.bashStun);
     }
     if (c.bleed > 0.f) {   // "Bleed": the hit again, spread over a couple of seconds
         e.bleed = C::bleedTime;
@@ -153,6 +169,7 @@ float World::commonDamageMul(const Ball& b) const {
         for (const SummonTotem& t : sw.totems) n += t.owner == b.owner ? 1 : 0;
         for (const SummonShot& t : sw.shots) n += t.wisp && t.owner == b.owner ? 1 : 0;
         n += b.mods.cls.summoner.wardens;
+        for (const CommonWorld::Golem& g : classWorld_.common.golems) n += g.owner == b.owner ? 1 : 0;
         k *= 1.f + c.packLeader * static_cast<float>(std::min(n, C::packLeaderMax));
     }
     if (c.sentinel > 0.f) {   // "Sentinel": close to the core
@@ -175,6 +192,7 @@ void World::commonTick(Ball& b, float dt, const WorldParams& p, FrameEvents&) {
     s.landingCd = std::max(0.f, s.landingCd - dt);
     s.chainT = std::max(0.f, s.chainT - dt);
     s.caromT = std::max(0.f, s.caromT - dt);
+    s.transT = std::max(0.f, s.transT - dt);
     if (s.coverPending) {
         s.coverPending = false;
         if (!b.held && waveRunning_) commonVolley(b, p, b.mods.cls.common.cover, core_.pos);
@@ -190,6 +208,10 @@ void World::commonWorldTick(float dt, const WorldParams& p, FrameEvents& ev) {
         const Element el = static_cast<Element>(pd.elem);
         for (Enemy& e : enemies_) {
             if (e.hp <= 0.f || length(e.pos - pd.pos) > pd.r + e.radius) continue;
+            if (pd.prime) {   // "Residue": only primes - the next hit there reacts
+                if (e.elemT <= 0.f) { e.elem = el; e.elemOwner = -1; e.elemT = cfg::synergy::reactWindow; }
+                continue;
+            }
             touchElement(e, el, 1.f, BallMods{}, p);
             applyElement(e, el, pd.owner, pd.dmg, p, ev);
         }
@@ -278,6 +300,7 @@ void World::commonWallBounce(Ball& b, const WorldParams& p) {
 
 void World::commonCoreBounce(Ball& b, const WorldParams& p, FrameEvents& ev) {   // "Heavy landing"
     const CommonMods& c = b.mods.cls.common;
+    b.cls.common.skipping = false;   // "Skipping stone": home
     if (c.heavyLanding <= 0.f || b.cls.common.landingCd > 0.f) return;
     b.cls.common.landingCd = cfg::common::landingCd;
     const float R = cfg::common::landingRadius * arenaScale();
@@ -338,13 +361,41 @@ void World::commonOnCast(Ball& b, const WorldParams& p) {
         }
 }
 
-void World::commonOnReaction(Ball* rb) {
-    if (rb && rb->mods.cls.common.elixir > 0.f) {   // "Elixir": every ball, for a moment
+void World::commonOnReaction(Ball* rb, Element x, Element y, sf::Vector2f at, float hitDmg, FrameEvents& ev) {
+    if (!rb) return;
+    const CommonMods& c = rb->mods.cls.common;
+    const Element other = x == rb->element ? y : x;   // the element it met
+    if (c.transmute > 0.f && other != Element::Plain) {   // "Transmute": it carries that one a while
+        rb->cls.common.transT = c.transmute;
+        rb->cls.common.transElem = static_cast<int>(other);
+    }
+    if (c.residue > 0.f && other != Element::Plain) {   // "Residue": a puddle that primes (no owner: reacts with anything)
+        auto& ps = classWorld_.common.puddles;
+        if (static_cast<int>(ps.size()) >= cfg::common::maxPuddles) ps.erase(ps.begin());
+        CommonWorld::Puddle pd;
+        pd.pos = at;
+        pd.r = (cfg::common::residueRadius +
+                cfg::common::residueRadiusPerLevel * (c.residue - cfg::common::residue) / cfg::common::residuePerLevel) *
+               arenaScale();
+        pd.life = pd.maxLife = c.residue;
+        pd.dmg = hitDmg * cfg::common::seepFrac;
+        pd.elem = static_cast<int>(other);
+        pd.owner = -1;
+        pd.prime = true;
+        ps.push_back(pd);
+    }
+    if (c.aurum > 0)   // "Aurum": what this reaction killed pays
+        for (Enemy& e : enemies_)
+            if (e.hp <= 0.f && !e.aurumPaid) {
+                e.aurumPaid = true;
+                ev.midasGold += c.aurum;
+            }
+    if (rb->mods.cls.common.elixir > 0.f) {   // "Elixir": every ball, for a moment
         CommonWorld& cw = classWorld_.common;
         cw.elixirT = cfg::common::elixirTime;
         cw.elixir = std::max(cw.elixir, rb->mods.cls.common.elixir);
     }
-    if (!rb || rb->mods.cls.common.distill <= 0.f) return;   // "Distill"
+    if (rb->mods.cls.common.distill <= 0.f) return;   // "Distill"
     if (++rb->cls.common.reactions % cfg::common::distillEvery == 0)
         core_.hp = std::min(core_.maxHp, core_.hp + rb->mods.cls.common.distill);
 }
@@ -358,6 +409,18 @@ void World::commonOnBlink(Ball& b, Enemy& t, const WorldParams& p) {
     if (c.quickstep > 0.f) boostSpeed(b, c.quickstep, p);   // "Quickstep"
     if (c.chainKill > 0.f) b.cls.common.chainT = c.chainKill;   // "Chain kill": a kill now recharges it
     if (c.venomBlade > 0.f) b.cls.common.venom = true;          // "Venom blade"
+    if (c.predator > 0.f) b.cls.common.predArmed = true;        // "Predator" (the reach and the pick: the blink)
+    if (c.flicker > 0.f) {   // "Flicker": again, at once - a few times at most
+        CommonState& s = b.cls.common;
+        if (s.flickers < cfg::common::flickerMax && chance(c.flicker, p)) {
+            ++s.flickers;
+            b.cls.assassin.pending = true;
+            b.cls.assassin.pendingAt = classWorld_.assassin.clock;
+            b.cls.assassin.cd = 0.f;
+        } else {
+            s.flickers = 0;
+        }
+    }
 }
 
 void World::commonOnGrab(Ball& b) {
@@ -390,6 +453,12 @@ void World::commonOnThrow(Ball& b, float pullFrac) {
     const CommonMods& c = b.mods.cls.common;
     if (c.longPull > 0.f) b.cls.common.pull = c.longPull * clampf(pullFrac, 0.f, 1.f);   // "Long pull"
     if (c.bankThrow > 0.f) { b.cls.common.bankArmed = true; b.cls.common.banks = 0; }   // "Bank throw"
+    b.cls.common.skipping = c.skipping > 0.f;   // "Skipping stone": until it's home
+    if (c.formation > 0.f && length(b.vel) > 1.f) {   // "Formation": the others follow
+        const sf::Vector2f v = b.vel * c.formation;
+        for (Ball& o : balls_)
+            if (&o != &b && !o.held && !o.mods.satellite && o.snaredBy < 0) o.vel = v;
+    }
     for (Ball& o : balls_)   // other balls' "Covering fire" (on their next tick)
         if (&o != &b && o.mods.cls.common.cover > 0) o.cls.common.coverPending = true;
     b.sinceThrow = 0.f;
@@ -398,11 +467,14 @@ void World::commonOnThrow(Ball& b, float pullFrac) {
 void World::commonWaveStart() {
     classWorld_.common.puddles.clear();
     classWorld_.common.glyphs.clear();
+    classWorld_.common.golems.clear();
     classWorld_.common.elixirT = classWorld_.common.elixir = 0.f;
     for (Ball& b : balls_) {
         b.cls.common.firstBlood = b.mods.cls.common.firstBlood > 0.f;   // "First blood": armed
         b.cls.common.adrenaline = 0;                                    // "Adrenaline": a fresh fight
         b.cls.common.streak = 0;
+        b.cls.common.fortune = 0;   // "Fortune": a fresh fight
+        b.cls.common.flickers = 0;
     }
 }
 

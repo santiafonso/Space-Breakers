@@ -219,6 +219,26 @@ enum class UpgradeKind {
     BankThrow,         // wall bounces after your throw charge its first hit  [Slinger]
     Bully,             // + damage vs bigger enemies                          [Striker]
     Carom,             // a hit right after a clack hits harder               [Striker]
+    // ---- rares (2026-10-04), same home and same rule ----
+    Transmute,         // a reaction it sets off lends it the other element   [Alchemist]
+    Residue,           // its reactions leave a priming puddle                [Alchemist]
+    Aurum,             // kills by its reactions pay gold                     [Alchemist]
+    HighRoller,        // doubled hits land far harder, plain ones softer     [Jester]
+    LuckySeven,        // every 7th hit is a sure double                      [Jester]
+    Fortune,           // each double makes its chances likelier this fight   [Jester]
+    Projection,        // its ghost copies cast its abilities too             [Mage]
+    Spellweave,        // its abilities hit harder on enemies under an element [Mage]
+    Cascade,           // an ability that kills is ready again at once        [Mage]
+    Hatchery,          // a summon's kill lets a wisp loose                   [Summoner]
+    Golem,             // calls a stone golem now and then                    [Summoner]
+    Soulbind,          // its summons leave their element's full effect       [Summoner]
+    Predator,          // the blink reaches twice as far, at the weakest      [Assassin]
+    Flicker,           // a blink may blink again                             [Assassin]
+    FragRounds,        // bullets burst                                       [Shooter]
+    Marksman,          // every 5th bullet crits and marks                    [Shooter]
+    SkippingStone,     // thrown, it skips off enemies without slowing        [Slinger]
+    Formation,         // your throw sends the other balls the same way       [Slinger]
+    ShieldBash,        // enemies it hits near the core fly off, stunned      [Guardian]
 
     // ---- relics (keep CoreSpring first and Overcharge last) ----
     CoreSpring,        // balls ricochet off the core faster

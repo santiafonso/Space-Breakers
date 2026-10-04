@@ -270,7 +270,9 @@ private:
     void commonCoreBounce(Ball& b, const WorldParams& p, FrameEvents& ev);   // "Heavy landing"
     void commonClack(Ball& a, Ball& o);                // "Tincture", "Medic"
     void commonOnCast(Ball& b, const WorldParams& p);        // Spellblade / Aether step / Sync
-    void commonOnReaction(Ball* rb);                         // "Distill"
+    void commonOnReaction(Ball* rb, Element x, Element y, sf::Vector2f at, float hitDmg, FrameEvents& ev);
+    void commonGolems(float dt, const WorldParams& p, FrameEvents& ev);   // "Golem" (WorldClasses.cpp)
+    Ball* castBall_ = nullptr;   // the ball whose ability is firing right now ("Spellweave")
     void commonOnBlink(Ball& b, Enemy& t, const WorldParams& p);   // Mark for death / Quickstep
     void commonOnGrab(Ball& b);                              // Relay / Second wind
     void commonOnThrow(Ball& b, float pullFrac);             // Long pull / Covering fire

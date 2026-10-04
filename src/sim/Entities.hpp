@@ -309,6 +309,7 @@ struct Enemy {
     float spotT = 0.f, spotMul = 1.f;    // "Spotter": the other balls hit it x spotMul...
     int spotOwner = -1;                  // ...all but this one
     float doomT = 0.f, doomMul = 1.f;    // "Mark for death": every ball hits it x doomMul
+    bool aurumPaid = false;              // "Aurum": its gold is counted
     Gait gait = Gait::Straight;
     float gaitPhase = 0.f;  // Weave: where in its sway it started
     float gaitSign = 1.f;   // Weave / Spiral: which way it leans

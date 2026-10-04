@@ -251,6 +251,13 @@ void worldStyle(sf::RenderTarget& t, const World& world) {
         draw::disc(t, pd.pos, pd.r, withAlpha(c, 0.14f * a), withAlpha(c, 0.03f * a), {1.f, 1.f}, 28);
         draw::ring(t, pd.pos, pd.r, 1.2f * k, withAlpha(c, 0.3f * a));
     }
+    for (const CommonWorld::Golem& g : world.classWorld().common.golems) {   // "Golem": a stone block
+        const float a = clampf(g.life / 0.4f, 0.f, 1.f);
+        const float r = cfg::common::golemRadius * k * (1.f + 0.25f * g.flash);
+        draw::disc(t, g.pos, r, withAlpha(lerpColor(theme::elemStone, theme::classSummoner, 0.35f), 0.9f * a),
+                   withAlpha(theme::elemStone, 0.6f * a), {1.f, 1.f}, 6);
+        draw::polygonOutline(t, g.pos, r, 6, 0.f, 1.6f * k, withAlpha(theme::classSummoner, 0.85f * a));
+    }
     for (const CommonWorld::Glyph& g : world.classWorld().common.glyphs) {   // "Sigil"
         const float a = clampf(g.life / 0.6f, 0.f, 1.f);
         draw::polygonOutline(t, g.pos, g.r, 6, g.life * 0.8f, 1.6f * k, withAlpha(theme::classMage, 0.75f * a));

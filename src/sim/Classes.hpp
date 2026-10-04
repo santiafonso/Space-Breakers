@@ -148,6 +148,8 @@ struct ShooterBullet {
     int banks = 0;            // "Bank shot": wall bounces left
     float hollow = 0.f;       // "Hollow point": + damage vs an enemy under an element
     float suppress = 0.f;     // "Suppressing fire": slow per hit
+    float frag = 0.f;         // "Frag rounds": burst x the bullet
+    bool mark = false;        // "Marksman": this one marks
 };
 struct ShooterRail {          // Deadeye's rail shot, kept only to be drawn
     sf::Vector2f a, b;
@@ -433,6 +435,28 @@ struct CommonMods {
     float bankThrow = 0.f;     // "Bank throw": + this per wall before the thrown first hit
     float bully = 0.f;         // "Bully": + damage vs bigger enemies (and bosses)
     float carom = 0.f;         // "Carom": + damage right after a clack
+    // rares (2026-10-04)
+    float transmute = 0.f;     // "Transmute": s it carries the other element after a reaction
+    float residue = 0.f;       // "Residue": its reactions leave a priming puddle this long
+    int aurum = 0;             // "Aurum": gold per kill by its reactions
+    float highRoller = 0.f;    // "High roller": a doubled hit + this on top (every hit x penalty)
+    int luckySeven = 0;        // "Lucky seven": every Nth hit is a double
+    float fortune = 0.f;       // "Fortune": chances + this per double this fight
+    bool projection = false;   // "Projection": its copies cast
+    float spellweave = 0.f;    // "Spellweave": its abilities + this vs an enemy under an element
+    bool cascade = false;      // "Cascade": an ability that kills is ready again
+    int hatchery = 0;          // "Hatchery": wisps per summon kill
+    float golemEvery = 0.f;    // "Golem": s between golems (0 = off)...
+    float golemFrac = 0.f;     // ...its slam x the ball's hit
+    bool soulbind = false;     // "Soulbind": summons leave the full element
+    float predator = 0.f;      // "Predator": the hit after a (longer, weakest-first) blink + this
+    float flicker = 0.f;       // "Flicker": chance a blink blinks again
+    float frag = 0.f;          // "Frag rounds": bullet burst x the bullet
+    int marksman = 0;          // "Marksman": every Nth bullet hits x3 and marks
+    float skipping = 0.f;      // "Skipping stone": speed x this per skip (0 = off)
+    float formation = 0.f;     // "Formation": the others follow your throw at this x its speed
+    float shieldBash = 0.f;    // "Shield bash": knock near the core...
+    float bashStun = 0.f;      // ...and stun
 };
 struct CommonState {
     bool doubled = false;      // this hit was doubled (crit, coin heads, a Jester double)
@@ -453,12 +477,23 @@ struct CommonState {
     bool bankArmed = false;    // "Bank throw": thrown, first hit not landed yet...
     int banks = 0;             // ...walls since
     float caromT = 0.f;        // "Carom": s left after a clack
+    float transT = 0.f;        // "Transmute": s it still carries...
+    int transElem = 0;         // ...this element (an Element)
+    int hits7 = 0;             // "Lucky seven": hits toward the sure double
+    bool forcedDouble = false; // ...this hit is it
+    int fortune = 0;           // "Fortune": doubles this fight
+    bool predArmed = false;    // "Predator": the hit after the blink
+    int flickers = 0;          // "Flicker": blinks in this chain
+    int shots = 0;             // "Marksman": bullets fired
+    bool skipping = false;     // "Skipping stone": thrown, not back at the core yet
+    float golemT = 0.f;        // "Golem": to the next one
 };
 struct CommonWorld {
     struct Puddle {            // "Seep"
         sf::Vector2f pos;
         float r = 0.f, life = 0.f, maxLife = 1.f, tickT = 0.f, dmg = 0.f;
         int elem = 0, owner = -1;
+        bool prime = false;    // "Residue": primes only (no touch, no damage)
     };
     std::vector<Puddle> puddles;
     struct Glyph {             // "Sigil"
@@ -468,6 +503,13 @@ struct CommonWorld {
     };
     std::vector<Glyph> glyphs;
     float elixirT = 0.f, elixir = 0.f;   // "Elixir": every ball + elixir while elixirT runs
+    struct Golem {             // "Golem": walks to the enemy nearest the core, slams
+        sf::Vector2f pos;
+        float life = 0.f, maxLife = 1.f, slamT = 0.f, dmg = 0.f;
+        float flash = 0.f;     // 1 on a slam, fades (visual)
+        int elem = 0, owner = -1;
+    };
+    std::vector<Golem> golems;
 };
 
 // On BallMods (`mods.cls`): what the ball's class items add up to.

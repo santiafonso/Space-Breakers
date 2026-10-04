@@ -400,6 +400,32 @@ inline constexpr float windUp = 0.5f, windUpPerLevel = 0.15f, windUpTime = 1.5f;
 inline constexpr float bankThrow = 0.15f, bankThrowPerLevel = 0.05f;
 inline constexpr float bully = 0.3f, bullyPerLevel = 0.1f;
 inline constexpr float carom = 0.4f, caromPerLevel = 0.15f, caromWindow = 0.5f;
+// rares
+inline constexpr float transmute = 5.f, transmutePerLevel = 1.5f;
+inline constexpr float residue = 2.f, residuePerLevel = 0.5f, residueRadius = 50.f, residueRadiusPerLevel = 8.f;
+inline constexpr int aurum = 2;
+inline constexpr float highRoller = 0.75f, highRollerPerLevel = 0.25f, highRollerPlain = 0.85f;
+inline constexpr int luckySeven = 7;
+inline constexpr float fortune = 0.08f, fortunePerLevel = 0.03f;
+inline constexpr int fortuneMax = 5;
+inline constexpr float rareAbilityPerLevel = 0.1f;   // Projection / Cascade levels: ability damage
+inline constexpr float cascadeFloor = 0.35f;         // "Cascade": the soonest it fires again (no per-frame spam)
+inline constexpr float spellweave = 0.5f, spellweavePerLevel = 0.15f;
+inline constexpr float golemEvery = 10.f, golemEveryPerLevel = -1.5f, golemFrac = 0.8f, golemFracPerLevel = 0.2f;
+inline constexpr float golemLife = 6.f, golemSpeed = 110.f, golemRadius = 16.f, golemSlamEvery = 1.f,
+                       golemSlamRadius = 55.f, golemKnock = 260.f, hatcheryFrac = 0.5f;
+inline constexpr int maxGolems = 6;
+inline constexpr float soulbindPerLevel = 0.1f;
+inline constexpr float predator = 0.4f, predatorPerLevel = 0.15f, predatorRange = 2.f;
+inline constexpr float flicker = 0.3f, flickerPerLevel = 0.1f;
+inline constexpr int flickerMax = 3;
+inline constexpr float frag = 0.4f, fragPerLevel = 0.15f, fragRadius = 50.f;
+inline constexpr int marksman = 5;
+inline constexpr float marksmanMul = 3.f;
+inline constexpr float skipping = 1.f, skippingPerLevel = 0.05f;
+inline constexpr float formation = 0.6f, formationPerLevel = 0.15f;
+inline constexpr float shieldBash = 420.f, shieldBashPerLevel = 120.f, bashStun = 1.f, bashStunPerLevel = 0.3f,
+                       bashRange = 230.f;
 }  // namespace common
 
 }  // namespace sb::cfg

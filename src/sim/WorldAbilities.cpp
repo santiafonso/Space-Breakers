@@ -35,11 +35,19 @@ void World::updateAbilities(Ball& b, float dt, const WorldParams& p, FrameEvents
         if (a.id == Ability::None) continue;
         b.abilityCd[i] -= dt * rate;
         if (b.abilityCd[i] > 0.f) continue;
-        if (fireAbility(b, a, p, ev)) {
+        // "Cascade": did this cast kill? (count the fallen before and after)
+        auto fallen = [&] { int n = 0; for (const Enemy& e : enemies_) n += e.hp <= 0.f ? 1 : 0; return n; };
+        const int before = b.mods.cls.common.cascade ? fallen() : 0;
+        castBall_ = &b;   // "Spellweave" reads it in damageEnemy
+        const bool fired = fireAbility(b, a, p, ev);
+        castBall_ = nullptr;
+        if (fired) {
             b.abilityCd[i] = abilityCooldown(a.id, a.level);
             b.abilityFlash = 1.f;
             mageOnCast(b, i, false, p, ev);   // Mage items / Ancient Mage react to the cast
             commonOnCast(b, p);               // Spellblade / Aether step / Sync
+            if (b.mods.cls.common.cascade && fallen() > before)   // "Cascade": again almost at once
+                b.abilityCd[i] = std::min(b.abilityCd[i], cfg::common::cascadeFloor);
         } else {
             b.abilityCd[i] = 0.f;   // charged: fires the moment it has a target
         }

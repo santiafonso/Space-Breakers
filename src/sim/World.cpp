@@ -1260,6 +1260,10 @@ bool World::chance(float base, const WorldParams& p) {
 }
 
 void World::damageEnemy(Enemy& e, float dmg) {
+    if (castBall_ && castBall_->mods.cls.common.spellweave > 0.f &&   // "Spellweave": an ability on an afflicted enemy
+        (e.burn > 0.f || e.poison > 0.f || e.frozen > 0.f || e.soak > 0.f || e.cracks > 0 ||
+         (e.elemT > 0.f && e.elem != Element::Plain)))
+        dmg *= 1.f + castBall_->mods.cls.common.spellweave;
     e.hp -= dmg * (e.brittle > 0.f ? cfg::synergy::brittleMul : 1.f) *
             (1.f + cfg::element::crackDamage * static_cast<float>(e.cracks));   // stone cracks
     e.hitFlash = 1.f;
@@ -1303,6 +1307,8 @@ bool World::strike(Ball& b, Enemy& e, sf::Vector2f normal, const WorldParams& p,
     // "Trick shot": until a thrown ball's first hit is done, its chances are up.
     struct Restore { float& v; float old; ~Restore() { v = old; } } restoreTrick{trickLuck_, trickLuck_};
     if (b.cls.slinger.armed && m.cls.slinger.trick > 1.f) trickLuck_ = m.cls.slinger.trick;
+    if (b.cls.common.fortune > 0)   // "Fortune": its doubles this fight
+        trickLuck_ *= 1.f + m.cls.common.fortune * static_cast<float>(b.cls.common.fortune);
     float dmg = ballDamage(b, p);   // fire / ricochet / Glutton / role bonuses are baked in
     dmg *= classPreHit(b, e, p);    // Slinger: the thrown first hit, Execution throw, Double down
     dmg *= stylePreHit(b, e, p, ev);   // a Beacon / Pass charge
@@ -1404,7 +1410,8 @@ bool World::strike(Ball& b, Enemy& e, sf::Vector2f normal, const WorldParams& p,
         }
     }
     if (m.resonanceFrac > 0.f) resonate(b, dmg, p, ev);   // "Resonance"
-    b.cls.common.doubled = crit || coinHeads;             // (a Jester double sets it in classOnHit)
+    b.cls.common.doubled = crit || coinHeads || b.cls.common.forcedDouble;   // (a Jester double sets it in classOnHit)
+    b.cls.common.forcedDouble = false;                    // ("Lucky seven")
     classOnHit(b, e, dmg, kill, p, ev);                   // its classes (mark, stagger, ascended forms...)
     commonOnHit(b, e, dmg, kill, p, ev);                  // the commons
     if (m.spin > 0.f && chance(m.spin, p)) ++comboStreak_;   // "Spin": an extra combo step
@@ -1445,6 +1452,7 @@ void World::onKill(Ball& b, Enemy& e, float dmg, const WorldParams& p, FrameEven
 // A ball leaves its element on an enemy. If a DIFFERENT ball's different
 // element is already waiting there, the two react (and the status is used up).
 Element World::hitElement(const Ball& b, const WorldParams& p) {
+    if (b.cls.common.transT > 0.f) return static_cast<Element>(b.cls.common.transElem);   // "Transmute"
     if (p.creed.alchemy && rng_.range(0.f, 1.f) < cfg::creed::alchemyChance) {   // "Alchemy" creed: a random extra element
         Element e = static_cast<Element>(rng_.irange(1, kElementCount - 1));
         if (e == b.element) e = static_cast<Element>(static_cast<int>(e) % (kElementCount - 1) + 1);
@@ -1596,7 +1604,7 @@ void World::triggerReaction(Element x, Element y, Enemy& e, float hitDmg, const 
             o.elemT = S::reactWindow;
         }
     }
-    if (depth == 0) commonOnReaction(rb);   // "Distill"
+    if (depth == 0) commonOnReaction(rb, x, y, at, hitDmg, ev);   // Distill / Elixir / Transmute / Residue / Aurum
     if (am && am->flux > 0.f)   // "Flux": each reaction recharges its abilities
         for (int i = 0; i < kMaxAbilitySlots; ++i)
             if (rb->abilities[i].id != Ability::None)
@@ -1822,7 +1830,7 @@ void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
     b.radius = ballRadius(b, p);   // role, "Big ball" gear, "Mass" web
     b.resonanceT = std::max(0.f, b.resonanceT - dt);
     b.overclockT = std::max(0.f, b.overclockT - dt);
-    if (!b.ghost) updateAbilities(b, dt, p, ev);   // copies don't fire abilities
+    if (!b.ghost || b.mods.cls.common.projection) updateAbilities(b, dt, p, ev);   // copies don't fire abilities ("Projection": they do)
     classTick(b, dt, p, ev);
     styleTick(b, dt, p, ev);   // the older classes' speed items
     commonTick(b, dt, p, ev);  // the commons' timers
@@ -1966,6 +1974,10 @@ void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
             }
             afterBounce(b, c.normal, true);
             aimBounce(b, c.normal, &e);
+            if (b.cls.common.skipping) {   // "Skipping stone": off the enemy with no speed lost
+                const float sp = std::max(length(b.vel), length(v0)) * b.mods.cls.common.skipping;
+                b.vel = normalized(b.vel, v0) * std::min(sp, cfg::ball::hardSpeedCap * arenaScale());
+            }
             if (b.mods.boomerangHit > 0.f) b.homing = true;   // "Boomerang": head home
             pushFx(c);
         }

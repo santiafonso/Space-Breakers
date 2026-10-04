@@ -278,7 +278,7 @@ template <> struct ClassHooks<BallRole::Shooter> : NoClassHooks {
         return false;
     }
 
-    static void fire(World& w, const Ball& b, sf::Vector2f dir, float dmg, const WorldParams& p) {
+    static void fire(World& w, Ball& b, sf::Vector2f dir, float dmg, const WorldParams& p) {
         auto& bullets = w.classWorld_.shooter.bullets;
         if (static_cast<int>(bullets.size()) >= cfg::shooter::maxBullets) return;
         const ShooterMods& m = b.mods.cls.shooter;
@@ -294,6 +294,11 @@ template <> struct ClassHooks<BallRole::Shooter> : NoClassHooks {
         u.banks = b.mods.cls.common.bankShots;   // "Bank shot"
         u.hollow = b.mods.cls.common.hollow;     // "Hollow point"
         u.suppress = b.mods.cls.common.suppress; // "Suppressing fire"
+        u.frag = b.mods.cls.common.frag;         // "Frag rounds"
+        if (const int mk = b.mods.cls.common.marksman; mk > 0 && ++b.cls.common.shots % mk == 0) {   // "Marksman"
+            u.dmg *= cfg::common::marksmanMul;
+            u.mark = true;
+        }
         if (m.tracerChance > 0.f && b.element != Element::Plain && w.chance(m.tracerChance, p))
             u.elem = static_cast<int>(b.element);
         bullets.push_back(u);
@@ -445,6 +450,12 @@ template <> struct ClassHooks<BallRole::Shooter> : NoClassHooks {
                                                    e.cracks > 0 || (e.elemT > 0.f && e.elem != Element::Plain));
             w.damageEnemy(e, u.dmg * (e.mark > 0.f ? p.markMul : 1.f) * (hollow ? 1.f + u.hollow : 1.f));   // "Hollow point"
             e.hitFlash = std::max(flash, 0.55f);   // a bullet is a tick, not a big hit
+            if (u.frag > 0.f) {   // "Frag rounds": a little burst
+                const float R = cfg::common::fragRadius * w.arenaScale();
+                w.areaDamage(e.pos, R, u.dmg * u.frag, &e);
+                if (static_cast<int>(ev.bursts.size()) < 24) ev.bursts.push_back({e.pos, R, theme::classShooter, nullptr});
+            }
+            if (u.mark) e.mark = std::max(e.mark, cfg::role::markDuration);   // "Marksman"
             if (u.suppress > 0.f) {   // "Suppressing fire": each one slows it a little more
                 e.braceT = std::max(e.braceT, cfg::common::braceTime);
                 e.braceSlow = std::min(cfg::common::suppressMax, e.braceSlow + u.suppress);
@@ -487,6 +498,20 @@ template <> struct ClassHooks<BallRole::Assassin> : NoClassHooks {
     }
 
     // The live enemy nearest `from` inside the arena, not already in `skip`.
+    // "Predator": the live enemy in reach with the least health left (by share).
+    static Enemy* weakest(World& w, sf::Vector2f from, float range, const std::vector<Enemy*>& skip) {
+        Enemy* best = nullptr;
+        float bestF = 2.f;
+        for (Enemy& e : w.enemies_) {
+            if (e.hp <= 0.f || e.orbiter || dot(e.pos - from, e.pos - from) > range * range) continue;
+            if (e.pos.x < 0.f || e.pos.y < 0.f || e.pos.x > w.size_.x || e.pos.y > w.size_.y) continue;
+            if (std::find(skip.begin(), skip.end(), &e) != skip.end()) continue;
+            const float f = e.hp / std::max(1e-3f, e.maxHp);
+            if (f < bestF) { bestF = f; best = &e; }
+        }
+        return best;
+    }
+
     static Enemy* pick(World& w, sf::Vector2f from, float range, const std::vector<Enemy*>& skip) {
         if (const Enemy* f = w.focusEnemy();   // the player's target, when it's in range
             f && dot(f->pos - from, f->pos - from) <= range * range &&
@@ -562,11 +587,12 @@ template <> struct ClassHooks<BallRole::Assassin> : NoClassHooks {
         namespace A = cfg::assassin;
         const AssassinMods& m = b.mods.cls.assassin;
         AssassinState& s = b.cls.assassin;
-        const float range = A::blinkRange * w.arenaScale();
+        const bool predator = b.mods.cls.common.predator > 0.f;   // "Predator": further, weakest first
+        const float range = A::blinkRange * w.arenaScale() * (predator ? cfg::common::predatorRange : 1.f);
         const int reach = 1 + (b.isAscended(BallRole::Assassin) ? A::ascChain : 0);
         std::vector<Enemy*> chain;
         for (sf::Vector2f at = b.pos; static_cast<int>(chain.size()) < reach;) {
-            Enemy* e = pick(w, at, range, chain);
+            Enemy* e = predator ? weakest(w, at, range, chain) : pick(w, at, range, chain);
             if (!e) break;
             chain.push_back(e);
             at = e->pos;
@@ -701,8 +727,13 @@ template <> struct ClassHooks<BallRole::Summoner> : NoClassHooks {
     static void touch(World& w, Enemy& e, float dmg, int elem, int owner, bool full, const WorldParams& p,
                       FrameEvents& ev) {
         namespace E = cfg::element;
-        if (const Ball* o = ownerBall(w, owner)) dmg *= 1.f + o->mods.cls.common.guardDog;   // "Guard dog"
+        const Ball* o = ownerBall(w, owner);
+        if (o) dmg *= 1.f + o->mods.cls.common.guardDog;   // "Guard dog"
+        if (o && o->mods.cls.common.soulbind) full = true; // "Soulbind": the element's full effect
+        const bool wasAlive = e.hp > 0.f;
         w.damageEnemy(e, dmg);
+        if (o && wasAlive && e.hp <= 0.f && o->mods.cls.common.hatchery > 0)   // "Hatchery": a kill hatches wisps
+            hatch(w, *o, e.pos, o->mods.cls.common.hatchery, p);
         const Element el = static_cast<Element>(elem);
         if (el == Element::Plain) return;
         if (full) {   // the element's own effect, like a ball hit
@@ -767,6 +798,23 @@ template <> struct ClassHooks<BallRole::Summoner> : NoClassHooks {
             return true;
         }
         return e != nullptr;
+    }
+
+    // "Hatchery": n wisps loose from where a summon made a kill.
+    static void hatch(World& w, const Ball& o, sf::Vector2f at, int n, const WorldParams& p) {
+        namespace S = cfg::summoner;
+        SummonerWorld& sw = w.classWorld_.summoner;
+        for (int i = 0; i < n && static_cast<int>(sw.shots.size()) < S::maxShots; ++i) {
+            SummonShot s;
+            s.pos = at;
+            s.vel = w.rng_.direction() * S::wispSpeed * 0.6f;
+            s.dmg = w.ballDamage(o, p) * cfg::common::hatcheryFrac * power(o);
+            s.life = S::wispLife * power(o) * (1.f + o.mods.cls.common.linger);
+            s.elem = static_cast<int>(o.element);
+            s.owner = o.owner;
+            s.wisp = true;
+            sw.shots.push_back(s);
+        }
     }
 
     // "Martyr": a turret / totem that runs out bursts with its element.
@@ -1092,6 +1140,7 @@ template <> struct ClassHooks<BallRole::Summoner> : NoClassHooks {
                 if (pulse) touch(w, e, t.dmg, t.elem, t.owner, false, p, ev);
             }
         }
+        w.commonGolems(dt, p, ev);   // "Golem" (a common's summon, same rules as these)
         for (const SummonTotem& t : sw.totems)
             if (t.life <= 0.f) martyr(w, t.pos, t.elem, t.owner, p, ev);   // "Martyr"
         sw.totems.erase(std::remove_if(sw.totems.begin(), sw.totems.end(),
@@ -1469,6 +1518,65 @@ template <> struct ClassHooks<BallRole::Slinger> : NoClassHooks {
 
     static void waveStart(World& w, const WorldParams&) { w.classWorld_.slinger.flames.clear(); }
 };
+
+// "Golem" (a rare, sim/WorldCommons.cpp): every so often a ball calls a stone
+// golem that walks to the enemy nearest the core and slams what's around it
+// away from the core. A summon like the Summoner's: Guard dog, Soulbind,
+// Lingering, Martyr and Pack leader all count it.
+void World::commonGolems(float dt, const WorldParams& p, FrameEvents& ev) {
+    namespace C = cfg::common;
+    using H = ClassHooks<BallRole::Summoner>;
+    auto& gs = classWorld_.common.golems;
+    const float k = arenaScale();
+    for (Ball& b : balls_) {   // the real balls call them
+        const CommonMods& c = b.mods.cls.common;
+        if (c.golemEvery <= 0.f || !waveRunning_ || b.held) continue;
+        if ((b.cls.common.golemT -= dt) > 0.f) continue;
+        b.cls.common.golemT = c.golemEvery;
+        if (static_cast<int>(gs.size()) >= C::maxGolems) continue;
+        CommonWorld::Golem g;
+        g.pos = b.pos;
+        g.life = g.maxLife = C::golemLife * H::power(b) * (1.f + c.linger);
+        g.dmg = ballDamage(b, p) * c.golemFrac * H::power(b);
+        g.elem = static_cast<int>(b.element);
+        g.owner = b.owner;
+        gs.push_back(g);
+        ev.bursts.push_back({g.pos, C::golemRadius * 2.f * k, theme::classSummoner, nullptr});
+    }
+    for (CommonWorld::Golem& g : gs) {
+        g.life -= dt;
+        g.slamT -= dt;
+        g.flash = std::max(0.f, g.flash - dt * 3.f);
+        const Enemy* t = nullptr;   // the enemy nearest the core
+        float bd = 1e18f;
+        for (const Enemy& e : enemies_) {
+            if (e.hp <= 0.f || e.orbiter) continue;
+            const float d2 = dot(e.pos - core_.pos, e.pos - core_.pos);
+            if (d2 < bd) { bd = d2; t = &e; }
+        }
+        if (!t) continue;
+        const sf::Vector2f to = t->pos - g.pos;
+        const float reach = t->radius + C::golemRadius * k + 6.f;
+        if (length(to) > reach) {
+            g.pos += normalized(to, {1.f, 0.f}) * std::min(length(to) - reach, C::golemSpeed * k * dt);
+            continue;
+        }
+        if (g.slamT > 0.f) continue;
+        g.slamT = C::golemSlamEvery;
+        g.flash = 1.f;
+        const float R = C::golemSlamRadius * k;
+        for (Enemy& e : enemies_) {
+            if (e.hp <= 0.f || e.orbiter || length(e.pos - g.pos) > R + e.radius) continue;
+            H::touch(*this, e, g.dmg, g.elem, g.owner, false, p, ev);
+            e.vel += normalized(e.pos - core_.pos, {1.f, 0.f}) * C::golemKnock * k * e.knockTaken;
+            e.stagger = std::max(e.stagger, 0.3f);
+        }
+        ev.bursts.push_back({g.pos, R, theme::classSummoner, nullptr});
+    }
+    for (const CommonWorld::Golem& g : gs)
+        if (g.life <= 0.f) H::martyr(*this, g.pos, g.elem, g.owner, p, ev);   // "Martyr"
+    gs.erase(std::remove_if(gs.begin(), gs.end(), [](const CommonWorld::Golem& g) { return g.life <= 0.f; }), gs.end());
+}
 
 // "Covering fire" / "Ammo feed" (commons, sim/WorldCommons.cpp): a fan at the
 // enemy nearest `from` - the Shooter's gun, on any ball.

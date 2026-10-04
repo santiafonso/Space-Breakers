@@ -115,12 +115,13 @@ inline Tier upgradeTier(UpgradeKind k) {
         case UpgradeKind::AbilityMeteor:
         case UpgradeKind::Tesla: case UpgradeKind::Bomber: case UpgradeKind::Echo:
         case UpgradeKind::Berserk: case UpgradeKind::Giant:
+        case UpgradeKind::Storm: case UpgradeKind::Tether:   // (2026-10-04: down from Epic - the rarity pyramid)
         case UpgradeKind::Comet: case UpgradeKind::Mitosis: case UpgradeKind::Boomerang:
         case UpgradeKind::Glutton:
         case UpgradeKind::LuckyClover: case UpgradeKind::MagneticCore: case UpgradeKind::Overcharge:
             return Tier::Rare;
-        case UpgradeKind::SplitShot: case UpgradeKind::Piercing: case UpgradeKind::Storm:
-        case UpgradeKind::Hunter: case UpgradeKind::Tether: case UpgradeKind::BlackHole:
+        case UpgradeKind::SplitShot: case UpgradeKind::Piercing:
+        case UpgradeKind::Hunter: case UpgradeKind::BlackHole:
         case UpgradeKind::Resonance:
         case UpgradeKind::Catalyst: case UpgradeKind::ChainReaction:
         case UpgradeKind::GlassCannon: case UpgradeKind::Phoenix: case UpgradeKind::TimeDilation:

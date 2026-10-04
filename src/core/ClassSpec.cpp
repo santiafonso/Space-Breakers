@@ -24,7 +24,7 @@ bool foldMage(UpgradeKind k, int level, BallMods& m) {
             g.barrageFrac = M::barrageFrac + M::barrageFracPerLevel * n;
             g.missileMul = 1.f + M::barrageMissilePerLevel * n;
             return true;
-        case UpgradeKind::Attunement: g.power = M::power + M::powerPerLevel * n; return true;
+        case UpgradeKind::Attunement: g.power *= M::power + M::powerPerLevel * n; return true;   // *= : Projection / Cascade levels too
         case UpgradeKind::Twincast: g.twincast = M::twincast + M::twincastPerLevel * n; return true;
         case UpgradeKind::ManaSpring: g.manaSpring = M::manaSpring + M::manaSpringPerLevel * n; return true;
         default: return false;
@@ -319,6 +319,41 @@ bool foldCommon(UpgradeKind k, int level, BallMods& m) {
         case K::BankThrow:   c.bankThrow = C::bankThrow + C::bankThrowPerLevel * n; return true;
         case K::Bully:       c.bully = C::bully + C::bullyPerLevel * n; return true;
         case K::Carom:       c.carom = C::carom + C::caromPerLevel * n; return true;
+        // rares
+        case K::Transmute:   c.transmute = C::transmute + C::transmutePerLevel * n; return true;
+        case K::Residue:     c.residue = C::residue + C::residuePerLevel * n; return true;
+        case K::Aurum:       c.aurum = C::aurum + (level - 1); return true;
+        case K::HighRoller:  c.highRoller = C::highRoller + C::highRollerPerLevel * n; return true;
+        case K::LuckySeven:  c.luckySeven = std::max(4, C::luckySeven - (level - 1)); return true;
+        case K::Fortune:     c.fortune = C::fortune + C::fortunePerLevel * n; return true;
+        case K::Projection:
+            c.projection = true;
+            m.cls.mage.power *= 1.f + C::rareAbilityPerLevel * n;
+            return true;
+        case K::Spellweave:  c.spellweave = C::spellweave + C::spellweavePerLevel * n; return true;
+        case K::Cascade:
+            c.cascade = true;
+            m.cls.mage.power *= 1.f + C::rareAbilityPerLevel * n;
+            return true;
+        case K::Hatchery:    c.hatchery = level; return true;
+        case K::Golem:
+            c.golemEvery = C::golemEvery + C::golemEveryPerLevel * n;
+            c.golemFrac = C::golemFrac + C::golemFracPerLevel * n;
+            return true;
+        case K::Soulbind:
+            c.soulbind = true;
+            m.cls.summoner.bond *= 1.f + C::soulbindPerLevel * n;
+            return true;
+        case K::Predator:    c.predator = C::predator + C::predatorPerLevel * n; return true;
+        case K::Flicker:     c.flicker = C::flicker + C::flickerPerLevel * n; return true;
+        case K::FragRounds:  c.frag = C::frag + C::fragPerLevel * n; return true;
+        case K::Marksman:    c.marksman = std::max(3, C::marksman - (level - 1)); return true;
+        case K::SkippingStone: c.skipping = C::skipping + C::skippingPerLevel * n; return true;
+        case K::Formation:   c.formation = C::formation + C::formationPerLevel * n; return true;
+        case K::ShieldBash:
+            c.shieldBash = C::shieldBash + C::shieldBashPerLevel * n;
+            c.bashStun = C::bashStun + C::bashStunPerLevel * n;
+            return true;
         default: return false;
     }
 }
