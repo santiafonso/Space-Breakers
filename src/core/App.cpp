@@ -127,6 +127,8 @@ WorldParams App::params() const {
     const int* u = data_.meta.unlock;
     WorldParams p;
     p.hard = data_.run.hard;
+    p.bossHpMul = data_.run.tutorial ? cfg::tutorial::bossHpMul : 1.f;
+    p.bossKind = static_cast<int>(runBoss(cfg::run::actOfWave(data_.run.wave)));
     p.damageMult = 1.f + cfg::combat::heftPerLevel * static_cast<float>(u[MetaHeft]);
     p.wave = std::max(1, data_.run.wave);
     p.ballRadiusMult = 1.f + cfg::combat::massPerLevel * static_cast<float>(u[MetaMass]);
@@ -377,6 +379,11 @@ std::vector<BallSpec> App::ballSpecs() const {
 void App::syncWorldBalls() {
     grantMageMissiles();
     world_.syncBalls(ballSpecs(), params());
+    // "Plating": the core's max health follows what the balls carry.
+    if (const float want = world_.commonPlating(); std::fabs(want - data_.run.platingHp) > 0.01f) {
+        world_.addCoreMaxHp(want - data_.run.platingHp);
+        data_.run.platingHp = want;
+    }
     announceClassGains();
 }
 
@@ -559,7 +566,12 @@ bool App::simulating() const {
 
 // ---------------------------------------------------------------- run flow
 
-void App::openLoadout() { push(ScreenId::Loadout); }
+void App::openLoadout() {
+    // The very first Play goes straight into the tutorial run - the web means
+    // nothing yet; you meet it when the tutorial ends.
+    if (data_.meta.stats.runs == 0) { newRun(); return; }
+    push(ScreenId::Loadout);
+}
 
 std::string App::runPath() const {
     return (std::filesystem::path(savePath_).parent_path() / "run.txt").string();
@@ -620,7 +632,16 @@ void App::newRun() {
     // run intro picks the first ball's first ability.
     auto startLoadout = [](int n) { return std::vector<BallLoadout>(static_cast<std::size_t>(n)); };
     r.balls = startLoadout(startBallCount());
+    // The very first run is the tutorial (SB_DEV=1 SB_TUTORIAL=1 forces it).
+    r.tutorial = data_.meta.stats.runs == 0 || (devMode() && envInt("SB_TUTORIAL", 0) != 0);
     ++data_.meta.stats.runs;
+    hintDone(Hint::WebStart);
+    // Acts 1-4 meet their bosses in a fresh order every run (the tutorial
+    // always opens on the Charger, the simplest duel).
+    for (int i = 0; i < 4; ++i) r.bosses[static_cast<std::size_t>(i)] = i;
+    for (int i = 3; i > (r.tutorial ? 1 : 0); --i)
+        std::swap(r.bosses[static_cast<std::size_t>(i)],
+                  r.bosses[static_cast<std::size_t>(rng_.irange(r.tutorial ? 1 : 0, i))]);
 
     r.rerollsLeft = data_.meta.unlock[MetaReroll] * cfg::run::rerollsPerLevel;
     r.gold = cfg::meta::treasuryGoldPerLevel * data_.meta.unlock[MetaTreasury];   // "Treasury"
@@ -645,7 +666,7 @@ void App::newRun() {
 
     // "Continue" past the miniboss is offered only once a run has been won before
     // (or when a dev shortcut drops us past the boss already).
-    continueUnlocked_ = data_.meta.stats.wins > 0 || startWave > cfg::run::bossWave;
+    continueUnlocked_ = !r.tutorial && (data_.meta.stats.wins > 0 || startWave > cfg::run::bossWave);
 
     // "Starter kit": a free item on the first ball (Uncommon, then Rare). With
     // "Quartermaster" you pick it from 4 cards in the run intro instead.
@@ -681,7 +702,7 @@ void App::newRun() {
     bool anyClass = false;
     for (int i = 0; i < kClassCount && !anyClass; ++i)
         anyClass = data_.meta.unlock[classUnlockNode(classTag(i))] > 0;
-    r.map = generateMap(rng_, act, act == 1 && !anyClass ? cfg::map::rowsFirstRun : 0);
+    r.map = r.tutorial ? tutorialMap() : generateMap(rng_, act, act == 1 && !anyClass ? cfg::map::rowsFirstRun : 0);
     r.mapNode = -1;
     r.mapRow = 0;   // stand just before the first row that plays as startWave
     while (r.mapRow <= r.map.rowCount() && mapRowWave(r.map, r.mapRow + 1) < startWave) ++r.mapRow;
@@ -1017,6 +1038,11 @@ int App::ballCap() const {
     return cfg::ball::baseBalls + (data_.run.map.act >= cfg::ball::lateBallsAct ? cfg::ball::lateBalls : 0);
 }
 
+BossKind App::runBoss(int act) const {
+    if (act >= cfg::run::acts) return BossKind::Orbital;
+    return static_cast<BossKind>(data_.run.bosses[static_cast<std::size_t>(std::clamp(act, 1, 4) - 1)]);
+}
+
 bool App::repulseOpen() const { return data_.run.map.act >= cfg::player::repulseAct; }
 
 // F: the core's shockwave - every enemy near it is shoved away and staggered.
@@ -1024,6 +1050,7 @@ void App::repulse() {
     if (!repulseOpen() || !data_.run.active || !simulating() || repulseCd_ > 0.f) return;
     world_.repulse();
     repulseCd_ = cfg::player::repulseCooldown;
+    hintDone(Hint::Repulse);
     effects_.addBurst(world_.core().pos, cfg::player::repulseRadius * world_.arenaScale(), theme::core);
     effects_.flash(theme::core, 0.25f);
     camKick_ = std::max(camKick_, 5.f);
@@ -1047,6 +1074,7 @@ void App::playerMark() {
                         cfg::player::volleySpeedMul * quickThrowMul() * world_.arenaScale() * flingPower();
     if (!world_.volley(speed)) return;
     markCd_ = cfg::player::markCooldown;
+    hintDone(Hint::Volley);
     audio_.thrown(1.f);
 }
 
@@ -1093,8 +1121,18 @@ void App::travelTo(int node) {
     n.visited = true;
     r.mapNode = node;
     r.mapRow = n.row;
-    const int wave = mapRowWave(r.map, n.row);
+    // The tutorial's stops climb gently (row N plays as wave N); its boss is the act's.
+    const int wave = r.tutorial && n.row < r.map.bossRow() ? n.row : mapRowWave(r.map, n.row);
     audio_.travel();
+    hintDone(Hint::Map);
+    switch (n.type) {   // the stop's own hint (App::updateHints)
+        case MapNodeType::Recruit: hintDone(Hint::Recruit); break;
+        case MapNodeType::Elite:   hintDone(Hint::Elite); break;
+        case MapNodeType::Shop:    hintDone(Hint::Shop); break;
+        case MapNodeType::Forge:   hintDone(Hint::Forge); break;
+        case MapNodeType::Boss:    hintDone(Hint::Boss); break;
+        default: break;
+    }
     back();   // close the map: the Play screen is underneath
     const sf::Vector2f mid{size().x * 0.5f, size().y * 0.4f};
     switch (n.type) {
@@ -1684,6 +1722,7 @@ void App::buyMetaUnlock(int u) {
         data_.meta.cores -= cost;
     }
     ++data_.meta.unlock[u];
+    hintDone(Hint::WebBuy);
     audio_.purchase();
     effects_.flash(theme::accent, 0.4f);
     save();
@@ -1774,6 +1813,7 @@ void App::handleEvent(const sf::Event& e) {
             openPause();
             return;
         }
+        if (data_.run.active && e.type == sf::Event::KeyPressed && e.key.code == sf::Keyboard::Tab) hintDone(Hint::Tab);
         // TAB anywhere in a live run: screens without their own peek get the App's.
         if (data_.run.active && !stack_.back()->ownsTab() && !onOptions()) {
             if (peek_.handle(e)) return;
@@ -2109,6 +2149,7 @@ void App::update(float frameDt) {
         stack_.back()->update(*this, frameDt, peek_.open ? sf::Vector2f{-1e6f, -1e6f} : mouse);
         stack_.back()->advanceIntro(frameDt);
     }
+    updateHints(frameDt);
 
     if (simulating() && !stack_.back()->frozen()) {
         // A fresh wave eases in: feed the fixed-step accumulator slowly at first
@@ -2132,6 +2173,7 @@ void App::update(float frameDt) {
                 bulletGauge_ = std::max(0.f, bulletGauge_ - frameDt / P::bulletMax);
                 bulletIdle_ = 0.f;
                 slow = std::min(slow, P::bulletScale);
+                hintDone(Hint::Bullet);
             } else if ((bulletIdle_ += frameDt) > P::bulletRechargeDelay) {
                 bulletGauge_ = std::min(1.f, bulletGauge_ + frameDt / P::bulletRecharge);
             }
@@ -2141,6 +2183,8 @@ void App::update(float frameDt) {
         novaCd_ = std::max(0.f, novaCd_ - frameDt);   // "Nova" creed recharges while you fight
         repulseCd_ = std::max(0.f, repulseCd_ - frameDt);
         markCd_ = std::max(0.f, markCd_ - frameDt);
+        if (const float q = world_.takeQRefund(); q > 0.f)   // "Second wind": a catch refunds the Q
+            markCd_ = std::max(0.f, markCd_ - q * cfg::player::markCooldown);
         if (hitstop_ > 0.f) {  // an impact landed: hold the frame, no catch-up after
             hitstop_ = std::max(0.f, hitstop_ - frameDt);
             simDt = 0.f;
@@ -2226,6 +2270,7 @@ void App::update(float frameDt) {
     hud_.setHard(data_.run.hard);
     {   // the boss's health for the top bar
         const Boss& bs = world_.boss();
+        hud_.setBossKind(runBoss(data_.run.map.act));
         hud_.setBoss(bs.alive && bs.maxHp > 0.f ? clampf(bs.hp / bs.maxHp, 0.f, 1.f) : -1.f);
     }
     hud_.update(frameDt, data_.run.map.act, data_.run.mapRow, data_.run.map.rowCount() + 1, world_.enemiesLeft(),
@@ -2255,6 +2300,7 @@ void App::render() {
         }
     }
     for (std::size_t i = start; i < stack_.size(); ++i) stack_[i]->draw(*this, w);
+    drawHint(w);
     if (peek_.open) drawLoadoutOverlay(*this, w, false, peek_);
 
     effects_.drawOverlay(w);
@@ -2753,6 +2799,29 @@ int App::runSnapshots(const std::string& dir) {
     replaceStack(ScreenId::Menu);
     openSound();
     snapFrame(d + "20_sound.png");
+
+    // The tutorial: a fresh player's first run, its straight map and its hints.
+    {
+        auto settle = [&] { for (int i = 0; i < 25; ++i) update(0.1f); };   // hints wait a breath
+        data_.meta.stats.runs = 0;
+        data_.meta.hints = 0;
+        newRun();
+        settle();
+        snapFrame(d + "37_tutorial_map.png");
+        back();
+        data_.run.map.nodes[0].visited = true;
+        data_.run.mapNode = 0;
+        data_.run.mapRow = 1;
+        hintDone(Hint::Map);
+        openMap();
+        settle();
+        snapFrame(d + "38_tutorial_recruit.png");
+        openPause();
+        snapFrame(d + "39_tutorial_pause.png");
+        abandonRun();
+        settle();
+        snapFrame(d + "40_web_hint.png");
+    }
     return 0;
 }
 

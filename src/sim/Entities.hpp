@@ -303,6 +303,12 @@ struct Enemy {
     float blinkFx = 0.f;    // Blinker: 1 right after a jump, fades (the render's flicker)
     sf::Vector2f blinkFrom; // Blinker: where it jumped from (a fading afterimage)
     bool snaring = false;   // Snare: it's holding a ball (until it dies)
+    // the commons (sim/WorldCommons.cpp)
+    float bleed = 0.f, bleedDps = 0.f;   // "Bleed": s left, damage/s
+    float braceT = 0.f, braceSlow = 0.f; // "Brace": s left slowed, by this
+    float spotT = 0.f, spotMul = 1.f;    // "Spotter": the other balls hit it x spotMul...
+    int spotOwner = -1;                  // ...all but this one
+    float doomT = 0.f, doomMul = 1.f;    // "Mark for death": every ball hits it x doomMul
     Gait gait = Gait::Straight;
     float gaitPhase = 0.f;  // Weave: where in its sway it started
     float gaitSign = 1.f;   // Weave / Spiral: which way it leans
@@ -482,6 +488,8 @@ struct FrameEvents {
 // between-wave upgrades the player has picked this run.
 struct WorldParams {
     bool hard = false;            // hard mode (cfg::hard)
+    float bossHpMul = 1.f;        // the tutorial's softer boss (cfg::tutorial)
+    int bossKind = -1;            // the act's boss (BossKind) - the run shuffles them; -1 = bossOfAct
     float damageMult = 1.f;       // Heft (web): every ball
     float cruiseMult = 1.f;
     int wave = 1;

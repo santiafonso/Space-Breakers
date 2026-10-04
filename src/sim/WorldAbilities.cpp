@@ -39,6 +39,7 @@ void World::updateAbilities(Ball& b, float dt, const WorldParams& p, FrameEvents
             b.abilityCd[i] = abilityCooldown(a.id, a.level);
             b.abilityFlash = 1.f;
             mageOnCast(b, i, false, p, ev);   // Mage items / Ancient Mage react to the cast
+            commonOnCast(b, p);               // Spellblade / Aether step / Sync
         } else {
             b.abilityCd[i] = 0.f;   // charged: fires the moment it has a target
         }

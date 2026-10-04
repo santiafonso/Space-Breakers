@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <iterator>
 #include <vector>
 
 #include "core/Config.hpp"
@@ -135,6 +136,25 @@ static_assert(sizeof(kPreBossRow) / sizeof(kPreBossRow[0]) == cfg::map::lanes);
 // Every row between has 2..lanes nodes. The last row is kPreBossRow: each
 // node of the row before links to the stops in its lane and the lanes beside
 // it, and all of it feeds the boss.
+// The first run's map: one straight line, one stop of each kind, so every
+// stop is met once (App::newRun, cfg::tutorial).
+inline RunMap tutorialMap() {
+    static const MapNodeType kStops[] = {MapNodeType::Combat, MapNodeType::Recruit, MapNodeType::Elite,
+                                         MapNodeType::Shop, MapNodeType::Forge};
+    RunMap m;
+    m.act = 1;
+    m.rows = static_cast<int>(std::size(kStops));
+    for (int i = 0; i <= m.rows; ++i) {
+        MapNode n;
+        n.type = i < m.rows ? kStops[i] : MapNodeType::Boss;
+        n.row = i + 1;
+        n.lane = -1;   // drawn centred
+        if (i < m.rows) n.next = {i + 1};
+        m.nodes.push_back(n);
+    }
+    return m;
+}
+
 inline RunMap generateMap(Rng& rng, int act, int rows = 0) {
     RunMap m;
     m.act = act;

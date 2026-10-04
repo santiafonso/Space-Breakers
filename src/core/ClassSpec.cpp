@@ -243,12 +243,74 @@ bool foldAlchemist(UpgradeKind k, int level, BallMods& m) {
     }
 }
 
+// ==================================================================== commons (2026-10-04)
+bool foldCommon(UpgradeKind k, int level, BallMods& m) {
+    namespace C = cfg::common;
+    using K = UpgradeKind;
+    const float n = static_cast<float>(level - 1);
+    CommonMods& c = m.cls.common;
+    switch (k) {
+        case K::Volatile:   c.volatileMul = C::volatileMul + C::volatilePerLevel * n; return true;
+        case K::Seep:
+            c.seepLife = C::seepLife + C::seepLifePerLevel * n;
+            c.seepRadius = C::seepRadius + C::seepRadiusPerLevel * n;
+            return true;
+        case K::Reagent:    c.reagent = C::reagent + C::reagentPerLevel * n; return true;
+        case K::Tincture:   c.tincture = C::tincture + C::tincturePerLevel * n; return true;
+        case K::Distill:    c.distill = C::distill + C::distillPerLevel * n; return true;
+        case K::Pickpocket: c.pickpocket = C::pickpocket + C::pickpocketPerLevel * n; return true;
+        case K::HotStreak:  c.hotStreak = C::hotStreak + C::hotStreakPerLevel * n; return true;
+        case K::LuckyBreak: c.luckyBreak = C::luckyBreak + C::luckyBreakPerLevel * n; return true;
+        case K::Confetti:
+            c.confetti = C::confetti + (level - 1);
+            c.confettiFrac = C::confettiFrac + C::confettiFracPerLevel * n;
+            return true;
+        case K::Spellblade: c.spellblade = C::spellblade + C::spellbladePerLevel * n; return true;
+        case K::AetherStep: c.aetherStep = C::aetherStep + C::aetherStepPerLevel * n; return true;
+        case K::Insight:    c.insight = C::insight + C::insightPerLevel * n; return true;
+        case K::Lingering:  c.linger = C::linger + C::lingerPerLevel * n; return true;
+        case K::PackLeader: c.packLeader = C::packLeader + C::packLeaderPerLevel * n; return true;
+        case K::Decoy:      c.decoy = C::decoy + C::decoyPerLevel * n; return true;
+        case K::MarkForDeath:
+            c.doom = C::doom + C::doomPerLevel * n;
+            c.doomTime = C::doomTime + C::doomTimePerLevel * n;
+            return true;
+        case K::Bleed:       c.bleed = C::bleed + C::bleedPerLevel * n; return true;
+        case K::Quickstep:   c.quickstep = C::quickstep + C::quickstepPerLevel * n; return true;
+        case K::Opportunist: c.opportunist = C::opportunist + C::opportunistPerLevel * n; return true;
+        case K::HollowPoint: c.hollow = C::hollow + C::hollowPerLevel * n; return true;
+        case K::BankShot:    c.bankShots = level; return true;
+        case K::CoveringFire: c.cover = level; return true;
+        case K::LongPull:    c.longPull = C::longPull + C::longPullPerLevel * n; return true;
+        case K::Relay:       c.relay = C::relay + C::relayPerLevel * n; return true;
+        case K::SecondWind:  c.secondWind = C::secondWind + C::secondWindPerLevel * n; return true;
+        case K::Plating:     c.plating = C::plating + C::platingPerLevel * n; return true;
+        case K::Sentinel:    c.sentinel = C::sentinel + C::sentinelPerLevel * n; return true;
+        case K::Brace:       c.brace = C::brace + C::bracePerLevel * n; return true;
+        case K::HeavyLanding: c.heavyLanding = C::heavyLanding + C::heavyLandingPerLevel * n; return true;
+        case K::Bulk:
+            m.radiusMult *= C::bulkSize + C::bulkSizePerLevel * n;
+            m.damageMult *= C::bulkDamage + C::bulkDamagePerLevel * n;
+            return true;
+        case K::Edge:        m.damageMult *= 1.f + C::edge + C::edgePerLevel * n; return true;
+        case K::FirstBlood:  c.firstBlood = C::firstBlood + C::firstBloodPerLevel * n; return true;
+        case K::ComboHit:    c.comboHit = C::comboHit + C::comboHitPerLevel * n; return true;
+        case K::Adrenaline:  c.adrenaline = C::adrenaline + C::adrenalinePerLevel * n; return true;
+        case K::Spotter:     c.spotter = C::spotter + C::spotterPerLevel * n; return true;
+        case K::Anthem:      c.anthem = C::anthem + C::anthemPerLevel * n; return true;
+        case K::Medic:       c.medic = C::medic + C::medicPerLevel * n; return true;
+        case K::Sync:        c.sync = C::sync + C::syncPerLevel * n; return true;
+        case K::HandOff:     c.handOff = C::handOff + C::handOffPerLevel * n; return true;
+        default: return false;
+    }
+}
+
 }  // namespace
 
 bool foldClassItem(UpgradeKind k, int level, BallMods& m) {
     return foldMage(k, level, m) || foldShooter(k, level, m) || foldAssassin(k, level, m) ||
            foldSummoner(k, level, m) || foldJester(k, level, m) || foldSlinger(k, level, m) || foldStyle(k, level, m) ||
-           foldAlchemist(k, level, m);
+           foldAlchemist(k, level, m) || foldCommon(k, level, m);
 }
 
 }  // namespace sb

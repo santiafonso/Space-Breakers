@@ -1090,6 +1090,7 @@ void PlayScreen::release(App& app) {
             const sf::Vector2f v = normalized(*target - b->pos, {1.f, 0.f}) * speed * k * power;
             app.world().releaseHeld(v);
             app.audio().thrown(clampf(length(v) / 900.f, 0.f, 1.f));
+            app.hintDone(App::Hint::Throw);
         } else {
             app.world().cancelHeld();
         }
@@ -1109,6 +1110,8 @@ void PlayScreen::release(App& app) {
     const float pw = clampf(len / (cfg::app::slingMaxPull * k), 0.f, 1.f);
     const sf::Vector2f v = pull / len * lerpf(cfg::app::slingMinSpeed, cfg::app::slingMaxSpeed, pw) * k * power;
     app.world().releaseHeld(v);
+    app.hintDone(App::Hint::Throw);   // a slingshot throw counts for both
+    app.hintDone(App::Hint::Aim);
     if (app.world().grabbedKind() == Grabbed::None) app.audio().thrown(clampf(length(v) / 900.f, 0.f, 1.f));
 }
 
@@ -1126,7 +1129,7 @@ void PlayScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
     }
     if (isKey(e, sf::Keyboard::Escape)) { app.openPause(); return; }
     if (isKey(e, sf::Keyboard::Q)) { app.playerMark(); return; }   // volley: every ball at its nearest enemy
-    if (isKey(e, sf::Keyboard::F)) { app.repulse(); return; }      // the core's shockwave (act 2 on)
+    if (isKey(e, sf::Keyboard::F)) { app.repulse(); return; }      // the core's shockwave (act 4 on)
     if (isKey(e, sf::Keyboard::Space) ||                               // "Nova" creed
         (e.type == sf::Event::MouseButtonPressed && e.mouseButton.button == sf::Mouse::Right)) {
         app.useCreedAbility();
@@ -1344,7 +1347,7 @@ void PlayScreen::drawWaveBanner(App& app, sf::RenderWindow& w) const {
     std::string label = "Stage " + std::to_string(row);
     const bool elite = app.data().run.eliteWave && row <= app.data().run.map.rowCount();
     if (elite) label = "Elite";
-    if (row > app.data().run.map.rowCount()) label = bossName(bossOfAct(act));
+    if (row > app.data().run.map.rowCount()) label = bossName(app.runBoss(act));
     const sf::Color frame = elite ? theme::ember : theme::accent;   // an elite's banner burns orange
     drawLabel(w, app.font(), elite ? "act " + std::to_string(act) + "   -   item spoils" : "act " + std::to_string(act), 12,
               {s.x * 0.5f, s.y * 0.40f - 46.f - (1.f - out) * 16.f}, withAlpha(frame, a));
@@ -1815,7 +1818,7 @@ void PauseScreen::rebuild(App& app) {
                     {"Stats", true},
                     {"How to Play", true},
                     {lastSound_ ? "Options" : "Options (muted)", true},
-                    {"Abandon run", true},
+                    {app.data().run.tutorial ? "Skip tutorial" : "Abandon run", true},
                     {"Quit", true}});
     menu_.layout({s.x * 0.5f, s.y * 0.34f});
 }
@@ -1880,7 +1883,7 @@ void HowToScreen::draw(App& app, sf::RenderWindow& w) {
         "Click a ball to throw it at the enemy nearest the core; press and pull back to aim it.",
         "Click an enemy to target it: throws, Q and every ability go for it.",
         "Q throws every ball at the enemy nearest to it, faster than a click.",
-        "From act 2: hold E for bullet time (a gauge that refills), F makes the core repulse.",
+        "From act 2: hold E for bullet time (a gauge that refills). From act 4: F makes the core repulse.",
         "Items carry a class tag: 2 of a tag give a ball that class (it can have two),",
         "4 its ascended form. Two balls' elements on one enemy set off a reaction.",
         "Between fights, pick your path on the map: fights pay gold, elites add a pick,",
@@ -1941,7 +1944,7 @@ void BossWinScreen::draw(App& app, sf::RenderWindow& w) {
 
     const bool goingOn = app.bossWinCanContinue();   // run still live: the reward isn't due yet
     const bool runEnd = !goingOn && app.lastRunWave() >= cfg::run::finalWave;
-    const std::string downed = std::string(bossName(bossOfAct(cfg::run::actOfWave(app.data().run.wave)))) + " defeated";
+    const std::string downed = std::string(bossName(app.runBoss(cfg::run::actOfWave(app.data().run.wave)))) + " defeated";
     drawCenteredPop(w, app.font(), runEnd ? "Run complete" : downed, theme::fsTitle,
                     {s.x * 0.5f, s.y * 0.28f}, theme::core, introPop(it, 0.05f, 0.34f));
 
@@ -2008,7 +2011,7 @@ void RunOverScreen::draw(App& app, sf::RenderWindow& w) {
 
     // Where, and what got through.
     std::string where = "act " + std::to_string(r.act) + "   ";
-    if (r.boss) where += bossName(bossOfAct(r.act));
+    if (r.boss) where += bossName(app.runBoss(r.act));
     else if (r.elite) where += "elite fight";
     else where += "stage " + std::to_string(std::max(r.row, 1)) + " / " + std::to_string(r.rows + 1);
     if (r.hard) where += "   hard";

@@ -157,6 +157,51 @@ enum class UpgradeKind {
     PrismHit,          // "Prism": every 4th hit carries all its elements    [Alchemist]
     Conflux,           // its reactions leap once to another afflicted enemy [Alchemist]
 
+    // ---- commons (2026-10-04): every class's base widened, one line each,
+    // each built to combine with other classes too. Described in ClassItems.hpp
+    // (commonItemDef), numbers in core/ClassSpec.cpp (foldCommon), behaviour in
+    // sim/WorldCommons.cpp. Appended here (not in the class sections) so a
+    // saved run's item numbers keep meaning the same items. ----
+    Volatile,          // its elements last longer on enemies                [Alchemist]
+    Seep,              // a wall bounce leaves a puddle of its element       [Alchemist]
+    Reagent,           // + damage vs another ball's element                 [Alchemist]
+    Tincture,          // a ball it clacks carries its element               [Alchemist]
+    Distill,           // every few reactions it sets off patch the core     [Alchemist]
+    Pickpocket,        // a hit may steal a coin                             [Jester]
+    HotStreak,         // doubles in a row stack damage                      [Jester]
+    LuckyBreak,        // a hit may recharge all its abilities               [Jester]
+    Confetti,          // a doubled hit throws sparks                        [Jester]
+    Spellblade,        // the first hit after a cast hits harder             [Mage]
+    AetherStep,        // a cast speeds it up                                [Mage]
+    Insight,           // kills shorten its cooldowns                        [Mage]
+    Lingering,         // its summons last longer                            [Summoner]
+    PackLeader,        // + damage per live summon                           [Summoner]
+    Decoy,             // its turrets and totems draw enemies in             [Summoner]
+    MarkForDeath,      // its blink target takes more from every ball        [Assassin]
+    Bleed,             // its hits bleed                                     [Assassin]
+    Quickstep,         // faster for a moment after a blink                  [Assassin]
+    Opportunist,       // + damage vs frozen or staggered enemies            [Assassin]
+    HollowPoint,       // bullets hit harder on enemies under an element     [Shooter]
+    BankShot,          // bullets bounce off the walls                       [Shooter]
+    CoveringFire,      // fires a volley when you throw another ball         [Shooter]
+    LongPull,          // a longer slingshot pull, a harder first hit        [Slinger]
+    Relay,             // caught soon after a throw: launches another ball   [Slinger]
+    SecondWind,        // caught: recharges your Q                           [Slinger]
+    Plating,           // + core max HP                                      [Guardian]
+    Sentinel,          // hits harder the closer it flies to the core        [Guardian]
+    Brace,             // its hits slow enemies                              [Guardian]
+    HeavyLanding,      // a core bounce sends out a shockwave                [Guardian]
+    Bulk,              // bigger and a little harder                         [Guardian]
+    Edge,              // + damage, plain                                    [Striker]
+    FirstBlood,        // the first hit of each fight hits x3                [Striker]
+    ComboHit,          // a second enemy hit quickly takes more              [Striker]
+    Adrenaline,        // kills speed it up for the fight                    [Striker]
+    Spotter,           // enemies it hits take more from the other balls     [Support]
+    Anthem,            // every other ball hits a little harder              [Support]
+    Medic,             // a clack with another ball patches the core         [Support]
+    Sync,              // its casts shorten the other balls' cooldowns       [Support]
+    HandOff,           // its kills charge the nearest ball's next hit       [Support]
+
     // ---- relics (keep CoreSpring first and Overcharge last) ----
     CoreSpring,        // balls ricochet off the core faster
     CoreSlowField,     // a zone around the core slows enemies inside it

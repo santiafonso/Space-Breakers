@@ -86,6 +86,8 @@ public:
     bool grabAt(sf::Vector2f point, float catchRadius);
     void setPointer(sf::Vector2f p) { pointer_ = p; hasPointer_ = true; }   // the play screen, every frame
     float heldCatch() const { return heldCatch_; }   // the grab just made: its catch reward (0 = none)
+    float takeQRefund() { const float r = qRefund_; qRefund_ = 0.f; return r; }   // "Second wind"
+    float commonPlating() const;   // "Plating": the core max hp the balls' items add
     bool hasHeld() const { return grabbed_ != Grabbed::None; }
     Grabbed grabbedKind() const { return grabbed_; }
     void moveHeld(sf::Vector2f target, float dt);
@@ -181,7 +183,7 @@ private:
     void spawnPack();                 // a bunch of runners from one spot (act 2+)
     void spawnOrbiter(float phase);   // one shield enemy on the Orbital's ring
     void beginWave(int wave, bool elite);          // a normal wave's spawn plan
-    void startChargerWave(const WorldParams& p);   // act 1's boss: core far left
+    void startChargerWave(int wave, const WorldParams& p);   // the Charger: core far left
     void startFinalBossWave(const WorldParams& p); // act 5's Orbital + shield ring
     float bossHp(float grunts, int wave) const;
     float enemyHp(int wave) const;      // the wave's plain enemy HP (hard mode on top)
@@ -254,6 +256,26 @@ private:
     void styleOnHit(Ball& b, Enemy& e, const WorldParams& p);      // "Blur" marks
     void stylePass(const Ball& a, Ball& o, const WorldParams& p);  // "Pass"
     void styleOnCast(Ball& b, const WorldParams& p, FrameEvents& ev);   // "Leyline"
+    // The 2026-10-04 commons, every class (sim/WorldCommons.cpp).
+    float commonPreHit(Ball& b, Enemy& e, const WorldParams& p);
+    void commonOnHit(Ball& b, Enemy& e, float dmg, bool kill, const WorldParams& p, FrameEvents& ev);
+    void commonOnKill(Ball& b, Enemy& e, const WorldParams& p);
+    float commonDamageMul(const Ball& b) const;
+    void commonTick(Ball& b, float dt, const WorldParams& p, FrameEvents& ev);
+    void commonWorldTick(float dt, const WorldParams& p, FrameEvents& ev);
+    void commonEnemyTick(Enemy& e, float dt);               // Bleed, the marks wearing off
+    void commonEnemyDrag(Enemy& e, float& edt, float dt);   // Brace / Decoy
+    void commonWallBounce(Ball& b, const WorldParams& p);   // "Seep"
+    void commonCoreBounce(Ball& b, const WorldParams& p, FrameEvents& ev);   // "Heavy landing"
+    void commonClack(Ball& a, Ball& o);                // "Tincture", "Medic"
+    void commonOnCast(Ball& b, const WorldParams& p);        // Spellblade / Aether step / Sync
+    void commonOnReaction(Ball* rb);                         // "Distill"
+    void commonOnBlink(Ball& b, Enemy& t, const WorldParams& p);   // Mark for death / Quickstep
+    void commonOnGrab(Ball& b);                              // Relay / Second wind
+    void commonOnThrow(Ball& b, float pullFrac);             // Long pull / Covering fire
+    void commonWaveStart();
+    void commonCoverFire(Ball& b, const WorldParams& p);     // "Covering fire" (WorldClasses.cpp: it's the Shooter's gun)
+    float qRefund_ = 0.f;                                    // "Second wind": share of the Q cooldown to refund
     // Pacts (sim/WorldPacts.cpp).
     float pactDamageMul(const Ball& b, const WorldParams& p) const;   // Lead / Stillness / Quick Hands / Juggler / Last Breath
     bool pactWrap(Ball& b);                                           // "Void Walls": true = it went through an edge
@@ -369,6 +391,7 @@ private:
     void updateLaunch(float dt, const WorldParams& p, FrameEvents& ev);
     void chargerShock(FrameEvents& ev);
     bool hard_ = false;       // hard mode (cfg::hard), from WorldParams at each wave start
+    float bossHpMul_ = 1.f;   // WorldParams::bossHpMul, from the boss wave's start
     std::vector<int> bruteSlots_;   // toSpawn_ values at which a Brute (miniboss) spawns instead
     bool eliteWave_ = false;
 

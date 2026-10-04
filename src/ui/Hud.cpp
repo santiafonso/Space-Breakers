@@ -69,10 +69,10 @@ bool Hud::tooltipAt(sf::Vector2f m, std::string& title, std::string& desc, sf::C
         return true;
     }
     if (sf::FloatRect(size_.x * 0.5f - 300.f, 0.f, 600.f, band).contains(m)) {
-        title = bossWave_ ? std::string(bossName(bossOfAct(act_)))
+        title = bossWave_ ? std::string(bossName(bossKind_))
                           : (eliteWave_ ? "Elite fight" : "Stage " + std::to_string(stage_) + " of " + std::to_string(stages_));
         if (bossWave_) {
-            desc = std::string(bossDesc(bossOfAct(act_))) + ".  The red bar is its health; past the notch it enrages.";
+            desc = std::string(bossDesc(bossKind_)) + ".  The red bar is its health; past the notch it enrages.";
             return true;
         }
         if (eliteWave_) {
@@ -163,7 +163,7 @@ void Hud::draw(sf::RenderWindow& window) const {
     {
         char stage[32];
         if (bossWave_) {
-            std::string n = bossName(bossOfAct(act_));
+            std::string n = bossName(bossKind_);
             for (char& ch : n) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
             std::snprintf(stage, sizeof(stage), "%s", n.c_str());
         }

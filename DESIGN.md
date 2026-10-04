@@ -2291,9 +2291,84 @@ de las pelotas: Q, el anillo de E y F.
   ganados. "Skill web" (Enter) o "Menu" (Esc). Mientras está arriba la run ya
   no está activa: sin pausa ni TAB, suena el menú.
 
+### 2026-10-04: guía del primer run (hints)
+
+- Una sola línea a la vez, centrada en la banda negra de abajo, con un pulso
+  suave. Cada hint sale **una vez en la vida**: se va apenas hacés lo que dice
+  (o a los 25 s si nunca lo hacés). Cuáles ya hiciste queda en el save
+  (`hints`, un bit por `App::Hint`). Código en `core/AppHints.cpp`.
+- **En pelea**, en orden: click en una pelota (tirar), tirar con la honda
+  (apuntar), Q, E (desde que se abre), F (desde que se abre), TAB.
+  **En el mapa:** elegir una parada, después TAB.
+- No salen con el TAB abierto, en pausa ni fuera de la run; entre un hint y
+  el siguiente hay 1.5 s de respiro.
+- **En el mapa**, después de "click a stop": la primera vez que tenés
+  adelante un Recruit / Elite / Shop / Forge / Boss, una línea dice qué es.
+- **En la web**, después de la primera run: "your cores buy upgrades: click a
+  lit node" y después "Start run: a real one this time".
+
+### 2026-10-04: el tutorial (la primera run)
+
+- Si nunca jugaste una run (`stats.runs == 0`; con `SB_DEV=1 SB_TUTORIAL=1`
+  se fuerza), la run es el tutorial (`RunState::tutorial`, guardado en
+  run.txt): un mapa recto (`tutorialMap`) combate → recruit → elite → tienda
+  → forja → boss, sin creed ni starter pick. Las paradas suben suave (la
+  fila N juega como la oleada N); el boss es el del acto 1 con 60% de vida
+  (`cfg::tutorial::bossHpMul`). Sin "Continue" al ganarle.
+- Gane o pierda termina en la web, donde salen los hints de la web. En la
+  pausa, "Abandon run" pasa a ser "Skip tutorial".
+- El primer "Play" del menú no abre la web: arranca directo el tutorial
+  (`App::openLoadout`). La web se conoce al terminarlo.
+
+### 2026-10-04: bosses en orden al azar
+
+- Los bosses de los actos 1-4 (Charger, Hive, Warden, Dasher) salen en un
+  orden nuevo cada run (`RunState::bosses`, guardado en run.txt; las runs
+  viejas quedan con el orden fijo). El Orbital sigue siendo siempre el final
+  (acto 5). El tutorial abre siempre con el Charger.
+- La vida de cada boss ya escala con la oleada (`World::bossHp`), así que
+  cualquiera puede caer en cualquier acto. El Charger usa la oleada real (antes
+  estaba fijo en la 10).
+
+### 2026-10-04: pirámide de rarezas y los 39 comunes
+
+- **Regla (el usuario):** por clase, más comunes que poco comunes > raros >
+  épicos > legendarios, y mínimo 2 legendarios. Meta por clase: 6 / 5 / 4 / 3 / 2
+  (20 items). Support y Striker tienen la pirámide al revés: se van a bajar
+  algunos de rareza (no sacar) cuando lleguemos a esas rarezas.
+- **Sinergias indirectas:** cada item nuevo tiene que combinar también con
+  cosas de otras clases, no solo de la suya.
+- **Tanda 1 - comunes (hecha):** 39 items en `sim/WorldCommons.cpp` (tabla
+  `commonItemDef`, números `cfg::common`, fold `foldCommon`). Funcionan en
+  cualquier pelota, sin necesitar la clase. Van al final del enum, antes de
+  las reliquias, para que las runs guardadas no cambien de items.
+  - Alchemist: Volatile, Seep, Reagent, Tincture, Distill.
+  - Jester: Pickpocket, Hot streak, Lucky break, Confetti.
+  - Mage: Spellblade, Aether step, Insight.
+  - Summoner: Lingering, Pack leader, Decoy.
+  - Assassin: Mark for death, Bleed, Quickstep, Opportunist.
+  - Shooter: Hollow point, Bank shot, Covering fire.
+  - Slinger: Long pull, Relay, Second wind.
+  - Guardian: Plating, Sentinel, Brace, Heavy landing, Bulk.
+  - Striker: Edge, First blood, Combo hit, Adrenaline.
+  - Support: Spotter, Anthem (era "Rally", chocaba con el nodo de la web),
+    Medic, Sync (era "Uplink", ídem), Hand-off.
+- **Lo que falta:** poco comunes 17, raros 19, épicos 20, legendarios 15.
+- **F (Repulse) se abre en el acto 4** (antes en el 2, igual que la E). La E sigue en el 2.
+
 ### Anotado para después (el usuario lo pidió así)
 
 - **Progresión:** por ahora todo se desbloquea como está; se ve más adelante.
 - **5 actos:** se queda así; el balance entre actos se ve después.
 - **Música:** los tracks actuales son libres, pero el usuario quiere sumar más.
 - **Opción en español:** para lo último (ver la rama WIP pausada).
+- **Ideas del usuario (2026-10-04), sin empezar:**
+  - Faltan items para algunas clases, sobre todo **Assassin** y **Shooter**
+    (en el código cada una ya tiene ~8; ver qué se siente que falta al jugar).
+  - **Bosses nuevos:**
+    - *Los gemelos:* dos que entran por lados distintos, se juntan y forman un
+      enemigo más fuerte que atrapa una pelota hasta que muere uno de los dos.
+    - *El tirador:* le dispara a tus pelotas y las hace rebotar (las desvía).
+    - *El inmortal:* no se le puede hacer daño hasta que matás 3 oleadas de
+      enemigos, cada una más fuerte que la anterior.
+- **Tutorial:** hecho el 2026-10-04 (ver arriba).

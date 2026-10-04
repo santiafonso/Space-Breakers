@@ -245,6 +245,12 @@ void worldStyle(sf::RenderTarget& t, const World& world) {
         const float a = clampf(r.life / 1.f, 0.f, 1.f);
         draw::polygonOutline(t, r.pos, 7.f * k, 4, 0.f, 1.5f * k, withAlpha(theme::classMage, 0.7f * a));
     }
+    for (const CommonWorld::Puddle& pd : world.classWorld().common.puddles) {   // "Seep"
+        const float a = clampf(pd.life / std::min(0.5f, pd.maxLife), 0.f, 1.f);
+        const sf::Color c = elementColor(static_cast<Element>(pd.elem));
+        draw::disc(t, pd.pos, pd.r, withAlpha(c, 0.14f * a), withAlpha(c, 0.03f * a), {1.f, 1.f}, 28);
+        draw::ring(t, pd.pos, pd.r, 1.2f * k, withAlpha(c, 0.3f * a));
+    }
 }
 
 // ==================================================================== Jester

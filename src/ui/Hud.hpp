@@ -20,6 +20,7 @@ public:
     void setHard(bool on) { hard_ = on; }
     // The boss's health for the top bar (frac < 0 = no boss on the field).
     void setBoss(float frac) { bossFrac_ = frac; }
+    void setBossKind(BossKind k) { bossKind_ = k; }   // the act's boss, for its name
     void update(float dt, int act, int stage, int stages, int enemiesLeft, float coreFrac,
                 float comboMultiplier, int score, int gold, const std::optional<ActiveEffect>& effect,
                 bool bossWave, bool eliteWave = false);
@@ -44,6 +45,7 @@ private:
     bool bossWave_ = false;
     bool hard_ = false;
     float bossFrac_ = -1.f;
+    BossKind bossKind_ = BossKind::Charger;
     bool eliteWave_ = false;
     float coreFrac_ = 1.f;
     float comboMul_ = 1.f;

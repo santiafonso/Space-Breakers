@@ -253,9 +253,107 @@ inline const ItemDef* alchemistItemDef(UpgradeKind k) {
 }
 
 // ---------------------------------------------------------------- lookup
+// ==================================================================== commons (2026-10-04)
+// One line each, every class: the base a build stands on. Each one is meant
+// to combine with other classes' items too (DESIGN.md, "comunes").
+inline const ItemDef* commonItemDef(UpgradeKind k) {
+    using K = UpgradeKind;
+    static const std::vector<ItemDef> defs = {
+        // Alchemist
+        {K::Volatile, "Volatile", "Volatile", "its elements last 40% longer on enemies - more time for another ball to set them off",
+         "+15% longer", Tier::Common, ItemTag::Alchemist},
+        {K::Seep, "Seep", "Seep", "a wall bounce leaves a puddle of its element for 2 s; enemies walking through take it",
+         "+0.5 s, wider", Tier::Common, ItemTag::Alchemist},
+        {K::Reagent, "Reagent", "Reagent", "+20% damage to enemies carrying another ball's element",
+         "+8%", Tier::Common, ItemTag::Alchemist},
+        {K::Tincture, "Tincture", "Tincture", "a ball it clacks into carries its element on its next hit (reactions!)",
+         "that hit +10% harder", Tier::Common, ItemTag::Alchemist},
+        {K::Distill, "Distill", "Distill", "every 3rd reaction it sets off repairs the core by 2",
+         "+1 repair", Tier::Common, ItemTag::Alchemist},
+        // Jester
+        {K::Pickpocket, "Pickpocket", "Pickpocket", "10% chance a hit steals 1 gold (luck raises it)",
+         "+4% chance", Tier::Common, ItemTag::Jester},
+        {K::HotStreak, "HotStreak", "Hot streak", "each doubled hit in a row (crit, coin heads, a Jester double) adds +10% damage, up to 5; a plain hit ends it",
+         "+5% per step", Tier::Common, ItemTag::Jester},
+        {K::LuckyBreak, "LuckyBreak", "Lucky break", "5% chance a hit fully recharges its abilities (luck raises it)",
+         "+2% chance", Tier::Common, ItemTag::Jester},
+        {K::Confetti, "Confetti", "Confetti", "a doubled hit (crit, coin heads, a Jester double) throws 3 sparks at enemies nearby for 30% of the hit",
+         "+1 spark, +10%", Tier::Common, ItemTag::Jester},
+        // Mage
+        {K::Spellblade, "Spellblade", "Spellblade", "the first hit after it casts an ability deals +40%",
+         "+15%", Tier::Common, ItemTag::Mage},
+        {K::AetherStep, "AetherStep", "Aether step", "casting an ability kicks it to x1.4 speed",
+         "+0.1x", Tier::Common, ItemTag::Mage},
+        {K::Insight, "Insight", "Insight", "each kill takes 0.5 s off its ability cooldowns",
+         "+0.25 s", Tier::Common, ItemTag::Mage},
+        // Summoner
+        {K::Lingering, "Lingering", "Lingering", "its summons (turrets, totems, wisps, spritelings) last 30% longer",
+         "+15% longer", Tier::Common, ItemTag::Summoner},
+        {K::PackLeader, "PackLeader", "Pack leader", "+4% damage for each of its summons alive (up to 6)",
+         "+2% per summon", Tier::Common, ItemTag::Summoner},
+        {K::Decoy, "Decoy", "Decoy", "its turrets and totems draw nearby enemies toward them, away from the core",
+         "a stronger pull, wider", Tier::Common, ItemTag::Summoner},
+        // Assassin
+        {K::MarkForDeath, "MarkForDeath", "Mark for death", "the enemy it blinks to takes +20% from every ball for 2.5 s",
+         "+8%, +0.75 s", Tier::Common, ItemTag::Assassin},
+        {K::Bleed, "Bleed", "Bleed", "its hits bleed: 30% of the hit more over 2 s",
+         "+10% of the hit", Tier::Common, ItemTag::Assassin},
+        {K::Quickstep, "Quickstep", "Quickstep", "each blink kicks it to x1.3 speed",
+         "+0.1x", Tier::Common, ItemTag::Assassin},
+        {K::Opportunist, "Opportunist", "Opportunist", "+25% damage to enemies that are frozen or staggered",
+         "+10%", Tier::Common, ItemTag::Assassin},
+        // Shooter
+        {K::HollowPoint, "HollowPoint", "Hollow point", "its bullets deal +40% to enemies under an element (burning, poisoned, frozen, soaked, cracked or primed)",
+         "+15%", Tier::Common, ItemTag::Shooter},
+        {K::BankShot, "BankShot", "Bank shot", "its bullets bounce off the walls once",
+         "+1 bounce", Tier::Common, ItemTag::Shooter},
+        {K::CoveringFire, "CoveringFire", "Covering fire", "when you throw another ball, it fires a volley at the enemy nearest the core",
+         "+1 bullet", Tier::Common, ItemTag::Shooter},
+        // Slinger
+        {K::LongPull, "LongPull", "Long pull", "the further you pull the slingshot, the harder the throw's first hit: up to +60%",
+         "+20%", Tier::Common, ItemTag::Slinger},
+        {K::Relay, "Relay", "Relay", "catch it within 2.5 s of your throw and the nearest other ball is launched at the enemy nearest it",
+         "launched faster", Tier::Common, ItemTag::Slinger},
+        {K::SecondWind, "SecondWind", "Second wind", "catching it recharges your Q by 30%",
+         "+10%", Tier::Common, ItemTag::Slinger},
+        // Guardian
+        {K::Plating, "Plating", "Plating", "+10 core max health",
+         "+5", Tier::Common, ItemTag::Guardian},
+        {K::Sentinel, "Sentinel", "Sentinel", "the closer it flies to the core, the harder it hits: up to +40% right beside it",
+         "+15%", Tier::Common, ItemTag::Guardian},
+        {K::Brace, "Brace", "Brace", "enemies it hits move 20% slower for 2 s",
+         "+8% slower", Tier::Common, ItemTag::Guardian},
+        {K::HeavyLanding, "HeavyLanding", "Heavy landing", "bouncing off the core sends out a shockwave for 40% of its hit",
+         "+15%", Tier::Common, ItemTag::Guardian},
+        {K::Bulk, "Bulk", "Bulk", "12% bigger and 8% harder-hitting",
+         "+4% bigger, +4% harder", Tier::Common, ItemTag::Guardian},
+        // Striker
+        {K::Edge, "Edge", "Edge", "+12% damage",
+         "+6%", Tier::Common, ItemTag::Striker},
+        {K::FirstBlood, "FirstBlood", "First blood", "the first hit it lands in each fight deals x3",
+         "+0.5x", Tier::Common, ItemTag::Striker},
+        {K::ComboHit, "ComboHit", "Combo hit", "hitting a different enemy within 0.6 s of the last one deals +35%",
+         "+10%", Tier::Common, ItemTag::Striker},
+        {K::Adrenaline, "Adrenaline", "Adrenaline", "each kill makes it 5% faster until the fight ends (up to 10 kills)",
+         "+2% per kill", Tier::Common, ItemTag::Striker},
+        // Support
+        {K::Spotter, "Spotter", "Spotter", "enemies it hits take +15% from the other balls for 2 s",
+         "+5%", Tier::Common, ItemTag::Support},
+        {K::Anthem, "Anthem", "Anthem", "every other ball deals +6% damage",
+         "+3%", Tier::Common, ItemTag::Support},
+        {K::Medic, "Medic", "Medic", "clacking into another ball repairs the core by 1",
+         "+0.5", Tier::Common, ItemTag::Support},
+        {K::Sync, "Sync", "Sync", "each ability it casts takes 0.5 s off the other balls' ability cooldowns",
+         "+0.25 s", Tier::Common, ItemTag::Support},
+        {K::HandOff, "HandOff", "Hand-off", "its kills give the nearest other ball +25% on its next hit",
+         "+10%", Tier::Common, ItemTag::Support},
+    };
+    return findItemDef(defs, k);
+}
+
 inline const ItemDef* classItemDef(UpgradeKind k) {
     for (const ItemDef* (*f)(UpgradeKind) : {mageItemDef, shooterItemDef, assassinItemDef, summonerItemDef, jesterItemDef,
-                                             slingerItemDef, styleItemDef, alchemistItemDef})
+                                             slingerItemDef, styleItemDef, alchemistItemDef, commonItemDef})
         if (const ItemDef* d = f(k)) return d;
     return nullptr;
 }

@@ -332,4 +332,56 @@ inline constexpr float drop = 0.35f, dropPerLevel = 0.1f;               // turre
 inline constexpr float dropLife = 6.f, dropRate = 1.4f;
 }  // namespace style
 
+// ==================================================================== commons
+// The 2026-10-04 commons (sim/WorldCommons.cpp): level-1 value, then
+// + ...PerLevel per level past it.
+namespace common {
+inline constexpr float volatileMul = 0.4f, volatilePerLevel = 0.15f;
+inline constexpr float seepLife = 2.f, seepLifePerLevel = 0.5f;
+inline constexpr float seepRadius = 34.f, seepRadiusPerLevel = 6.f;
+inline constexpr float seepTick = 0.4f, seepFrac = 0.5f;   // how often a puddle touches what's in it; its "hit" x the ball's
+inline constexpr int maxPuddles = 14;
+inline constexpr float reagent = 0.2f, reagentPerLevel = 0.08f;
+inline constexpr float tincture = 1.f, tincturePerLevel = 0.1f;
+inline constexpr int distillEvery = 3;
+inline constexpr float distill = 2.f, distillPerLevel = 1.f;
+inline constexpr float pickpocket = 0.1f, pickpocketPerLevel = 0.04f;
+inline constexpr float hotStreak = 0.1f, hotStreakPerLevel = 0.05f;
+inline constexpr int hotStreakMax = 5;
+inline constexpr float luckyBreak = 0.05f, luckyBreakPerLevel = 0.02f;
+inline constexpr int confetti = 3;
+inline constexpr float confettiFrac = 0.3f, confettiFracPerLevel = 0.1f, confettiRange = 220.f;
+inline constexpr float spellblade = 0.4f, spellbladePerLevel = 0.15f, spellbladeWindow = 3.f;
+inline constexpr float aetherStep = 1.4f, aetherStepPerLevel = 0.1f;
+inline constexpr float insight = 0.5f, insightPerLevel = 0.25f;
+inline constexpr float linger = 0.3f, lingerPerLevel = 0.15f;
+inline constexpr float packLeader = 0.04f, packLeaderPerLevel = 0.02f;
+inline constexpr int packLeaderMax = 6;
+inline constexpr float decoy = 45.f, decoyPerLevel = 15.f, decoyRadius = 170.f, decoyRadiusPerLevel = 25.f;
+inline constexpr float doom = 0.2f, doomPerLevel = 0.08f, doomTime = 2.5f, doomTimePerLevel = 0.75f;
+inline constexpr float bleed = 0.3f, bleedPerLevel = 0.1f, bleedTime = 2.f;
+inline constexpr float quickstep = 1.3f, quickstepPerLevel = 0.1f;
+inline constexpr float opportunist = 0.25f, opportunistPerLevel = 0.1f;
+inline constexpr float hollow = 0.4f, hollowPerLevel = 0.15f;
+inline constexpr float coverFrac = 1.f, coverSpread = 0.12f;   // a covering bullet x a normal one; fan spread (rad)
+inline constexpr float longPull = 0.6f, longPullPerLevel = 0.2f;
+inline constexpr float relay = 2.f, relayPerLevel = 0.4f, relayWindow = 2.5f;
+inline constexpr float secondWind = 0.3f, secondWindPerLevel = 0.1f;
+inline constexpr float plating = 10.f, platingPerLevel = 5.f;
+inline constexpr float sentinel = 0.4f, sentinelPerLevel = 0.15f, sentinelRange = 280.f;
+inline constexpr float brace = 0.2f, bracePerLevel = 0.08f, braceTime = 2.f;
+inline constexpr float heavyLanding = 0.4f, heavyLandingPerLevel = 0.15f, landingRadius = 95.f, landingCd = 0.35f;
+inline constexpr float bulkSize = 1.12f, bulkSizePerLevel = 0.04f, bulkDamage = 1.08f, bulkDamagePerLevel = 0.04f;
+inline constexpr float edge = 0.12f, edgePerLevel = 0.06f;
+inline constexpr float firstBlood = 3.f, firstBloodPerLevel = 0.5f;
+inline constexpr float comboHit = 0.35f, comboHitPerLevel = 0.1f, comboWindow = 0.6f;
+inline constexpr float adrenaline = 0.05f, adrenalinePerLevel = 0.02f;
+inline constexpr int adrenalineMax = 10;
+inline constexpr float spotter = 0.15f, spotterPerLevel = 0.05f, spotTime = 2.f;
+inline constexpr float anthem = 0.06f, anthemPerLevel = 0.03f;
+inline constexpr float medic = 1.f, medicPerLevel = 0.5f, medicCd = 0.5f;
+inline constexpr float sync = 0.5f, syncPerLevel = 0.25f;
+inline constexpr float handOff = 0.25f, handOffPerLevel = 0.1f;
+}  // namespace common
+
 }  // namespace sb::cfg

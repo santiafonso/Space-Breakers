@@ -145,6 +145,8 @@ struct ShooterBullet {
     int hops = 0;             // hops left
     float hopKeep = 1.f;
     int lastHit = -1;         // Enemy::id it last hit (no double hits while passing through)
+    int banks = 0;            // "Bank shot": wall bounces left
+    float hollow = 0.f;       // "Hollow point": + damage vs an enemy under an element
 };
 struct ShooterRail {          // Deadeye's rail shot, kept only to be drawn
     sf::Vector2f a, b;
@@ -368,6 +370,75 @@ struct AlchemistWorld {};
 // ---------------------------------------------------------------- bundles
 // (no class logic below this line)
 
+// ==================================================================== commons
+// The 2026-10-04 commons, every class (sim/WorldCommons.cpp). They work on any
+// ball that carries them - no class needed. 0 = not equipped.
+struct CommonMods {
+    float volatileMul = 0.f;   // "Volatile": its elements last + this
+    float seepLife = 0.f;      // "Seep": a wall bounce leaves a puddle this long...
+    float seepRadius = 0.f;    // ...this wide
+    float reagent = 0.f;       // "Reagent": + damage vs another ball's element
+    float tincture = 0.f;      // "Tincture": a clacked ball's next hit x this, with its element
+    float distill = 0.f;       // "Distill": core hp per 3rd reaction
+    float pickpocket = 0.f;    // "Pickpocket": chance a hit steals a coin
+    float hotStreak = 0.f;     // "Hot streak": + damage per double in a row
+    float luckyBreak = 0.f;    // "Lucky break": chance a hit recharges its abilities
+    int confetti = 0;          // "Confetti": sparks per doubled hit...
+    float confettiFrac = 0.f;  // ...each x the hit
+    float spellblade = 0.f;    // "Spellblade": first hit after a cast + this
+    float aetherStep = 0.f;    // "Aether step": a cast kicks its speed x this
+    float insight = 0.f;       // "Insight": s off its cooldowns per kill
+    float linger = 0.f;        // "Lingering": its summons last + this
+    float packLeader = 0.f;    // "Pack leader": + damage per live summon
+    float decoy = 0.f;         // "Decoy": its turrets / totems pull enemies at this speed
+    float doom = 0.f;          // "Mark for death": its blink target takes + this...
+    float doomTime = 0.f;      // ...for this long
+    float bleed = 0.f;         // "Bleed": x the hit, over cfg::common::bleedTime
+    float quickstep = 0.f;     // "Quickstep": a blink kicks its speed x this
+    float opportunist = 0.f;   // "Opportunist": + damage vs frozen / staggered
+    float hollow = 0.f;        // "Hollow point": its bullets + this vs an enemy under an element
+    int bankShots = 0;         // "Bank shot": wall bounces per bullet
+    int cover = 0;             // "Covering fire": bullets per volley when you throw another ball
+    float longPull = 0.f;      // "Long pull": the throw's first hit + up to this
+    float relay = 0.f;         // "Relay": the other ball leaves at this x its cruise
+    float secondWind = 0.f;    // "Second wind": share of your Q's cooldown a catch refunds
+    float plating = 0.f;       // "Plating": core max hp (App folds it, not the sim)
+    float sentinel = 0.f;      // "Sentinel": + damage beside the core
+    float brace = 0.f;         // "Brace": enemies it hits are slowed by this
+    float heavyLanding = 0.f;  // "Heavy landing": core-bounce shockwave x its hit
+    float firstBlood = 0.f;    // "First blood": first hit of a fight x this
+    float comboHit = 0.f;      // "Combo hit": + damage on a quick second enemy
+    float adrenaline = 0.f;    // "Adrenaline": + cruise per kill this fight
+    float spotter = 0.f;       // "Spotter": what it hits takes + this from the others
+    float anthem = 0.f;        // "Anthem": every other ball + this damage
+    float medic = 0.f;         // "Medic": core hp per clack
+    float sync = 0.f;          // "Sync": s off the others' cooldowns per cast
+    float handOff = 0.f;       // "Hand-off": its kill gives the nearest ball + this
+};
+struct CommonState {
+    bool doubled = false;      // this hit was doubled (crit, coin heads, a Jester double)
+    int streak = 0;            // "Hot streak": doubles in a row
+    float spellT = 0.f;        // "Spellblade": s the armed hit waits
+    bool firstBlood = false;   // "First blood": armed at each fight's start
+    int lastHitId = -1;        // "Combo hit": the enemy it hit last...
+    float lastHitT = 99.f;     // ...this long ago
+    int adrenaline = 0;        // "Adrenaline": kills this fight
+    float pull = 0.f;          // "Long pull": the throw's first hit + this (0 = spent)
+    float handOff = 0.f;       // "Hand-off": the next hit + this (given by another ball)
+    float medicCd = 0.f;       // "Medic": between repairs
+    float landingCd = 0.f;     // "Heavy landing": between shockwaves
+    int reactions = 0;         // "Distill": reactions it set off
+    bool coverPending = false; // "Covering fire": fire on the next tick (it needs the params)
+};
+struct CommonWorld {
+    struct Puddle {            // "Seep"
+        sf::Vector2f pos;
+        float r = 0.f, life = 0.f, maxLife = 1.f, tickT = 0.f, dmg = 0.f;
+        int elem = 0, owner = -1;
+    };
+    std::vector<Puddle> puddles;
+};
+
 // On BallMods (`mods.cls`): what the ball's class items add up to.
 struct ClassMods {
     StrikerMods striker;
@@ -380,6 +451,7 @@ struct ClassMods {
     JesterMods jester;
     SlingerMods slinger;
     AlchemistMods alchemist;
+    CommonMods common;
     // Classes (RoleMask bits) whose hooks also run for a ball that carries
     // their items without having the class (a single item). A class opts in
     // from its own fold (core/ClassSpec.cpp); its hooks must then check
@@ -399,6 +471,7 @@ struct ClassState {
     JesterState jester;
     SlingerState slinger;
     AlchemistState alchemist;
+    CommonState common;
 };
 
 // On World (`World::classWorld()`): state a class owns outside the balls.
@@ -414,6 +487,7 @@ struct ClassWorldState {
     JesterWorld jester;
     SlingerWorld slinger;
     AlchemistWorld alchemist;
+    CommonWorld common;
 };
 
 }  // namespace sb

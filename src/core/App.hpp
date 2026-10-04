@@ -73,6 +73,14 @@ public:
         int cores = 0, prisms = 0;
     };
     const RunSummary& runSummary() const { return summary_; }
+    // First-run hints: one line in the bottom band, once ever, gone the moment
+    // you do the thing (see App::updateHints).
+    enum class Hint { Throw, Aim, Volley, Bullet, Repulse, Map, Tab,
+                      Recruit, Elite, Shop, Forge, Boss,   // a map stop, before you first step on one
+                      WebBuy, WebStart,                    // the skill web, after the first run
+                      Count };
+    void hintDone(Hint h);
+    bool hintSeen(Hint h) const { return (data_.meta.hints >> static_cast<int>(h)) & 1u; }
     void leaveRunOver(bool toWeb);   // the run-over card: to the skill web, or the menu
     int bossFlawlessGold() const { return bossFlawlessGold_; }   // BossWin card: flawless boss bonus (0 = none)
     int bossIronCores() const { return bossIronCores_; }         // BossWin card: "Iron core" cores (0 = none)
@@ -91,6 +99,7 @@ public:
     bool mapNodeOpen(int node) const;   // can you step onto this node now?
     void travelTo(int node);            // step onto it: fight, shop, forge, rest or a pick
     int gold() const { return data_.run.gold; }
+    BossKind runBoss(int act) const;    // this run's boss for an act (shuffled at newRun)
 
     // ---- ball / slot picker (Equip screen) ----
     void beginEquip(EquipSource src, UpgradeKind k, int ref);
@@ -331,6 +340,12 @@ private:
     float runStartTime_ = 0.f;
     int runBestCombo_ = 0;
     void startRunTally();
+    int hint_ = -1;          // the hint on screen (a Hint), -1 none
+    float hintA_ = 0.f;      // its fade
+    float hintGap_ = 1.f;    // a breath before the next one
+    float hintT_ = 0.f;      // how long it's been up (it gives up after a while)
+    void updateHints(float dt);
+    void drawHint(sf::RenderWindow& w) const;
     int bossFlawlessGold_ = 0;       // set when a boss falls, for the BossWin card
     int bossIronCores_ = 0;
     bool continueUnlocked_ = false;  // snapshot at newRun: has a run ever been won before?

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <vector>
 
@@ -35,6 +36,7 @@ struct MetaState {
     SoundSettings sound;      // volumes + a style per sound category (the Sound screen)
     bool fullscreen = false;
     bool hardMode = false;    // the next run starts in hard mode (cfg::hard)
+    std::uint32_t hints = 0;  // first-run hints already done (bit per App::Hint)
     Stats stats;
 };
 
@@ -62,6 +64,9 @@ struct RunMods {
 struct RunState {
     bool active = false;
     bool hard = false;        // hard mode, fixed at the run start
+    bool tutorial = false;    // the very first run: a straight map and a soft boss (cfg::tutorial)
+    float platingHp = 0.f;    // core max hp the balls' "Plating" items add (already in coreMaxHp)
+    std::array<int, 4> bosses{0, 1, 2, 3};   // acts 1-4's bosses (BossKind), shuffled per run; act 5 is always the Orbital
     int wave = 0;
     float coreHp = cfg::core::baseHp;
     float coreMaxHp = cfg::core::baseHp;

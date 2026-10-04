@@ -291,6 +291,8 @@ template <> struct ClassHooks<BallRole::Shooter> : NoClassHooks {
         u.pierce = m.pierce;
         u.hops = m.hops + (b.isAscended(BallRole::Shooter) ? cfg::shooter::deadeyeHops : 0);
         u.hopKeep = m.hopKeep;
+        u.banks = b.mods.cls.common.bankShots;   // "Bank shot"
+        u.hollow = b.mods.cls.common.hollow;     // "Hollow point"
         if (m.tracerChance > 0.f && b.element != Element::Plain && w.chance(m.tracerChance, p))
             u.elem = static_cast<int>(b.element);
         bullets.push_back(u);
@@ -402,7 +404,19 @@ template <> struct ClassHooks<BallRole::Shooter> : NoClassHooks {
         for (Bullet& u : sw.bullets) {
             u.life -= dt;
             u.pos += u.vel * dt;
-            if (u.pos.x < 0.f || u.pos.y < 0.f || u.pos.x > sz.x || u.pos.y > sz.y) u.life = 0.f;
+            if (u.pos.x < 0.f || u.pos.y < 0.f || u.pos.x > sz.x || u.pos.y > sz.y) {
+                if (u.banks > 0) {   // "Bank shot": off the wall instead
+                    --u.banks;
+                    if (u.pos.x < 0.f || u.pos.x > sz.x) u.vel.x = -u.vel.x;
+                    if (u.pos.y < 0.f || u.pos.y > sz.y) u.vel.y = -u.vel.y;
+                    u.pos.x = clampf(u.pos.x, 0.f, sz.x);
+                    u.pos.y = clampf(u.pos.y, 0.f, sz.y);
+                    u.lastHit = -1;
+                    u.life = std::max(u.life, S::bulletLife * 0.6f);
+                } else {
+                    u.life = 0.f;
+                }
+            }
             if (u.life <= 0.f) continue;
             Enemy* hit = nullptr;
             for (Enemy& e : w.enemies_) {
@@ -426,7 +440,9 @@ template <> struct ClassHooks<BallRole::Shooter> : NoClassHooks {
                 continue;
             }
             const float flash = e.hitFlash;
-            w.damageEnemy(e, u.dmg * (e.mark > 0.f ? p.markMul : 1.f));
+            const bool hollow = u.hollow > 0.f && (e.burn > 0.f || e.poison > 0.f || e.frozen > 0.f || e.soak > 0.f ||
+                                                   e.cracks > 0 || (e.elemT > 0.f && e.elem != Element::Plain));
+            w.damageEnemy(e, u.dmg * (e.mark > 0.f ? p.markMul : 1.f) * (hollow ? 1.f + u.hollow : 1.f));   // "Hollow point"
             e.hitFlash = std::max(flash, 0.55f);   // a bullet is a tick, not a big hit
             if (u.elem != 0) w.applyElement(e, static_cast<Element>(u.elem), u.owner, u.dmg, p, ev);
             u.lastHit = e.id;
@@ -596,6 +612,7 @@ template <> struct ClassHooks<BallRole::Assassin> : NoClassHooks {
             s.spreeT = A::spreeWindow;
         }
         s.cd = cooldown(b);
+        w.commonOnBlink(b, t, p);   // Mark for death / Quickstep
     }
 
     static void tick(World& w, Ball& b, float dt, const WorldParams& p, FrameEvents& ev) {
@@ -741,7 +758,7 @@ template <> struct ClassHooks<BallRole::Summoner> : NoClassHooks {
         g.twin = false;
         g.held = false;
         g.scale = S::spriteScale;
-        g.ghostLife = S::spriteLife * power(b);
+        g.ghostLife = S::spriteLife * power(b) * (1.f + b.mods.cls.common.linger);   // "Lingering"
         g.age = 0.f;
         g.trail.clear();
         g.waterTrail.clear();
@@ -788,7 +805,7 @@ template <> struct ClassHooks<BallRole::Summoner> : NoClassHooks {
             q.pos = b.pos;
             q.vel = w.rng_.direction() * S::wispSpeed * 0.6f;
             q.dmg = w.ballDamage(b, p) * m.kennelFrac * pw;
-            q.life = S::wispLife * pw;
+            q.life = S::wispLife * pw * (1.f + b.mods.cls.common.linger);
             q.elem = elem;
             q.owner = b.owner;
             q.wisp = true;
@@ -801,7 +818,7 @@ template <> struct ClassHooks<BallRole::Summoner> : NoClassHooks {
                 SummonTurret t;
                 t.pos = {std::clamp(s.dropAt.x, S::turretInset, w.size_.x - S::turretInset),
                          std::clamp(s.dropAt.y, S::turretInset, w.size_.y - S::turretInset)};
-                t.life = t.maxLife = cfg::style::dropLife * pw;
+                t.life = t.maxLife = cfg::style::dropLife * pw * (1.f + b.mods.cls.common.linger);
                 t.rate = cfg::style::dropRate;
                 t.dmg = w.ballDamage(b, p) * m.drop * pw;
                 t.aim = std::atan2(w.core_.pos.y - t.pos.y, w.core_.pos.x - t.pos.x);
@@ -829,7 +846,7 @@ template <> struct ClassHooks<BallRole::Summoner> : NoClassHooks {
                 SummonTurret t;
                 t.pos = {std::clamp(b.pos.x, S::turretInset, sz.x - S::turretInset),
                          std::clamp(b.pos.y, S::turretInset, sz.y - S::turretInset)};
-                t.life = t.maxLife = m.turretLife * pw;
+                t.life = t.maxLife = m.turretLife * pw * (1.f + b.mods.cls.common.linger);
                 t.rate = m.turretRate;
                 t.dmg = w.ballDamage(b, p) * m.turretFrac * pw;
                 t.aim = std::atan2(w.core_.pos.y - t.pos.y, w.core_.pos.x - t.pos.x);
@@ -850,7 +867,7 @@ template <> struct ClassHooks<BallRole::Summoner> : NoClassHooks {
                 w.nearestEnemy(b.pos, m.totemRadius)) {
                 SummonTotem t;
                 t.pos = b.pos;
-                t.life = t.maxLife = m.totemLife * pw;
+                t.life = t.maxLife = m.totemLife * pw * (1.f + b.mods.cls.common.linger);
                 t.radius = m.totemRadius;
                 t.slow = std::min(0.8f, m.totemSlow * (full ? 1.25f : 1.f));
                 t.pulseT = S::totemPulse * 0.5f;
@@ -949,7 +966,7 @@ template <> struct ClassHooks<BallRole::Summoner> : NoClassHooks {
                 s.pos = e.pos;
                 s.vel = w.rng_.direction() * S::wispSpeed * 0.6f;
                 s.dmg = w.ballDamage(*best, p) * m.wispFrac * power(*best);
-                s.life = S::wispLife * power(*best);
+                s.life = S::wispLife * power(*best) * (1.f + best->mods.cls.common.linger);
                 s.elem = static_cast<int>(best->element);
                 s.owner = best->owner;
                 s.wisp = true;
@@ -1181,6 +1198,7 @@ template <> struct ClassHooks<BallRole::Jester> : NoClassHooks {
                     if (kill || e.hp <= 0.f) spark(w, e, extra, J::sparkRange);   // it's down: the rest jumps on
                     else w.damageEnemy(e, extra);
                     pop(w, e.pos);
+                    b.cls.common.doubled = true;   // Hot streak / Confetti
                     break;
                 }
                 case Spark: spark(w, e, dmg * J::sparkFrac, J::sparkRange); break;
@@ -1407,6 +1425,28 @@ template <> struct ClassHooks<BallRole::Slinger> : NoClassHooks {
 
     static void waveStart(World& w, const WorldParams&) { w.classWorld_.slinger.flames.clear(); }
 };
+
+// "Covering fire" (a common, sim/WorldCommons.cpp): you threw another ball, so
+// this one fires a fan at the enemy nearest the core - the Shooter's gun, any ball.
+void World::commonCoverFire(Ball& b, const WorldParams& p) {
+    const int n = b.mods.cls.common.cover;
+    if (n <= 0) return;
+    const Enemy* t = nullptr;
+    float best = 1e18f;
+    for (const Enemy& e : enemies_) {
+        if (e.hp <= 0.f || e.orbiter) continue;
+        const float d2 = dot(e.pos - core_.pos, e.pos - core_.pos);
+        if (d2 < best) { best = d2; t = &e; }
+    }
+    if (!t) return;
+    const sf::Vector2f dir = normalized(t->pos - b.pos, {1.f, 0.f});
+    const float base = std::atan2(dir.y, dir.x);
+    const float dmg = ballDamage(b, p) * cfg::shooter::bulletFrac * cfg::common::coverFrac;
+    for (int i = 0; i < n; ++i) {
+        const float a = base + (static_cast<float>(i) - 0.5f * static_cast<float>(n - 1)) * cfg::common::coverSpread;
+        ClassHooks<BallRole::Shooter>::fire(*this, b, {std::cos(a), std::sin(a)}, dmg, p);
+    }
+}
 
 // ---------------------------------------------------------------- dispatch
 // (no class logic below this line)

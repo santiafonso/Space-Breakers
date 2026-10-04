@@ -475,6 +475,13 @@ inline constexpr int rerollsPerLevel = 2;     // "Foresight" web node: reroll ch
 // Hard mode (toggled on the run-start screen, saved): everything hits harder,
 // comes in bigger numbers and the core gets no free repair between fights.
 // Pays more cores.
+// The very first run (no run played yet; SB_DEV=1 SB_TUTORIAL=1 forces it):
+// one straight path - fight, recruit, elite, shop, forge, then a softer boss -
+// with a hint at each stop. Win or lose, it ends at the skill web.
+namespace tutorial {
+inline constexpr float bossHpMul = 0.6f;
+}  // namespace tutorial
+
 namespace hard {
 inline constexpr float enemyHpMul = 1.6f;
 inline constexpr float enemySpeedMul = 1.12f;
@@ -863,9 +870,9 @@ inline constexpr float bulletMax = 3.f;           // real s of slow motion in a 
 inline constexpr float bulletRecharge = 14.f;     // real s from empty to full
 inline constexpr float bulletRechargeDelay = 0.8f;
 inline constexpr float bulletMinStart = 0.08f;    // gauge needed to start it again
-// F, Repulse (act 2 on): the core sends out a shockwave - every enemy near it
+// F, Repulse (act 4 on, 2026-10-04): the core sends out a shockwave - every enemy near it
 // is shoved away (soaked ones further) and staggered. The panic button.
-inline constexpr int repulseAct = 2;
+inline constexpr int repulseAct = 4;
 inline constexpr float repulseCooldown = 10.f;
 inline constexpr float repulseRadius = 270.f;   // px (x arena scale)
 inline constexpr float repulseKnock = 800.f;    // outward speed given (x knockTaken): ~230 px with the stagger drag

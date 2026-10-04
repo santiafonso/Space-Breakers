@@ -291,6 +291,7 @@ void App::afterChoice() {
 // back here when it closes. Ends on the map.
 void App::advanceRunIntro() {
     const int* u = data_.meta.unlock;
+    if (data_.run.tutorial) introStep_ = 3;   // the tutorial: no creed, no starter pick - straight to the map
     if (introStep_ == 0) {
         introStep_ = 1;
         if (u[MetaCovenant] > 0 && openCreedChoice(CreedSource::Start)) return;   // "Covenant"

@@ -45,6 +45,7 @@ bool saveGame(const std::string& path, const GameData& d) {
         f << "snd.cat " << i << ' ' << m.sound.vol[i] << ' ' << m.sound.style[i] << '\n';
     f << "fullscreen " << (m.fullscreen ? 1 : 0) << '\n';
     f << "hard " << (m.hardMode ? 1 : 0) << '\n';
+    f << "hints " << m.hints << '\n';
     f << "stat.enemiesKilled " << m.stats.enemiesKilled << '\n';
     f << "stat.coresEarned " << m.stats.coresEarned << '\n';
     f << "stat.bestWave " << m.stats.bestWave << '\n';
@@ -73,6 +74,7 @@ bool loadGame(const std::string& path, GameData& d) {
 
         if (key == "version") ls >> fileVersion;
         else if (key == "meta.cores") ls >> m.cores;
+        else if (key == "hints") ls >> m.hints;
         else if (key == "meta.prisms") ls >> m.prisms;
         else if (key == "meta.unlock") {
             // v9 inserted nodes and shifted indices; older unlock allocations
@@ -151,6 +153,11 @@ bool saveRun(const std::string& path, const RunState& r) {
         if (!f) return false;
         f << "run.version " << kRunVersion << '\n';
         f << "run.hard " << (r.hard ? 1 : 0) << '\n';
+        f << "run.tutorial " << (r.tutorial ? 1 : 0) << '\n';
+        f << "run.plating " << r.platingHp << '\n';
+        f << "run.bosses";
+        for (int b : r.bosses) f << ' ' << b;
+        f << '\n';
         f << "run.wave " << r.wave << '\n';
         f << "run.core " << r.coreHp << ' ' << r.coreMaxHp << '\n';
         f << "run.score " << r.score << '\n';
@@ -208,6 +215,9 @@ bool loadRun(const std::string& path, RunState& out) {
         if (!(ls >> key)) continue;
         if (key == "run.version") ls >> version;
         else if (key == "run.hard") { int v = 0; ls >> v; r.hard = v != 0; }
+        else if (key == "run.tutorial") { int v = 0; ls >> v; r.tutorial = v != 0; }
+        else if (key == "run.plating") ls >> r.platingHp;
+        else if (key == "run.bosses") { for (int& b : r.bosses) ls >> b; }   // older saves: the fixed order
         else if (key == "run.wave") ls >> r.wave;
         else if (key == "run.core") ls >> r.coreHp >> r.coreMaxHp;
         else if (key == "run.score") ls >> r.score;
