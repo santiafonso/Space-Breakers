@@ -158,8 +158,9 @@ void worldSummoner(sf::RenderTarget& t, const World& world) {
     for (const SummonShot& s : sw.shots) {
         const sf::Color c = summonColor(s.elem);
         if (s.wisp) {
-            draw::glow(t, s.pos, 10.f, c, 0.10f);
-            draw::disc(t, s.pos, cfg::summoner::wispRadius, withAlpha(c, 0.75f), withAlpha(c, 0.35f), {1.f, 1.f}, 12);
+            const float r = cfg::summoner::wispRadius * (s.great ? 2.4f : 1.f);   // "Spirit host": a great one
+            draw::glow(t, s.pos, s.great ? 26.f : 10.f, c, s.great ? 0.22f : 0.10f);
+            draw::disc(t, s.pos, r, withAlpha(c, 0.75f), withAlpha(c, 0.35f), {1.f, 1.f}, 12);
         } else {
             draw::disc(t, s.pos, cfg::summoner::shotRadius, withAlpha(c, 0.8f), withAlpha(c, 0.5f), {1.f, 1.f}, 8);
         }
@@ -250,6 +251,22 @@ void worldStyle(sf::RenderTarget& t, const World& world) {
         const sf::Color c = elementColor(static_cast<Element>(pd.elem));
         draw::disc(t, pd.pos, pd.r, withAlpha(c, 0.14f * a), withAlpha(c, 0.03f * a), {1.f, 1.f}, 28);
         draw::ring(t, pd.pos, pd.r, 1.2f * k, withAlpha(c, 0.3f * a));
+    }
+    const CommonWorld& cw = world.classWorld().common;
+    for (const CommonWorld::Wire& w : cw.wires) {   // "Razor wire"
+        const float a = clampf(w.life / 0.5f, 0.f, 1.f);
+        const sf::Vector2f d = w.b - w.a;
+        sf::RectangleShape r({length(d), 2.f * k});
+        r.setOrigin(0.f, k);
+        r.setPosition(w.a);
+        r.setRotation(std::atan2(d.y, d.x) * 180.f / kPi);
+        r.setFillColor(withAlpha(theme::classAssassin, 0.7f * a));
+        t.draw(r);
+    }
+    if (cw.wardOn) {   // "Ward ring": bright when it's up
+        const Core& co = world.core();
+        draw::ring(t, co.pos, co.radius + 10.f * k, 2.f * k,
+                   withAlpha(theme::core, cw.wardCd <= 0.f ? 0.7f : 0.15f));
     }
     for (const CommonWorld::Golem& g : world.classWorld().common.golems) {   // "Golem": a stone block
         const float a = clampf(g.life / 0.4f, 0.f, 1.f);

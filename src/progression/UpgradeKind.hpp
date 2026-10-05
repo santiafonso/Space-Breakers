@@ -239,6 +239,27 @@ enum class UpgradeKind {
     SkippingStone,     // thrown, it skips off enemies without slowing        [Slinger]
     Formation,         // your throw sends the other balls the same way       [Slinger]
     ShieldBash,        // enemies it hits near the core fly off, stunned      [Guardian]
+    // ---- epics (2026-10-04), same home and same rule ----
+    Saturate,          // its reactions leave both elements' full effects     [Alchemist]
+    Maelstrom,         // now and then a ring of all its elements             [Alchemist]
+    DeathSentence,     // what it hits dies under 20% to any ball             [Assassin]
+    RazorWire,         // each blink leaves a cutting line                    [Assassin]
+    WardRing,          // the core throws back the first enemy every few s    [Guardian]
+    Juggernaut,        // its size bonus counts double as damage              [Guardian]
+    LastLine,          // once a fight, a low core blasts everything away     [Guardian]
+    SlotMachine,       // spins for buffs now and then                        [Jester]
+    WildMagic,         // a double casts a random ability from the run        [Jester]
+    SpellChorus,       // every 5th cast, every ball casts                    [Mage]
+    Chronomancy,       // each cast slows every enemy a moment                [Mage]
+    Minigun,           // fires faster the longer it keeps firing             [Shooter]
+    SmartRounds,       // bullets home in                                     [Shooter]
+    Shrapnel,          // its kills burst into a ring of bullets              [Shooter]
+    PerfectRelease,    // a full-pull throw hits x2.5 and pierces to a wall   [Slinger]
+    Homecoming,        // after its first hit it curves back to your hand     [Slinger]
+    Lightspeed,        // very fast, its hits chain and don't slow it         [Striker]
+    SpiritHost,        // 5 wisps out merge into a great spirit               [Summoner]
+    TwinCall,          // everything it summons comes in pairs                [Summoner]
+    Fortify,           // its turrets stop what touches them and last longer  [Summoner]
 
     // ---- relics (keep CoreSpring first and Overcharge last) ----
     CoreSpring,        // balls ricochet off the core faster

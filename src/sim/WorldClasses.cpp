@@ -295,6 +295,7 @@ template <> struct ClassHooks<BallRole::Shooter> : NoClassHooks {
         u.hollow = b.mods.cls.common.hollow;     // "Hollow point"
         u.suppress = b.mods.cls.common.suppress; // "Suppressing fire"
         u.frag = b.mods.cls.common.frag;         // "Frag rounds"
+        u.smart = b.mods.cls.common.smart;       // "Smart rounds"
         if (const int mk = b.mods.cls.common.marksman; mk > 0 && ++b.cls.common.shots % mk == 0) {   // "Marksman"
             u.dmg *= cfg::common::marksmanMul;
             u.mark = true;
@@ -348,13 +349,18 @@ template <> struct ClassHooks<BallRole::Shooter> : NoClassHooks {
         }
         float speedRate = clampf(length(b.vel) / std::max(1.f, w.ballCruise(b, p)), S::rateMin, S::rateMax);
         if (m.slug > 0.f) speedRate = std::max(speedRate, 1.f) * (1.f + m.slug * still);   // "Slug": slow = fast fire
-        st.fireT -= dt * speedRate * m.rate;
+        CommonState& cs = b.cls.common;   // "Minigun": spun up, it fires faster
+        st.fireT -= dt * speedRate * m.rate * (1.f + cfg::common::minigunMax * cs.spin);
         if (st.fireT > 0.f) return;
         sf::Vector2f at;
         const float range = S::range * w.arenaScale() * (1.f + 0.5f * m.slug * still);   // "Slug" reaches further
         if (!aimAt(w, b.pos, range, -1, at)) { st.fireT = 0.f; return; }   // wait, loaded
         st.fireT += S::fireInterval;
         if (st.fireT < 0.f) st.fireT = 0.f;
+        if (b.mods.cls.common.minigun > 0.f) {   // "Minigun": one more volley spins it up
+            cs.spin = std::min(1.f, cs.spin + b.mods.cls.common.minigun);
+            cs.spinIdle = 0.f;
+        }
         const sf::Vector2f dir = normalized(at - b.pos, {1.f, 0.f});
         const float dmg = w.ballDamage(b, p) * S::bulletFrac * (m.pellets > 1 ? m.pelletFrac : 1.f);
         const float base = std::atan2(dir.y, dir.x);
@@ -409,6 +415,15 @@ template <> struct ClassHooks<BallRole::Shooter> : NoClassHooks {
         const sf::Vector2f sz = w.size_;
         for (Bullet& u : sw.bullets) {
             u.life -= dt;
+            if (u.smart > 0.f) {   // "Smart rounds": curve after the nearest enemy
+                sf::Vector2f at;
+                if (aimAt(w, u.pos, S::range * w.arenaScale(), u.lastHit, at)) {
+                    const float cur = std::atan2(u.vel.y, u.vel.x);
+                    const float want = std::atan2(at.y - u.pos.y, at.x - u.pos.x);
+                    const float turn = clampf(std::remainder(want - cur, 2.f * kPi), -u.smart * dt, u.smart * dt);
+                    u.vel = sf::Vector2f{std::cos(cur + turn), std::sin(cur + turn)} * length(u.vel);
+                }
+            }
             u.pos += u.vel * dt;
             if (u.pos.x < 0.f || u.pos.y < 0.f || u.pos.x > sz.x || u.pos.y > sz.y) {
                 if (u.banks > 0) {   // "Bank shot": off the wall instead
@@ -607,6 +622,7 @@ template <> struct ClassHooks<BallRole::Assassin> : NoClassHooks {
         const float hit = w.ballDamage(b, p);   // before Backstab arms
         const float speed = std::min(std::max(length(b.vel), w.ballCruise(b, p) * A::blinkMinSpeed), w.ballMaxSpeed(b, p));
         if (m.phantomLife > 0.f && !b.ghost) phantom(w, b, t, m.phantomLife, speed);
+        const sf::Vector2f start = b.pos;   // ("Razor wire")
         sf::Vector2f from = b.pos;
         for (std::size_t i = 0; i + 1 < chain.size(); ++i) {   // Shadow Assassin: cut through the chain
             Enemy& e = *chain[i];
@@ -643,7 +659,7 @@ template <> struct ClassHooks<BallRole::Assassin> : NoClassHooks {
             s.spreeT = A::spreeWindow;
         }
         s.cd = cooldown(b);
-        w.commonOnBlink(b, t, p);   // Mark for death / Quickstep
+        w.commonOnBlink(b, t, p, start);   // Mark for death / Quickstep / Razor wire...
     }
 
     static void tick(World& w, Ball& b, float dt, const WorldParams& p, FrameEvents& ev) {
@@ -800,6 +816,26 @@ template <> struct ClassHooks<BallRole::Summoner> : NoClassHooks {
         return e != nullptr;
     }
 
+    // "Twin call": the summon just pushed gets a twin on the far side of the core.
+    static sf::Vector2f mirror(const World& w, sf::Vector2f at) {
+        const sf::Vector2f m = w.core_.pos * 2.f - at;
+        return {clampf(m.x, 10.f, w.size_.x - 10.f), clampf(m.y, 10.f, w.size_.y - 10.f)};
+    }
+    static void twin(World& w, const Ball& o, std::vector<SummonShot>& v) {
+        if (!o.mods.cls.common.twinCall || v.empty() || static_cast<int>(v.size()) >= cfg::summoner::maxShots) return;
+        SummonShot c = v.back();
+        c.pos = mirror(w, c.pos);
+        c.vel = -c.vel;
+        v.push_back(c);
+    }
+    template <typename T>
+    static void twin(World& w, const Ball& o, std::vector<T>& v) {
+        if (!o.mods.cls.common.twinCall || v.empty()) return;
+        T c = v.back();
+        c.pos = mirror(w, c.pos);
+        v.push_back(c);
+    }
+
     // "Hatchery": n wisps loose from where a summon made a kill.
     static void hatch(World& w, const Ball& o, sf::Vector2f at, int n, const WorldParams& p) {
         namespace S = cfg::summoner;
@@ -814,6 +850,7 @@ template <> struct ClassHooks<BallRole::Summoner> : NoClassHooks {
             s.owner = o.owner;
             s.wisp = true;
             sw.shots.push_back(s);
+            twin(w, o, sw.shots);   // "Twin call"
         }
     }
 
@@ -898,6 +935,7 @@ template <> struct ClassHooks<BallRole::Summoner> : NoClassHooks {
             q.owner = b.owner;
             q.wisp = true;
             sw.shots.push_back(q);
+            twin(w, b, sw.shots);   // "Twin call"
         }
         // "Drop turret": you let go of it here.
         if (s.dropPending) {
@@ -906,13 +944,15 @@ template <> struct ClassHooks<BallRole::Summoner> : NoClassHooks {
                 SummonTurret t;
                 t.pos = {std::clamp(s.dropAt.x, S::turretInset, w.size_.x - S::turretInset),
                          std::clamp(s.dropAt.y, S::turretInset, w.size_.y - S::turretInset)};
-                t.life = t.maxLife = cfg::style::dropLife * pw * (1.f + b.mods.cls.common.linger);
+                t.life = t.maxLife = cfg::style::dropLife * pw * (1.f + b.mods.cls.common.linger) *
+                                     std::max(1.f, b.mods.cls.common.fortify);   // "Fortify"
                 t.rate = cfg::style::dropRate;
                 t.dmg = w.ballDamage(b, p) * m.drop * pw;
                 t.aim = std::atan2(w.core_.pos.y - t.pos.y, w.core_.pos.x - t.pos.x);
                 t.elem = elem;
                 t.owner = b.owner;
                 sw.turrets.push_back(t);
+                twin(w, b, sw.turrets);   // "Twin call"
             }
         }
 
@@ -934,13 +974,15 @@ template <> struct ClassHooks<BallRole::Summoner> : NoClassHooks {
                 SummonTurret t;
                 t.pos = {std::clamp(b.pos.x, S::turretInset, sz.x - S::turretInset),
                          std::clamp(b.pos.y, S::turretInset, sz.y - S::turretInset)};
-                t.life = t.maxLife = m.turretLife * pw * (1.f + b.mods.cls.common.linger);
+                t.life = t.maxLife = m.turretLife * pw * (1.f + b.mods.cls.common.linger) *
+                                     std::max(1.f, b.mods.cls.common.fortify);   // "Fortify"
                 t.rate = m.turretRate;
                 t.dmg = w.ballDamage(b, p) * m.turretFrac * pw;
                 t.aim = std::atan2(w.core_.pos.y - t.pos.y, w.core_.pos.x - t.pos.x);
                 t.elem = elem;
                 t.owner = b.owner;
                 sw.turrets.push_back(t);
+                twin(w, b, sw.turrets);   // "Twin call"
                 s.turretCd = S::turretCooldown;
             }
         }
@@ -963,6 +1005,7 @@ template <> struct ClassHooks<BallRole::Summoner> : NoClassHooks {
                 t.elem = elem;
                 t.owner = b.owner;
                 sw.totems.push_back(t);
+                twin(w, b, sw.totems);   // "Twin call"
                 s.totemT = m.totemInterval;
             }
         }
@@ -1059,6 +1102,7 @@ template <> struct ClassHooks<BallRole::Summoner> : NoClassHooks {
                 s.owner = best->owner;
                 s.wisp = true;
                 sw.shots.push_back(s);
+                twin(w, *best, sw.shots);   // "Twin call"
             }
         }
 
@@ -1109,8 +1153,11 @@ template <> struct ClassHooks<BallRole::Summoner> : NoClassHooks {
                 bool full = false;
                 if (s.owner >= 0 && s.owner < static_cast<int>(w.balls_.size()))
                     full = w.balls_[static_cast<std::size_t>(s.owner)].isAscended(BallRole::Summoner);
+                if (e.id == s.lastHit) continue;   // a great spirit passing through
                 touch(w, e, s.dmg, s.elem, s.owner, full, p, ev);
-                s.life = 0.f;
+                s.lastHit = e.id;
+                if (s.pierce > 0) --s.pierce;   // "Spirit host": on to the next one
+                else s.life = 0.f;
                 break;
             }
             if (s.life > 0.f && w.boss_.alive && length(w.boss_.pos - s.pos) < w.boss_.radius + r) {
@@ -1541,6 +1588,7 @@ void World::commonGolems(float dt, const WorldParams& p, FrameEvents& ev) {
         g.elem = static_cast<int>(b.element);
         g.owner = b.owner;
         gs.push_back(g);
+        H::twin(*this, b, gs);   // "Twin call"
         ev.bursts.push_back({g.pos, C::golemRadius * 2.f * k, theme::classSummoner, nullptr});
     }
     for (CommonWorld::Golem& g : gs) {
@@ -1575,7 +1623,53 @@ void World::commonGolems(float dt, const WorldParams& p, FrameEvents& ev) {
     }
     for (const CommonWorld::Golem& g : gs)
         if (g.life <= 0.f) H::martyr(*this, g.pos, g.elem, g.owner, p, ev);   // "Martyr"
+
+    // "Spirit host": five of a ball's wisps out merge into one great spirit.
+    auto& shots = classWorld_.summoner.shots;
+    for (const Ball& b : balls_) {
+        const CommonMods& c = b.mods.cls.common;
+        if (c.spiritHost <= 0.f) continue;
+        int n = 0;
+        for (const SummonShot& s : shots) n += s.wisp && !s.great && s.owner == b.owner ? 1 : 0;
+        if (n < C::spiritAt) continue;
+        SummonShot great;
+        sf::Vector2f at{0.f, 0.f};
+        float dmg = 0.f;
+        int taken = 0;
+        for (SummonShot& s : shots)
+            if (taken < C::spiritAt && s.wisp && !s.great && s.owner == b.owner && s.life > 0.f) {
+                at += s.pos;
+                dmg += s.dmg;
+                great.elem = s.elem;
+                s.life = 0.f;   // swept by the summons' own pass
+                ++taken;
+            }
+        great.pos = at / static_cast<float>(taken);
+        great.vel = {0.f, 0.f};
+        great.dmg = dmg / static_cast<float>(taken) * c.spiritHost;
+        great.life = cfg::summoner::wispLife * C::spiritLife * (1.f + c.linger);
+        great.owner = b.owner;
+        great.wisp = true;
+        great.great = true;
+        great.pierce = c.spiritPierce;
+        shots.push_back(great);
+        ev.bursts.push_back({great.pos, 50.f * k, theme::classSummoner, nullptr});
+    }
     gs.erase(std::remove_if(gs.begin(), gs.end(), [](const CommonWorld::Golem& g) { return g.life <= 0.f; }), gs.end());
+}
+
+// "Shrapnel" (an epic): a ring of bullets out of the enemy it just killed.
+void World::commonRing(Ball& b, const WorldParams& p, sf::Vector2f at, int n) {
+    if (n <= 0) return;
+    auto& bullets = classWorld_.shooter.bullets;
+    const float dmg = ballDamage(b, p) * cfg::shooter::bulletFrac * cfg::common::shrapnelFrac;
+    const float spin = rng_.range(0.f, 2.f * kPi);
+    for (int i = 0; i < n; ++i) {
+        const float a = spin + 2.f * kPi * static_cast<float>(i) / static_cast<float>(n);
+        const std::size_t before = bullets.size();
+        ClassHooks<BallRole::Shooter>::fire(*this, b, {std::cos(a), std::sin(a)}, dmg, p);
+        if (bullets.size() > before) bullets.back().pos = at;   // out of the dead enemy, not the ball
+    }
 }
 
 // "Covering fire" / "Ammo feed" (commons, sim/WorldCommons.cpp): a fan at the

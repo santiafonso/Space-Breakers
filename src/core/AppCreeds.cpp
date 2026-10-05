@@ -400,6 +400,7 @@ bool App::openStarterChoice() {
     for (int i = 0; i < kChoiceCount; ++i) choices_[static_cast<std::size_t>(i)] = pool[static_cast<std::size_t>(i)];
     choiceCount_ = kChoiceCount;
     rollSource_ = RollSource::Normal;
+    starterChoice_ = true;   // its rerolls draw from the same kit (App::rerollChoice)
     const bool allWant = std::all_of(choices_.begin(), choices_.end(), [want](UpgradeKind k) { return upgradeTier(k) == want; });
     choiceTitle_ = allWant ? std::string("Starter kit - pick your ") + tierName(want) + " item" : "Starter kit - pick your item";
     push(ScreenId::Choice);

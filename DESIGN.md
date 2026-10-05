@@ -2367,7 +2367,23 @@ de las pelotas: Q, el anillo de E y F.
   stone, Formation (Slinger); Shield bash (Guardian). Golem es una invocación
   nueva: cuenta para Guard dog, Soulbind, Lingering, Martyr y Pack leader.
   - Storm y Tether bajan de épico a raro (pirámide de Support).
-- **Lo que falta:** épicos 20, legendarios 15.
+- **Tanda 4 - épicos (hecha):** Saturate, Maelstrom (Alchemist); Death
+  sentence, Razor wire (Assassin); Ward ring, Juggernaut, Last line (Guardian);
+  Slot machine, Wild magic (Jester); Spell chorus, Chronomancy (Mage); Minigun,
+  Smart rounds, Shrapnel (Shooter); Perfect release, Homecoming (Slinger);
+  Lightspeed (Striker); Spirit host, Twin call, Fortify (Summoner).
+- **Shooter más fuerte de base (el usuario: el Magic missile era mucho mejor):**
+  dispara cada 0.4 s (era 0.9), alcance global (era 330 px), balas más rápidas
+  (950, viven 2.4 s), una pelota lenta ya no dispara más lento, daño por bala
+  0.3 del golpe (era 0.35). En una prueba sin jugador pasó de ~14 kills a ~40
+  en 6 peleas (Magic missile solo: ~6-12).
+- **Reroll del kit inicial (Quartermaster):** ahora saca otro item del mismo
+  kit; antes usaba el sorteo de mejoras y daba elementos / modificadores.
+- **Panel F1:** tres pestañas - Items 1 (Striker..Shooter), Items 2
+  (Assassin..Alchemist), Run - y cada clase ordenada de común a legendario.
+- **Lo que falta:** legendarios 15. **Necromancer** (los enemigos que matan sus
+  invocaciones se levantan como fantasmas aliados que explotan) va como
+  legendario del Summoner - el usuario lo prefirió ahí.
 - **F (Repulse) se abre en el acto 4** (antes en el 2, igual que la E). La E sigue en el 2.
 
 ### Anotado para después (el usuario lo pidió así)

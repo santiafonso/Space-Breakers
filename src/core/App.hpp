@@ -358,6 +358,7 @@ private:
     int equipRef_ = -1;       // Choice card / shop offer being placed
     RollSource rollSource_ = RollSource::Normal;   // what the current Choice was rolled from (rerolls keep it)
     std::string choiceTitle_;                      // custom Choice heading ("Starter kit ..."), empty = default
+    bool starterChoice_ = false;                   // the Choice is the Quartermaster starter pick (rerolls stay items)
     std::vector<CreedId> creedChoices_;
     std::vector<PactId> pactChoices_;
     bool pactFromMap_ = true;   // the Altar was a map stop: closing it goes back to the map

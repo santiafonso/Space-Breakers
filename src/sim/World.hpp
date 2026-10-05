@@ -269,11 +269,15 @@ private:
     void commonWallBounce(Ball& b, const WorldParams& p);   // "Seep"
     void commonCoreBounce(Ball& b, const WorldParams& p, FrameEvents& ev);   // "Heavy landing"
     void commonClack(Ball& a, Ball& o);                // "Tincture", "Medic"
-    void commonOnCast(Ball& b, const WorldParams& p);        // Spellblade / Aether step / Sync
-    void commonOnReaction(Ball* rb, Element x, Element y, sf::Vector2f at, float hitDmg, FrameEvents& ev);
+    void commonOnCast(Ball& b, const WorldParams& p, FrameEvents& ev);   // Spellblade / Aether step / Sync / Chorus...
+    void commonOnReaction(Ball* rb, Element x, Element y, sf::Vector2f at, float hitDmg, const WorldParams& p,
+                          FrameEvents& ev);
+    bool commonWard(Enemy& e, FrameEvents& ev);   // "Ward ring": true = thrown back, no damage
+    void commonRing(Ball& b, const WorldParams& p, sf::Vector2f at, int n);   // "Shrapnel" (WorldClasses.cpp)
+    int midasPending_ = 0;                        // gold earned off the events path, flushed each step
     void commonGolems(float dt, const WorldParams& p, FrameEvents& ev);   // "Golem" (WorldClasses.cpp)
     Ball* castBall_ = nullptr;   // the ball whose ability is firing right now ("Spellweave")
-    void commonOnBlink(Ball& b, Enemy& t, const WorldParams& p);   // Mark for death / Quickstep
+    void commonOnBlink(Ball& b, Enemy& t, const WorldParams& p, sf::Vector2f from);   // Mark for death / Quickstep / Razor wire
     void commonOnGrab(Ball& b);                              // Relay / Second wind
     void commonOnThrow(Ball& b, float pullFrac);             // Long pull / Covering fire
     void commonWaveStart();

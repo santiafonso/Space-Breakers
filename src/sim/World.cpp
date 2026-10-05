@@ -61,7 +61,8 @@ float World::ballCruise(const Ball& b, const WorldParams& p) const {
            (b.hasRole(BallRole::Guardian) ? cfg::role::guardianCruiseMul : 1.f) *
            (b.hasElement(Element::Stone) ? cfg::element::stoneCruise : 1.f) *   // stone: the heavy one
            (b.overclockT > 0.f ? cfg::ability::overclockCruise : 1.f) *   // "Overclock" ability
-           (1.f + b.mods.cls.common.adrenaline * static_cast<float>(b.cls.common.adrenaline));   // "Adrenaline"
+           (1.f + b.mods.cls.common.adrenaline * static_cast<float>(b.cls.common.adrenaline)) *   // "Adrenaline"
+           (b.cls.common.slotSpeedT > 0.f ? cfg::common::slotSpeed : 1.f);   // "Slot machine": a speed pair
 }
 
 float World::ballMaxSpeed(const Ball& b, const WorldParams& p) const {
@@ -1604,7 +1605,7 @@ void World::triggerReaction(Element x, Element y, Enemy& e, float hitDmg, const 
             o.elemT = S::reactWindow;
         }
     }
-    if (depth == 0) commonOnReaction(rb, x, y, at, hitDmg, ev);   // Distill / Elixir / Transmute / Residue / Aurum
+    if (depth == 0) commonOnReaction(rb, x, y, at, hitDmg, p, ev);   // Distill / Elixir / Transmute / Residue / Aurum
     if (am && am->flux > 0.f)   // "Flux": each reaction recharges its abilities
         for (int i = 0; i < kMaxAbilitySlots; ++i)
             if (rb->abilities[i].id != Ability::None)
@@ -1930,7 +1931,7 @@ void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
             commonCoreBounce(b, p, ev);   // "Heavy landing"
             pushFx(c);
         }
-        const bool passThrough = b.mods.piercing || styleBlurring(b, p);   // "Piercing" / "Blur"
+        const bool passThrough = b.mods.piercing || styleBlurring(b, p) || b.cls.common.perfect;   // "Piercing" / "Blur" / "Perfect release"
         if (passThrough) {   // "Piercing": no bounce - every enemy on the path takes the hit
             for (Enemy& e : enemies_) {
                 if (e.hp <= 0.f || e.pierceCd > 0.f) continue;
@@ -1974,6 +1975,9 @@ void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
             }
             afterBounce(b, c.normal, true);
             aimBounce(b, c.normal, &e);
+            if (b.mods.cls.common.lightspeed > 0.f &&   // "Lightspeed": that fast, a hit doesn't slow it
+                length(v0) > ballCruise(b, p) * cfg::common::lightspeedAt)
+                b.vel = normalized(b.vel, v0) * length(v0);
             if (b.cls.common.skipping) {   // "Skipping stone": off the enemy with no speed lost
                 const float sp = std::max(length(b.vel), length(v0)) * b.mods.cls.common.skipping;
                 b.vel = normalized(b.vel, v0) * std::min(sp, cfg::ball::hardSpeedCap * arenaScale());
@@ -2279,6 +2283,10 @@ void World::updateEnemies(float dt, const WorldParams& p, FrameEvents& ev) {
         e.hitFlash *= std::exp(-6.f * dt);
 
         const float dist = length(core_.pos - e.pos);
+        if (dist <= core_.radius + e.radius && commonWard(e, ev)) {   // "Ward ring": thrown back
+            ++it;
+            continue;
+        }
         if (dist <= core_.radius + e.radius) {
             if (!invuln_) {
                 if (aegisChargesLeft_ > 0) --aegisChargesLeft_;   // "Aegis" soaks the hit

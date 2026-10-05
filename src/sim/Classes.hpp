@@ -150,6 +150,7 @@ struct ShooterBullet {
     float suppress = 0.f;     // "Suppressing fire": slow per hit
     float frag = 0.f;         // "Frag rounds": burst x the bullet
     bool mark = false;        // "Marksman": this one marks
+    float smart = 0.f;        // "Smart rounds": turn rate (rad/s)
 };
 struct ShooterRail {          // Deadeye's rail shot, kept only to be drawn
     sf::Vector2f a, b;
@@ -255,6 +256,9 @@ struct SummonShot {
     int elem = 0;              // Element (sim/Entities.hpp)
     int owner = -1;
     bool wisp = false;         // homes in on the nearest enemy
+    int pierce = 0;            // "Spirit host": a great spirit goes through this many more
+    int lastHit = -1;          // ...not the same one twice in a row
+    bool great = false;        // ...drawn big
 };
 struct SummonTurret {
     sf::Vector2f pos;
@@ -457,6 +461,32 @@ struct CommonMods {
     float formation = 0.f;     // "Formation": the others follow your throw at this x its speed
     float shieldBash = 0.f;    // "Shield bash": knock near the core...
     float bashStun = 0.f;      // ...and stun
+    // epics (2026-10-04)
+    float saturate = 0.f;      // "Saturate": both elements' full effects this far around a reaction
+    float maelstrom = 0.f;     // "Maelstrom": s between rings (0 = off)...
+    float maelstromR = 0.f;    // ...this wide
+    float sentence = 0.f;      // "Death sentence": the kill threshold (share of max hp)
+    float razor = 0.f;         // "Razor wire": the line cuts for this x its hit...
+    float razorLife = 0.f;     // ...this long
+    float wardEvery = 0.f;     // "Ward ring": s between throws (0 = off)
+    float juggernaut = 0.f;    // "Juggernaut": damage + this x its size bonus
+    float lastLine = 0.f;      // "Last line": the blast x its hit (0 = off)...
+    float lastLineStun = 0.f;  // ...and the stun
+    float slotEvery = 0.f;     // "Slot machine": s between spins (0 = off)
+    float wildCd = 0.f;        // "Wild magic": s between casts (0 = off)
+    int chorus = 0;            // "Spell chorus": every Nth cast
+    float chrono = 0.f;        // "Chronomancy": slow per cast
+    float minigun = 0.f;       // "Minigun": spin-up per volley (0 = off)
+    float smart = 0.f;         // "Smart rounds": bullet turn rate (rad/s, 0 = off)
+    int shrapnel = 0;          // "Shrapnel": bullets per kill
+    float perfect = 0.f;       // "Perfect release": the perfect throw's hit x this (0 = off)
+    float homecoming = 0.f;    // "Homecoming": the catch shockwave x its hit (0 = off)
+    float lightspeed = 0.f;    // "Lightspeed": chain x the hit (0 = off)...
+    int lightChains = 0;       // ...this many
+    float spiritHost = 0.f;    // "Spirit host": the spirit's damage x (0 = off)...
+    int spiritPierce = 0;      // ...enemies it goes through
+    bool twinCall = false;     // "Twin call"
+    float fortify = 0.f;       // "Fortify": its turrets last x this (0 = off)
 };
 struct CommonState {
     bool doubled = false;      // this hit was doubled (crit, coin heads, a Jester double)
@@ -487,6 +517,17 @@ struct CommonState {
     int shots = 0;             // "Marksman": bullets fired
     bool skipping = false;     // "Skipping stone": thrown, not back at the core yet
     float golemT = 0.f;        // "Golem": to the next one
+    float maelT = 0.f;         // "Maelstrom": to the next ring
+    float slotT = 0.f;         // "Slot machine": to the next spin...
+    float slotDmgT = 0.f, slotSpeedT = 0.f, slotGoldT = 0.f;   // ...its buffs, s left
+    float wildT = 0.f;         // "Wild magic": cooldown
+    int casts = 0;             // "Spell chorus": casts so far
+    float spin = 0.f;          // "Minigun": 0..1 spun up...
+    float spinIdle = 0.f;      // ...s since its last volley
+    bool perfect = false;      // "Perfect release": this throw is one (until a wall)
+    bool homeArmed = false;    // "Homecoming": thrown, first hit not landed...
+    float homeT = 0.f;         // ...s left curving home
+    bool homePulse = false;    // ...caught on the way: pulse on the next tick
 };
 struct CommonWorld {
     struct Puddle {            // "Seep"
@@ -510,6 +551,15 @@ struct CommonWorld {
         int elem = 0, owner = -1;
     };
     std::vector<Golem> golems;
+    struct Wire {              // "Razor wire"
+        sf::Vector2f a, b;
+        float life = 0.f, maxLife = 1.f, dmg = 0.f, tickT = 0.f;
+    };
+    std::vector<Wire> wires;
+    float wardCd = 0.f;        // "Ward ring": s until it's up again...
+    bool wardOn = false;       // ...some ball carries it (the renderer's ring)
+    bool lastLineUsed = false; // "Last line": once a fight
+    float chronoT = 0.f, chrono = 0.f;   // "Chronomancy": every enemy slowed by chrono while chronoT runs
 };
 
 // On BallMods (`mods.cls`): what the ball's class items add up to.

@@ -883,6 +883,7 @@ UpgradeKind App::rollPick(RollSource src, const std::vector<UpgradeKind>& exclud
 
 void App::rollChoices(RollSource src) {
     rollSource_ = src;
+    starterChoice_ = false;
     choiceTitle_.clear();
     choiceCount_ = cfg::run::choiceCards;
     std::vector<UpgradeKind> taken;
@@ -897,7 +898,14 @@ void App::rollChoices(RollSource src) {
 void App::rerollChoice(int idx) {
     if (idx < 0 || idx >= choiceCount_ || data_.run.rerollsLeft <= 0) return;
     const std::vector<UpgradeKind> shown(choices_.begin(), choices_.end());
-    const UpgradeKind k = rollPick(rollSource_, shown);   // same odds as the card it replaces
+    UpgradeKind k = shown[static_cast<std::size_t>(idx)];
+    if (starterChoice_) {   // the starter pick: another item from the same kit, never a free pick
+        const Tier want = data_.meta.unlock[MetaStarterKit] >= 2 ? Tier::Rare : Tier::Uncommon;
+        for (UpgradeKind c : starterPool(want))
+            if (std::find(shown.begin(), shown.end(), c) == shown.end()) { k = c; break; }
+    } else {
+        k = rollPick(rollSource_, shown);   // same odds as the card it replaces
+    }
     if (std::find(shown.begin(), shown.end(), k) != shown.end()) return;   // nothing new - keep the charge
     choices_[idx] = k;
     --data_.run.rerollsLeft;
@@ -914,6 +922,7 @@ void App::rollRecruitChoices() {
         ? UpgradeKind::AddBall
         : static_cast<UpgradeKind>(static_cast<int>(UpgradeKind::HeavyImpact) + rng_.irange(0, kModifierCount - 1));
     rollSource_ = RollSource::Normal;
+    starterChoice_ = false;
     choiceTitle_.clear();
     choiceCount_ = cfg::run::choiceCards;
     std::vector<UpgradeKind> taken{choices_[0], UpgradeKind::AddBall};
@@ -2457,14 +2466,16 @@ int App::runSnapshots(const std::string& dir) {
 
     push(ScreenId::Dev);
     snapFrame(d + "09_dev.png");
-    {   // its second page (the "Run" tab, top right), then back to the first
+    {   // its other pages (the tabs, top right: Items 1 / Items 2 / Run), then back to the first
         sf::Event click{};
         click.type = sf::Event::MouseButtonPressed;
         click.mouseButton.button = sf::Mouse::Left;
-        const sf::Vector2f runTab{size().x - 330.f + 98.f + 30.f, 71.f}, itemsTab{size().x - 330.f + 30.f, 71.f};
-        stack_.back()->handleEvent(*this, click, runTab);
-        snapFrame(d + "09b_dev_run.png");
-        stack_.back()->handleEvent(*this, click, itemsTab);
+        auto tab = [&](int i) { return sf::Vector2f{size().x - 330.f + 104.f * static_cast<float>(i) + 30.f, 71.f}; };
+        stack_.back()->handleEvent(*this, click, tab(1));
+        snapFrame(d + "09b_dev_items2.png");
+        stack_.back()->handleEvent(*this, click, tab(2));
+        snapFrame(d + "09c_dev_run.png");
+        stack_.back()->handleEvent(*this, click, tab(0));
     }
     back();
 

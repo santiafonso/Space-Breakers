@@ -80,15 +80,15 @@ void DevScreen::rebuild(App& app) {
         buttons_.push_back(bt);
     }
 
-    // ---- two pages (tabs, top right): ITEMS = every item by class in up to
-    // five columns; RUN = balls / types / abilities, modifiers / relics,
-    // creeds and pacts. The right column (actions, spawns, speed, screens)
-    // is on both.
+    // ---- three pages (tabs, top right): two of ITEMS (five classes each, one
+    // column a class, common -> legendary); RUN = balls / types / abilities,
+    // modifiers / relics, creeds and pacts. The right column (actions, spawns,
+    // speed, screens) is on all of them.
     {
-        const char* names[2] = {"Items", "Run: picks, creeds, pacts"};
-        const float widths[2] = {90.f, 210.f};
+        const char* names[3] = {"Items 1", "Items 2", "Run"};
+        const float widths[3] = {96.f, 96.f, 96.f};
         float x = s.x - 330.f;
-        for (int pg = 0; pg < 2; ++pg) {
+        for (int pg = 0; pg < 3; ++pg) {
             Button bt;
             bt.rect = {x, 58.f, widths[pg], 26.f};
             bt.label = names[pg];
@@ -96,7 +96,9 @@ void DevScreen::rebuild(App& app) {
             bt.action = kActPage + pg;
             bt.on = gDevPage == pg;
             bt.tipTitle = names[pg];
-            bt.tipDesc = pg == 0 ? "every item, by class" : "balls, types, abilities, modifiers, relics, creeds and pacts";
+            bt.tipDesc = pg == 0 ? "Striker, Guardian, Support, Mage and Shooter items"
+                       : pg == 1 ? "Assassin, Summoner, Jester, Slinger and Alchemist items"
+                                 : "balls, types, abilities, modifiers, relics, creeds and pacts";
             buttons_.push_back(bt);
             x += widths[pg] + 8.f;
         }
@@ -115,15 +117,20 @@ void DevScreen::rebuild(App& app) {
         buttons_.push_back(bt);
     };
 
-    if (gDevPage == 0) {
+    if (gDevPage < 2) {
         // Items go by class: a coloured class heading, then its items in the
-        // class colour (the tier is in the tooltip). A class stays in one
-        // column; the next column starts when this one would run off the bottom.
+        // class colour, common first (the tier is in the tooltip). Five classes
+        // a page; a class stays in one column.
+        const int lo = gDevPage == 0 ? 1 : 6, hi = lo + 4;   // ItemTag range on this page
         std::vector<UpgradeKind> items;
-        for (int i = 0; i < kUpgradeKindCount; ++i)
-            if (upgradeCat(static_cast<UpgradeKind>(i)) == UpgradeCat::Item) items.push_back(static_cast<UpgradeKind>(i));
+        for (int i = 0; i < kUpgradeKindCount; ++i) {
+            const auto k = static_cast<UpgradeKind>(i);
+            const int tag = static_cast<int>(itemTag(k));
+            if (upgradeCat(k) == UpgradeCat::Item && tag >= lo && tag <= hi) items.push_back(k);
+        }
         std::stable_sort(items.begin(), items.end(), [](UpgradeKind x, UpgradeKind y) {
-            return static_cast<int>(itemTag(x)) < static_cast<int>(itemTag(y));
+            if (itemTag(x) != itemTag(y)) return static_cast<int>(itemTag(x)) < static_cast<int>(itemTag(y));
+            return static_cast<int>(upgradeTier(x)) < static_cast<int>(upgradeTier(y));
         });
         const float bottom = s.y - 44.f;
         int c = 0;

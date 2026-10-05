@@ -45,7 +45,7 @@ void World::updateAbilities(Ball& b, float dt, const WorldParams& p, FrameEvents
             b.abilityCd[i] = abilityCooldown(a.id, a.level);
             b.abilityFlash = 1.f;
             mageOnCast(b, i, false, p, ev);   // Mage items / Ancient Mage react to the cast
-            commonOnCast(b, p);               // Spellblade / Aether step / Sync
+            commonOnCast(b, p, ev);           // Spellblade / Aether step / Sync / Chorus / Chronomancy
             if (b.mods.cls.common.cascade && fallen() > before)   // "Cascade": again almost at once
                 b.abilityCd[i] = std::min(b.abilityCd[i], cfg::common::cascadeFloor);
         } else {

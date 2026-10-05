@@ -51,6 +51,8 @@ float World::commonPreHit(Ball& b, Enemy& e, const WorldParams&) {
         k *= 2.f;
     }
     if (s.predArmed) { k *= 1.f + c.predator; s.predArmed = false; }   // "Predator"
+    if (s.perfect) k *= c.perfect;                                 // "Perfect release": until a wall
+    if (s.slotDmgT > 0.f) k *= cfg::common::slotDamage;            // "Slot machine": a damage pair
     return k;
 }
 
@@ -58,6 +60,55 @@ void World::commonOnHit(Ball& b, Enemy& e, float dmg, bool kill, const WorldPara
     namespace C = cfg::common;
     const CommonMods& c = b.mods.cls.common;
     CommonState& s = b.cls.common;
+    if (!kill && e.hp > 0.f && e.sentenceT > 0.f && e.hp < e.maxHp * e.sentence) {   // a "Death sentence" carried out
+        damageEnemy(e, e.hp);
+        for (Ball& o : balls_)
+            if (o.owner == e.sentenceOwner && !o.ghost) {   // ...and the sentencing ball blinks on
+                o.cls.assassin.pending = true;
+                o.cls.assassin.pendingAt = classWorld_.assassin.clock;
+                break;
+            }
+        ev.bursts.push_back({e.pos, e.radius * 2.f, theme::classAssassin, nullptr});
+        kill = true;
+    }
+    if (c.sentence > 0.f && !kill && e.hp > 0.f) {   // "Death sentence": passed
+        e.sentenceT = C::sentenceTime;
+        e.sentence = std::max(e.sentenceT > 0.f ? e.sentence : 0.f, c.sentence);
+        e.sentenceOwner = b.owner;
+    }
+    if (s.homeArmed) { s.homeArmed = false; s.homeT = C::homeTime; }   // "Homecoming": now curve home
+    if (c.lightspeed > 0.f && length(b.vel) > ballCruise(b, p) * C::lightspeedAt) {   // "Lightspeed": chain
+        std::vector<const Enemy*> hit{&e};
+        sf::Vector2f from = e.pos;
+        for (int n = 0; n < c.lightChains; ++n) {
+            Enemy* t = nullptr;
+            float best = C::lightRange * arenaScale();
+            best *= best;
+            for (Enemy& o : enemies_) {
+                if (o.hp <= 0.f || std::find(hit.begin(), hit.end(), &o) != hit.end()) continue;
+                const float d2 = dot(o.pos - from, o.pos - from);
+                if (d2 < best) { best = d2; t = &o; }
+            }
+            if (!t) break;
+            damageEnemy(*t, dmg * c.lightspeed);
+            if (static_cast<int>(bolts_.size()) < cfg::element::maxBolts)
+                bolts_.push_back(Bolt{from, t->pos, cfg::element::boltLife, cfg::element::boltLife});
+            hit.push_back(t);
+            from = t->pos;
+        }
+    }
+    if (c.wildCd > 0.f && s.doubled && s.wildT <= 0.f) {   // "Wild magic": a random ability from the run
+        std::vector<AbilitySpec> pool;
+        for (const Ball& o : balls_)
+            for (int i = 0; i < kMaxAbilitySlots; ++i)
+                if (o.abilities[i].id != Ability::None) pool.push_back(o.abilities[i]);
+        if (!pool.empty()) {
+            const AbilitySpec a = pool[static_cast<std::size_t>(rng_.irange(0, static_cast<int>(pool.size()) - 1))];
+            castBall_ = &b;
+            if (fireAbility(b, a, p, ev)) s.wildT = c.wildCd;
+            castBall_ = nullptr;
+        }
+    }
     s.lastHitId = e.id;   // "Combo hit"
     s.lastHitT = 0.f;
     if (c.hotStreak > 0.f) s.streak = s.doubled ? std::min(s.streak + 1, C::hotStreakMax) : 0;   // "Hot streak"
@@ -140,6 +191,8 @@ void World::commonOnKill(Ball& b, Enemy& e, const WorldParams& p) {
         for (int i = 0; i < kMaxAbilitySlots; ++i)
             if (b.abilities[i].id != Ability::None) b.abilityCd[i] = std::max(0.f, b.abilityCd[i] - c.insight);
     if (c.adrenaline > 0.f && s.adrenaline < C::adrenalineMax) ++s.adrenaline;   // "Adrenaline" (ballCruise reads it)
+    if (s.slotGoldT > 0.f) midasPending_ += C::slotGold;   // "Slot machine": a gold pair
+    if (c.shrapnel > 0) commonRing(b, p, e.pos, c.shrapnel);   // "Shrapnel"
     if (c.chainKill > 0.f && s.chainT > 0.f) {   // "Chain kill": the blink is ready again
         b.cls.assassin.cd = 0.f;
         s.chainT = 0.f;
@@ -177,6 +230,7 @@ float World::commonDamageMul(const Ball& b) const {
         k *= 1.f + c.sentinel * clampf(1.f - d / (C::sentinelRange * arenaScale()), 0.f, 1.f);
     }
     if (classWorld_.common.elixirT > 0.f) k *= 1.f + classWorld_.common.elixir;   // someone's "Elixir"
+    if (c.juggernaut > 0.f && b.mods.radiusMult > 1.f) k *= 1.f + c.juggernaut * (b.mods.radiusMult - 1.f);   // "Juggernaut"
     for (const Ball& o : balls_)   // other balls' "Anthem"
         if (o.owner != b.owner && o.mods.cls.common.anthem > 0.f) k *= 1.f + o.mods.cls.common.anthem;
     return k;
@@ -184,7 +238,7 @@ float World::commonDamageMul(const Ball& b) const {
 
 // ---------------------------------------------------------------- over time
 
-void World::commonTick(Ball& b, float dt, const WorldParams& p, FrameEvents&) {
+void World::commonTick(Ball& b, float dt, const WorldParams& p, FrameEvents& ev) {
     CommonState& s = b.cls.common;
     s.spellT = std::max(0.f, s.spellT - dt);
     s.lastHitT += dt;
@@ -193,6 +247,68 @@ void World::commonTick(Ball& b, float dt, const WorldParams& p, FrameEvents&) {
     s.chainT = std::max(0.f, s.chainT - dt);
     s.caromT = std::max(0.f, s.caromT - dt);
     s.transT = std::max(0.f, s.transT - dt);
+    s.wildT = std::max(0.f, s.wildT - dt);
+    s.slotDmgT = std::max(0.f, s.slotDmgT - dt);
+    s.slotSpeedT = std::max(0.f, s.slotSpeedT - dt);
+    s.slotGoldT = std::max(0.f, s.slotGoldT - dt);
+    if ((s.spinIdle += dt) > cfg::common::minigunIdle) s.spin = 0.f;   // "Minigun": spun down
+    const CommonMods& c = b.mods.cls.common;
+    const bool live = waveRunning_ && !b.held && !b.ghost;
+    if (c.maelstrom > 0.f && live && (s.maelT -= dt) <= 0.f) {   // "Maelstrom": a ring of all its elements
+        s.maelT = c.maelstrom;
+        const float R = c.maelstromR * arenaScale();
+        const float hit = ballDamage(b, p) * 0.5f;
+        const float pot = elemPotency(b, p);
+        for (Enemy& e : enemies_) {
+            if (e.hp <= 0.f || length(e.pos - b.pos) > R + e.radius) continue;
+            for (int i = 0; i < b.elemN; ++i) {
+                touchElement(e, b.elems[i], pot, b.mods, p);
+                applyElement(e, b.elems[i], i == 0 ? b.owner : -1, hit, p, ev);   // the rest react with it
+            }
+        }
+        if (b.elemN > 0) ev.bursts.push_back({b.pos, R, elementColor(b.elems[0]), nullptr});
+    }
+    if (c.slotEvery > 0.f && live && (s.slotT -= dt) <= 0.f) {   // "Slot machine": spin
+        namespace C = cfg::common;
+        s.slotT = c.slotEvery;
+        const int r[3] = {rng_.irange(0, 2), rng_.irange(0, 2), rng_.irange(0, 2)};
+        static const char* kNames[3] = {"DAMAGE", "SPEED", "GOLD"};
+        auto give = [&](int sym) {
+            if (sym == 0) s.slotDmgT = C::slotBuff;
+            else if (sym == 1) s.slotSpeedT = C::slotBuff;
+            else s.slotGoldT = C::slotBuff;
+        };
+        if (r[0] == r[1] && r[1] == r[2]) {   // three of a kind: everything and a jackpot
+            for (int i = 0; i < 3; ++i) give(i);
+            const float R = C::slotJackpotRadius * arenaScale();
+            areaDamage(b.pos, R, ballDamage(b, p) * C::slotJackpot, nullptr);
+            midasPending_ += C::slotJackpotGold;
+            ev.bursts.push_back({b.pos, R, theme::puGolden, "JACKPOT"});
+        } else {
+            const int pair = r[0] == r[1] || r[0] == r[2] ? r[0] : r[1] == r[2] ? r[1] : -1;
+            if (pair >= 0) {
+                give(pair);
+                ev.bursts.push_back({b.pos, b.radius * 2.5f, theme::classJester, kNames[pair]});
+            }
+        }
+    }
+    if (s.homeT > 0.f) {   // "Homecoming": curve back toward your pointer
+        s.homeT -= dt;
+        if (hasPointer_ && !b.held && length(b.vel) > 1.f) {
+            const float cur = std::atan2(b.vel.y, b.vel.x);
+            const sf::Vector2f to = pointer_ - b.pos;
+            const float want = std::atan2(to.y, to.x);
+            const float turn = clampf(std::remainder(want - cur, 2.f * kPi), -cfg::common::homeTurn * dt,
+                                      cfg::common::homeTurn * dt);
+            b.vel = sf::Vector2f{std::cos(cur + turn), std::sin(cur + turn)} * length(b.vel);
+        }
+    }
+    if (s.homePulse) {   // ...caught on the way home: a shockwave
+        s.homePulse = false;
+        const float R = cfg::common::homeRadius * arenaScale();
+        areaDamage(b.pos, R, ballDamage(b, p) * c.homecoming, nullptr);
+        ev.bursts.push_back({b.pos, R, theme::classSlinger, nullptr});
+    }
     if (s.coverPending) {
         s.coverPending = false;
         if (!b.held && waveRunning_) commonVolley(b, p, b.mods.cls.common.cover, core_.pos);
@@ -220,7 +336,44 @@ void World::commonWorldTick(float dt, const WorldParams& p, FrameEvents& ev) {
              ps.end());
 
     CommonWorld& cw = classWorld_.common;
+    ev.midasGold += midasPending_;   // gold the commons earned off the events path (Slot machine)
+    midasPending_ = 0;
     if (cw.elixirT > 0.f && (cw.elixirT -= dt) <= 0.f) cw.elixir = 0.f;   // "Elixir" wears off
+    if (cw.chronoT > 0.f && (cw.chronoT -= dt) <= 0.f) cw.chrono = 0.f;   // "Chronomancy" wears off
+    cw.wardCd = std::max(0.f, cw.wardCd - dt);
+    cw.wardOn = false;
+    for (const Ball& b : balls_) cw.wardOn = cw.wardOn || b.mods.cls.common.wardEvery > 0.f;
+    for (auto& wr : cw.wires) {   // "Razor wire": what crosses it gets cut
+        wr.life -= dt;
+        if ((wr.tickT -= dt) > 0.f) continue;
+        wr.tickT = cfg::common::razorTick;
+        const sf::Vector2f ab = wr.b - wr.a;
+        const float L2 = std::max(1.f, dot(ab, ab));
+        for (Enemy& e : enemies_) {
+            if (e.hp <= 0.f) continue;
+            const float t = clampf(dot(e.pos - wr.a, ab) / L2, 0.f, 1.f);
+            if (length(e.pos - (wr.a + ab * t)) <= cfg::common::razorWidth * arenaScale() + e.radius) damageEnemy(e, wr.dmg);
+        }
+    }
+    cw.wires.erase(std::remove_if(cw.wires.begin(), cw.wires.end(), [](const CommonWorld::Wire& w) { return w.life <= 0.f; }),
+                   cw.wires.end());
+    if (!cw.lastLineUsed && waveRunning_ && core_.hp > 0.f && core_.hp < core_.maxHp * cfg::common::lastLineAt) {
+        const Ball* best = nullptr;   // "Last line": the strongest one carrying it
+        for (const Ball& b : balls_)
+            if (!b.ghost && b.mods.cls.common.lastLine > 0.f && (!best || b.mods.cls.common.lastLine > best->mods.cls.common.lastLine))
+                best = &b;
+        if (best) {
+            cw.lastLineUsed = true;
+            const float dmg = ballDamage(*best, p) * best->mods.cls.common.lastLine;
+            for (Enemy& e : enemies_) {
+                if (e.hp <= 0.f || e.orbiter) continue;
+                damageEnemy(e, dmg);
+                e.vel += normalized(e.pos - core_.pos, {1.f, 0.f}) * cfg::common::lastLineKnock * arenaScale() * e.knockTaken;
+                e.stagger = std::max(e.stagger, best->mods.cls.common.lastLineStun);
+            }
+            ev.bursts.push_back({core_.pos, std::max(size_.x, size_.y) * 0.5f, theme::core, "LAST LINE"});
+        }
+    }
     for (auto& g : cw.glyphs) {   // "Sigil": another ball crossing it sets it off
         g.life -= dt;
         for (const Ball& o : balls_) {
@@ -253,6 +406,17 @@ void World::commonEnemyTick(Enemy& e, float dt) {
 
 // Per walking enemy, per step: "Brace" slows, "Decoy" pulls.
 void World::commonEnemyDrag(Enemy& e, float& edt, float dt) {
+    if (classWorld_.common.chronoT > 0.f) edt *= 1.f - classWorld_.common.chrono;   // "Chronomancy"
+    for (const SummonTurret& t : classWorld_.summoner.turrets) {   // "Fortify": a turret stops it dead
+        if (length(t.pos - e.pos) > cfg::common::fortifyRadius * arenaScale() + e.radius) continue;
+        for (const Ball& b : balls_)
+            if (b.owner == t.owner && b.mods.cls.common.fortify > 0.f) {
+                e.vel = {0.f, 0.f};
+                e.stagger = std::max(e.stagger, 0.3f);
+                edt = 0.f;
+                break;
+            }
+    }
     if (e.braceT > 0.f) {
         e.braceT -= dt;
         edt *= 1.f - e.braceSlow;
@@ -283,6 +447,7 @@ void World::commonWallBounce(Ball& b, const WorldParams& p) {
         for (int i = 0; i < kMaxAbilitySlots; ++i)
             if (b.abilities[i].id != Ability::None) b.abilityCd[i] = std::max(0.f, b.abilityCd[i] - c.arcaneCharge);
     if (b.cls.common.bankArmed) ++b.cls.common.banks;   // "Bank throw"
+    b.cls.common.perfect = false;                        // "Perfect release": the wall ends it
     if (c.ammoFeed > 0 && waveRunning_) commonVolley(b, p, c.ammoFeed, b.pos);   // "Ammo feed"
     // "Seep": a puddle of its element
     if (c.seepLife <= 0.f || b.element == Element::Plain) return;
@@ -301,6 +466,7 @@ void World::commonWallBounce(Ball& b, const WorldParams& p) {
 void World::commonCoreBounce(Ball& b, const WorldParams& p, FrameEvents& ev) {   // "Heavy landing"
     const CommonMods& c = b.mods.cls.common;
     b.cls.common.skipping = false;   // "Skipping stone": home
+    b.cls.common.perfect = false;
     if (c.heavyLanding <= 0.f || b.cls.common.landingCd > 0.f) return;
     b.cls.common.landingCd = cfg::common::landingCd;
     const float R = cfg::common::landingRadius * arenaScale();
@@ -325,8 +491,22 @@ void World::commonClack(Ball& a, Ball& o) {
     }
 }
 
-void World::commonOnCast(Ball& b, const WorldParams& p) {
+void World::commonOnCast(Ball& b, const WorldParams& p, FrameEvents& ev) {
     const CommonMods& c = b.mods.cls.common;
+    if (c.chrono > 0.f) {   // "Chronomancy": everything slows a moment
+        CommonWorld& cw = classWorld_.common;
+        cw.chronoT = cfg::common::chronoTime;
+        cw.chrono = std::max(cw.chrono, c.chrono);
+    }
+    if (c.chorus > 0 && ++b.cls.common.casts % c.chorus == 0) {   // "Spell chorus": every ball casts
+        for (Ball& o : balls_) {
+            if (o.owner == b.owner || o.abilities[0].id == Ability::None) continue;
+            castBall_ = &o;
+            if (fireAbility(o, o.abilities[0], p, ev)) o.abilityFlash = 1.f;
+            castBall_ = nullptr;
+        }
+        ev.bursts.push_back({b.pos, b.radius * 3.f, theme::classMage, nullptr});
+    }
     if (c.spellblade > 0.f) b.cls.common.spellT = cfg::common::spellbladeWindow;   // "Spellblade": armed
     if (c.aetherStep > 0.f) boostSpeed(b, c.aetherStep, p);                      // "Aether step"
     if (c.sigil > 0.f) {   // "Sigil": a glyph for the others to cross
@@ -361,9 +541,19 @@ void World::commonOnCast(Ball& b, const WorldParams& p) {
         }
 }
 
-void World::commonOnReaction(Ball* rb, Element x, Element y, sf::Vector2f at, float hitDmg, FrameEvents& ev) {
+void World::commonOnReaction(Ball* rb, Element x, Element y, sf::Vector2f at, float hitDmg, const WorldParams& p,
+                             FrameEvents& ev) {
     if (!rb) return;
     const CommonMods& c = rb->mods.cls.common;
+    if (c.saturate > 0.f) {   // "Saturate": both elements' full effects on what the blast caught
+        const float R = c.saturate * arenaScale();
+        const float pot = elemPotency(*rb, p);
+        for (Enemy& e : enemies_) {
+            if (e.hp <= 0.f || length(e.pos - at) > R + e.radius) continue;
+            touchElement(e, x, pot, rb->mods, p);
+            touchElement(e, y, pot, rb->mods, p);
+        }
+    }
     const Element other = x == rb->element ? y : x;   // the element it met
     if (c.transmute > 0.f && other != Element::Plain) {   // "Transmute": it carries that one a while
         rb->cls.common.transT = c.transmute;
@@ -400,8 +590,18 @@ void World::commonOnReaction(Ball* rb, Element x, Element y, sf::Vector2f at, fl
         core_.hp = std::min(core_.maxHp, core_.hp + rb->mods.cls.common.distill);
 }
 
-void World::commonOnBlink(Ball& b, Enemy& t, const WorldParams& p) {
+void World::commonOnBlink(Ball& b, Enemy& t, const WorldParams& p, sf::Vector2f from) {
     const CommonMods& c = b.mods.cls.common;
+    if (c.razor > 0.f) {   // "Razor wire": the path stays sharp a while
+        auto& ws = classWorld_.common.wires;
+        if (static_cast<int>(ws.size()) >= cfg::common::maxWires) ws.erase(ws.begin());
+        CommonWorld::Wire w;
+        w.a = from;
+        w.b = b.pos;
+        w.life = w.maxLife = c.razorLife;
+        w.dmg = ballDamage(b, p) * c.razor;
+        ws.push_back(w);
+    }
     if (c.doom > 0.f) {   // "Mark for death"
         t.doomT = c.doomTime;
         t.doomMul = 1.f + c.doom;
@@ -427,6 +627,10 @@ void World::commonOnGrab(Ball& b) {
     const CommonMods& c = b.mods.cls.common;
     const bool quick = b.sinceThrow < cfg::common::relayWindow;   // caught soon after your throw
     if (c.secondWind > 0.f) qRefund_ += c.secondWind;            // "Second wind": App reads it
+    if (b.cls.common.homeT > 0.f) {                               // "Homecoming": caught on the way home
+        b.cls.common.homeT = 0.f;
+        b.cls.common.homePulse = true;
+    }
     if (c.relay <= 0.f || !quick) return;
     // "Relay": the nearest other ball flies at the enemy nearest it.
     Ball* o = nullptr;
@@ -454,6 +658,9 @@ void World::commonOnThrow(Ball& b, float pullFrac) {
     if (c.longPull > 0.f) b.cls.common.pull = c.longPull * clampf(pullFrac, 0.f, 1.f);   // "Long pull"
     if (c.bankThrow > 0.f) { b.cls.common.bankArmed = true; b.cls.common.banks = 0; }   // "Bank throw"
     b.cls.common.skipping = c.skipping > 0.f;   // "Skipping stone": until it's home
+    b.cls.common.perfect = c.perfect > 0.f && pullFrac >= cfg::common::perfectAt;   // "Perfect release"
+    if (b.cls.common.perfect) b.squash = 1.f;
+    b.cls.common.homeArmed = c.homecoming > 0.f;   // "Homecoming": after the first hit
     if (c.formation > 0.f && length(b.vel) > 1.f) {   // "Formation": the others follow
         const sf::Vector2f v = b.vel * c.formation;
         for (Ball& o : balls_)
@@ -468,6 +675,10 @@ void World::commonWaveStart() {
     classWorld_.common.puddles.clear();
     classWorld_.common.glyphs.clear();
     classWorld_.common.golems.clear();
+    classWorld_.common.wires.clear();
+    classWorld_.common.wardCd = 0.f;
+    classWorld_.common.lastLineUsed = false;
+    classWorld_.common.chronoT = classWorld_.common.chrono = 0.f;
     classWorld_.common.elixirT = classWorld_.common.elixir = 0.f;
     for (Ball& b : balls_) {
         b.cls.common.firstBlood = b.mods.cls.common.firstBlood > 0.f;   // "First blood": armed
@@ -475,7 +686,28 @@ void World::commonWaveStart() {
         b.cls.common.streak = 0;
         b.cls.common.fortune = 0;   // "Fortune": a fresh fight
         b.cls.common.flickers = 0;
+        b.cls.common.spin = 0.f;
+        b.cls.common.slotT = b.mods.cls.common.slotEvery * 0.5f;   // the first spin comes early
     }
+}
+
+// "Ward ring": an enemy reaching the core is thrown back instead (true), once
+// every few seconds.
+bool World::commonWard(Enemy& e, FrameEvents& ev) {
+    CommonWorld& cw = classWorld_.common;
+    if (cw.wardCd > 0.f) return false;
+    float every = 0.f;
+    for (const Ball& b : balls_)
+        if (b.mods.cls.common.wardEvery > 0.f) every = every > 0.f ? std::min(every, b.mods.cls.common.wardEvery)
+                                                                   : b.mods.cls.common.wardEvery;
+    if (every <= 0.f) return false;
+    cw.wardCd = every;
+    const sf::Vector2f out = normalized(e.pos - core_.pos, {1.f, 0.f});
+    e.pos = core_.pos + out * (core_.radius + e.radius + 6.f);
+    e.vel = out * cfg::common::wardKnock * arenaScale() * e.knockTaken;
+    e.stagger = std::max(e.stagger, 0.6f);
+    ev.bursts.push_back({core_.pos, core_.radius * 2.4f, theme::core, nullptr});
+    return true;
 }
 
 float World::commonHouseEdge() const {   // "House edge" (App doubles the gold)

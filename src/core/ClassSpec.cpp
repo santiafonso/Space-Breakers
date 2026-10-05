@@ -354,6 +354,45 @@ bool foldCommon(UpgradeKind k, int level, BallMods& m) {
             c.shieldBash = C::shieldBash + C::shieldBashPerLevel * n;
             c.bashStun = C::bashStun + C::bashStunPerLevel * n;
             return true;
+        // epics
+        case K::Saturate:    c.saturate = C::saturate + C::saturatePerLevel * n; return true;
+        case K::Maelstrom:
+            c.maelstrom = C::maelstrom + C::maelstromPerLevel * n;
+            c.maelstromR = C::maelstromR + C::maelstromRPerLevel * n;
+            return true;
+        case K::DeathSentence: c.sentence = C::sentence + C::sentencePerLevel * n; return true;
+        case K::RazorWire:
+            c.razor = C::razor + C::razorPerLevel * n;
+            c.razorLife = C::razorLife + C::razorLifePerLevel * n;
+            return true;
+        case K::WardRing:    c.wardEvery = C::wardEvery + C::wardEveryPerLevel * n; return true;
+        case K::Juggernaut:  c.juggernaut = C::juggernaut + C::juggernautPerLevel * n; return true;
+        case K::LastLine:
+            c.lastLine = C::lastLine + C::lastLinePerLevel * n;
+            c.lastLineStun = C::lastLineStun + C::lastLineStunPerLevel * n;
+            return true;
+        case K::SlotMachine: c.slotEvery = C::slotEvery + C::slotEveryPerLevel * n; return true;
+        case K::WildMagic:   c.wildCd = C::wildCd + C::wildCdPerLevel * n; return true;
+        case K::SpellChorus: c.chorus = std::max(3, C::chorus - (level - 1)); return true;
+        case K::Chronomancy: c.chrono = C::chrono + C::chronoPerLevel * n; return true;
+        case K::Minigun:     c.minigun = C::minigun + C::minigunPerLevel * n; return true;
+        case K::SmartRounds: c.smart = C::smart + C::smartPerLevel * n; return true;
+        case K::Shrapnel:    c.shrapnel = C::shrapnel + 2 * (level - 1); return true;
+        case K::PerfectRelease: c.perfect = C::perfect + C::perfectPerLevel * n; return true;
+        case K::Homecoming:  c.homecoming = C::homecoming + C::homecomingPerLevel * n; return true;
+        case K::Lightspeed:
+            c.lightspeed = C::lightspeed + C::lightspeedPerLevel * n;
+            c.lightChains = C::lightChains + (level - 1);
+            return true;
+        case K::SpiritHost:
+            c.spiritHost = C::spiritHost + C::spiritHostPerLevel * n;
+            c.spiritPierce = C::spiritPierce + (level - 1);
+            return true;
+        case K::TwinCall:
+            c.twinCall = true;
+            m.cls.summoner.bond *= 1.f + C::twinCallPerLevel * n;
+            return true;
+        case K::Fortify:     c.fortify = C::fortify + C::fortifyPerLevel * n; return true;
         default: return false;
     }
 }

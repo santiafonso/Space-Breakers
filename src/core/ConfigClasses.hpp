@@ -34,18 +34,20 @@ inline constexpr float manaSpring = 0.25f, manaSpringPerLevel = 0.07f;
 
 // ==================================================================== Shooter
 namespace shooter {
-// Role base: a bullet at the nearest enemy in range every `fireInterval`
+// Role base: a bullet at the nearest enemy anywhere every `fireInterval`
 // seconds, faster the faster the ball flies (x rate = speed / cruise, clamped).
-inline constexpr float fireInterval = 0.9f;     // s between volleys at cruise
-inline constexpr float rateMin = 0.75f;         // speed factor floor (slow ball)
+// 2026-10-04: a real gunner - it fires fast, across the whole arena, and a
+// slow ball no longer fires slower (the Magic missile outclassed it).
+inline constexpr float fireInterval = 0.4f;     // s between volleys at cruise (was 0.9)
+inline constexpr float rateMin = 1.0f;          // speed factor floor (was 0.75: slow = slower fire)
 inline constexpr float rateMax = 2.0f;          // ...and ceiling (flung hard)
-inline constexpr float range = 330.f;           // px: how far it looks for a target
-inline constexpr float bulletFrac = 0.35f;      // bullet damage = the ball's hit x this
-inline constexpr float bulletSpeed = 620.f;     // px/s
-inline constexpr float bulletLife = 0.9f;       // s
+inline constexpr float range = 5000.f;          // px: how far it looks for a target - the whole arena (was 330)
+inline constexpr float bulletFrac = 0.3f;       // bullet damage = the ball's hit x this (was 0.35)
+inline constexpr float bulletSpeed = 950.f;     // px/s (was 620)
+inline constexpr float bulletLife = 2.4f;       // s: wall to wall (was 0.9)
 inline constexpr float bulletRadius = 2.5f;     // px (hit size; drawn smaller)
 inline constexpr float bossFrac = 0.5f;         // bullets chip the boss for this much
-inline constexpr int maxBullets = 90;           // cap on live bullets (perf)
+inline constexpr int maxBullets = 160;          // cap on live bullets (perf; was 90)
 inline constexpr float firstDelay = 0.4f;       // s: a wave's first volley
 // "Rapid fire" (Common): volleys come this much faster.
 inline constexpr float rapidRate = 1.3f;
@@ -426,6 +428,36 @@ inline constexpr float skipping = 1.f, skippingPerLevel = 0.05f;
 inline constexpr float formation = 0.6f, formationPerLevel = 0.15f;
 inline constexpr float shieldBash = 420.f, shieldBashPerLevel = 120.f, bashStun = 1.f, bashStunPerLevel = 0.3f,
                        bashRange = 230.f;
+// epics
+inline constexpr float saturate = 95.f, saturatePerLevel = 25.f;
+inline constexpr float maelstrom = 8.f, maelstromPerLevel = -1.f, maelstromR = 150.f, maelstromRPerLevel = 25.f;
+inline constexpr float sentence = 0.2f, sentencePerLevel = 0.05f, sentenceTime = 4.f;
+inline constexpr float razor = 0.5f, razorPerLevel = 0.2f, razorLife = 2.f, razorLifePerLevel = 0.5f, razorWidth = 14.f,
+                       razorTick = 0.25f;
+inline constexpr int maxWires = 8;
+inline constexpr float wardEvery = 6.f, wardEveryPerLevel = -1.f, wardKnock = 420.f;
+inline constexpr float juggernaut = 2.f, juggernautPerLevel = 0.5f;
+inline constexpr float lastLine = 1.f, lastLinePerLevel = 0.5f, lastLineAt = 0.25f, lastLineKnock = 900.f,
+                       lastLineStun = 1.5f, lastLineStunPerLevel = 0.5f;
+inline constexpr float slotEvery = 10.f, slotEveryPerLevel = -1.5f, slotBuff = 6.f, slotDamage = 1.5f, slotSpeed = 1.3f,
+                       slotJackpot = 3.f, slotJackpotRadius = 160.f;
+inline constexpr int slotGold = 1, slotJackpotGold = 10;
+inline constexpr float wildCd = 1.5f, wildCdPerLevel = -0.4f;
+inline constexpr int chorus = 5;
+inline constexpr float chrono = 0.2f, chronoPerLevel = 0.05f, chronoTime = 1.5f;
+inline constexpr float minigun = 0.08f, minigunPerLevel = 0.03f, minigunMax = 2.f, minigunIdle = 2.f;   // rate x (1 + max x spin)
+inline constexpr float smart = 5.f, smartPerLevel = 2.f;
+inline constexpr int shrapnel = 6;
+inline constexpr float shrapnelFrac = 0.5f;
+inline constexpr float perfect = 2.5f, perfectPerLevel = 0.5f, perfectAt = 0.95f;
+inline constexpr float homecoming = 0.6f, homecomingPerLevel = 0.2f, homeTime = 1.6f, homeTurn = 6.f,
+                       homeRadius = 110.f;
+inline constexpr float lightspeed = 0.5f, lightspeedPerLevel = 0.1f, lightspeedAt = 2.f, lightRange = 240.f;
+inline constexpr int lightChains = 3;
+inline constexpr float spiritHost = 3.f, spiritHostPerLevel = 0.5f, spiritLife = 2.5f;
+inline constexpr int spiritAt = 5, spiritPierce = 5;
+inline constexpr float twinCallPerLevel = 0.1f;
+inline constexpr float fortify = 1.5f, fortifyPerLevel = 0.25f, fortifyRadius = 22.f;
 }  // namespace common
 
 }  // namespace sb::cfg
