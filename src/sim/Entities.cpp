@@ -229,6 +229,21 @@ const char* abilityName(Ability a) {
         case Ability::Arc:       return "Arc";
         case Ability::Meteor:    return "Meteor";
         case Ability::MagicMissile: return "Magic missile";
+        case Ability::Hook: return "Hook";
+        case Ability::Mines: return "Mines";
+        case Ability::Empower: return "Empower";
+        case Ability::Tailwind: return "Tailwind";
+        case Ability::Vortex: return "Vortex";
+        case Ability::Beam: return "Beam";
+        case Ability::Blades: return "Blades";
+        case Ability::Cloud: return "Cloud";
+        case Ability::Smite: return "Smite";
+        case Ability::Warp: return "Warp";
+        case Ability::Portal: return "Portal";
+        case Ability::Leash: return "Leash";
+        case Ability::Swap: return "Swap";
+        case Ability::Shrink: return "Shrink";
+        case Ability::Bounty: return "Bounty";
     }
     return "";
 }
@@ -246,6 +261,21 @@ float abilityCooldown(Ability a, int level) {
         case Ability::Arc:       base = A::arcCooldown; break;
         case Ability::Meteor:    base = A::meteorCooldown; break;
         case Ability::MagicMissile: base = A::missileCooldown; break;
+        case Ability::Hook: base = A::hookCooldown; break;
+        case Ability::Mines: base = A::minesCooldown; break;
+        case Ability::Empower: base = A::empowerCooldown; break;
+        case Ability::Tailwind: base = A::tailwindCooldown; break;
+        case Ability::Vortex: base = A::vortexCooldown; break;
+        case Ability::Beam: base = A::beamCooldown; break;
+        case Ability::Blades: base = A::bladesCooldown; break;
+        case Ability::Cloud: base = A::cloudCooldown; break;
+        case Ability::Smite: base = A::smiteCooldown; break;
+        case Ability::Warp: base = A::warpCooldown; break;
+        case Ability::Portal: base = A::portalCooldown; break;
+        case Ability::Leash: base = A::leashCooldown; break;
+        case Ability::Swap: base = A::swapCooldown; break;
+        case Ability::Shrink: base = A::shrinkCooldown; break;
+        case Ability::Bounty: base = A::bountyCooldown; break;
     }
     return base * std::pow(A::cooldownPerLevel, static_cast<float>(std::max(0, level - 1)));
 }

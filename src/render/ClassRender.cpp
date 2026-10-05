@@ -75,11 +75,24 @@ void markShooter(sf::RenderTarget& t, sf::Vector2f p, float r, float heading, fl
 // ball. Deadeye's rail: one thin line that fades fast.
 void worldShooter(sf::RenderTarget& t, const World& world) {
     const ShooterWorld& sw = world.classWorld().shooter;
+    const float k = world.arenaScale();
     for (const ShooterRail& r : sw.rails) {
+        if (r.width > 0.f) {   // "Ion cannon": a thick beam that thins out
+            const float f = clampf(r.life / std::max(0.01f, r.maxLife), 0.f, 1.f);
+            draw::line(t, r.a, r.b, 2.f * r.width * f, withAlpha(theme::classShooter, 0.35f * f));
+            draw::line(t, r.a, r.b, 0.7f * r.width * f + 1.f, white(0.85f * f));
+            continue;
+        }
         const float f = clampf(r.life / cfg::shooter::deadeyeRailLife, 0.f, 1.f);
         draw::line(t, r.a, r.b, 1.f + 1.5f * f, white(0.45f * f));
     }
-    const float k = world.arenaScale();
+    for (const Ball& b : world.balls()) {   // "Ion cannon" charging: a sight line that firms up, a glow
+        const float c = b.cls.common.ionT;
+        if (b.mods.cls.common.ion <= 0.f || c <= 0.05f) continue;
+        draw::line(t, b.pos, b.pos + b.cls.common.ionDir * 2000.f, (0.6f + 1.4f * c) * k,
+                   withAlpha(theme::classShooter, 0.08f + 0.3f * c * c));
+        draw::glow(t, b.pos, b.radius * (1.f + 1.5f * c), theme::classShooter, 0.25f * c);
+    }
     for (const ShooterBullet& u : sw.bullets) {
         const sf::Color c = u.elem != 0 ? lerpColor(elementColor(static_cast<Element>(u.elem)), sf::Color::White, 0.3f) : sf::Color::White;
         const float fade = clampf(u.life / 0.15f, 0.f, 1.f);
@@ -157,7 +170,11 @@ void worldSummoner(sf::RenderTarget& t, const World& world) {
 
     for (const SummonShot& s : sw.shots) {
         const sf::Color c = summonColor(s.elem);
-        if (s.wisp) {
+        if (s.boom) {   // "Necromancer": a pale ghost
+            const sf::Color g = lerpColor(c, sf::Color::White, 0.6f);
+            draw::glow(t, s.pos, 14.f, g, 0.12f);
+            draw::disc(t, s.pos, cfg::summoner::wispRadius * 1.3f, withAlpha(g, 0.55f), withAlpha(g, 0.2f), {1.f, 1.f}, 12);
+        } else if (s.wisp) {
             const float r = cfg::summoner::wispRadius * (s.great ? 2.4f : 1.f);   // "Spirit host": a great one
             draw::glow(t, s.pos, s.great ? 26.f : 10.f, c, s.great ? 0.22f : 0.10f);
             draw::disc(t, s.pos, r, withAlpha(c, 0.75f), withAlpha(c, 0.35f), {1.f, 1.f}, 12);
@@ -263,6 +280,71 @@ void worldStyle(sf::RenderTarget& t, const World& world) {
         r.setFillColor(withAlpha(theme::classAssassin, 0.7f * a));
         t.draw(r);
     }
+    {   // "Contract": a crosshair on the mark
+        const float spin = classClock() * 1.5f;
+        auto mark = [&](sf::Vector2f at, float r) {
+            draw::ring(t, at, r + 7.f * k, 1.5f * k, withAlpha(theme::classAssassin, 0.75f));
+            for (int i = 0; i < 4; ++i) {
+                const float a = spin + kPi * 0.5f * static_cast<float>(i);
+                const sf::Vector2f d{std::cos(a), std::sin(a)};
+                draw::line(t, at + d * (r + 3.f * k), at + d * (r + 12.f * k), 1.5f * k, withAlpha(theme::classAssassin, 0.85f));
+            }
+        };
+        if (cw.contractBoss) mark(world.boss().pos, world.boss().radius);
+        else if (cw.contractId >= 0)
+            for (const Enemy& e : world.enemies())
+                if (e.id == cw.contractId && e.hp > 0.f) { mark(e.pos, e.radius); break; }
+    }
+    // ---- the second batch of abilities (2026-10-05): quiet shapes, the ball's colours
+    for (const CommonWorld::Mine& m : cw.mines) {   // "Mines": a small dot, a ring once armed
+        const sf::Color c = m.elem != 0 ? elementColor(static_cast<Element>(m.elem)) : theme::accent;
+        const float a = clampf(m.life / 0.5f, 0.f, 1.f);
+        draw::disc(t, m.pos, 3.5f * k, withAlpha(c, 0.85f * a), withAlpha(c, 0.4f * a), {1.f, 1.f}, 10);
+        if (m.arm <= 0.f) draw::ring(t, m.pos, 7.f * k, 1.f * k, withAlpha(c, 0.45f * a));
+    }
+    for (const CommonWorld::Vortex& v : cw.vortices) {   // "Vortex": two arcs turning in
+        const float a = clampf(v.life / 0.4f, 0.f, 1.f) * clampf((v.maxLife - v.life) / 0.2f, 0.f, 1.f);
+        const sf::Color c = v.elem != 0 ? elementColor(static_cast<Element>(v.elem)) : sf::Color::White;
+        const float spin = classClock() * 5.f;
+        for (int i = 0; i < 3; ++i) {
+            const float r = v.r * (0.35f + 0.3f * static_cast<float>(i));
+            const float s0 = spin * (1.f + 0.4f * static_cast<float>(i)) + static_cast<float>(i);
+            draw::ring(t, v.pos, r, 1.5f * k, withAlpha(c, 0.4f * a), s0, s0 + 2.2f, 20);
+        }
+    }
+    for (const CommonWorld::Cloud& cl : cw.clouds) {   // "Cloud": a soft tinted disc
+        const float a = clampf(cl.life / 0.5f, 0.f, 1.f) * clampf((cl.maxLife - cl.life) / 0.3f, 0.f, 1.f);
+        const sf::Color c = cl.elem != 0 ? elementColor(static_cast<Element>(cl.elem)) : sf::Color::White;
+        draw::disc(t, cl.pos, cl.r, withAlpha(c, 0.16f * a), withAlpha(c, 0.02f * a), {1.f, 1.f}, 32);
+    }
+    for (const CommonWorld::Portal& q : cw.portals) {   // "Portal": a pair of turning rings
+        const float a = clampf(q.life / 0.4f, 0.f, 1.f) * clampf((q.maxLife - q.life) / 0.25f, 0.f, 1.f);
+        const float R = cfg::ability::portalRadius * k;
+        const float spin = classClock() * 3.f;
+        for (sf::Vector2f at : {q.a, q.b}) {
+            draw::disc(t, at, R, withAlpha(theme::classMage, 0.12f * a), withAlpha(theme::classMage, 0.f), {1.f, 1.f}, 24);
+            draw::ring(t, at, R, 2.f * k, withAlpha(theme::classMage, 0.75f * a), spin, spin + 4.5f, 24);
+        }
+    }
+    for (const Ball& b : world.balls()) {
+        const CommonState& s = b.cls.common;
+        if (s.beamOn)   // "Beam"
+            draw::line(t, b.pos, s.beamTo, 3.f * k, withAlpha(lerpColor(b.color, sf::Color::White, 0.5f), 0.8f));
+        if (s.bladesT > 0.f)   // "Blades"
+            for (int i = 0; i < s.bladeN; ++i) {
+                const float ang = s.bladeAng + 2.f * kPi * static_cast<float>(i) / static_cast<float>(s.bladeN);
+                const sf::Vector2f d{std::cos(ang), std::sin(ang)};
+                const sf::Vector2f at = b.pos + d * (cfg::ability::bladeOrbit * k + b.radius);
+                const sf::Vector2f side{-d.y, d.x};
+                draw::line(t, at - side * (7.f * k), at + side * (7.f * k), 2.5f * k, white(0.8f));
+            }
+        if (s.leashT > 0.f)   // "Leash": the rope
+            draw::line(t, world.core().pos, b.pos, 1.5f * k, white(0.35f));
+        if (s.empower > 0.f)   // "Empower": armed
+            draw::ring(t, b.pos, b.radius + 4.f * k, 2.f * k, withAlpha(b.color, 0.8f));
+    }
+    for (const Enemy& e : world.enemies())   // "Bounty": a gold ring
+        if (e.bounty > 0 && e.hp > 0.f) draw::ring(t, e.pos, e.radius + 5.f * k, 2.f * k, withAlpha(theme::puGolden, 0.85f));
     if (cw.wardOn) {   // "Ward ring": bright when it's up
         const Core& co = world.core();
         draw::ring(t, co.pos, co.radius + 10.f * k, 2.f * k,

@@ -260,6 +260,23 @@ enum class UpgradeKind {
     SpiritHost,        // 5 wisps out merge into a great spirit               [Summoner]
     TwinCall,          // everything it summons comes in pairs                [Summoner]
     Fortify,           // its turrets stop what touches them and last longer  [Summoner]
+    // ---- legendaries (2026-10-05), same home and same rule ----
+    Titan,             // grows on every core bounce; full size, a quake      [Guardian]
+    Archmage,          // abilities twice as fast, each cast stronger         [Mage]
+    TimeStop,          // every 5th cast stops every enemy a moment           [Mage]
+    IonCannon,         // slower; charges a laser across the arena            [Shooter]
+    Gunship,           // every ball fires a bullet when it hits              [Shooter]
+    LeadStorm,         // now and then it empties the gun all around          [Shooter]
+    Reaper,            // the blink fires after every hit                     [Assassin]
+    Contract,          // the strongest enemy takes a share of its max hp     [Assassin]
+    Necromancer,       // what its summons kill rises as an exploding ghost   [Summoner]
+    Overlord,          // every ball's summons are its own                    [Summoner]
+    Rigged,            // every chance in the run rolls twice                 [Jester]
+    Joker,             // each fight, a copy of a random legendary            [Jester]
+    SteadyHand,        // aiming, time almost stops - and the throw hits more [Slinger]
+    Showtime,          // quick catch-and-throws stack damage and speed       [Slinger]
+    PhilosopherStone,  // every hit carries elements of all six              [Alchemist]
+    GrandReaction,     // every 10th reaction is huge                         [Alchemist]
 
     // ---- relics (keep CoreSpring first and Overcharge last) ----
     CoreSpring,        // balls ricochet off the core faster
@@ -276,9 +293,28 @@ enum class UpgradeKind {
     Phoenix,           // once per act the core comes back from 0 at half health
     TimeDilation,      // enemies move 25% slower, always
     Overcharge,        // the damage combo can climb twice as high
+
+    // ---- abilities, second batch (2026-10-05): after the relics so saved
+    // runs keep their numbers (upgradeCat / abilityOf read this range too;
+    // order = Ability 9..; keep AbilityBounty last) ----
+    AbilityHook,       // yanks the enemy nearest the core over to the ball
+    AbilityMines,      // drops mines along its path
+    AbilityEmpower,    // its next hit x3 and a shockwave
+    AbilityTailwind,   // every ball faster for a few seconds
+    AbilityVortex,     // a whirlpool that drags enemies together
+    AbilityBeam,       // a steady beam at the nearest enemy
+    AbilityBlades,     // blades spin around the ball
+    AbilityCloud,      // a cloud of its element hangs where it was
+    AbilitySmite,      // lightning on the strongest enemies
+    AbilityWarp,       // teleports onto the enemy nearest the core
+    AbilityPortal,     // a pair of portals the balls fly through
+    AbilityLeash,      // tied to the core, it swings around like a flail
+    AbilitySwap,       // trades places with the enemy nearest the core
+    AbilityShrink,     // enemies nearby shrink: slower, and take double
+    AbilityBounty,     // a price on the strongest enemy's head
 };
-inline constexpr int kUpgradeKindCount = static_cast<int>(UpgradeKind::Overcharge) + 1;
-inline constexpr int kMaxUpgradeKinds = 256;   // capacity of UpgradeCtx::locked
+inline constexpr int kUpgradeKindCount = static_cast<int>(UpgradeKind::AbilityBounty) + 1;
+inline constexpr int kMaxUpgradeKinds = 384;   // capacity of UpgradeCtx::locked
 static_assert(kUpgradeKindCount <= kMaxUpgradeKinds, "raise kMaxUpgradeKinds");
 
 // ---- tiers: how rare (and how strong) a pick is -----------------------------

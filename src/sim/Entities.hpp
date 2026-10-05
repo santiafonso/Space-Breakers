@@ -69,8 +69,12 @@ sf::Color roleColor(BallRole r);
 // Timed actives in a ball's ability slot(s): each fires on its own when its
 // cooldown is up (and it has something to act on). They don't count toward a
 // class. Levelled by picking the same one again (cfg::ability).
-enum class Ability { None, Dash, Nova, Split, Bulwark, Overclock, Arc, Meteor, MagicMissile };
-inline constexpr int kAbilityCount = 9;        // with None
+enum class Ability {
+    None, Dash, Nova, Split, Bulwark, Overclock, Arc, Meteor, MagicMissile,
+    // the second batch (2026-10-05), same order as UpgradeKind::AbilityHook..
+    Hook, Mines, Empower, Tailwind, Vortex, Beam, Blades, Cloud, Smite, Warp, Portal, Leash, Swap, Shrink, Bounty
+};
+inline constexpr int kAbilityCount = 24;       // with None
 inline constexpr int kMaxAbilitySlots = 3;     // 1 by default, the Mage raises it (abilitySlotCount)
 
 struct AbilitySpec {
@@ -313,6 +317,8 @@ struct Enemy {
     float sentenceT = 0.f;               // "Death sentence": s left...
     float sentence = 0.f;                // ...dies under this share of its max hp...
     int sentenceOwner = -1;              // ...and that ball's blink fires
+    float shrinkT = 0.f, shrinkR = 0.f;  // "Shrink" (ability): s left, and the radius it had
+    int bounty = 0;                      // "Bounty" (ability): gold its killer earns
     Gait gait = Gait::Straight;
     float gaitPhase = 0.f;  // Weave: where in its sway it started
     float gaitSign = 1.f;   // Weave / Spiral: which way it leans

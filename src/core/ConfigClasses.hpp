@@ -458,6 +458,30 @@ inline constexpr float spiritHost = 3.f, spiritHostPerLevel = 0.5f, spiritLife =
 inline constexpr int spiritAt = 5, spiritPierce = 5;
 inline constexpr float twinCallPerLevel = 0.1f;
 inline constexpr float fortify = 1.5f, fortifyPerLevel = 0.25f, fortifyRadius = 22.f;
+// legendaries (2026-10-05)
+inline constexpr float titan = 0.12f, titanPerLevel = 0.03f;      // size gained per core bounce (1 = twice the size)
+inline constexpr float titanQuake = 1.f, titanQuakePerLevel = 0.25f, titanStun = 1.5f, titanStunPerLevel = 0.25f;
+inline constexpr float titanDamage = 0.5f;                         // its growth counts this much as damage
+inline constexpr float archmage = 2.f, archmagePerLevel = 0.25f;   // cast rate x
+inline constexpr float archStack = 0.1f, archStackPerLevel = 0.0125f;
+inline constexpr int timeStopEvery = 5;
+inline constexpr float timeStop = 2.f, timeStopPerLevel = 0.25f;
+inline constexpr float ion = 4.f, ionPerLevel = 0.5f, ionCharge = 2.f, ionChargePerLevel = -0.15f, ionCruise = 0.6f,
+                       ionWidth = 16.f, ionLife = 0.35f;
+inline constexpr float gunship = 0.4f, gunshipPerLevel = 0.05f;
+inline constexpr float leadStorm = 10.f, leadStormPerLevel = -1.f, leadStormTime = 2.f, leadStormRate = 6.f,
+                       leadStormTurn = 0.55f;   // rad between shots: a spiral
+inline constexpr float reaper = 0.3f, reaperPerLevel = -0.05f;    // s: the blink's cooldown
+inline constexpr float contract = 0.1f, contractPerLevel = 0.0125f, contractBoss = 0.02f, contractBossPerLevel = 0.0025f;
+inline constexpr float necro = 0.8f, necroPerLevel = 0.1f, necroRadius = 70.f;
+inline constexpr float overlord = 0.2f, overlordPerLevel = 0.0375f;
+inline constexpr int riggedLuck = 2;                                // luck per level past the first
+inline constexpr float steady = 0.2f, steadyPerLevel = -0.025f;   // time scale while aiming
+inline constexpr float steadyBonus = 0.6f, steadyBonusPerLevel = 0.1f, steadyFull = 0.5f;   // s of sim time aimed for the full bonus
+inline constexpr float showtime = 0.2f, showtimePerLevel = 0.025f;
+inline constexpr int philoElems = 2;                               // +1 per level past the first
+inline constexpr int grandEvery = 10;
+inline constexpr float grand = 5.f, grandPerLevel = 0.25f;
 }  // namespace common
 
 }  // namespace sb::cfg

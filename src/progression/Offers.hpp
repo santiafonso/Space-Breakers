@@ -56,6 +56,7 @@ enum class UpgradeCat { NewBall, Element, Ability, Item, Modifier, Relic };
 
 inline UpgradeCat upgradeCat(UpgradeKind k) {
     const int i = static_cast<int>(k);
+    if (i >= static_cast<int>(UpgradeKind::AbilityHook)) return UpgradeCat::Ability;   // the second batch, after the relics
     if (i <= static_cast<int>(UpgradeKind::AddBall)) return UpgradeCat::NewBall;
     if (i <= static_cast<int>(UpgradeKind::ElemElectric)) return UpgradeCat::Element;
     if (i <= static_cast<int>(UpgradeKind::AbilityMissile)) return UpgradeCat::Ability;
@@ -105,6 +106,9 @@ inline Tier upgradeTier(UpgradeKind k) {
         case UpgradeKind::ElemIce: case UpgradeKind::ElemStone: case UpgradeKind::ElemElectric:
         case UpgradeKind::AbilityDash: case UpgradeKind::AbilityBulwark: case UpgradeKind::AbilityArc:
         case UpgradeKind::AbilityMissile:
+        case UpgradeKind::AbilityHook: case UpgradeKind::AbilityMines: case UpgradeKind::AbilityEmpower:
+        case UpgradeKind::AbilityTailwind: case UpgradeKind::AbilitySwap: case UpgradeKind::AbilityShrink:
+        case UpgradeKind::AbilityBounty:
         case UpgradeKind::Rampart: case UpgradeKind::Bedrock:
         case UpgradeKind::Cleave: case UpgradeKind::Executioner:   // (2026-10-04: down from Rare - the rarity pyramid)
         case UpgradeKind::Overkill: case UpgradeKind::Midas:
@@ -113,6 +117,8 @@ inline Tier upgradeTier(UpgradeKind k) {
             return Tier::Uncommon;
         case UpgradeKind::AbilityNova: case UpgradeKind::AbilitySplit: case UpgradeKind::AbilityOverclock:
         case UpgradeKind::AbilityMeteor:
+        case UpgradeKind::AbilityVortex: case UpgradeKind::AbilityBeam: case UpgradeKind::AbilityBlades:
+        case UpgradeKind::AbilityCloud: case UpgradeKind::AbilitySmite: case UpgradeKind::AbilityWarp:
         case UpgradeKind::Tesla: case UpgradeKind::Bomber: case UpgradeKind::Echo:
         case UpgradeKind::Berserk: case UpgradeKind::Giant:
         case UpgradeKind::Storm: case UpgradeKind::Tether:   // (2026-10-04: down from Epic - the rarity pyramid)
@@ -120,6 +126,7 @@ inline Tier upgradeTier(UpgradeKind k) {
         case UpgradeKind::Glutton:
         case UpgradeKind::LuckyClover: case UpgradeKind::MagneticCore: case UpgradeKind::Overcharge:
             return Tier::Rare;
+        case UpgradeKind::AbilityPortal: case UpgradeKind::AbilityLeash:
         case UpgradeKind::SplitShot: case UpgradeKind::Piercing:
         case UpgradeKind::Hunter: case UpgradeKind::BlackHole:
         case UpgradeKind::Resonance:
@@ -188,6 +195,9 @@ inline int elementItemSlot(UpgradeKind k) {
 // Ability picks -> the sim's Ability (None for anything else).
 inline Ability abilityOf(UpgradeKind k) {
     if (upgradeCat(k) != UpgradeCat::Ability) return Ability::None;
+    if (k >= UpgradeKind::AbilityHook)   // the second batch (2026-10-05)
+        return static_cast<Ability>(static_cast<int>(Ability::MagicMissile) + 1 + static_cast<int>(k) -
+                                    static_cast<int>(UpgradeKind::AbilityHook));
     return static_cast<Ability>(static_cast<int>(k) - static_cast<int>(UpgradeKind::AbilityDash) + 1);
 }
 
@@ -220,6 +230,21 @@ inline const char* upgradeKindId(UpgradeKind k) {
         case UpgradeKind::AbilityArc:     return "AbilityArc";
         case UpgradeKind::AbilityMeteor:  return "AbilityMeteor";
         case UpgradeKind::AbilityMissile: return "AbilityMissile";
+        case UpgradeKind::AbilityHook:    return "AbilityHook";
+        case UpgradeKind::AbilityMines:   return "AbilityMines";
+        case UpgradeKind::AbilityEmpower: return "AbilityEmpower";
+        case UpgradeKind::AbilityTailwind: return "AbilityTailwind";
+        case UpgradeKind::AbilityVortex:  return "AbilityVortex";
+        case UpgradeKind::AbilityBeam:    return "AbilityBeam";
+        case UpgradeKind::AbilityBlades:  return "AbilityBlades";
+        case UpgradeKind::AbilityCloud:   return "AbilityCloud";
+        case UpgradeKind::AbilitySmite:   return "AbilitySmite";
+        case UpgradeKind::AbilityWarp:    return "AbilityWarp";
+        case UpgradeKind::AbilityPortal:  return "AbilityPortal";
+        case UpgradeKind::AbilityLeash:   return "AbilityLeash";
+        case UpgradeKind::AbilitySwap:    return "AbilitySwap";
+        case UpgradeKind::AbilityShrink:  return "AbilityShrink";
+        case UpgradeKind::AbilityBounty:  return "AbilityBounty";
         case UpgradeKind::Ricochet:       return "Ricochet";
         case UpgradeKind::Cleave:         return "Cleave";
         case UpgradeKind::Crit:           return "Crit";
@@ -302,6 +327,21 @@ inline UpgradeInfo upgradeInfo(UpgradeKind k) {
         case UpgradeKind::AbilityArc:    return {"Arc", "every few seconds a bolt leaps from the ball through up to 4 enemies, with its element"};
         case UpgradeKind::AbilityMeteor: return {"Meteor", "every few seconds a meteor falls on the thickest pack of enemies and crushes it, with the ball's element"};
         case UpgradeKind::AbilityMissile: return {"Magic missile", "every few seconds the ball looses a magic missile that curves after the nearest enemy and follows it, with its element"};
+        case UpgradeKind::AbilityHook:   return {"Hook", "every few seconds a hook yanks the enemy nearest the core over to the ball and stuns it a moment"};
+        case UpgradeKind::AbilityMines:  return {"Mines", "every few seconds the ball drops 3 mines on its path; an enemy that steps on one sets it off, with its element"};
+        case UpgradeKind::AbilityEmpower: return {"Empower", "every few seconds its next hit is empowered: x3 damage and a shockwave around it"};
+        case UpgradeKind::AbilityTailwind: return {"Tailwind", "every few seconds a tailwind: every ball flies 30% faster for 3 s"};
+        case UpgradeKind::AbilityVortex: return {"Vortex", "every few seconds a whirlpool opens where the ball is and drags the enemies around it together for 2 s"};
+        case UpgradeKind::AbilityBeam:   return {"Beam", "every few seconds the ball holds a beam on the nearest enemy for 1 s, burning through it with its element"};
+        case UpgradeKind::AbilityBlades: return {"Blades", "every few seconds 3 blades spin around the ball for 4 s, cutting whatever they touch"};
+        case UpgradeKind::AbilityCloud:  return {"Cloud", "every few seconds a cloud of its element hangs where the ball is for 3 s; enemies inside take it - reactions"};
+        case UpgradeKind::AbilitySmite:  return {"Smite", "every few seconds lightning strikes the 3 strongest enemies, anywhere, with its element"};
+        case UpgradeKind::AbilityWarp:   return {"Warp", "every few seconds the ball teleports onto the enemy nearest the core and strikes it away"};
+        case UpgradeKind::AbilityPortal: return {"Portal", "every few seconds two portals open for 4 s, one by the core and one out by the enemies: a ball flying into one comes out of the other"};
+        case UpgradeKind::AbilityLeash:  return {"Leash", "every few seconds the ball is tied to the core for 4 s and swings around it like a flail, fast"};
+        case UpgradeKind::AbilitySwap:   return {"Swap", "every few seconds the ball trades places with the enemy nearest the core, striking and stunning it"};
+        case UpgradeKind::AbilityShrink: return {"Shrink", "every few seconds the enemies near the ball shrink for 4 s: half the size, slower, and they take double damage"};
+        case UpgradeKind::AbilityBounty: return {"Bounty", "every few seconds a price goes on the strongest enemy's head: whoever kills it earns 5 gold"};
         case UpgradeKind::Ricochet:      return {"Ricochet", "every wall bounce speeds it up and arms a harder hit for a moment"};
         case UpgradeKind::Cleave:        return {"Cleave", "punches straight through an enemy it kills"};
         case UpgradeKind::Crit:          return {"Keen eye", "12% chance a hit deals double damage"};
@@ -382,6 +422,21 @@ inline const char* upgradeLevelDesc(UpgradeKind k) {
         case UpgradeKind::AbilityArc:    return "leaps to one more enemy, harder, a shorter cooldown";
         case UpgradeKind::AbilityMeteor: return "a wider, heavier impact, a shorter cooldown";
         case UpgradeKind::AbilityMissile: return "harder missiles, a shorter cooldown; a 2nd missile at level 3, a 3rd at level 5";
+        case UpgradeKind::AbilityHook:   return "a harder yank, a longer stun, a shorter cooldown";
+        case UpgradeKind::AbilityMines:  return "bigger blasts, a shorter cooldown; a 4th mine at level 3, a 5th at level 5";
+        case UpgradeKind::AbilityEmpower: return "a harder hit, a wider wave, a shorter cooldown";
+        case UpgradeKind::AbilityTailwind: return "a stronger, longer wind, a shorter cooldown";
+        case UpgradeKind::AbilityVortex: return "a wider, longer pull, a shorter cooldown";
+        case UpgradeKind::AbilityBeam:   return "a longer, hotter beam, a shorter cooldown";
+        case UpgradeKind::AbilityBlades: return "longer, sharper blades, a shorter cooldown; a 4th blade at level 3, a 5th at level 5";
+        case UpgradeKind::AbilityCloud:  return "a wider, longer cloud, a shorter cooldown";
+        case UpgradeKind::AbilitySmite:  return "harder strikes, a shorter cooldown; a 4th strike at level 3, a 5th at level 5";
+        case UpgradeKind::AbilityWarp:   return "a harder strike, a shorter cooldown";
+        case UpgradeKind::AbilityPortal: return "the portals stay open longer, a shorter cooldown";
+        case UpgradeKind::AbilityLeash:  return "a longer, faster swing, a shorter cooldown";
+        case UpgradeKind::AbilitySwap:   return "a harder strike, a longer stun, a shorter cooldown";
+        case UpgradeKind::AbilityShrink: return "wider and longer, a shorter cooldown";
+        case UpgradeKind::AbilityBounty: return "+1 gold, a shorter cooldown";
         case UpgradeKind::Ricochet:      return "a bigger speed kick and a harder armed hit";
         case UpgradeKind::Cleave:        return "also cuts through - and finishes - enemies it leaves under 8% more health";
         case UpgradeKind::Crit:          return "+7% chance, and crits hit harder";
@@ -1010,19 +1065,19 @@ inline const MetaUnlockDef& metaUnlockDef(int u) {
                          10u, 2, B::Support,  C, 51, 217.f, 5.f},
         /* Rally     */ {"Rally",     "marked enemies take +10% more from every hit per level",
                          12u, 2, B::Support,  C, 51, 227.f, 5.f},
-        /* Missile   */ {"Magic missile","the Magic missile ability can be offered: homing missiles that follow enemies",
+        /* Missile   */ {"Magic missile","the Magic missile, Beam and Blades abilities can be offered",
                          6u,  1, B::Mage,     C,  0, 280.f, 1.f},
         /* Channel   */ {"Channel",   "every ability recharges 6% faster per level",
                          8u,  3, B::Mage,     C, 75, 280.f, 2.f},
-        /* AbArc     */ {"Arc",       "the Arc ability can be offered: a bolt that leaps through enemies",
+        /* AbArc     */ {"Arc",       "the Arc, Cloud and Smite abilities can be offered",
                          8u,  1, B::Mage,     C, 75, 266.f, 2.f},
-        /* AbBulwark */ {"Bulwark pulse","the Bulwark ability can be offered: the core shoves back when enemies close in",
+        /* AbBulwark */ {"Bulwark pulse","the Bulwark, Vortex and Shrink abilities can be offered",
                          8u,  1, B::Mage,     C, 77, 265.f, 3.f},
-        /* AbSplit   */ {"Split",     "the Split ability can be offered: two ghost copies fan out for a moment",
+        /* AbSplit   */ {"Split",     "the Split, Portal and Mines abilities can be offered",
                          12u, 1, B::Mage,     C, 78, 265.f, 4.f},
-        /* AbOverclock*/{"Overclock", "the Overclock ability can be offered: a few seconds faster and harder-hitting",
+        /* AbOverclock*/{"Overclock", "the Overclock, Tailwind and Leash abilities can be offered",
                          12u, 1, B::Mage,     C, 79, 265.f, 5.f},
-        /* AbMeteor  */ {"Meteor",    "the Meteor ability can be offered: crushes the thickest pack of enemies",
+        /* AbMeteor  */ {"Meteor",    "the Meteor, Warp and Bounty abilities can be offered",
                          16u, 1, B::Mage,     C, 80, 266.f, 6.f},
         /* MageLore  */ {"Mage lore", "Mage items show up 50% more often per level",
                          10u, 2, B::Mage,     C, 53, 275.f, 4.f},
@@ -1067,12 +1122,20 @@ inline int classLoreNode(ItemTag t) {
 // (Dash and Nova).
 inline int abilityUnlockNode(UpgradeKind k) {
     switch (k) {
-        case UpgradeKind::AbilityMissile:   return MetaAbilityMissile;
-        case UpgradeKind::AbilityArc:       return MetaAbilityArc;
-        case UpgradeKind::AbilityBulwark:   return MetaAbilityBulwark;
-        case UpgradeKind::AbilitySplit:     return MetaAbilitySplit;
-        case UpgradeKind::AbilityOverclock: return MetaAbilityOverclock;
-        case UpgradeKind::AbilityMeteor:    return MetaAbilityMeteor;
+        // each ability node also opens two of the second batch (2026-10-05);
+        // Hook, Swap and Empower are open from the start, like Dash and Nova
+        case UpgradeKind::AbilityMissile: case UpgradeKind::AbilityBeam: case UpgradeKind::AbilityBlades:
+            return MetaAbilityMissile;
+        case UpgradeKind::AbilityArc: case UpgradeKind::AbilityCloud: case UpgradeKind::AbilitySmite:
+            return MetaAbilityArc;
+        case UpgradeKind::AbilityBulwark: case UpgradeKind::AbilityVortex: case UpgradeKind::AbilityShrink:
+            return MetaAbilityBulwark;
+        case UpgradeKind::AbilitySplit: case UpgradeKind::AbilityPortal: case UpgradeKind::AbilityMines:
+            return MetaAbilitySplit;
+        case UpgradeKind::AbilityOverclock: case UpgradeKind::AbilityTailwind: case UpgradeKind::AbilityLeash:
+            return MetaAbilityOverclock;
+        case UpgradeKind::AbilityMeteor: case UpgradeKind::AbilityWarp: case UpgradeKind::AbilityBounty:
+            return MetaAbilityMeteor;
         default:                            return -1;
     }
 }

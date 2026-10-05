@@ -274,6 +274,39 @@ inline constexpr float missileRetarget = 420.f;   // a new target within this of
 inline constexpr float missileRadius = 4.f;       // hit size (px, arena-scaled)
 inline constexpr float missileBossFrac = 0.5f;    // chips the boss for this much
 inline constexpr int maxMissiles = 40;
+// ---- the second batch (2026-10-05). Damage is x the ball's hit; n = levels past the first.
+inline constexpr float hookCooldown = 6.f, hookFrac = 0.6f, hookFracPerLevel = 0.12f, hookSpeed = 900.f,
+                       hookStun = 0.7f, hookStunPerLevel = 0.1f;
+inline constexpr float minesCooldown = 7.f, mineFrac = 1.2f, mineFracPerLevel = 0.2f, mineRadius = 65.f,
+                       mineTrigger = 20.f, mineArm = 0.35f, mineLife = 12.f, mineGap = 38.f;
+inline constexpr int mines = 3, maxMines = 24;
+inline constexpr float empowerCooldown = 7.f, empower = 3.f, empowerPerLevel = 0.4f, empowerWave = 0.6f,
+                       empowerRadius = 90.f, empowerRadiusPerLevel = 8.f, empowerWindow = 6.f;
+inline constexpr float tailwindCooldown = 10.f, tailwind = 1.3f, tailwindPerLevel = 0.05f, tailwindTime = 3.f,
+                       tailwindTimePerLevel = 0.3f;
+inline constexpr float vortexCooldown = 9.f, vortexRadius = 140.f, vortexRadiusPerLevel = 12.f, vortexTime = 2.f,
+                       vortexTimePerLevel = 0.3f, vortexPull = 1400.f, vortexDps = 0.3f;
+inline constexpr float beamCooldown = 7.f, beamTime = 1.f, beamTimePerLevel = 0.2f, beamFrac = 0.25f,
+                       beamFracPerLevel = 0.04f, beamTick = 0.1f, beamRange = 460.f, beamElemEvery = 0.3f;
+inline constexpr float bladesCooldown = 9.f, bladesTime = 4.f, bladesTimePerLevel = 0.5f, bladeFrac = 0.6f,
+                       bladeFracPerLevel = 0.1f, bladeOrbit = 55.f, bladeRadius = 9.f, bladeSpin = 7.f, bladeTick = 0.25f;
+inline constexpr int blades = 3;
+inline constexpr float cloudCooldown = 8.f, cloudRadius = 90.f, cloudRadiusPerLevel = 10.f, cloudTime = 3.f,
+                       cloudTimePerLevel = 0.5f, cloudFrac = 0.2f, cloudTick = 0.5f;
+inline constexpr int maxClouds = 8;
+inline constexpr float smiteCooldown = 8.f, smiteFrac = 1.5f, smiteFracPerLevel = 0.25f, smiteStagger = 0.3f;
+inline constexpr int smites = 3;
+inline constexpr float warpCooldown = 7.f, warpFrac = 1.5f, warpFracPerLevel = 0.25f, warpKnock = 380.f;
+inline constexpr float portalCooldown = 12.f, portalTime = 4.f, portalTimePerLevel = 0.5f, portalRadius = 26.f,
+                       portalBoost = 1.2f, portalCd = 0.4f;
+inline constexpr float leashCooldown = 11.f, leashTime = 4.f, leashTimePerLevel = 0.5f, leashMin = 120.f,
+                       leashMax = 260.f, leashSpeed = 1.6f, leashSpeedPerLevel = 0.1f;   // x its cruise at least
+inline constexpr float swapCooldown = 8.f, swapFrac = 0.8f, swapFracPerLevel = 0.15f, swapStun = 0.8f,
+                       swapStunPerLevel = 0.1f;
+inline constexpr float shrinkCooldown = 9.f, shrinkRadius = 160.f, shrinkRadiusPerLevel = 15.f, shrinkTime = 4.f,
+                       shrinkTimePerLevel = 0.5f, shrinkSize = 0.5f, shrinkSlow = 0.6f, shrinkDamage = 2.f;
+inline constexpr float bountyCooldown = 12.f;
+inline constexpr int bounty = 5, bountyPerLevel = 1;
 }  // namespace ability
 
 // Tiers: how rare a pick is. Each card rolls a tier first (by these weights),

@@ -359,6 +359,8 @@ private:
     RollSource rollSource_ = RollSource::Normal;   // what the current Choice was rolled from (rerolls keep it)
     std::string choiceTitle_;                      // custom Choice heading ("Starter kit ..."), empty = default
     bool starterChoice_ = false;                   // the Choice is the Quartermaster starter pick (rerolls stay items)
+    int jokerAs_ = -1;                             // "Joker": the legendary it copies this fight (UpgradeKind, -1 = none)
+    void rollJoker();                              // ...picked as each fight starts
     std::vector<CreedId> creedChoices_;
     std::vector<PactId> pactChoices_;
     bool pactFromMap_ = true;   // the Altar was a map stop: closing it goes back to the map

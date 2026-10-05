@@ -62,7 +62,10 @@ float World::ballCruise(const Ball& b, const WorldParams& p) const {
            (b.hasElement(Element::Stone) ? cfg::element::stoneCruise : 1.f) *   // stone: the heavy one
            (b.overclockT > 0.f ? cfg::ability::overclockCruise : 1.f) *   // "Overclock" ability
            (1.f + b.mods.cls.common.adrenaline * static_cast<float>(b.cls.common.adrenaline)) *   // "Adrenaline"
-           (b.cls.common.slotSpeedT > 0.f ? cfg::common::slotSpeed : 1.f);   // "Slot machine": a speed pair
+           (b.cls.common.slotSpeedT > 0.f ? cfg::common::slotSpeed : 1.f) *   // "Slot machine": a speed pair
+           (b.mods.cls.common.ion > 0.f ? cfg::common::ionCruise : 1.f) *     // "Ion cannon": a heavy gun
+           (1.f + b.mods.cls.common.showtime * static_cast<float>(b.cls.common.showStacks)) *   // "Showtime"
+           (classWorld_.common.tailT > 0.f ? classWorld_.common.tailMul : 1.f);                  // "Tailwind" (ability)
 }
 
 float World::ballMaxSpeed(const Ball& b, const WorldParams& p) const {
@@ -76,7 +79,7 @@ float World::ballRadius(const Ball& b, const WorldParams& p) const {
     float mult = p.ballRadiusMult * b.mods.radiusMult *
                  (b.hasRole(BallRole::Guardian) ? cfg::role::guardianRadiusMul : 1.f) *
                  (1.f + cfg::changer::gluttonRadius * static_cast<float>(b.gluttonStacks));
-    mult = std::min(mult, cfg::changer::maxRadiusMult);
+    mult = std::min(mult, cfg::changer::maxRadiusMult) * (1.f + b.cls.common.titan);   // "Titan" grows past the cap
     return cfg::ball::radius * mult * b.scale * (1.f + (arenaScale() - 1.f) * cfg::boss::ballRadiusArenaFrac);
 }
 
@@ -759,6 +762,10 @@ void World::releaseHeld(sf::Vector2f throwVel) {
         }
         classOnThrow(b);  // Slinger: armed first hit, Afterburner
         commonOnThrow(b, s / (cfg::app::slingMaxSpeed * arenaScale()));   // Long pull, Covering fire
+        if (b.mods.cls.common.steadyBonus > 0.f) {   // "Steady hand": aimed a while, the first hit lands harder
+            b.catchBonus += b.mods.cls.common.steadyBonus * clampf(heldT_ / cfg::common::steadyFull, 0.f, 1.f);
+            b.catchT = cfg::combat::catchWindow;
+        }
         if (b.mods.heavyThrow > 0.f) {   // "Heavy throw": rides on the throw's first hit, like the catch reward
             b.catchBonus += b.mods.heavyThrow;
             b.catchT = cfg::combat::catchWindow;
@@ -1257,7 +1264,8 @@ void World::resonate(Ball& b, float dmg, const WorldParams& p, FrameEvents& ev) 
 // ---------------------------------------------------------------- synergies
 
 bool World::chance(float base, const WorldParams& p) {
-    return rng_.range(0.f, 1.f) < std::min(base * p.luck * trickLuck_, cfg::synergy::chanceCap);   // "Trick shot"
+    const float q = std::min(base * p.luck * trickLuck_, cfg::synergy::chanceCap);   // "Trick shot"
+    return rng_.range(0.f, 1.f) < q || (classWorld_.common.rigged && rng_.range(0.f, 1.f) < q);   // "Rigged": twice
 }
 
 void World::damageEnemy(Enemy& e, float dmg) {
@@ -1265,6 +1273,9 @@ void World::damageEnemy(Enemy& e, float dmg) {
         (e.burn > 0.f || e.poison > 0.f || e.frozen > 0.f || e.soak > 0.f || e.cracks > 0 ||
          (e.elemT > 0.f && e.elem != Element::Plain)))
         dmg *= 1.f + castBall_->mods.cls.common.spellweave;
+    if (castBall_ && castBall_->mods.cls.common.archStack > 0.f)   // "Archmage": every cast this fight adds on
+        dmg *= 1.f + castBall_->mods.cls.common.archStack * static_cast<float>(castBall_->cls.common.archStacks);
+    if (e.shrinkT > 0.f) dmg *= cfg::ability::shrinkDamage;   // "Shrink" (ability)
     e.hp -= dmg * (e.brittle > 0.f ? cfg::synergy::brittleMul : 1.f) *
             (1.f + cfg::element::crackDamage * static_cast<float>(e.cracks));   // stone cracks
     e.hitFlash = 1.f;
@@ -1384,7 +1395,14 @@ bool World::strike(Ball& b, Enemy& e, sf::Vector2f normal, const WorldParams& p,
     struct RestoreBall { Ball*& v; Ball* old; ~RestoreBall() { v = old; } } restoreBall{reactBall_, reactBall_};
     reactBall_ = &b;
     const float pot = elemPotency(b, p);
-    if (allElems) {
+    if (const int ph = m.cls.common.philo; ph > 0) {   // "Philosopher's stone": some of all six, every hit
+        Element pick[6] = {Element::Fire, Element::Poison, Element::Water, Element::Ice, Element::Stone, Element::Electric};
+        for (int i = 0; i < 6; ++i) std::swap(pick[i], pick[rng_.irange(i, 5)]);
+        for (int i = 0; i < std::min(ph, 6); ++i) {
+            touchElement(e, pick[i], pot, m, p);
+            applyElement(e, pick[i], i + 1 < ph ? -1 : b.owner, dmg, p, ev);   // the last one reacts, as this ball
+        }
+    } else if (allElems) {
         for (int i = 0; i < b.elemN; ++i) {
             touchElement(e, b.elems[i], pot, m, p);
             applyElement(e, b.elems[i], b.owner, dmg, p, ev);
@@ -2550,6 +2568,8 @@ void World::ballHitsBoss(Ball& b, float cdMul, const WorldParams& p, FrameEvents
     if (speedGate && length(b.vel) < ballBaseCruise(b, p) * cfg::boss::minHitCruiseFrac) return;
     if (wardenBlocks(b.pos)) { ev.shieldBlock = true; return; }
     boss_.hp -= ballDamage(b, p) * (1.f + b.mods.cls.common.bully);   // "Bully": bosses are bigger
+    if (classWorld_.common.contractBoss && b.mods.cls.common.contractBoss > 0.f)   // "Contract" on the boss
+        boss_.hp -= boss_.maxHp * b.mods.cls.common.contractBoss;
     boss_.hitFlash = 1.f;
     boss_.hitCd = cfg::boss::hitCooldown * cdMul;
     ev.bossHit = true;

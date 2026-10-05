@@ -155,6 +155,8 @@ struct ShooterBullet {
 struct ShooterRail {          // Deadeye's rail shot, kept only to be drawn
     sf::Vector2f a, b;
     float life = 0.f;
+    float maxLife = 0.f;      // 0 = Deadeye's
+    float width = 0.f;        // "Ion cannon": a thick beam (0 = Deadeye's thin line)
 };
 struct ShooterWorld {
     std::vector<ShooterBullet> bullets;
@@ -259,6 +261,7 @@ struct SummonShot {
     int pierce = 0;            // "Spirit host": a great spirit goes through this many more
     int lastHit = -1;          // ...not the same one twice in a row
     bool great = false;        // ...drawn big
+    bool boom = false;         // "Necromancer": a ghost that explodes on the first enemy
 };
 struct SummonTurret {
     sf::Vector2f pos;
@@ -487,6 +490,28 @@ struct CommonMods {
     int spiritPierce = 0;      // ...enemies it goes through
     bool twinCall = false;     // "Twin call"
     float fortify = 0.f;       // "Fortify": its turrets last x this (0 = off)
+    // legendaries (2026-10-05)
+    float titan = 0.f;         // "Titan": growth per core bounce (0 = off)...
+    float titanQuake = 0.f, titanStun = 0.f;   // ...the quake at full size
+    float archmage = 0.f;      // "Archmage": cast rate x this (0 = off)...
+    float archStack = 0.f;     // ...+ ability damage per cast
+    float timeStop = 0.f;      // "Time stop": s every enemy stands still (0 = off)
+    float ion = 0.f;           // "Ion cannon": the laser x its hit (0 = off)...
+    float ionCharge = 0.f;     // ...s to charge
+    float gunship = 0.f;       // "Gunship": the other balls' bullet x their hit (0 = off)
+    float leadStorm = 0.f;     // "Lead storm": s between storms (0 = off)
+    float reaper = 0.f;        // "Reaper": the blink's cooldown (0 = off)
+    float contract = 0.f;      // "Contract": share of max hp per hit (0 = off)...
+    float contractBoss = 0.f;  // ...of a boss's
+    float necro = 0.f;         // "Necromancer": the ghost's blast x its hit (0 = off)
+    float overlord = 0.f;      // "Overlord": every summon + this damage (0 = off)
+    bool rigged = false;       // "Rigged"
+    float steady = 0.f;        // "Steady hand": time scale while aimed (0 = off)...
+    float steadyBonus = 0.f;   // ...the throw's first hit + up to this
+    float showtime = 0.f;      // "Showtime": per quick catch (0 = off)
+    int philo = 0;             // "Philosopher's stone": elements per hit (0 = off)
+    int grandEvery = 0;        // "Grand reaction": every Nth (0 = off)...
+    float grand = 0.f;         // ...x the hit
 };
 struct CommonState {
     bool doubled = false;      // this hit was doubled (crit, coin heads, a Jester double)
@@ -528,6 +553,28 @@ struct CommonState {
     bool homeArmed = false;    // "Homecoming": thrown, first hit not landed...
     float homeT = 0.f;         // ...s left curving home
     bool homePulse = false;    // ...caught on the way: pulse on the next tick
+    float titan = 0.f;         // "Titan": 0..1 grown (1 = twice the size)
+    int archStacks = 0;        // "Archmage": casts this fight
+    int stopCasts = 0;         // "Time stop": casts toward the next
+    float ionT = 0.f;          // "Ion cannon": 0..1 charged...
+    sf::Vector2f ionDir{1.f, 0.f};   // ...where it'll fire
+    float stormT = 0.f;        // "Lead storm": to the next...
+    float stormOn = 0.f;       // ...s left firing...
+    float stormFireT = 0.f, stormAng = 0.f;
+    int showStacks = 0;        // "Showtime": quick catches this fight
+    int grandN = 0;            // "Grand reaction": reactions so far
+    // abilities, second batch (2026-10-05; sim/WorldAbilities.cpp)
+    float empower = 0.f;       // "Empower": the next hit x this (0 = not armed)...
+    float empowerR = 0.f;      // ...and its wave this wide...
+    float empowerT = 0.f;      // ...if it lands before this runs out
+    bool empowerHit = false;   // ...this hit was the empowered one (the wave goes off in commonOnHit)
+    float beamT = 0.f, beamTickT = 0.f, beamElemT = 0.f, beamDmg = 0.f;   // "Beam": s left, tick timers, per tick
+    sf::Vector2f beamTo;       // ...where it's burning (drawn)
+    bool beamOn = false;
+    float bladesT = 0.f, bladeAng = 0.f, bladeTickT = 0.f, bladeDmg = 0.f;   // "Blades"
+    int bladeN = 0;
+    float leashT = 0.f, leashL = 0.f, leashSpeed = 0.f;   // "Leash": s left, rope length, the swing's floor
+    float portalCd = 0.f;      // "Portal": not again right away
 };
 struct CommonWorld {
     struct Puddle {            // "Seep"
@@ -560,6 +607,36 @@ struct CommonWorld {
     bool wardOn = false;       // ...some ball carries it (the renderer's ring)
     bool lastLineUsed = false; // "Last line": once a fight
     float chronoT = 0.f, chrono = 0.f;   // "Chronomancy": every enemy slowed by chrono while chronoT runs
+    float stopT = 0.f;         // "Time stop": every enemy stands still while it runs
+    int contractId = -1;       // "Contract": the enemy under contract (Enemy::id)...
+    bool contractBoss = false; // ...or the boss
+    bool rigged = false;       // "Rigged": some ball carries it (World::chance rolls twice)
+    // abilities, second batch (2026-10-05)
+    struct Mine {              // "Mines"
+        sf::Vector2f pos;
+        float life = 0.f, arm = 0.f, dmg = 0.f, r = 0.f;
+        int elem = 0, owner = -1;
+    };
+    std::vector<Mine> mines;
+    struct Vortex {            // "Vortex"
+        sf::Vector2f pos;
+        float life = 0.f, maxLife = 1.f, r = 0.f, dps = 0.f;
+        int elem = 0;
+    };
+    std::vector<Vortex> vortices;
+    struct Cloud {             // "Cloud"
+        sf::Vector2f pos;
+        float life = 0.f, maxLife = 1.f, r = 0.f, dmg = 0.f, tickT = 0.f;
+        int elem = 0;
+    };
+    std::vector<Cloud> clouds;
+    struct Portal {            // "Portal": a pair
+        sf::Vector2f a, b;
+        float life = 0.f, maxLife = 1.f;
+        int owner = -1;
+    };
+    std::vector<Portal> portals;
+    float tailT = 0.f, tailMul = 1.f;   // "Tailwind": every ball's cruise x tailMul while tailT runs
 };
 
 // On BallMods (`mods.cls`): what the ball's class items add up to.

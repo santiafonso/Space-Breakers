@@ -393,6 +393,42 @@ bool foldCommon(UpgradeKind k, int level, BallMods& m) {
             m.cls.summoner.bond *= 1.f + C::twinCallPerLevel * n;
             return true;
         case K::Fortify:     c.fortify = C::fortify + C::fortifyPerLevel * n; return true;
+        // legendaries (2026-10-05)
+        case K::Titan:
+            c.titan = C::titan + C::titanPerLevel * n;
+            c.titanQuake = C::titanQuake + C::titanQuakePerLevel * n;
+            c.titanStun = C::titanStun + C::titanStunPerLevel * n;
+            return true;
+        case K::Archmage:
+            c.archmage = C::archmage + C::archmagePerLevel * n;
+            c.archStack = C::archStack + C::archStackPerLevel * n;
+            return true;
+        case K::TimeStop:    c.timeStop = C::timeStop + C::timeStopPerLevel * n; return true;
+        case K::IonCannon:
+            c.ion = C::ion + C::ionPerLevel * n;
+            c.ionCharge = C::ionCharge + C::ionChargePerLevel * n;
+            return true;
+        case K::Gunship:     c.gunship = C::gunship + C::gunshipPerLevel * n; return true;
+        case K::LeadStorm:   c.leadStorm = C::leadStorm + C::leadStormPerLevel * n; return true;
+        case K::Reaper:      c.reaper = C::reaper + C::reaperPerLevel * n; return true;
+        case K::Contract:
+            c.contract = C::contract + C::contractPerLevel * n;
+            c.contractBoss = C::contractBoss + C::contractBossPerLevel * n;
+            return true;
+        case K::Necromancer: c.necro = C::necro + C::necroPerLevel * n; return true;
+        case K::Overlord:    c.overlord = C::overlord + C::overlordPerLevel * n; return true;
+        case K::Rigged:      c.rigged = true; return true;   // its luck: App::luck
+        case K::Joker:       return true;                    // App::ballSpec folds the copy instead
+        case K::SteadyHand:
+            c.steady = C::steady + C::steadyPerLevel * n;
+            c.steadyBonus = C::steadyBonus + C::steadyBonusPerLevel * n;
+            return true;
+        case K::Showtime:    c.showtime = C::showtime + C::showtimePerLevel * n; return true;
+        case K::PhilosopherStone: c.philo = C::philoElems + (level - 1) / 2; return true;
+        case K::GrandReaction:
+            c.grandEvery = std::max(2, C::grandEvery - (level - 1) / 2);
+            c.grand = C::grand + C::grandPerLevel * n;
+            return true;
         default: return false;
     }
 }

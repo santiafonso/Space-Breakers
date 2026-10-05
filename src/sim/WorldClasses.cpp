@@ -167,7 +167,8 @@ template <> struct ClassHooks<BallRole::Mage> : NoClassHooks {
 };
 
 float World::mageCastRate(const Ball& b) const {   // "Focus", Channel, Archive; "Meditate" when still
-    return 1.f + b.mods.cls.mage.focus + b.mods.cls.mage.meditate * b.cls.mage.still;
+    return (1.f + b.mods.cls.mage.focus + b.mods.cls.mage.meditate * b.cls.mage.still) *
+           std::max(1.f, b.mods.cls.common.archmage);   // "Archmage"
 }
 
 // `count` missiles at the nearest enemies (spread over them, nearest first),
@@ -185,7 +186,8 @@ bool World::mageMissiles(Ball& b, int count, float frac, const WorldParams& p) {
         return dot(x->pos - b.pos, x->pos - b.pos) < dot(y->pos - b.pos, y->pos - b.pos);
     });
     auto& ms = classWorld_.mage.missiles;
-    const float dmg = ballDamage(b, p) * frac * b.mods.cls.mage.power * b.mods.cls.mage.missileMul;
+    const float dmg = ballDamage(b, p) * frac * b.mods.cls.mage.power * b.mods.cls.mage.missileMul *
+                      (1.f + b.mods.cls.common.archStack * static_cast<float>(b.cls.common.archStacks));   // "Archmage"
     const Element el = hitElement(b, p);
     const sf::Vector2f head = normalized(b.vel, {0.f, -1.f});
     for (int i = 0; i < count && static_cast<int>(ms.size()) < A::maxMissiles; ++i) {
@@ -329,6 +331,71 @@ template <> struct ClassHooks<BallRole::Shooter> : NoClassHooks {
         if (rails.size() < 8) rails.push_back({b.pos, b.pos + dir * t, S::deadeyeRailLife});
     }
 
+    // "Ion cannon": the heading from the ball down which a beam would cut the
+    // most enemies (the nearest such one breaks a tie), or the boss.
+    static bool ionAim(const World& w, const Ball& b, sf::Vector2f& dir) {
+        const float hw = cfg::common::ionWidth * w.arenaScale();
+        int best = 0;
+        float bestD = 1e18f;
+        for (const Enemy& e : w.enemies_) {
+            if (e.hp <= 0.f || e.orbiter) continue;
+            const sf::Vector2f d = normalized(e.pos - b.pos, {1.f, 0.f});
+            int n = 0;
+            for (const Enemy& o : w.enemies_) {
+                if (o.hp <= 0.f || o.orbiter) continue;
+                const float along = dot(o.pos - b.pos, d);
+                if (along > 0.f && length(o.pos - (b.pos + d * along)) <= hw + o.radius) ++n;
+            }
+            const float dist = dot(e.pos - b.pos, e.pos - b.pos);
+            if (n > best || (n == best && dist < bestD)) { best = n; bestD = dist; dir = d; }
+        }
+        if (best > 0) return true;
+        if (w.boss_.alive && w.boss_.intro <= 0.f) {
+            dir = normalized(w.boss_.pos - b.pos, {1.f, 0.f});
+            return true;
+        }
+        return false;
+    }
+
+    // ...and the beam: through everything to the wall, with its element.
+    static void ionFire(World& w, Ball& b, sf::Vector2f dir, const WorldParams& p, FrameEvents& ev) {
+        namespace C = cfg::common;
+        float t = 1e9f;
+        const sf::Vector2f sz = w.size_;
+        if (dir.x > 1e-4f) t = std::min(t, (sz.x - b.pos.x) / dir.x);
+        if (dir.x < -1e-4f) t = std::min(t, -b.pos.x / dir.x);
+        if (dir.y > 1e-4f) t = std::min(t, (sz.y - b.pos.y) / dir.y);
+        if (dir.y < -1e-4f) t = std::min(t, -b.pos.y / dir.y);
+        t = clampf(t, 0.f, 4000.f);
+        const CommonMods& c = b.mods.cls.common;
+        const float dmg = w.ballDamage(b, p) * c.ion * b.mods.cls.shooter.dmgMul;
+        const float hw = C::ionWidth * w.arenaScale();
+        const Element el = w.hitElement(b, p);
+        for (Enemy& e : w.enemies_) {
+            if (e.hp <= 0.f) continue;
+            const float along = clampf(dot(e.pos - b.pos, dir), 0.f, t);
+            if (length(e.pos - (b.pos + dir * along)) > hw + e.radius) continue;
+            const bool hollow = c.hollow > 0.f && (e.burn > 0.f || e.poison > 0.f || e.frozen > 0.f || e.soak > 0.f ||
+                                                   e.cracks > 0 || (e.elemT > 0.f && e.elem != Element::Plain));
+            w.damageEnemy(e, dmg * (e.mark > 0.f ? p.markMul : 1.f) * (hollow ? 1.f + c.hollow : 1.f));   // "Hollow point"
+            if (c.marksman > 0) e.mark = std::max(e.mark, cfg::role::markDuration);                        // "Marksman"
+            w.applyElement(e, el, b.owner, dmg, p, ev);
+        }
+        Boss& bo = w.boss_;
+        if (bo.alive && bo.intro <= 0.f) {
+            const float along = clampf(dot(bo.pos - b.pos, dir), 0.f, t);
+            if (length(bo.pos - (b.pos + dir * along)) <= hw + bo.radius) {
+                bo.hp -= dmg * cfg::shooter::bossFrac;
+                bo.hitFlash = 1.f;
+            }
+        }
+        auto& rails = w.classWorld_.shooter.rails;
+        if (rails.size() < 8) rails.push_back({b.pos, b.pos + dir * t, C::ionLife, C::ionLife, hw});
+        b.squash = 1.f;
+        b.squashAxis = dir;
+        b.vel -= dir * std::min(length(b.vel) * 0.5f, 120.f * w.arenaScale());   // a kick back
+    }
+
     static void tick(World& w, Ball& b, float dt, const WorldParams& p, FrameEvents& ev) {
         namespace S = cfg::shooter;
         ShooterState& st = b.cls.shooter;
@@ -350,6 +417,36 @@ template <> struct ClassHooks<BallRole::Shooter> : NoClassHooks {
         float speedRate = clampf(length(b.vel) / std::max(1.f, w.ballCruise(b, p)), S::rateMin, S::rateMax);
         if (m.slug > 0.f) speedRate = std::max(speedRate, 1.f) * (1.f + m.slug * still);   // "Slug": slow = fast fire
         CommonState& cs = b.cls.common;   // "Minigun": spun up, it fires faster
+        const CommonMods& cm = b.mods.cls.common;
+        if (cm.leadStorm > 0.f) {   // "Lead storm": now and then, a spiral of bullets all around
+            if (cs.stormOn > 0.f) {
+                cs.stormOn -= dt;
+                cs.stormFireT -= dt * m.rate * cfg::common::leadStormRate;
+                const float d = w.ballDamage(b, p) * S::bulletFrac;
+                for (int guard = 0; cs.stormFireT <= 0.f && guard < 8; ++guard) {
+                    cs.stormFireT += S::fireInterval;
+                    cs.stormAng += cfg::common::leadStormTurn;
+                    fire(w, b, {std::cos(cs.stormAng), std::sin(cs.stormAng)}, d, p);
+                }
+            } else if ((cs.stormT -= dt) <= 0.f) {
+                cs.stormT = cm.leadStorm;
+                cs.stormOn = cfg::common::leadStormTime;
+                cs.stormFireT = 0.f;
+                ev.bursts.push_back({b.pos, b.radius * 3.f, theme::classShooter, nullptr});
+            }
+        }
+        if (cm.ion > 0.f) {   // "Ion cannon": no bullets - it charges the beam ("Slug" / "Rapid fire" charge it faster)
+            const float rate = m.rate * (m.slug > 0.f ? 1.f + m.slug * still : 1.f);
+            sf::Vector2f dir;
+            const bool aimed = ionAim(w, b, dir);
+            if (aimed) cs.ionDir = dir;
+            cs.ionT = std::min(1.f, cs.ionT + dt * rate / std::max(0.2f, cm.ionCharge));
+            if (aimed && cs.ionT >= 1.f) {   // held at full until there's something to hit
+                cs.ionT = 0.f;
+                ionFire(w, b, dir, p, ev);
+            }
+            return;
+        }
         st.fireT -= dt * speedRate * m.rate * (1.f + cfg::common::minigunMax * cs.spin);
         if (st.fireT > 0.f) return;
         sf::Vector2f at;
@@ -658,7 +755,7 @@ template <> struct ClassHooks<BallRole::Assassin> : NoClassHooks {
             s.spree = std::min(s.spree + 1, m.spreeMax);
             s.spreeT = A::spreeWindow;
         }
-        s.cd = cooldown(b);
+        s.cd = b.mods.cls.common.reaper > 0.f ? std::min(cooldown(b), b.mods.cls.common.reaper) : cooldown(b);   // "Reaper"
         w.commonOnBlink(b, t, p, start);   // Mark for death / Quickstep / Razor wire...
     }
 
@@ -684,6 +781,10 @@ template <> struct ClassHooks<BallRole::Assassin> : NoClassHooks {
 
     static void onHit(World& w, Ball& b, Enemy& e, float dmg, bool kill, const WorldParams& p, FrameEvents& ev) {
         b.cls.assassin.armedT = 0.f;   // "Backstab" is spent
+        if (b.mods.cls.common.reaper > 0.f && !b.held) {   // "Reaper": every hit queues a blink, not just kills
+            b.cls.assassin.pending = true;
+            b.cls.assassin.pendingAt = w.classWorld_.assassin.clock;
+        }
         if (b.cls.assassin.blinked) {  // "Lurk" too
             b.cls.assassin.blinked = false;
             b.cls.assassin.lurk = 0.f;
@@ -744,12 +845,13 @@ template <> struct ClassHooks<BallRole::Summoner> : NoClassHooks {
                       FrameEvents& ev) {
         namespace E = cfg::element;
         const Ball* o = ownerBall(w, owner);
-        if (o) dmg *= 1.f + o->mods.cls.common.guardDog;   // "Guard dog"
+        if (o) dmg *= (1.f + o->mods.cls.common.guardDog) * (1.f + o->mods.cls.common.overlord);   // "Guard dog" / "Overlord"
         if (o && o->mods.cls.common.soulbind) full = true; // "Soulbind": the element's full effect
         const bool wasAlive = e.hp > 0.f;
         w.damageEnemy(e, dmg);
         if (o && wasAlive && e.hp <= 0.f && o->mods.cls.common.hatchery > 0)   // "Hatchery": a kill hatches wisps
             hatch(w, *o, e.pos, o->mods.cls.common.hatchery, p);
+        if (o && wasAlive && e.hp <= 0.f && o->mods.cls.common.necro > 0.f) raise(w, *o, e.pos, p);   // "Necromancer"
         const Element el = static_cast<Element>(elem);
         if (el == Element::Plain) return;
         if (full) {   // the element's own effect, like a ball hit
@@ -852,6 +954,34 @@ template <> struct ClassHooks<BallRole::Summoner> : NoClassHooks {
             sw.shots.push_back(s);
             twin(w, o, sw.shots);   // "Twin call"
         }
+    }
+
+    // "Necromancer": what a summon killed rises as a ghost that seeks an enemy and explodes.
+    static void raise(World& w, const Ball& o, sf::Vector2f at, const WorldParams& p) {
+        namespace S = cfg::summoner;
+        SummonerWorld& sw = w.classWorld_.summoner;
+        if (static_cast<int>(sw.shots.size()) >= S::maxShots) return;
+        SummonShot s;
+        s.pos = at;
+        s.vel = w.rng_.direction() * S::wispSpeed * 0.4f;
+        s.dmg = w.ballDamage(o, p) * o.mods.cls.common.necro * power(o);
+        s.life = S::wispLife * power(o) * (1.f + o.mods.cls.common.linger);
+        s.elem = static_cast<int>(o.element);
+        s.owner = o.owner;
+        s.wisp = true;
+        s.boom = true;
+        sw.shots.push_back(s);
+        twin(w, o, sw.shots);   // "Twin call"
+    }
+    // ...its blast: straight damage, so a ghost's kills don't raise more ghosts.
+    static void explode(World& w, const SummonShot& s, const WorldParams& p, FrameEvents& ev) {
+        const float R = cfg::common::necroRadius * w.arenaScale();
+        for (Enemy& e : w.enemies_) {
+            if (e.hp <= 0.f || length(e.pos - s.pos) > R + e.radius) continue;
+            w.damageEnemy(e, s.dmg);
+            if (s.elem != 0) w.applyElement(e, static_cast<Element>(s.elem), s.owner, s.dmg, p, ev);
+        }
+        ev.bursts.push_back({s.pos, R, s.elem != 0 ? elementColor(static_cast<Element>(s.elem)) : theme::classSummoner, nullptr});
     }
 
     // "Martyr": a turret / totem that runs out bursts with its element.
@@ -1108,6 +1238,25 @@ template <> struct ClassHooks<BallRole::Summoner> : NoClassHooks {
 
         for (Ball& b : w.balls_) tickBall(w, b, dt, p, ev);
 
+        // "Overlord": every summon on the field serves the ball that carries it.
+        const Ball* lord = nullptr;
+        for (const Ball& b : w.balls_)
+            if (!b.ghost && b.mods.cls.common.overlord > 0.f &&
+                (!lord || b.mods.cls.common.overlord > lord->mods.cls.common.overlord))
+                lord = &b;
+        if (lord) {
+            const int le = static_cast<int>(lord->element);
+            auto claim = [&](int& owner, int& elem) {
+                if (owner == lord->owner) return;
+                owner = lord->owner;
+                if (le != 0) elem = le;
+            };
+            for (SummonTurret& t : sw.turrets) claim(t.owner, t.elem);
+            for (SummonTotem& t : sw.totems) claim(t.owner, t.elem);
+            for (SummonShot& s : sw.shots) claim(s.owner, s.elem);
+            for (CommonWorld::Golem& g : w.classWorld_.common.golems) claim(g.owner, g.elem);
+        }
+
         // Turrets: aim and fire at the nearest enemy in range.
         for (SummonTurret& t : sw.turrets) {
             t.life -= dt;
@@ -1154,6 +1303,11 @@ template <> struct ClassHooks<BallRole::Summoner> : NoClassHooks {
                 if (s.owner >= 0 && s.owner < static_cast<int>(w.balls_.size()))
                     full = w.balls_[static_cast<std::size_t>(s.owner)].isAscended(BallRole::Summoner);
                 if (e.id == s.lastHit) continue;   // a great spirit passing through
+                if (s.boom) {   // "Necromancer": a ghost bursts on the first one
+                    explode(w, s, p, ev);
+                    s.life = 0.f;
+                    break;
+                }
                 touch(w, e, s.dmg, s.elem, s.owner, full, p, ev);
                 s.lastHit = e.id;
                 if (s.pierce > 0) --s.pierce;   // "Spirit host": on to the next one
@@ -1249,6 +1403,7 @@ template <> struct ClassHooks<BallRole::Jester> : NoClassHooks {
     static Outcome outcome(World& w, const Ball& b, const WorldParams& p) {
         Outcome o = rollOutcome(w, p);
         if (b.isAscended(BallRole::Jester)) o = std::max(o, rollOutcome(w, p));
+        if (w.classWorld_.common.rigged) o = std::max(o, rollOutcome(w, p));   // "Rigged": the better of two
         const float re = b.mods.cls.jester.reroll;
         if (o == Normal && re > 0.f && w.rng_.range(0.f, 1.f) < re) o = rollOutcome(w, p);
         return o;
@@ -1630,14 +1785,14 @@ void World::commonGolems(float dt, const WorldParams& p, FrameEvents& ev) {
         const CommonMods& c = b.mods.cls.common;
         if (c.spiritHost <= 0.f) continue;
         int n = 0;
-        for (const SummonShot& s : shots) n += s.wisp && !s.great && s.owner == b.owner ? 1 : 0;
+        for (const SummonShot& s : shots) n += s.wisp && !s.great && !s.boom && s.owner == b.owner ? 1 : 0;
         if (n < C::spiritAt) continue;
         SummonShot great;
         sf::Vector2f at{0.f, 0.f};
         float dmg = 0.f;
         int taken = 0;
         for (SummonShot& s : shots)
-            if (taken < C::spiritAt && s.wisp && !s.great && s.owner == b.owner && s.life > 0.f) {
+            if (taken < C::spiritAt && s.wisp && !s.great && !s.boom && s.owner == b.owner && s.life > 0.f) {
                 at += s.pos;
                 dmg += s.dmg;
                 great.elem = s.elem;
@@ -1670,6 +1825,29 @@ void World::commonRing(Ball& b, const WorldParams& p, sf::Vector2f at, int n) {
         ClassHooks<BallRole::Shooter>::fire(*this, b, {std::cos(a), std::sin(a)}, dmg, p);
         if (bullets.size() > before) bullets.back().pos = at;   // out of the dead enemy, not the ball
     }
+}
+
+// "Gunship" (a legendary): a ball that hits fires one bullet at another enemy,
+// with the gun - and the Shooter items - of the ball carrying Gunship.
+void World::commonGunship(Ball& b, const Enemy& e, const WorldParams& p) {
+    Ball* g = nullptr;
+    for (Ball& o : balls_)
+        if (&o != &b && o.owner != b.owner && !o.ghost && o.mods.cls.common.gunship > 0.f &&
+            (!g || o.mods.cls.common.gunship > g->mods.cls.common.gunship))
+            g = &o;
+    if (!g) return;
+    const Enemy* t = nullptr;
+    float best = 1e18f;
+    for (const Enemy& o : enemies_) {
+        if (&o == &e || o.hp <= 0.f || o.orbiter) continue;
+        const float d2 = dot(o.pos - b.pos, o.pos - b.pos);
+        if (d2 < best) { best = d2; t = &o; }
+    }
+    const sf::Vector2f dir = normalized((t ? t->pos : e.pos) - b.pos, {1.f, 0.f});
+    auto& bullets = classWorld_.shooter.bullets;
+    const std::size_t before = bullets.size();
+    ClassHooks<BallRole::Shooter>::fire(*this, *g, dir, ballDamage(b, p) * g->mods.cls.common.gunship, p);
+    if (bullets.size() > before) bullets.back().pos = b.pos + dir * b.radius;   // out of the ball that hit
 }
 
 // "Covering fire" / "Ammo feed" (commons, sim/WorldCommons.cpp): a fan at the

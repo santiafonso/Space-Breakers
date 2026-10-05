@@ -151,30 +151,31 @@ void DevScreen::rebuild(App& app) {
             y += kRowH;
         }
     } else {
-        // col 0: new ball, types, abilities; col 1: modifiers, relics;
-        // cols 2-3: creeds, then pacts under them.
-        std::vector<UpgradeKind> cols[2];
+        // col 0: new ball, types; col 1: abilities; col 2: modifiers, relics;
+        // cols 3-4: creeds, then pacts under them.
+        std::vector<UpgradeKind> cols[3];
         for (int i = 0; i < kUpgradeKindCount; ++i) {
             const auto k = static_cast<UpgradeKind>(i);
             switch (upgradeCat(k)) {
                 case UpgradeCat::NewBall:
-                case UpgradeCat::Element:
-                case UpgradeCat::Ability:  cols[0].push_back(k); break;
+                case UpgradeCat::Element:  cols[0].push_back(k); break;
+                case UpgradeCat::Ability:  cols[1].push_back(k); break;
                 case UpgradeCat::Modifier:
-                case UpgradeCat::Relic:    cols[1].push_back(k); break;
+                case UpgradeCat::Relic:    cols[2].push_back(k); break;
                 case UpgradeCat::Item:     break;
             }
         }
-        heads_.push_back({{26.f, kTop - 20.f}, "BALL / TYPE / ABILITY", theme::textDim});
-        heads_.push_back({{26.f + kColW, kTop - 20.f}, "MODIFIERS / RELICS", theme::textDim});
-        for (int c = 0; c < 2; ++c) {
+        heads_.push_back({{26.f, kTop - 20.f}, "BALL / TYPE", theme::textDim});
+        heads_.push_back({{26.f + kColW, kTop - 20.f}, "ABILITIES", theme::textDim});
+        heads_.push_back({{26.f + 2.f * kColW, kTop - 20.f}, "MODIFIERS / RELICS", theme::textDim});
+        for (int c = 0; c < 3; ++c) {
             float y = kTop;
             for (UpgradeKind k : cols[c]) {
                 pickButton(k, 24.f + static_cast<float>(c) * kColW, y, tierColor(upgradeTier(k)));
                 y += kRowH;
             }
         }
-        const float px0 = 24.f + 2.f * kColW;
+        const float px0 = 24.f + 3.f * kColW;
         heads_.push_back({{px0 + 2.f, kTop - 20.f}, "CREEDS (click: grant / drop)", theme::textDim});
         const int crows = (kCreedCount + 1) / 2;
         for (int i = 0; i < kCreedCount; ++i) {

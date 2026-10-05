@@ -274,6 +274,7 @@ private:
                           FrameEvents& ev);
     bool commonWard(Enemy& e, FrameEvents& ev);   // "Ward ring": true = thrown back, no damage
     void commonRing(Ball& b, const WorldParams& p, sf::Vector2f at, int n);   // "Shrapnel" (WorldClasses.cpp)
+    void commonGunship(Ball& b, const Enemy& e, const WorldParams& p);       // "Gunship" (WorldClasses.cpp)
     int midasPending_ = 0;                        // gold earned off the events path, flushed each step
     void commonGolems(float dt, const WorldParams& p, FrameEvents& ev);   // "Golem" (WorldClasses.cpp)
     Ball* castBall_ = nullptr;   // the ball whose ability is firing right now ("Spellweave")
@@ -315,6 +316,8 @@ private:
     // ---- abilities (sim/WorldAbilities.cpp) ----
     void updateAbilities(Ball& b, float dt, const WorldParams& p, FrameEvents& ev);
     bool fireAbility(Ball& b, const AbilitySpec& a, const WorldParams& p, FrameEvents& ev);   // false = nothing to act on yet
+    void abilityTick(Ball& b, float dt, const WorldParams& p, FrameEvents& ev);   // Beam / Blades / Leash, after the cast
+    void abilityWorldTick(float dt, const WorldParams& p, FrameEvents& ev);   // mines, vortices, clouds, portals
     void resetAbilityCooldowns(Ball& b);   // a wave starts: every ability part-charged
     // Mage (defined in its section of sim/WorldClasses.cpp): its items act through casts.
     float mageCastRate(const Ball& b) const;   // cooldowns tick this much faster ("Focus")

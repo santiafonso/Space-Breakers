@@ -2381,10 +2381,69 @@ de las pelotas: Q, el anillo de E y F.
   kit; antes usaba el sorteo de mejoras y daba elementos / modificadores.
 - **Panel F1:** tres pestañas - Items 1 (Striker..Shooter), Items 2
   (Assassin..Alchemist), Run - y cada clase ordenada de común a legendario.
-- **Lo que falta:** legendarios 15. **Necromancer** (los enemigos que matan sus
-  invocaciones se levantan como fantasmas aliados que explotan) va como
-  legendario del Summoner - el usuario lo prefirió ahí.
+- **Tanda 5 - legendarios (hecha, 2026-10-05):** 16 items; con esto la
+  pirámide queda completa. Mismo archivo y misma regla.
+  - Guardian: **Titan** (cada rebote en el núcleo lo agranda, hasta el doble;
+    lleno, el siguiente rebote hace un terremoto que aturde a todos). El usuario
+    descartó "Citadel".
+  - Mage: **Archmage** (habilidades al doble de velocidad, cada cast +10% hasta
+    el fin de la pelea), **Time stop** (cada 5 casts, los enemigos quietos 2 s;
+    el jefe no se frena).
+  - Shooter, **3 legendarios** (el usuario lo pidió; excepción a la regla de
+    "más épicos que legendarios"): **Ion cannon** (40% más lenta, sin balas:
+    carga 2 s y dispara un láser que cruza la arena por la línea con más
+    enemigos, x4; reemplazó a "Sniper"), **Gunship** (las otras pelotas
+    disparan una bala al pegar, con los items de Shooter de esta), **Lead
+    storm** (cada 10 s, 2 s de fuego x6 en espiral).
+  - Assassin: **Reaper** (el blink sale después de cada golpe, cooldown 0.3 s),
+    **Contract** (el más fuerte - jefe, si no un Brute, si no el de más vida -
+    recibe +10% de su vida máxima por golpe; 2% del jefe).
+  - Summoner: **Necromancer** (lo que matan sus invocaciones se levanta como
+    fantasma que explota; sus muertes no levantan más), **Overlord** (todas las
+    invocaciones de todas las pelotas pasan a ser suyas: su elemento, sus items,
+    +20%).
+  - Jester: **Rigged** (toda probabilidad de la run se tira dos veces),
+    **Joker** (en cada pelea copia un legendario al azar de los que se pueden
+    encontrar, `App::rollJoker`).
+  - Slinger: **Steady hand** (apuntando, el tiempo va al 20% y no se acaba -
+    la cámara lenta normal es 30% por 2.5 s; cuanto más apuntás, más pega el
+    primer golpe, hasta +60%), **Showtime** (cada atrapada rápida +20% daño y
+    velocidad sin tope en la pelea; una lenta deja la mitad).
+  - Alchemist: **Philosopher's stone** (cada golpe deja 2 elementos al azar de
+    los 6 - siempre reacciona; 3 y 4 en Lv2/3), **Grand reaction** (cada 10ª
+    reacción, x5 en toda la arena).
 - **F (Repulse) se abre en el acto 4** (antes en el 2, igual que la E). La E sigue en el 2.
+
+### 2026-10-05: 15 habilidades nuevas (de 8 a 23)
+
+- **Pedido del usuario:** más del doble de habilidades, que cambien el juego y
+  sin repetirse con los items. Eligió estas 15 de dos listas propuestas.
+- **Poco comunes:** Hook (tira al enemigo más cercano al núcleo hacia la
+  pelota y lo aturde), Mines (3 minas detrás, explotan al pisarlas, con su
+  elemento), Empower (el próximo golpe x3 y una onda), Tailwind (todas las
+  pelotas +30% de velocidad 3 s), Swap (cambia de lugar con el enemigo más
+  cercano al núcleo, solo si está más adentro que la pelota), Shrink (los
+  enemigos cerca a la mitad de tamaño 4 s: más lentos, reciben el doble),
+  Bounty (el enemigo más fuerte paga 5 de oro al morir).
+- **Raras:** Vortex (remolino 2 s que junta enemigos), Beam (rayo continuo 1 s
+  al más cercano), Blades (3 cuchillas giran 4 s), Cloud (nube de su elemento
+  3 s, reacciona con cualquiera), Smite (rayos sobre los 3 más fuertes, también
+  el jefe), Warp (se teletransporta entre el núcleo y el enemigo más cercano a
+  él y lo saca para afuera; cuenta como blink para los items del Assassin).
+- **Épicas (las primeras habilidades épicas):** Portal (dos portales 4 s, uno
+  junto al núcleo y otro donde está el enemigo más lejano; las pelotas pasan
+  de uno al otro, +20% de velocidad), Leash (atada al núcleo 4 s, gira como un
+  mangual sin poder alejarse).
+- **Desbloqueo, sin nodos nuevos:** Hook, Swap y Empower vienen abiertas (con
+  Dash y Nova, 5 de entrada). Cada nodo de habilidad abre 2 más: Magic
+  missile -> Beam, Blades; Arc -> Cloud, Smite; Bulwark -> Vortex, Shrink;
+  Split -> Portal, Mines; Overclock -> Tailwind, Leash; Meteor -> Warp, Bounty.
+- **Código:** `sim/WorldAbilities.cpp` (casos de `fireAbility`, `abilityTick`
+  por pelota, `abilityWorldTick` para minas / remolinos / nubes / portales),
+  números en `cfg::ability`. En el enum van **después de las reliquias**
+  (`AbilityHook..AbilityBounty`) para que las runs guardadas no cambien de
+  números; `upgradeCat` y `abilityOf` leen ese rango.
+- **Panel F1:** la pestaña Run tiene una columna propia de habilidades.
 
 ### Anotado para después (el usuario lo pidió así)
 

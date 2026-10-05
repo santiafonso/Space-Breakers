@@ -52,6 +52,11 @@ float World::commonPreHit(Ball& b, Enemy& e, const WorldParams&) {
     }
     if (s.predArmed) { k *= 1.f + c.predator; s.predArmed = false; }   // "Predator"
     if (s.perfect) k *= c.perfect;                                 // "Perfect release": until a wall
+    if (s.empower > 0.f) {                                         // "Empower" (ability): spent
+        k *= s.empower;
+        s.empower = 0.f;
+        s.empowerHit = true;
+    }
     if (s.slotDmgT > 0.f) k *= cfg::common::slotDamage;            // "Slot machine": a damage pair
     return k;
 }
@@ -70,6 +75,16 @@ void World::commonOnHit(Ball& b, Enemy& e, float dmg, bool kill, const WorldPara
             }
         ev.bursts.push_back({e.pos, e.radius * 2.f, theme::classAssassin, nullptr});
         kill = true;
+    }
+    if (c.contract > 0.f && !kill && e.hp > 0.f && e.id == classWorld_.common.contractId) {   // "Contract"
+        damageEnemy(e, e.maxHp * c.contract);
+        kill = e.hp <= 0.f;
+    }
+    if (!b.held) commonGunship(b, e, p);   // someone's "Gunship": a bullet off this hit
+    if (s.empowerHit) {   // "Empower" (ability): the hit sends out a wave
+        s.empowerHit = false;
+        areaDamage(e.pos, s.empowerR, dmg * cfg::ability::empowerWave, &e);
+        ev.bursts.push_back({e.pos, s.empowerR, b.color, nullptr});
     }
     if (c.sentence > 0.f && !kill && e.hp > 0.f) {   // "Death sentence": passed
         e.sentenceT = C::sentenceTime;
@@ -230,7 +245,10 @@ float World::commonDamageMul(const Ball& b) const {
         k *= 1.f + c.sentinel * clampf(1.f - d / (C::sentinelRange * arenaScale()), 0.f, 1.f);
     }
     if (classWorld_.common.elixirT > 0.f) k *= 1.f + classWorld_.common.elixir;   // someone's "Elixir"
-    if (c.juggernaut > 0.f && b.mods.radiusMult > 1.f) k *= 1.f + c.juggernaut * (b.mods.radiusMult - 1.f);   // "Juggernaut"
+    const float grown = b.mods.radiusMult * (1.f + b.cls.common.titan);   // "Titan" grows it too
+    if (c.juggernaut > 0.f && grown > 1.f) k *= 1.f + c.juggernaut * (grown - 1.f);   // "Juggernaut"
+    k *= 1.f + C::titanDamage * b.cls.common.titan;                                  // "Titan"
+    k *= 1.f + c.showtime * static_cast<float>(b.cls.common.showStacks);              // "Showtime"
     for (const Ball& o : balls_)   // other balls' "Anthem"
         if (o.owner != b.owner && o.mods.cls.common.anthem > 0.f) k *= 1.f + o.mods.cls.common.anthem;
     return k;
@@ -340,6 +358,33 @@ void World::commonWorldTick(float dt, const WorldParams& p, FrameEvents& ev) {
     midasPending_ = 0;
     if (cw.elixirT > 0.f && (cw.elixirT -= dt) <= 0.f) cw.elixir = 0.f;   // "Elixir" wears off
     if (cw.chronoT > 0.f && (cw.chronoT -= dt) <= 0.f) cw.chrono = 0.f;   // "Chronomancy" wears off
+    cw.stopT = std::max(0.f, cw.stopT - dt);                               // "Time stop"
+    abilityWorldTick(dt, p, ev);   // mines, vortices, clouds, portals (sim/WorldAbilities.cpp)
+    cw.rigged = false;                                                     // "Rigged" (World::chance)
+    bool contract = false;
+    for (const Ball& b : balls_) {
+        cw.rigged = cw.rigged || b.mods.cls.common.rigged;
+        contract = contract || b.mods.cls.common.contract > 0.f;
+    }
+    // "Contract": the boss, else the strongest enemy (a Brute first) - a new
+    // one when the last falls.
+    cw.contractBoss = contract && boss_.alive && boss_.intro <= 0.f;
+    if (!contract || cw.contractBoss) {
+        cw.contractId = -1;
+    } else {
+        bool alive = false;
+        for (const Enemy& e : enemies_) alive = alive || (e.id == cw.contractId && e.hp > 0.f);
+        if (!alive) {
+            cw.contractId = -1;
+            float best = -1.f;
+            for (const Enemy& e : enemies_) {
+                if (e.hp <= 0.f || e.orbiter || e.pos.x < 0.f || e.pos.y < 0.f || e.pos.x > size_.x || e.pos.y > size_.y)
+                    continue;
+                const float score = e.maxHp * (e.kind == EnemyKind::Brute ? 100.f : 1.f);
+                if (score > best) { best = score; cw.contractId = e.id; }
+            }
+        }
+    }
     cw.wardCd = std::max(0.f, cw.wardCd - dt);
     cw.wardOn = false;
     for (const Ball& b : balls_) cw.wardOn = cw.wardOn || b.mods.cls.common.wardEvery > 0.f;
@@ -402,11 +447,14 @@ void World::commonEnemyTick(Enemy& e, float dt) {
     }
     e.spotT = std::max(0.f, e.spotT - dt);
     e.doomT = std::max(0.f, e.doomT - dt);
+    if (e.shrinkT > 0.f && (e.shrinkT -= dt) <= 0.f) e.radius = e.shrinkR;   // "Shrink" wears off
 }
 
 // Per walking enemy, per step: "Brace" slows, "Decoy" pulls.
 void World::commonEnemyDrag(Enemy& e, float& edt, float dt) {
     if (classWorld_.common.chronoT > 0.f) edt *= 1.f - classWorld_.common.chrono;   // "Chronomancy"
+    if (classWorld_.common.stopT > 0.f) edt = 0.f;                                  // "Time stop"
+    if (e.shrinkT > 0.f) edt *= cfg::ability::shrinkSlow;                           // "Shrink" (ability)
     for (const SummonTurret& t : classWorld_.summoner.turrets) {   // "Fortify": a turret stops it dead
         if (length(t.pos - e.pos) > cfg::common::fortifyRadius * arenaScale() + e.radius) continue;
         for (const Ball& b : balls_)
@@ -467,6 +515,21 @@ void World::commonCoreBounce(Ball& b, const WorldParams& p, FrameEvents& ev) {  
     const CommonMods& c = b.mods.cls.common;
     b.cls.common.skipping = false;   // "Skipping stone": home
     b.cls.common.perfect = false;
+    if (c.titan > 0.f) {   // "Titan": it grows on every landing; full grown, the next one quakes
+        CommonState& s = b.cls.common;
+        if (s.titan >= 1.f) {
+            s.titan = 0.f;
+            const float dmg = ballDamage(b, p) * c.titanQuake;
+            for (Enemy& e : enemies_) {
+                if (e.hp <= 0.f || e.orbiter) continue;
+                damageEnemy(e, dmg);
+                e.stagger = std::max(e.stagger, c.titanStun);
+            }
+            ev.bursts.push_back({core_.pos, std::max(size_.x, size_.y) * 0.5f, theme::core, "QUAKE"});
+        } else {
+            s.titan = std::min(1.f, s.titan + c.titan);
+        }
+    }
     if (c.heavyLanding <= 0.f || b.cls.common.landingCd > 0.f) return;
     b.cls.common.landingCd = cfg::common::landingCd;
     const float R = cfg::common::landingRadius * arenaScale();
@@ -493,6 +556,14 @@ void World::commonClack(Ball& a, Ball& o) {
 
 void World::commonOnCast(Ball& b, const WorldParams& p, FrameEvents& ev) {
     const CommonMods& c = b.mods.cls.common;
+    if (c.archmage > 0.f) ++b.cls.common.archStacks;   // "Archmage": the next ones hit harder
+    if (c.timeStop > 0.f && ++b.cls.common.stopCasts % cfg::common::timeStopEvery == 0) {   // "Time stop"
+        CommonWorld& cw = classWorld_.common;
+        cw.stopT = std::max(cw.stopT, c.timeStop);
+        for (Enemy& e : enemies_)
+            if (e.hp > 0.f) e.stagger = std::max(e.stagger, c.timeStop);   // stopped counts as staggered (Opportunist)
+        ev.bursts.push_back({b.pos, std::max(size_.x, size_.y) * 0.5f, theme::classMage, "TIME STOP"});
+    }
     if (c.chrono > 0.f) {   // "Chronomancy": everything slows a moment
         CommonWorld& cw = classWorld_.common;
         cw.chronoT = cfg::common::chronoTime;
@@ -545,6 +616,16 @@ void World::commonOnReaction(Ball* rb, Element x, Element y, sf::Vector2f at, fl
                              FrameEvents& ev) {
     if (!rb) return;
     const CommonMods& c = rb->mods.cls.common;
+    if (c.grandEvery > 0 && ++rb->cls.common.grandN % c.grandEvery == 0) {   // "Grand reaction": the whole arena
+        const float dmg = hitDmg * c.grand;
+        for (Enemy& e : enemies_)
+            if (e.hp > 0.f && !e.orbiter) damageEnemy(e, dmg);
+        if (boss_.alive && boss_.intro <= 0.f) {
+            boss_.hp -= dmg * cfg::shooter::bossFrac;
+            boss_.hitFlash = 1.f;
+        }
+        ev.bursts.push_back({at, std::max(size_.x, size_.y) * 0.6f, elementColor(x), "GRAND REACTION"});
+    }
     if (c.saturate > 0.f) {   // "Saturate": both elements' full effects on what the blast caught
         const float R = c.saturate * arenaScale();
         const float pot = elemPotency(*rb, p);
@@ -627,6 +708,8 @@ void World::commonOnGrab(Ball& b) {
     const CommonMods& c = b.mods.cls.common;
     const bool quick = b.sinceThrow < cfg::common::relayWindow;   // caught soon after your throw
     if (c.secondWind > 0.f) qRefund_ += c.secondWind;            // "Second wind": App reads it
+    if (c.showtime > 0.f)                                         // "Showtime": quick = one more, slow = half
+        b.cls.common.showStacks = quick ? b.cls.common.showStacks + 1 : b.cls.common.showStacks / 2;
     if (b.cls.common.homeT > 0.f) {                               // "Homecoming": caught on the way home
         b.cls.common.homeT = 0.f;
         b.cls.common.homePulse = true;
@@ -679,6 +762,14 @@ void World::commonWaveStart() {
     classWorld_.common.wardCd = 0.f;
     classWorld_.common.lastLineUsed = false;
     classWorld_.common.chronoT = classWorld_.common.chrono = 0.f;
+    classWorld_.common.stopT = 0.f;
+    classWorld_.common.mines.clear();   // the second batch of abilities
+    classWorld_.common.vortices.clear();
+    classWorld_.common.clouds.clear();
+    classWorld_.common.portals.clear();
+    classWorld_.common.tailT = 0.f;
+    classWorld_.common.tailMul = 1.f;
+    classWorld_.common.contractId = -1;
     classWorld_.common.elixirT = classWorld_.common.elixir = 0.f;
     for (Ball& b : balls_) {
         b.cls.common.firstBlood = b.mods.cls.common.firstBlood > 0.f;   // "First blood": armed
@@ -688,6 +779,12 @@ void World::commonWaveStart() {
         b.cls.common.flickers = 0;
         b.cls.common.spin = 0.f;
         b.cls.common.slotT = b.mods.cls.common.slotEvery * 0.5f;   // the first spin comes early
+        b.cls.common.titan = 0.f;
+        b.cls.common.archStacks = b.cls.common.stopCasts = b.cls.common.showStacks = b.cls.common.grandN = 0;
+        b.cls.common.ionT = b.cls.common.stormOn = 0.f;
+        b.cls.common.empower = b.cls.common.beamT = b.cls.common.bladesT = b.cls.common.leashT = 0.f;
+        b.cls.common.empowerHit = false;
+        b.cls.common.stormT = b.mods.cls.common.leadStorm * 0.5f;   // the first storm comes early
     }
 }
 
@@ -719,6 +816,10 @@ float World::commonHouseEdge() const {   // "House edge" (App doubles the gold)
 
 // An enemy just died (any cause): "Fission" spreads the element it carried.
 void World::commonOnDeath(const Enemy& dead, FrameEvents& ev) {
+    if (dead.bounty > 0) {   // "Bounty" (ability): collected
+        ev.midasGold += dead.bounty;
+        ev.bursts.push_back({dead.pos, dead.radius * 3.f, theme::puGolden, nullptr});
+    }
     if (dead.elemT <= 0.f || dead.elem == Element::Plain || dead.elemOwner < 0) return;
     for (const Ball& b : balls_) {
         if (b.owner != dead.elemOwner || b.mods.cls.common.fission <= 0.f) continue;

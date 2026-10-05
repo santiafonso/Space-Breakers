@@ -221,7 +221,9 @@ BallSpec App::ballSpec(const BallLoadout& L) const {
         const int lvl = gearPower(L.gearLvl[i]);       // Lv1-3 play as the old 1 / 3 / 5
         const float n = static_cast<float>(lvl - 1);   // levels past the first
         m.damageMult *= 1.f + C::itemLevelDamage * n;
-        switch (static_cast<UpgradeKind>(L.gear[i])) {
+        UpgradeKind gk = static_cast<UpgradeKind>(L.gear[i]);
+        if (gk == UpgradeKind::Joker && jokerAs_ >= 0) gk = static_cast<UpgradeKind>(jokerAs_);   // "Joker": this fight's copy
+        switch (gk) {
             case UpgradeKind::Ricochet:
                 m.ricochetMult = C::ricochetMult + C::ricochetMultPerLevel * n;
                 m.wallBoost = C::ricochetBoost + C::ricochetBoostPerLevel * n;
@@ -333,7 +335,7 @@ BallSpec App::ballSpec(const BallLoadout& L) const {
             case UpgradeKind::Gemini: m.twins = 1 + (lvl >= 3 ? 1 : 0) + (lvl >= 5 ? 1 : 0); break;
             case UpgradeKind::Midas:  m.midasGold = G::midasGold * lvl; break;
             default:   // the newer classes' items (core/ClassSpec.cpp)
-                foldClassItem(static_cast<UpgradeKind>(L.gear[i]), lvl, m);
+                foldClassItem(gk, lvl, m);
                 break;
         }
     }
@@ -729,6 +731,7 @@ void App::startWaveAt(int wave, bool elite) {
                           cfg::core::mendPerLevel * static_cast<float>(data_.meta.unlock[MetaMend]));
     if (const int bastion = data_.meta.unlock[MetaBastion]; bastion > 0)   // "Bastion": max HP grows each wave
         world_.addCoreMaxHp(cfg::core::bastionPerWavePerLevel * static_cast<float>(bastion));
+    rollJoker();
     const int w = data_.run.wave;
     if (cfg::run::isBossWave(w)) audio_.bossAppear();
     else audio_.waveStart();
@@ -740,6 +743,34 @@ void App::startWaveAt(int wave, bool elite) {
         world_.startWave(w, params(), elite);
     data_.meta.stats.bestWave =
         std::max(data_.meta.stats.bestWave, static_cast<std::uint32_t>(data_.run.wave));
+}
+
+// "Joker": a fresh copy each fight - any legendary item the web lets you find.
+void App::rollJoker() {
+    bool any = false;
+    for (const BallLoadout& b : data_.run.balls)
+        for (int i = 0; i < kBallSlots; ++i) any = any || b.gear[i] == static_cast<int>(UpgradeKind::Joker);
+    if (!any) {
+        jokerAs_ = -1;
+        return;
+    }
+    const UpgradeCtx ctx = buildUpgradeCtx();
+    std::vector<UpgradeKind> pool;
+    for (int i = 0; i < kUpgradeKindCount; ++i) {
+        const auto k = static_cast<UpgradeKind>(i);
+        if (k != UpgradeKind::Joker && upgradeCat(k) == UpgradeCat::Item && upgradeTier(k) == Tier::Legendary &&
+            !ctx.isLocked(k))
+            pool.push_back(k);
+    }
+    if (pool.empty()) {
+        jokerAs_ = -1;
+        return;
+    }
+    const UpgradeKind k = pool[static_cast<std::size_t>(rng_.irange(0, static_cast<int>(pool.size()) - 1))];
+    jokerAs_ = static_cast<int>(k);
+    syncWorldBalls();
+    effects_.addLabel(std::string("Joker: ") + upgradeInfo(k).title, {size().x * 0.5f, size().y * 0.36f},
+                      theme::classJester, 22, 1.6f);
 }
 
 UpgradeCtx App::buildUpgradeCtx() const {
@@ -784,6 +815,9 @@ int App::luck() const {
     int l = cfg::luck::luckyStarPerLevel * data_.meta.unlock[MetaLuckyStar];
     if (data_.run.mods.luckyClover) l += cfg::luck::cloverPoints;
     if (hasCreed(CreedId::LoadedDice)) l += cfg::luck::dicePoints;
+    for (const BallLoadout& b : data_.run.balls)   // "Rigged": luck past its first level
+        for (int i = 0; i < kBallSlots; ++i)
+            if (b.gear[i] == static_cast<int>(UpgradeKind::Rigged)) l += cfg::common::riggedLuck * (b.gearLvl[i] - 1);
     // ---- Jester: every "Lucky charm" on every ball adds its points.
     for (const BallLoadout& b : data_.run.balls)
         for (int i = 0; i < kBallSlots; ++i)
@@ -2181,7 +2215,12 @@ void App::update(float frameDt) {
             simDt *= cfg::app::waveIntroSlow + (1.f - cfg::app::waveIntroSlow) * t;
         }
         float slow = 1.f;
-        if (aiming_ && aimSlows() && aimT_ < cfg::app::aimSlowMax) {   // "Heavy Arm" pact: none   // slingshot aim: bullet time, briefly
+        const Ball* aimed = world_.heldBall();
+        const float steady = aimed ? aimed->mods.cls.common.steady : 0.f;   // "Steady hand": deeper, and it never runs out
+        if (aiming_ && steady > 0.f) {
+            aimT_ += frameDt;
+            slow = steady;
+        } else if (aiming_ && aimSlows() && aimT_ < cfg::app::aimSlowMax) {   // "Heavy Arm" pact: none   // slingshot aim: bullet time, briefly
             aimT_ += frameDt;
             slow = cfg::app::aimTimeScale;
         }
