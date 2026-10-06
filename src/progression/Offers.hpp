@@ -343,7 +343,7 @@ inline UpgradeInfo upgradeInfo(UpgradeKind k) {
         case UpgradeKind::AbilitySmite:  return {"Smite", "every few seconds lightning strikes the 3 strongest enemies, anywhere, with its element"};
         case UpgradeKind::AbilityWarp:   return {"Warp", "every few seconds the ball teleports onto the enemy nearest the core and strikes it away"};
         case UpgradeKind::AbilityPortal: return {"Portal", "every few seconds two portals open for 3 s, one by the core and one a short way out toward the enemies: a ball flying into one is shot out of the other at the nearest enemy"};
-        case UpgradeKind::AbilityLeash:  return {"Leash", "every few seconds the ball is tied to the core for 4 s and swings around it like a flail, fast"};
+        case UpgradeKind::AbilityLeash:  return {"Leash", "the ball is tied to the core and spins around it for 4 s, from half a turn to 4 turns a second, hitting all it sweeps - then it's let go at full speed and keeps that speed 2.5 s, ricocheting everywhere (first hit +50%)"};
         case UpgradeKind::AbilitySwap:   return {"Swap", "every few seconds the ball trades places with the enemy nearest the core, striking and stunning it"};
         case UpgradeKind::AbilityShrink: return {"Shrink", "every few seconds the enemies near the ball shrink for 4 s: half the size, slower, and they take double damage"};
         case UpgradeKind::AbilityBounty: return {"Bounty", "every few seconds a price goes on the strongest enemy's head: whoever kills it earns 5 gold"};
@@ -439,7 +439,7 @@ inline const char* upgradeLevelDesc(UpgradeKind k) {
         case UpgradeKind::AbilitySmite:  return "harder strikes, a shorter cooldown; a 4th strike at level 3, a 5th at level 5";
         case UpgradeKind::AbilityWarp:   return "a harder strike, a shorter cooldown";
         case UpgradeKind::AbilityPortal: return "the portals stay open longer, a shorter cooldown";
-        case UpgradeKind::AbilityLeash:  return "a longer, faster swing, a shorter cooldown";
+        case UpgradeKind::AbilityLeash:  return "+0.5 s of full-speed flight after the launch, a shorter cooldown";
         case UpgradeKind::AbilitySwap:   return "a harder strike, a longer stun, a shorter cooldown";
         case UpgradeKind::AbilityShrink: return "wider and longer, a shorter cooldown";
         case UpgradeKind::AbilityBounty: return "+1 gold, a shorter cooldown";

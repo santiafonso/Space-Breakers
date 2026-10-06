@@ -308,6 +308,7 @@ void MenuScreen::rebuild(App& app) {
                     {resetArm_ > 0.f ? "Reset progress - click again to confirm" : "Reset progress",
                      true},
                     {"Quit", true}});
+    if (app.devMode()) items.insert(items.end() - 1, {"Endless (dev)", true});   // dev only: waves back to back
     menu_.setItems(items);
     menu_.layout({s.x * 0.5f, s.y * 0.44f});
 }
@@ -340,7 +341,11 @@ void MenuScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
             resetArm_ = 4.f;
             rebuild(app);
             break;
-        case 5: app.quit(); break;
+        case 5:
+            if (app.devMode()) { app.startEndless(); break; }   // "Endless (dev)" sits before Quit
+            app.quit();
+            break;
+        case 6: app.quit(); break;
         default: break;
     }
 }
@@ -1144,6 +1149,11 @@ void PlayScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
         dropHeld(app);
         return;
     }
+    if (isLeftClick(e) && app.data().run.endless && endlessButton(app).contains(app.uiMouse())) {   // dev endless: a crowd
+        app.world().devSpawn(cfg::app::endlessCrowd);
+        app.audio().uiClick();
+        return;
+    }
     if (isLeftClick(e)) { grab(app, mouse); return; }
     if (e.type == sf::Event::MouseButtonReleased && e.mouseButton.button == sf::Mouse::Left)
         release(app);
@@ -1212,6 +1222,12 @@ void PlayScreen::drawAim(App& app, sf::RenderWindow& w) const {
     const sf::Color col = withAlpha(lerpColor(theme::accent, theme::puGolden, k), 0.35f + 0.5f * k);
     for (float s = b->radius + 6.f * as; s < t; s += 18.f * as)
         seg(b->pos + dir * s, b->pos + dir * std::min(s + 9.f * as, t), 3.f * as, col);
+}
+
+// Dev endless: the "+N enemies" button, top right under the HUD (UI units).
+sf::FloatRect PlayScreen::endlessButton(App& app) {
+    const sf::Vector2f s = app.size();
+    return {s.x - 170.f, 74.f, 150.f, 30.f};
 }
 
 void PlayScreen::draw(App& app, sf::RenderWindow& w) {
@@ -1293,6 +1309,16 @@ void PlayScreen::draw(App& app, sf::RenderWindow& w) {
     if (app.repulseOpen()) kx += 30.f;
     drawTabHint(app, w, {kx + 10.f, dy - keyCapSize(app.font(), "tab").y * 0.5f});
     drawCreedHud(app, w, app.uiMouse(), !peek_.open && !dragging_);
+    if (app.data().run.endless) {   // dev endless: wave number, and the crowd button
+        const sf::FloatRect r = endlessButton(app);
+        const bool hot = r.contains(app.uiMouse());
+        draw::box(w, r, theme::corner, withAlpha(theme::bgDeep, 0.9f), withAlpha(theme::bgDeep, 0.9f),
+                  withAlpha(theme::coreLow, hot ? 0.95f : 0.6f), 1.5f);
+        drawCentered(w, app.font(), "+" + std::to_string(cfg::app::endlessCrowd) + " enemies", theme::fsSmall,
+                     {r.left + r.width * 0.5f, r.top + r.height * 0.5f - 1.f}, hot ? theme::textHi : theme::textLo);
+        drawLabel(w, app.font(), "ENDLESS  wave " + std::to_string(app.data().run.wave), 12,
+                  {r.left + r.width * 0.5f, r.top - 12.f}, theme::textDim);
+    }
 
     if (peek_.open) {
         drawLoadoutOverlay(app, w, true, peek_);
@@ -1995,7 +2021,7 @@ void RunOverScreen::onEnter(App& app) {
     const sf::Vector2f s = app.size();
     menu_.init(app.font(), theme::fsItem, s.y * 0.06f);
     menu_.setItems({{"Skill web", true}, {"Menu", true}});
-    menu_.layout({s.x * 0.5f, s.y * 0.80f});
+    menu_.layout({s.x * 0.5f, s.y * 0.91f});
 }
 
 void RunOverScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
@@ -2041,7 +2067,7 @@ void RunOverScreen::draw(App& app, sf::RenderWindow& w) {
         std::snprintf(t, sizeof(t), "%d:%02d", secs / 60, secs % 60);
         const std::pair<const char*, std::string> cells[] = {
             {"kills", std::to_string(r.kills)}, {"best combo", std::to_string(r.bestCombo)}, {"time", t}};
-        const float gap = 170.f, y = s.y * 0.44f;
+        const float gap = 170.f, y = s.y * 0.37f;
         for (int i = 0; i < 3; ++i) {
             const float x = cx + (static_cast<float>(i) - 1.f) * gap;
             drawLabel(w, app.font(), cells[i].first, 11, {x, y - 16.f}, withAlpha(theme::textDim, ra));
@@ -2052,33 +2078,70 @@ void RunOverScreen::draw(App& app, sf::RenderWindow& w) {
         }
     }
 
-    // Your balls: one disc each in its class colour, its classes under it.
+    // Your balls: a column each - the disc, its classes, its kills, then what it carried.
     {
         const float ba = clampf(introPop(it, 0.32f), 0.f, 1.f);
         const std::vector<Ball>& balls = app.world().balls();
-        const std::vector<BallLoadout>& lo = app.data().run.balls;
-        const int n = static_cast<int>(balls.size());
-        const float step = 110.f, y = s.y * 0.58f;
+        const int n = static_cast<int>(r.balls.size());
+        const float step = std::min(170.f, (s.x - 60.f) / static_cast<float>(std::max(1, n)));
+        const float y = s.y * 0.49f;
         float x = cx - step * 0.5f * static_cast<float>(n - 1);
+        int best = 0;   // the top killer gets its number lit
+        for (int i = 0; i < n; ++i)
+            if (r.ballKills[static_cast<std::size_t>(i)] > r.ballKills[static_cast<std::size_t>(best)]) best = i;
         for (int i = 0; i < n; ++i, x += step) {
-            const sf::Color ec = ballHue(balls[static_cast<std::size_t>(i)]);
-            draw::disc(w, {x, y}, 13.f, withAlpha(lerpColor(ec, sf::Color::White, 0.2f), ba), withAlpha(ec, ba),
-                       {1.f, 1.f}, 28);
+            const BallLoadout& L = r.balls[static_cast<std::size_t>(i)];
+            const sf::Color ec = i < static_cast<int>(balls.size()) ? ballHue(balls[static_cast<std::size_t>(i)]) : theme::ballMid;
+            draw::disc(w, {x, y}, 13.f, withAlpha(lerpColor(ec, sf::Color::White, 0.2f), ba), withAlpha(ec, ba), {1.f, 1.f}, 28);
             std::string cls;
-            if (i < static_cast<int>(lo.size())) {
-                ItemTag roles[2];
-                for (int k = 0, m = lo[static_cast<std::size_t>(i)].roles(roles); k < m; ++k)
-                    cls += (k ? " / " : "") + std::string(itemTagName(roles[k]));
-            }
-            drawLabel(w, app.font(), cls.empty() ? "no class" : cls, 11, {x, y + 28.f},
-                      withAlpha(cls.empty() ? theme::textDim : theme::textLo, ba));
+            ItemTag roles[2];
+            for (int k = 0, m = L.roles(roles); k < m; ++k)
+                cls += (k ? " / " : "") + std::string(L.ascended() == roles[k] ? ascendedName(tagRole(roles[k])) : itemTagName(roles[k]));
+            drawLabel(w, app.font(), cls.empty() ? "no class" : cls, 11, {x, y + 26.f}, withAlpha(cls.empty() ? theme::textDim : theme::textLo, ba));
+            const int kills = r.ballKills[static_cast<std::size_t>(i)];
+            drawLabel(w, app.font(), std::to_string(kills) + (kills == 1 ? " kill" : " kills"), 13, {x, y + 44.f},
+                      withAlpha(i == best && kills > 0 ? theme::puGolden : theme::textHi, ba));
+            float ly = y + 66.f;   // its items (tier colour), element, abilities - one per line
+            auto line = [&](const std::string& txt, sf::Color c) {
+                drawLabel(w, app.font(), txt, 11, {x, ly}, withAlpha(c, ba));
+                ly += 15.f;
+            };
+            for (int sl = 0; sl < kBallSlots; ++sl)
+                if (L.gear[sl] >= 0) {
+                    const auto k = static_cast<UpgradeKind>(L.gear[sl]);
+                    line(std::string(upgradeInfo(k).title) + (L.gearLvl[sl] > 1 ? "  " + std::to_string(L.gearLvl[sl]) : ""), tierColor(upgradeTier(k)));
+                }
+            Element els[kMaxElements];
+            for (int e = 0, ne = L.elements(els); e < ne; ++e) line(elementName(els[e]), elementColor(els[e]));
+            for (int a = 0; a < kMaxAbilitySlots; ++a)
+                if (L.ability[a] >= 0) line(upgradeInfo(static_cast<UpgradeKind>(L.ability[a])).title, theme::ability);
         }
+    }
+
+    // The run's passives: relics, creeds, pacts - one quiet line each.
+    {
+        const float pa = clampf(introPop(it, 0.38f), 0.f, 1.f);
+        float y = s.y * 0.76f;
+        auto row = [&](const char* head, const std::vector<std::string>& names, sf::Color c) {
+            if (names.empty()) return;
+            std::string txt = std::string(head) + "   ";
+            for (std::size_t i = 0; i < names.size(); ++i) txt += (i ? "  -  " : "") + names[i];
+            drawLabel(w, app.font(), txt, 12, {cx, y}, withAlpha(c, pa));
+            y += 18.f;
+        };
+        std::vector<std::string> relics, creeds, pacts;
+        for (UpgradeKind k : runRelics(r.mods)) relics.push_back(upgradeInfo(k).title);
+        for (int c : r.creeds) creeds.push_back(creedDef(static_cast<CreedId>(c)).name);
+        for (int c : r.pacts) pacts.push_back(pactDef(static_cast<PactId>(c)).name);
+        row("RELICS", relics, theme::puGolden);
+        row("CREEDS", creeds, sf::Color(226, 70, 84));
+        row("PACTS", pacts, theme::classMage);
     }
 
     // What it paid.
     std::string pay = "+" + std::to_string(r.cores) + " cores";
     if (r.prisms > 0) pay += "      +" + std::to_string(r.prisms) + (r.prisms == 1 ? " prism" : " prisms");
-    drawCenteredPop(w, app.font(), pay, theme::fsHeading, {cx, s.y * 0.69f}, theme::accent, introPop(it, 0.4f));
+    drawCenteredPop(w, app.font(), pay, theme::fsHeading, {cx, s.y * 0.84f}, theme::accent, introPop(it, 0.4f));
 
     menu_.draw(w, it);
 }

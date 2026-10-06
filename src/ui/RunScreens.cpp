@@ -252,7 +252,7 @@ void EquipScreen::draw(App& app, sf::RenderWindow& w) {
         sub = src == EquipSource::ShopForge
             ? "each level: the item's bonus or chance grows by half, and the ball hits 10% harder (max level " +
                   std::to_string(app.forgeCap()) + ")"
-            : "a level costs 1 point (an Epic too, but only one Epic per visit) - a Legendary costs 2";
+            : "common / uncommon: 1 point - rare / epic: 1 point, only as your first - legendary: both points";
         hint = src == EquipSource::ShopForge ? "click an item   -   Back: the shop"
                                              : "click an item   -   Back: leave the forge";
     } else if (barter) {

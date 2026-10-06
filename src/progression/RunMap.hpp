@@ -47,7 +47,7 @@ inline const char* mapNodeName(MapNodeType t) {
         case MapNodeType::Shop:    return "Shop";
         case MapNodeType::Forge:   return "Forge";
         case MapNodeType::Rest:    return "Rest";
-        case MapNodeType::Upgrade: return "Upgrade";
+        case MapNodeType::Upgrade: return "Encounter";
         case MapNodeType::Recruit: return "Recruit";
         case MapNodeType::Boss:    return "Boss";
         case MapNodeType::Altar:   return "Altar";
@@ -61,8 +61,8 @@ inline const char* mapNodeDesc(MapNodeType t) {
         case MapNodeType::Elite:   return "a much harder wave - more gold and an item pick (items only come from elites and shops)";
         case MapNodeType::Shop:    return "rare: buy what's on the shelf (items, abilities, relics, modifiers), reroll it as often as you can pay, sell one item";
         case MapNodeType::Forge:   return "level up one item a ball already carries";
-        case MapNodeType::Rest:    return "no fight: repair the core, or level up an item";
-        case MapNodeType::Upgrade: return "no fight: a free pick of 1 of 3 (no items) - or a stranger with deals for gold";
+        case MapNodeType::Rest:    return "no fight: repair the core, OR forge (2 points of levels) - not both";
+        case MapNodeType::Upgrade: return "no fight: an encounter - a stranger, a trade, a gamble, something odd";
         case MapNodeType::Recruit: return "no fight: a new ball, or a free pick";
         case MapNodeType::Boss:    return "the act's boss";
         case MapNodeType::Altar:   return "no fight: a pact - a gift with a price. Take one of three, or walk away";
@@ -105,8 +105,7 @@ inline MapNodeType rollNodeType(Rng& rng, int row, int act, PathLean lean) {
         {MapNodeType::Combat,  M::wCombat},
         {MapNodeType::Elite,   row >= 3 ? elite : 0},
         {MapNodeType::Shop,    row >= 3 ? shop : 0},
-        {MapNodeType::Forge,   row >= 4 ? M::wForge : 0},
-        {MapNodeType::Rest,    row >= 4 ? M::wRest : 0},
+        {MapNodeType::Rest,    row >= 4 ? M::wRest : 0},   // (no Forge stops since 2026-10-05: the Rest is where you forge)
         {MapNodeType::Upgrade, M::wUpgrade},
         {MapNodeType::Recruit, row >= 3 ? recruit : 0},
     };
@@ -126,7 +125,7 @@ inline MapNodeType rollNodeType(Rng& rng, int row, int act, PathLean lean) {
 // (No Recruit here: a sure ball at the end of every act would undo how
 // scarce balls are meant to be.)
 inline constexpr MapNodeType kPreBossRow[] = {MapNodeType::Shop, MapNodeType::Rest,
-                                              MapNodeType::Upgrade, MapNodeType::Forge};
+                                              MapNodeType::Upgrade, MapNodeType::Rest};
 static_assert(sizeof(kPreBossRow) / sizeof(kPreBossRow[0]) == cfg::map::lanes);
 
 // Build an act's map. Row 1 is a single fight (the trunk). Above it a few
@@ -140,7 +139,7 @@ static_assert(sizeof(kPreBossRow) / sizeof(kPreBossRow[0]) == cfg::map::lanes);
 // stop is met once (App::newRun, cfg::tutorial).
 inline RunMap tutorialMap() {
     static const MapNodeType kStops[] = {MapNodeType::Combat, MapNodeType::Recruit, MapNodeType::Elite,
-                                         MapNodeType::Shop, MapNodeType::Forge};
+                                         MapNodeType::Shop, MapNodeType::Rest};
     RunMap m;
     m.act = 1;
     m.rows = static_cast<int>(std::size(kStops));
@@ -372,7 +371,6 @@ inline RunMap generateMap(Rng& rng, int act, int rows = 0) {
             const W table[] = {
                 {MapNodeType::Upgrade, M::wUpgrade},
                 {MapNodeType::Shop,    b.row >= 3 ? M::wShopNeutral : 0},
-                {MapNodeType::Forge,   b.row >= 4 ? M::wForge : 0},
                 {MapNodeType::Rest,    b.row >= 4 ? M::wRest : 0},
             };
             int total = 0;

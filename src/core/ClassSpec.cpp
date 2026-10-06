@@ -265,6 +265,10 @@ bool foldCommon(UpgradeKind k, int level, BallMods& m) {
         case K::Pickpocket: c.pickpocket = C::pickpocket + C::pickpocketPerLevel * n; return true;
         case K::HotStreak:  c.hotStreak = C::hotStreak + C::hotStreakPerLevel * n; return true;
         case K::LuckyBreak: c.luckyBreak = C::luckyBreak + C::luckyBreakPerLevel * n; return true;
+        case K::Roulette:
+            c.rouletteEvery = C::rouletteEvery + C::rouletteEveryPerLevel * n;
+            c.roulette = C::roulette + C::roulettePerLevel * n;
+            return true;
         case K::Confetti:
             c.confetti = C::confetti + (level - 1);
             c.confettiFrac = C::confettiFrac + C::confettiFracPerLevel * n;

@@ -66,6 +66,7 @@ public:
     void addCoreMaxHp(float delta);                  // raise the core's max HP mid-run
 
     // ---- creeds (sim/WorldCreeds.cpp) -----------------------------------
+    const std::vector<int>& ballKills() const { return ballKills_; }   // kills per ball (owner) this run
     void trimBalls(int n);                     // "Duet": drop every ball past the first n
     void creedNova(const WorldParams& p);       // "Nova": burst every ball out of the core in a ring
     // "Hunters": each ball's current prey (valid where huntHas()[i] is set).
@@ -77,6 +78,8 @@ public:
     void devSpawn(EnemyKind k, int n);    // drop n enemies of a kind in from the edges
     void devKillAll();                    // everything on the field dies (counts as kills)
     void devSetInvuln(bool on) { invuln_ = on; }
+    void setEndless(bool on) { endless_ = on; }   // dev endless: a fallen core just refills, the run goes on
+    void devSpawn(int n) { for (int i = 0; i < n; ++i) spawnEnemy(); }   // dev: n more enemies at once
     void setPhoenix(int charges) { phoenixLeft_ = charges; }   // "Phoenix" relic: saves left this act
     bool devInvuln() const { return invuln_; }
 
@@ -174,6 +177,8 @@ private:
 
     void spawnBall(const BallSpec& spec, const WorldParams& p);
     void applySpec(Ball& b, const BallSpec& spec);   // roles / element / gear / abilities onto a ball
+    float roleContact(const Ball& b, const Enemy& e);   // the classes' own contact hit (Mage soft, Assassin's back, Jester's die)
+    float roleCruise(const Ball& b) const;   // the classes' own speed: Guardian slow, Assassin quick, an idle Slinger sinking
     float ballBaseCruise(const Ball& b, const WorldParams& p) const;   // role-scaled cruise, no buffs
     float ballCruise(const Ball& b, const WorldParams& p) const;       // + Surge / Warm-up
     float ballMaxSpeed(const Ball& b, const WorldParams& p) const;
@@ -203,6 +208,7 @@ private:
     sf::Vector2f wideArenaSize() const;      // the pulled-back arena used from the boss wave on
     void updateCoreSlide(float dt);          // ease the core left -> centre entering wave 11
     void advanceCombo(float dt, const WorldParams& p);
+    void advanceLeash(Ball& b, float dt, const WorldParams& p, FrameEvents& ev);   // "Leash": the spin on its rope
     void advanceSatellite(Ball& b, float dt, const WorldParams& p, FrameEvents& ev);   // "Satellite": orbit the core
     void fireRail(Ball& b, const WorldParams& p, FrameEvents& ev);                    // "Railgun" beam
     void updateStorm(Ball& b, float dt, const WorldParams& p, FrameEvents& ev);       // "Storm" zaps
@@ -279,6 +285,8 @@ private:
     void commonGolems(float dt, const WorldParams& p, FrameEvents& ev);   // "Golem" (WorldClasses.cpp)
     void commonDragons(float dt, const WorldParams& p, FrameEvents& ev);  // "Baby / Elder dragon", "Hive"
     Ball* castBall_ = nullptr;   // the ball whose ability is firing right now ("Spellweave")
+    int dmgOwner_ = -1;          // the ball behind the damage being dealt right now (kill credit), -1 = work it out
+    std::vector<int> ballKills_; // kills per ball (owner) this run
     void commonOnBlink(Ball& b, Enemy& t, const WorldParams& p, sf::Vector2f from);   // Mark for death / Quickstep / Razor wire
     void commonOnGrab(Ball& b);                              // Relay / Second wind
     void commonOnThrow(Ball& b, float pullFrac);             // Long pull / Covering fire
@@ -329,6 +337,13 @@ public:
     bool beckon(int ball, sf::Vector2f at, const WorldParams& p);
 private:
     void addFx(const CommonWorld::Fx& f);   // an ability's flourish (drawn only)
+    // Take `seconds` off ability slot i's cooldown (or `frac` of the full
+    // one) - but all the refunds between two casts add up to at most
+    // cfg::ability::refundCap of the cooldown, however many items stack.
+    void refundAbility(Ball& b, int i, float seconds, float frac = 0.f);
+    void refundAbilities(Ball& b, float seconds, float frac = 0.f) {
+        for (int i = 0; i < kMaxAbilitySlots; ++i) refundAbility(b, i, seconds, frac);
+    }
     void itemFx(CommonWorld::Fx::Kind k, sf::Vector2f at, float r, sf::Color c, float life,
                 sf::Vector2f b = {0.f, 0.f}, sf::Color c2 = sf::Color::White);   // an item's own shape
     void resetAbilityCooldowns(Ball& b);   // a wave starts: every ability part-charged
@@ -423,6 +438,7 @@ private:
 
     float pickupTimer_ = cfg::pickup::spawnMin;
     bool invuln_ = false;  // dev: core takes no damage
+    bool endless_ = false; // dev endless: the core never ends the run
     int phoenixLeft_ = 0;  // "Phoenix": times the core can still come back this act
 
     int aegisChargesLeft_ = 0;      // "Aegis": hits the core still soaks this wave

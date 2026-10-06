@@ -316,8 +316,9 @@ enum class UpgradeKind {
     Cocoon,            // does nothing; hatches into an Epic+ item after 3 fights (its level = fights left)
     // ---- items added after the abilities (2026-10-05) ----
     BlackPlague,       // enemies it hits may catch a plague: they go mad and spread it [Alchemist]
+    Roulette,          // a little roulette spins over it: red damage, black speed, green both [Jester]
 };
-inline constexpr int kUpgradeKindCount = static_cast<int>(UpgradeKind::BlackPlague) + 1;
+inline constexpr int kUpgradeKindCount = static_cast<int>(UpgradeKind::Roulette) + 1;
 inline constexpr int kMaxUpgradeKinds = 384;   // capacity of UpgradeCtx::locked
 static_assert(kUpgradeKindCount <= kMaxUpgradeKinds, "raise kMaxUpgradeKinds");
 

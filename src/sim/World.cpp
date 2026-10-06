@@ -51,9 +51,38 @@ float World::cruiseSpeed(const WorldParams& p) const {
     return c;
 }
 
+// A contact hit as each class feels it (2026-10-06): the ones that fight by
+// other means hit softer, an Assassin hits harder from behind (the enemy's
+// side away from the core - they walk toward it) and a Jester rolls a die.
+float World::roleContact(const Ball& b, const Enemy& e) {
+    namespace R = cfg::role;
+    float k = 1.f;
+    if (b.hasRole(BallRole::Mage)) k *= R::mageContactMul;
+    if (b.hasRole(BallRole::Shooter)) k *= R::shooterContactMul;
+    if (b.hasRole(BallRole::Summoner)) k *= R::summonerContactMul;
+    if (b.hasRole(BallRole::Alchemist)) k *= R::alchemistContactMul;
+    if (b.hasRole(BallRole::Assassin)) {
+        const sf::Vector2f back = normalized(e.pos - core_.pos, {1.f, 0.f});
+        if (dot(normalized(b.pos - e.pos, {0.f, 0.f}), back) >= R::assassinBackCos) k *= R::assassinBackMul;
+    }
+    if (b.hasRole(BallRole::Jester)) k *= rng_.range(R::jesterRollMin, R::jesterRollMax);
+    return k;
+}
+
+float World::roleCruise(const Ball& b) const {
+    namespace R = cfg::role;
+    float k = 1.f;
+    if (b.hasRole(BallRole::Guardian)) k *= R::guardianCruiseMul;
+    if (b.hasRole(BallRole::Assassin)) k *= R::assassinCruiseMul;
+    if (b.hasRole(BallRole::Slinger)) {   // left alone, it sinks: throw it to wake it up
+        const float t = clampf((b.cls.slinger.idleT - R::slingerIdleGrace) / R::slingerIdleFade, 0.f, 1.f);
+        k *= lerpf(1.f, R::slingerIdleMin, t);
+    }
+    return k;
+}
+
 float World::ballBaseCruise(const Ball& b, const WorldParams& p) const {
-    return cruiseBase(p) * b.mods.cruiseMult *
-           (b.hasRole(BallRole::Guardian) ? cfg::role::guardianCruiseMul : 1.f);
+    return cruiseBase(p) * b.mods.cruiseMult * roleCruise(b);
 }
 
 // "Lucky number": a high roll flies faster, a low one slower, a 1 stands still.
@@ -66,13 +95,13 @@ static float luckySpeed(const CommonState& s) {
 }
 
 float World::ballCruise(const Ball& b, const WorldParams& p) const {
-    return cruiseSpeed(p) * b.mods.cruiseMult *
-           (b.hasRole(BallRole::Guardian) ? cfg::role::guardianCruiseMul : 1.f) *
+    return cruiseSpeed(p) * b.mods.cruiseMult * roleCruise(b) *
            (b.hasElement(Element::Stone) ? cfg::element::stoneCruise : 1.f) *   // stone: the heavy one
            (b.overclockT > 0.f ? cfg::ability::overclockCruise : 1.f) *   // "Overclock" ability
            (1.f + b.mods.cls.common.adrenaline * static_cast<float>(b.cls.common.adrenaline)) *   // "Adrenaline"
            (b.cls.common.frenzyT > 0.f ? cfg::common::slotFrenzySpeed : 1.f) *   // "777": a frenzy
            luckySpeed(b.cls.common) *                                              // "Lucky number"
+           (b.cls.common.rouletteWin == 1 || b.cls.common.rouletteWin == 2 ? 1.f + b.mods.cls.common.roulette : 1.f) *   // "Roulette": black (or green)
            (1.f + b.mods.cls.common.showtime * static_cast<float>(b.cls.common.showStacks)) *   // "Showtime"
            (classWorld_.common.tailT > 0.f ? classWorld_.common.tailMul : 1.f) *                 // "Tailwind" (ability)
            (classWorld_.common.rainT > 0.f ? cfg::common::rainHaste : 1.f);                     // "Primal" water: rain
@@ -220,6 +249,7 @@ void World::startRun(const WorldParams& p, const std::vector<BallSpec>& balls,
     ghosts_.clear();
     pendingGhosts_.clear();
     enemies_.clear();
+    ballKills_.clear();
     lastCoreHitBy_ = -1;
     bolts_.clear();
     obstacles_.clear();
@@ -733,6 +763,7 @@ bool World::grabAt(sf::Vector2f point, float catchRadius) {
     pactOnGrab(b);
     classOnGrab(b);
     commonOnGrab(b);
+    b.cls.common.leashT = b.cls.common.leashFlyT = 0.f;   // "Leash": your hand cuts the rope
     b.held = true;
     b.vel = {0.f, 0.f};
     b.trail.clear();
@@ -758,6 +789,7 @@ void World::releaseHeld(sf::Vector2f throwVel) {
     b.regrabT = cfg::app::regrabDelay;   // no grabbing it straight back: the throw keeps its line a moment
     heldGrabOffset_ = {0.f, 0.f};
     if (b.hasRole(BallRole::Striker)) throwVel *= cfg::role::strikerFlingMult;   // built to be flung
+    if (b.hasRole(BallRole::Slinger)) throwVel *= cfg::role::slingerThrowMul;   // made for your hand
     if (b.mods.cometFling > 0.f) throwVel *= b.mods.cometFling;                 // "Comet"
     if (b.mods.cls.slinger.coil > 0.f) throwVel *= b.mods.cls.slinger.coil;     // "Coil"
     if (b.mods.cls.common.windUp > 0.f)                                         // "Wind-up": held a while
@@ -1049,16 +1081,48 @@ float World::orbitTarget(float usual, float minR) const {
 
 void World::advanceSatellite(Ball& b, float dt, const WorldParams& p, FrameEvents& ev) {
     // It swings its orbit out / in to meet whatever comes closest to the core.
-    const float usual = cfg::changer::satelliteRadius * arenaScale() + core_.radius;
+    // Not a rail (2026-10-06): the core pulls it like gravity toward a radius
+    // that breathes in and out, with a soft spring and little damping, so it
+    // drifts round in wobbly loops and only now and then brushes the edges.
+    namespace G = cfg::changer;
+    const float usual = G::satelliteRadius * arenaScale() + core_.radius;
+    const float minR = core_.radius + b.radius + 12.f;
     if (b.orbitR <= 0.f) b.orbitR = usual;
-    const float want = orbitTarget(usual, core_.radius + b.radius + 12.f);
-    b.orbitR += (want - b.orbitR) * (1.f - std::exp(-cfg::changer::orbitEase * dt));
-    const float R = b.orbitR;
-    const float sp = ballCruise(b, p) * cfg::changer::satelliteSpeed;
-    b.orbitAng += sp / R * dt;
-    const sf::Vector2f dir{std::cos(b.orbitAng), std::sin(b.orbitAng)};
-    b.pos = core_.pos + dir * R;
-    b.vel = sf::Vector2f{-dir.y, dir.x} * sp;   // tangent: the speed damage and colour read
+    const float want = orbitTarget(usual, minR);
+    b.orbitR += (want - b.orbitR) * (1.f - std::exp(-G::orbitEase * dt));
+    const float phase = static_cast<float>(b.owner) * 1.7f + static_cast<float>(b.twinIdx) * 2.3f;
+    const float room = std::min({core_.pos.x, size_.x - core_.pos.x, core_.pos.y, size_.y - core_.pos.y}) -
+                       b.radius * 3.f;   // its loops stay off the walls (a swing out may still brush one)
+    const float Rt = clampf(b.orbitR * (1.f + G::satelliteBreathe * std::sin(b.age * G::satelliteBreatheRate + phase)),
+                            minR, std::max(minR, room));
+    const float sp = ballCruise(b, p) * G::satelliteSpeed;
+    constexpr int kSub = 4;
+    const float h = dt / static_cast<float>(kSub);
+    for (int k = 0; k < kSub; ++k) {
+        const sf::Vector2f r = b.pos - core_.pos;
+        const float d = std::max(1.f, length(r));
+        const sf::Vector2f rh = r / d;
+        const sf::Vector2f tn{-rh.y, rh.x};
+        float vr = dot(b.vel, rh);
+        float vt = dot(b.vel, tn);
+        if (std::fabs(vt) < 1e-3f) vt = sp;
+        // gravity that holds the loop (vt^2 / d), plus a soft pull toward the breathing radius
+        vr += (-vt * vt / d - G::satelliteSpring * (d - Rt) - G::satelliteDamp * vr) * h;
+        vt += ((vt < 0.f ? -sp : sp) - vt) * (1.f - std::exp(-G::satelliteTurnEase * h));   // keeps its pace, softly
+        b.vel = rh * vr + tn * vt;
+        b.pos += b.vel * h;
+        // the core and the walls: a soft brush, not a bounce
+        if (const sf::Vector2f r2 = b.pos - core_.pos; length(r2) < minR) {
+            const sf::Vector2f n = normalized(r2, rh);
+            b.pos = core_.pos + n * minR;
+            if (const float in = dot(b.vel, n); in < 0.f) b.vel -= n * (in * 1.5f);
+        }
+        if (b.pos.x < b.radius) { b.pos.x = b.radius; b.vel.x = std::fabs(b.vel.x) * 0.6f; }
+        if (b.pos.x > size_.x - b.radius) { b.pos.x = size_.x - b.radius; b.vel.x = -std::fabs(b.vel.x) * 0.6f; }
+        if (b.pos.y < b.radius) { b.pos.y = b.radius; b.vel.y = std::fabs(b.vel.y) * 0.6f; }
+        if (b.pos.y > size_.y - b.radius) { b.pos.y = size_.y - b.radius; b.vel.y = -std::fabs(b.vel.y) * 0.6f; }
+    }
+    b.orbitAng = std::atan2(b.pos.y - core_.pos.y, b.pos.x - core_.pos.x);   // (Gemini twins start round from here)
     for (Enemy& e : enemies_) {
         if (e.hp <= 0.f || e.pierceCd > 0.f) continue;
         const sf::Vector2f d = b.pos - e.pos;
@@ -1077,6 +1141,61 @@ void World::advanceSatellite(Ball& b, float dt, const WorldParams& p, FrameEvent
         ballHitsBoss(b, 3.f, p, ev, false);   // an orbit grinds, it shouldn't melt a boss
     emitElement(b, dt, p, ev);
     b.color = ballTint(b, sp, p);
+    b.squash *= std::exp(-cfg::ball::squashDecay * dt);
+    updateTrail(b);
+}
+
+// "Leash" (2026-10-06): tied to the core it turns ever faster - leashSpinFrom
+// to leashSpinTo turns a second over leashRamp s, then flat out to the end -
+// hitting whatever it sweeps through (each enemy once per pierceCooldown, so
+// the faster it turns, the more often). Then it's let go along the swing at
+// its top speed and keeps that speed a while (regulateSpeed), ricocheting
+// all over. Like the Satellite it follows its path, not the physics.
+void World::advanceLeash(Ball& b, float dt, const WorldParams& p, FrameEvents& ev) {
+    namespace A = cfg::ability;
+    CommonState& s = b.cls.common;
+    const float t = A::leashTime - s.leashT;   // s into the spin
+    const float u = clampf(t / A::leashRamp, 0.f, 1.f);
+    const float turns = lerpf(A::leashSpinFrom, A::leashSpinTo, u * u);   // eases in: the climb shows
+    const float w = turns * 2.f * kPi;          // rad/s
+    const float R = s.leashL;
+    // Sweep the arc in small steps so a fast turn can't skip an enemy.
+    const float arc = w * dt * R;
+    const int steps = std::clamp(static_cast<int>(std::ceil(arc / (b.radius * 0.5f))), 1, 24);
+    const float hs = w * dt / static_cast<float>(steps);
+    const float vMax = ballMaxSpeed(b, p);
+    for (int k = 0; k < steps; ++k) {
+        s.leashAng += hs * s.leashDir;
+        const sf::Vector2f dir{std::cos(s.leashAng), std::sin(s.leashAng)};
+        b.pos = core_.pos + dir * R;
+        b.vel = sf::Vector2f{-dir.y, dir.x} * (s.leashDir * std::min(w * R, vMax));   // the hit reads its speed (capped)
+        for (Enemy& e : enemies_) {
+            if (e.hp <= 0.f || e.pierceCd > 0.f) continue;
+            const sf::Vector2f d = b.pos - e.pos;
+            if (length(d) > b.radius + e.radius) continue;
+            e.pierceCd = cfg::changer::pierceCooldown;
+            const sf::Vector2f n = normalized(d, {1.f, 0.f});
+            strike(b, e, n, p, ev);
+            BounceFx fx;
+            fx.pos = e.pos + n * e.radius;
+            fx.normal = n;
+            fx.speed = length(b.vel) / arenaScale();
+            fx.color = b.color;
+            ev.bounces.push_back(fx);
+        }
+        if (boss_.alive && length(b.pos - boss_.pos) < b.radius + boss_.radius)
+            ballHitsBoss(b, 3.f, p, ev, false);   // it grinds the boss like an orbit does
+    }
+    if ((s.leashT -= dt) <= 0.f) {   // let go: along the swing, as fast as it goes
+        s.leashT = 0.f;
+        b.vel = normalized(b.vel, {1.f, 0.f}) * (cfg::ball::hardSpeedCap * arenaScale() * A::leashLaunch);
+        s.leashFlyT = s.leashFlyLen;
+        b.catchBonus += A::leashLaunchHit;   // rides on the first hit, like a throw
+        b.catchT = cfg::combat::catchWindow;
+        itemFx(CommonWorld::Fx::Arrow, b.pos, b.radius * 2.5f, theme::textHi, 0.35f, normalized(b.vel, {1.f, 0.f}));
+    }
+    emitElement(b, dt, p, ev);
+    b.color = ballTint(b, length(b.vel), p);
     b.squash *= std::exp(-cfg::ball::squashDecay * dt);
     updateTrail(b);
 }
@@ -1165,6 +1284,10 @@ void World::updateTwins(const WorldParams& p) {
             t.waterTrail.clear();
             t.orbitAng = b.orbitAng + turn;
             const float c = std::cos(turn), sn = std::sin(turn);
+            if (b.mods.satellite) {   // a satellite's twin starts its own place round the core
+                const sf::Vector2f r = b.pos - core_.pos;
+                t.pos = core_.pos + sf::Vector2f{r.x * c - r.y * sn, r.x * sn + r.y * c};
+            }
             t.vel = {b.vel.x * c - b.vel.y * sn, b.vel.x * sn + b.vel.y * c};
             if (length(t.vel) < 1e-3f) t.vel = rng_.direction() * cruiseBase(p);
             pendingGhosts_.push_back(t);
@@ -1323,6 +1446,8 @@ void World::damageEnemy(Enemy& e, float dmg) {
     if (castBall_ && castBall_->mods.cls.common.archStack > 0.f)   // "Archmage": every cast this fight adds on
         dmg *= 1.f + castBall_->mods.cls.common.archStack * static_cast<float>(castBall_->cls.common.archStacks);
     if (e.shrinkT > 0.f) dmg *= cfg::ability::shrinkDamage;   // "Shrink" (ability)
+    if (const int by = dmgOwner_ >= 0 ? dmgOwner_ : castBall_ ? castBall_->owner : reactBall_ ? reactBall_->owner : -1; by >= 0)
+        e.lastBy = by;   // kill credit
     e.hp -= dmg * (e.brittle > 0.f ? cfg::synergy::brittleMul : 1.f) *
             (1.f + cfg::element::crackDamage * static_cast<float>(e.cracks));   // stone cracks
     e.hitFlash = 1.f;
@@ -1372,6 +1497,7 @@ bool World::strike(Ball& b, Enemy& e, sf::Vector2f normal, const WorldParams& p,
     dmg *= classPreHit(b, e, p);    // Slinger: the thrown first hit, Execution throw, Double down
     dmg *= stylePreHit(b, e, p, ev);   // a Beacon / Pass charge
     dmg *= commonPreHit(b, e, p);      // the commons: Reagent, Spotter, First blood...
+    dmg *= roleContact(b, e);          // the classes' own feel on a contact hit
     const bool coinHeads = b.cls.jester.coinMul > 1.f;   // (Hot streak / Confetti count it as doubled)
     const bool afflicted = e.poison > 0.f || e.frozen > 0.f || e.burn > 0.f;
     if (p.primed && afflicted) dmg *= cfg::combat::primedMult;             // "Primed"
@@ -1420,6 +1546,7 @@ bool World::strike(Ball& b, Enemy& e, sf::Vector2f normal, const WorldParams& p,
         }
     }
 
+    e.lastBy = b.owner;   // kill credit
     e.hp -= dmg;
     e.hitFlash = 1.f;
     const float knock = cfg::combat::knockback * m.knockMult *   // Big ball / Bumper
@@ -1665,10 +1792,7 @@ void World::triggerReaction(Element x, Element y, Enemy& e, float hitDmg, const 
     }
     if (depth == 0) commonOnReaction(rb, x, y, at, hitDmg, p, ev);   // Distill / Elixir / Transmute / Residue / Aurum
     if (am && am->flux > 0.f)   // "Flux": each reaction recharges its abilities
-        for (int i = 0; i < kMaxAbilitySlots; ++i)
-            if (rb->abilities[i].id != Ability::None)
-                rb->abilityCd[i] = std::max(0.f, rb->abilityCd[i] - am->flux *
-                                                     abilityCooldown(rb->abilities[i].id, rb->abilities[i].level));
+        refundAbilities(*rb, 0.f, am->flux);
     if (am && am->conflux && depth == 0) {   // "Conflux": it leaps once to another enemy carrying an element
         Enemy* next = nullptr;
         float best = S::chainRange * S::chainRange;
@@ -1873,7 +1997,8 @@ void World::regulateSpeed(Ball& b, float dt, const WorldParams& p) {
     // Cruise is a floor the ball climbs back to fast and a target it eases down
     // to slowly, so a fling stays fast for a moment.
     const float cruiseS = ballCruise(b, p);
-    const float vMax = ballMaxSpeed(b, p);
+    const float vMax = b.cls.common.leashFlyT > 0.f ? cfg::ball::hardSpeedCap * arenaScale()   // "Leash": flung past its usual top
+                                                    : ballMaxSpeed(b, p);
 
     const float sp = length(b.vel);
     if (const float drag = b.mods.cls.slinger.coilDrag; drag > 0.f) {   // "Coil": coasts down to a stop
@@ -1888,7 +2013,8 @@ void World::regulateSpeed(Ball& b, float dt, const WorldParams& p) {
     const float up = 1.f - std::exp(-cfg::ball::regainRate * dt);
     const float decayRate = cfg::ball::decayRate * b.mods.flingDecay * p.creed.flingHold *   // "Hot Hands" creed
                             (b.hasRole(BallRole::Striker) ? cfg::role::strikerFlingDecay : 1.f);
-    const float down = 1.f - std::exp(-decayRate * dt);
+    const float down = b.cls.common.leashFlyT > 0.f ? 0.f   // "Leash": let go, it keeps its speed a while
+                                                    : 1.f - std::exp(-decayRate * dt);
     const float k = (sp < cruiseS) ? up : down;
     const float ns = std::min(lerpf(sp, cruiseS, k), vMax);
     b.vel *= ns / sp;
@@ -1918,6 +2044,11 @@ void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
         advanceSatellite(b, dt, p, ev);
         return;
     }
+    if (b.cls.common.leashT > 0.f) {   // "Leash": on its rope, spinning up
+        advanceLeash(b, dt, p, ev);
+        return;
+    }
+    if (b.cls.common.leashFlyT > 0.f) b.cls.common.leashFlyT = std::max(0.f, b.cls.common.leashFlyT - dt);
     if (b.mods.hunterMult > 0.f) steerHunter(b, dt);   // "Hunter"
     if (b.homing) {   // "Boomerang": curve home to the core
         const float sp = length(b.vel);
@@ -2075,6 +2206,7 @@ void World::resolveBallPairs(FrameEvents& ev, const WorldParams& p) {
             Ball& a = balls_[i];
             Ball& b = balls_[j];
             if (a.mods.satellite || b.mods.satellite) continue;   // orbits are fixed paths
+            if (a.cls.common.leashT > 0.f || b.cls.common.leashT > 0.f) continue;   // ...and so is a Leash swing
             if (!collision::resolveBallPair(a, b)) continue;
 
             // "Bumper": the other ball is launched off it, at least this x its cruise.
@@ -2378,6 +2510,10 @@ void World::updateEnemies(float dt, const WorldParams& p, FrameEvents& ev) {
                 core_.hp = core_.maxHp * cfg::changer::phoenixHeal;
                 ev.phoenix = true;
             }
+            if (core_.hp <= 0.f && endless_) {   // dev endless: no end - it just fills up again
+                core_.hp = core_.maxHp;
+                core_.hitFlash = 1.f;
+            }
             if (core_.hp <= 0.f) {
                 core_.hp = 0.f;
                 runOver_ = true;
@@ -2434,6 +2570,10 @@ void World::sweepDeadEnemies(FrameEvents& ev, const WorldParams& p) {
             }
             commonOnDeath(*it, ev);   // "Fission"
             ev.kills.push_back(it->pos);
+            if (it->lastBy >= 0) {   // kill credit, for the run's end card
+                if (static_cast<int>(ballKills_.size()) <= it->lastBy) ballKills_.resize(static_cast<std::size_t>(it->lastBy) + 1, 0);
+                ++ballKills_[static_cast<std::size_t>(it->lastBy)];
+            }
             it = enemies_.erase(it);
         } else {
             ++it;

@@ -11,7 +11,7 @@ namespace sb::cfg {
 // work through the ball's abilities.
 namespace mage {
 // The class: every hit it lands takes this many seconds off each of its ability cooldowns.
-inline constexpr float hitRefund = 0.25f;
+inline constexpr float hitRefund = 0.2f;
 // Ancient Mage: every cast lets out an arcane nova around the ball.
 inline constexpr float novaRadius = 90.f;
 inline constexpr float novaFrac = 0.6f;        // damage x the ball's hit
@@ -29,7 +29,7 @@ inline constexpr float power = 1.3f, powerPerLevel = 0.1f;
 inline constexpr float twincast = 0.3f, twincastPerLevel = 0.08f;
 inline constexpr float echoDelay = 0.35f;
 // Mana spring: a cast charges its other abilities this share of their cooldown.
-inline constexpr float manaSpring = 0.25f, manaSpringPerLevel = 0.07f;
+inline constexpr float manaSpring = 0.15f, manaSpringPerLevel = 0.05f;
 }  // namespace mage
 
 // ==================================================================== Shooter
@@ -358,7 +358,7 @@ inline constexpr int confetti = 3;
 inline constexpr float confettiFrac = 0.3f, confettiFracPerLevel = 0.1f, confettiRange = 220.f;
 inline constexpr float spellblade = 0.4f, spellbladePerLevel = 0.15f, spellbladeWindow = 3.f;
 inline constexpr float aetherStep = 1.4f, aetherStepPerLevel = 0.1f;
-inline constexpr float insight = 0.5f, insightPerLevel = 0.25f;
+inline constexpr float insight = 0.3f, insightPerLevel = 0.15f;
 inline constexpr float linger = 0.3f, lingerPerLevel = 0.15f;
 inline constexpr float packLeader = 0.04f, packLeaderPerLevel = 0.02f;
 inline constexpr int packLeaderMax = 6;
@@ -394,7 +394,7 @@ inline constexpr float houseEdge = 0.2f, houseEdgePerLevel = 0.08f, houseEdgeCap
 inline constexpr float mirror = 0.12f, mirrorPerLevel = 0.04f;
 inline constexpr float sigil = 0.4f, sigilPerLevel = 0.15f, sigilLife = 4.f, sigilRadius = 30.f, sigilNova = 110.f;
 inline constexpr int maxGlyphs = 10;
-inline constexpr float arcaneCharge = 0.3f, arcaneChargePerLevel = 0.1f;
+inline constexpr float arcaneCharge = 0.2f, arcaneChargePerLevel = 0.07f;
 inline constexpr float conduit = 150.f, conduitPerLevel = 35.f;
 inline constexpr float martyr = 0.5f, martyrPerLevel = 0.2f, martyrRadius = 90.f;
 inline constexpr float guardDog = 0.3f, guardDogPerLevel = 0.1f;
@@ -459,6 +459,10 @@ inline constexpr float luckySpeedPer = 0.07f, luckyDamagePer = 0.09f;   // per p
 inline constexpr float luckySlowPer = 0.08f, luckyKnockPer = 0.3f, luckyStunPer = 0.15f;   // per point below 5
 inline constexpr float luckyStop = 1.f, luckyOneHit = 3.f, luckyTenCrit = 2.f;
 inline constexpr float wildCd = 1.5f, wildCdPerLevel = -0.4f;
+// "Roulette" (common): red damage, black speed, green (1 in 7) both and gold
+inline constexpr float rouletteEvery = 5.f, rouletteEveryPerLevel = -0.5f, rouletteSpin = 1.f;
+inline constexpr float roulette = 0.4f, roulettePerLevel = 0.1f;
+inline constexpr int rouletteGreenIn = 7, rouletteGold = 5;
 inline constexpr int chorus = 5;
 inline constexpr float chrono = 0.2f, chronoPerLevel = 0.05f, chronoTime = 1.5f;
 inline constexpr float minigun = 0.08f, minigunPerLevel = 0.03f, minigunMax = 2.f, minigunIdle = 2.f;   // rate x (1 + max x spin)

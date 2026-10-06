@@ -355,6 +355,19 @@ BallSpec App::ballSpec(const BallLoadout& L) const {
     if (L.hasRole(ItemTag::Assassin)) m.cls.assassin.cull += W::deathmarkPerLevel * lv(MetaDeathmark);    // "Deathmark"
     if (L.hasRole(ItemTag::Mage)) m.cls.mage.focus += W::archivePerLevel * lv(MetaArchive);             // "Archive"
     if (L.hasRole(ItemTag::Guardian)) m.menderHeal += W::stonewallPerLevel * lv(MetaStonewall);         // "Stonewall"
+
+    // Each class's small stat perks, besides its items (cfg::role, 2026-10-06).
+    namespace R = cfg::role;
+    if (L.hasRole(ItemTag::Striker)) { m.damageMult *= 1.f + R::strikerDamage; m.maxSpeedMult *= 1.f + R::strikerTop; }
+    if (L.hasRole(ItemTag::Guardian)) { m.knockMult *= 1.f + R::guardianKnock; m.menderHeal += R::guardianMend; }
+    if (L.hasRole(ItemTag::Support)) { m.elemMult *= 1.f + R::supportElem; m.cls.mage.focus += R::supportFocus; }
+    if (L.hasRole(ItemTag::Mage)) { m.cls.mage.focus += R::mageFocus; m.elemMult *= 1.f + R::mageElem; }
+    if (L.hasRole(ItemTag::Shooter)) { m.cls.shooter.dmgMul *= 1.f + R::shooterBullet; m.critChance += R::shooterCrit; }
+    if (L.hasRole(ItemTag::Assassin)) { m.critChance += R::assassinCrit; m.critMult += R::assassinCritMult; }
+    if (L.hasRole(ItemTag::Summoner)) { m.cls.summoner.bond *= 1.f + R::summonerBond; m.cls.mage.focus += R::summonerFocus; }
+    if (L.hasRole(ItemTag::Jester)) { m.critChance += R::jesterCrit; m.echoChance += R::jesterEcho; }
+    if (L.hasRole(ItemTag::Slinger)) { m.reach *= 1.f + R::slingerReach; m.heavyThrow += R::slingerHeavy; }
+    if (L.hasRole(ItemTag::Alchemist)) { m.elemMult *= 1.f + R::alchemistElem; m.cls.mage.focus += R::alchemistFocus; }
     return s;
 }
 
@@ -532,6 +545,12 @@ std::unique_ptr<Screen> App::makeScreen(ScreenId id) {
 }
 
 void App::replaceStack(ScreenId id) {
+    if (id == ScreenId::Menu && data_.run.endless) {   // leaving dev endless: the real progress, as it was
+        world_.setEndless(false);
+        data_.meta = endlessMeta_;
+        data_.run = RunState{};
+        endlessNextT_ = -1.f;
+    }
     stack_.clear();
     stack_.push_back(makeScreen(id));
     fade_ = 1.f;
@@ -592,7 +611,7 @@ bool App::hasSavedRun() const {
 }
 
 void App::saveRunNow() {
-    if (!data_.run.active || runBanked_) return;
+    if (!data_.run.active || runBanked_ || data_.run.endless) return;   // (dev endless: never saved)
     data_.run.coreHp = world_.core().hp;
     data_.run.coreMaxHp = world_.core().maxHp;
     saveRun(runPath(), data_.run);
@@ -720,6 +739,40 @@ void App::newRun() {
     introStep_ = 0;
     advanceRunIntro();   // Covenant creed, Quartermaster pick, then the map
     save();
+}
+
+// Dev endless: a few plain balls, gold to spare, and waves back to back
+// (F1 for items). The real save is snapshotted now and put back on the way
+// out; nothing here is written to disk.
+void App::startEndless() {
+    endlessMeta_ = data_.meta;
+    RunState& r = data_.run;
+    r = RunState{};
+    r.active = true;
+    r.endless = true;
+    r.coreMaxHp = startCoreHp();
+    r.coreHp = r.coreMaxHp;
+    r.balls = std::vector<BallLoadout>(3);
+    r.gold = 999;
+    r.map = generateMap(rng_, 1, 0);   // (unused: endless never opens the map)
+    for (int i = 0; i < 4; ++i) r.bosses[static_cast<std::size_t>(i)] = i;
+    novaCd_ = repulseCd_ = markCd_ = 0.f;
+    bulletGauge_ = 1.f;
+    bulletOn_ = false;
+    introStep_ = -1;
+    runBanked_ = true;   // never banked
+    world_.startRun(params(), ballSpecs(), r.coreHp, r.coreMaxHp);
+    world_.setEndless(true);
+    rememberClasses();
+    effects_.clear();
+    hitstop_ = 0.f;
+    camKick_ = 0.f;
+    replaceStack(ScreenId::Play);
+    r.wave = 1;
+    world_.startWave(1, params(), false);
+    waveIntro_ = cfg::app::waveIntroTime;
+    endlessNextT_ = -1.f;
+    effects_.addLabel("ENDLESS (dev) - F1 for items", {size().x * 0.5f, size().y * 0.3f}, theme::accent, 26, 2.f);
 }
 
 void App::startWaveAt(int wave, bool elite) {
@@ -1167,9 +1220,9 @@ void App::travelTo(int node) {
             r.wave = wave;
             openRestStop();
             break;
-        case MapNodeType::Upgrade:   // a free pick - or now and then a stranger with deals
+        case MapNodeType::Upgrade:   // a "?": an encounter (a free pick only if none can apply)
             r.wave = wave;
-            if (rng_.irange(0, 99) >= cfg::event::chancePct || !openEvent()) openChoice();
+            if (!openEvent()) openChoice();
             break;
         case MapNodeType::Recruit:
             r.wave = wave;
@@ -1203,7 +1256,6 @@ void App::travelTo(int node) {
 bool App::openForgePicker() {
     equipSrc_ = EquipSource::Forge;
     forgePoints_ = cfg::gold::forgePoints;
-    forgeEpicUsed_ = false;
     bool any = false;
     for (int b = 0; b < runBallCount() && !any; ++b) any = equipFitsBall(b);
     if (!any) return false;
@@ -1231,8 +1283,11 @@ bool App::equipFitsSlot(int ball, int slot) const {
         if (slot < 0 || slot >= kLoadoutSlots || b.kindAt(slot) < 0 || b.kindAt(slot) == cocoon || b.levelAt(slot) >= forgeCap())
             return false;
         if (equipSrc_ == EquipSource::ShopForge) return true;   // paid per level: no budget
-        const auto k = static_cast<UpgradeKind>(b.kindAt(slot));   // the visit's budget
-        return forgeCost(k) <= forgePoints_ && !(upgradeTier(k) == Tier::Epic && forgeEpicUsed_);
+        // The visit's budget: commons / uncommons any time there's a point; a rare,
+        // epic or legendary only as the first level of the visit (a legendary takes both).
+        const auto k = static_cast<UpgradeKind>(b.kindAt(slot));
+        const bool low = upgradeTier(k) <= Tier::Uncommon;
+        return forgeCost(k) <= forgePoints_ && (low || forgePoints_ == cfg::gold::forgePoints);
     }
     if (equipSrc_ == EquipSource::Sell) return isItemSlot(slot) && b.gear[slot] >= 0;
     if (equipSrc_ == EquipSource::Barter) return isItemSlot(slot) && b.gear[slot] >= 0 && b.gear[slot] != cocoon;
@@ -1308,7 +1363,6 @@ void App::confirmEquip(int ball, int slot) {
             if (!equipFitsSlot(ball, slot)) return;
             const auto k = static_cast<UpgradeKind>(r.balls[static_cast<std::size_t>(ball)].kindAt(slot));
             forgePoints_ -= forgeCost(k);
-            if (upgradeTier(k) == Tier::Epic) forgeEpicUsed_ = true;
             audio_.levelUp(r.balls[static_cast<std::size_t>(ball)].levelUp(slot));
             syncWorldBalls();
             effects_.flash(theme::accent, 0.4f);
@@ -1565,6 +1619,7 @@ void App::bankRun(bool won) {
 }
 
 void App::finishToMenu() {
+    if (data_.run.endless) { replaceStack(ScreenId::Menu); return; }
     clearRun(runPath());
     data_.run = RunState{};
     save();
@@ -1620,6 +1675,7 @@ void App::startRunTally() {
 
 // The run-over card's buttons. The run is already banked (bankRun on the loss).
 void App::leaveRunOver(bool toWeb) {
+    if (data_.run.endless) { replaceStack(ScreenId::Menu); return; }   // dev endless: nothing to clear or bank
     clearRun(runPath());
     data_.run = RunState{};
     save();
@@ -1633,6 +1689,7 @@ void App::leaveBossWin() {
 }
 
 void App::abandonRun() {
+    if (data_.run.endless) { replaceStack(ScreenId::Menu); return; }   // dev endless: the real saved run stays put
     clearRun(runPath());
     data_.run = RunState{};
     save();
@@ -1881,7 +1938,10 @@ void App::toggleFullscreen() {
     save();
 }
 
-void App::save() { saveGame(savePath_, data_); }
+void App::save() {
+    if (data_.run.endless) return;   // dev endless: nothing it does is kept
+    saveGame(savePath_, data_);
+}
 
 // ---------------------------------------------------------------- loop
 
@@ -2119,11 +2179,25 @@ void App::processEvents(const FrameEvents& ev) {
         summary_.kills = data_.meta.stats.enemiesKilled - runStartKills_;
         summary_.bestCombo = runBestCombo_;
         summary_.time = data_.meta.stats.timePlayed - runStartTime_;
-        bankRun(false);
+        summary_.balls = r.balls;
+        summary_.ballKills = world_.ballKills();
+        summary_.ballKills.resize(r.balls.size(), 0);
+        summary_.mods = r.mods;
+        summary_.creeds = r.creeds;
+        summary_.pacts = r.pacts;
+        if (!r.endless) bankRun(false);
         summary_.cores = lastRunCores_;
         summary_.prisms = lastRunPrisms_;
         data_.run.active = false;
         push(ScreenId::RunOver);
+        return;
+    }
+    if (ev.waveCleared && data_.run.endless) {   // dev endless: the next one in a moment
+        flushMultiKill();
+        audio_.waveClear();
+        afterFight();
+        effects_.addLabel("wave " + std::to_string(data_.run.wave) + " cleared", {size().x * 0.5f, size().y * 0.3f}, theme::accent, 24, 1.2f);
+        endlessNextT_ = 1.5f;
         return;
     }
     if (ev.waveCleared) {
@@ -2211,6 +2285,11 @@ void App::afterFightPick() {
 }
 
 void App::update(float frameDt) {
+    if (data_.run.endless && endlessNextT_ >= 0.f && simulating() && (endlessNextT_ -= frameDt) < 0.f) {   // dev endless: next wave
+        data_.run.wave += 1;
+        world_.startWave(data_.run.wave, params(), false);
+        waveIntro_ = cfg::app::waveIntroTime;
+    }
     // The slingshot pull reads mouse motion while aiming (see Window::setMouseCapture);
     // let go of it the moment aiming stops for any reason.
     window_.setMouseCapture(aiming_ && simulating() && window_.handle().hasFocus());
@@ -2798,6 +2877,11 @@ int App::runSnapshots(const std::string& dir) {
         summary_.bestCombo = 37;
         summary_.time = 412.f;
         summary_.cores = 28;
+        summary_.balls = data_.run.balls;   // the build it ended with
+        for (std::size_t i = 0; i < summary_.balls.size(); ++i) summary_.ballKills.push_back(static_cast<int>(90 - 23 * i));
+        summary_.mods = data_.run.mods;
+        summary_.creeds = data_.run.creeds;
+        summary_.pacts = data_.run.pacts;
         push(ScreenId::RunOver);
         snapFrame(d + "36_run_over.png");
         back();

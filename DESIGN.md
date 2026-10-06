@@ -2516,9 +2516,33 @@ de las pelotas: Q, el anillo de E y F.
   (+1 cada dos niveles) o hasta tocar el núcleo.
 - **Conductor y Bedrock pasan al Alquimista** (trabajan con su elemento); los
   textos dicen que necesitan Eléctrico / Piedra.
-- **Forja con presupuesto:** cada visita (nodo Forge, Wandering smith, Rest ->
-  forja) tiene 2 puntos: común / poco común / raro 1, épico 1 (uno solo por
-  visita), legendario 2. Te quedás en la forja mientras alcance. La forja paga de
+- **Mapa (después, a pedido):** ya no hay paradas de Forja: se forja sólo en
+  el Descanso, que es reparar el núcleo O forjar (2 puntos), así que mejorar
+  es una decisión. Los "?" son siempre un encuentro (evento); el item gratis
+  sólo si ningún evento aplica. La fila antes del jefe: Tienda, Descanso, ?,
+  Descanso. (La "forja paga de la tienda" era código sin uso.)
+- **Cooldowns del Mago (equilibrio):** las aceleraciones de recarga (Focus,
+  Meditate, Archmage, nodos de la red) se suman con rendimiento decreciente:
+  x(1 + 2B/(2 + B)), tope x3 (`cfg::ability::rateCap`). Lo que devuelve
+  segundos (golpe del Mago 0.2 s, Insight 0.3 s, Arcane charge 0.2 s, Mana
+  spring 15%, Sync, Flux, Master Slinger) pasa por `World::refundAbility` y
+  entre dos lanzamientos no puede devolver más del 40% del cooldown
+  (`refundCap`). Lucky break y Cascade siguen siendo recargas completas.
+- **Modo infinito (dev):** con SB_DEV=1 el menú principal muestra "Endless
+  (dev)": 3 pelotas, 999 de oro, núcleo x2, oleadas seguidas sin mapa (1.5 s
+  entre una y otra, cada vez más duras); items con F1. No guarda nada: ni la
+  run (la run guardada de verdad no se toca) ni el progreso (se restaura al
+  salir).
+- **Pantalla de derrota:** debajo de cada pelota, sus clases, sus kills (la
+  que más mató, en dorado) y lo que llevaba (items en el color de su rareza,
+  elementos, habilidades); abajo, reliquias, credos y pactos. Las kills se
+  acreditan a la última pelota que dañó al enemigo (`Enemy::lastBy`): golpes,
+  balas, habilidades, reacciones, invocaciones y efectos de campo cuentan
+  para su pelota dueña (`World::ballKills`).
+- **Forja con presupuesto:** cada visita (Rest -> forja, Wandering smith)
+  tiene 2 puntos: común / poco común 1; raro / épico 1 pero sólo como el
+  primero de la visita; legendario 2 (solo). Si arrancás con un común, ya no
+  podés subir raros, épicos ni legendarios en esa visita. Te quedás en la forja mientras alcance. La forja paga de
   la tienda sigue siendo un nivel por pago (`cfg::gold::forgePoints`).
 - **Combinar en el TAB:** arrastrar un item o habilidad y soltarlo sobre el
   mismo en otra pelota (o sobre su panel) los combina ahí: los niveles se
@@ -2605,6 +2629,11 @@ de las pelotas: Q, el anillo de E y F.
   K lanzamiento a toda velocidad + nova, As uno de cada palo. El número sube la
   fuerza. Cartas por vez: 1, +1 con 3+ items, +1 Gran Bufón, +1 con 6+ items.
 - **Cosméticos:** sólo con los 4 items de la clase (ascendida), ya no por legendario.
+- **Bufón, básicos:** Coin flip ahora se ve (en cada golpe salta una moneda
+  que cae dorada en cara, gris en cruz). Roulette (común, nuevo, al final del
+  enum): cada 5 s gira una ruleta chiquita junto a la pelota; rojo +40% daño,
+  negro +40% velocidad, verde (1 en 7) ambos y 5 de oro; dura hasta el
+  próximo giro (aro del color ganador en la pelota).
 - **Jefes:** Dasher embiste por todo el mapa (rebota en paredes, encadena
   embestidas; cada 3ra va al núcleo). Charger, Hive y Warden tienen segunda
   fase: al bajarlos la primera vez caen dormidos, entra una oleada
@@ -2620,6 +2649,40 @@ de las pelotas: Q, el anillo de E y F.
 - **Tooltips de clase más simples:** el texto se separa en párrafos ("\n" en
   `wrapText`, una línea vacía = medio renglón). La pelota muestra qué hace su
   clase y aparte "2 items: X (done) / 4 items: Mega X (3/4)".
+
+### 2026-10-06: cada clase se siente distinta
+
+- **Rasgo propio por clase** (`cfg::role`, `World::roleCruise` / `roleContact`;
+  dos clases se multiplican, la ascendida no cambia el rasgo):
+  Guardian mucho más lento (x0.65, antes 0.9); Mage pega la mitad de contacto;
+  Shooter 0.7x, Summoner 0.6x, Alchemist 0.85x de contacto; Assassin x1.25 de
+  velocidad y x1.8 golpeando por la espalda (el lado del enemigo opuesto al
+  núcleo); Jester tira un dado en cada golpe de contacto (x0.5 a x1.7);
+  Slinger tirado sale x1.6, pero suelto (1.5 s de gracia) su crucero baja a
+  x0.55 en 5 s; tirarlo de nuevo o una oleada nueva lo resetea. Striker y
+  Support quedan como estaban.
+- **Mini stats por clase** (además de items y rasgo, `App::ballSpec`):
+  Striker +8% daño, +10% vel. máx.; Guardian +20% empuje, cura el núcleo al
+  rebotar; Support +10% elemento, +5% recarga; Mage +15% recarga, +5%
+  elemento; Shooter +10% balas, +5% crit; Assassin +10% crit, +25% daño crit;
+  Summoner +15% invocaciones, +5% recarga; Jester +8% crit, +5% golpe doble;
+  Slinger agarre más lejos, +15% primer golpe tirado; Alchemist +15%
+  elemento, +5% recarga. Se ven en el tooltip de la pelota.
+- **Leash (rehecho):** atada al núcleo gira 4 s, de 0.5 a 4 vueltas por
+  segundo (sube en 3 s con curva, el último segundo a fondo; ~9 vueltas),
+  siguiendo su camino como el Satellite (`World::advanceLeash`): pega a todo lo
+  que barre, sin choques con otras pelotas ni paredes (la cuerda cabe en la
+  arena). Al final se suelta por la tangente a 0.85x el tope duro de velocidad
+  y la mantiene 2.5 s (+0.5 por nivel) rebotando por todos lados; primer golpe
+  +50%. Combina con Striker (daño por velocidad) y Assassin. Una sola a la vez:
+  un 2do Leash espera a que termine el vuelo; agarrarla corta la cuerda.
+- **Satellite:** ya no es un círculo rígido: el núcleo la atrae como gravedad
+  hacia un radio que respira (±18%), con resorte blando y poca amortiguación,
+  así gira en lazos que van y vienen y rara vez roza las paredes
+  (`cfg::changer::satellite*`).
+- **Click vs Q:** una pelota tirada se puede volver a agarrar a los 0.6 s
+  (antes 1 s), y la Q (Volley) recarga en 2.5 s (antes 1.25): clickear bien
+  rinde más que spamear la Q.
 
 ### Anotado para después (el usuario lo pidió así)
 

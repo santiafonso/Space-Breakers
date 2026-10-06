@@ -145,7 +145,7 @@ inline constexpr float markDamageMul = 1.35f;      // any ball (and zaps) vs a m
 inline constexpr float guardianRadiusMul = 1.3f;
 inline constexpr float guardianDamageMul = 0.75f;
 inline constexpr float guardianKnockMul = 2.0f;
-inline constexpr float guardianCruiseMul = 0.9f;
+inline constexpr float guardianCruiseMul = 0.65f;   // a slow wall (was 0.9 until 2026-10-06)
 inline constexpr float staggerDuration = 0.7f;     // enemy drifts on its knockback, not toward the core
 inline constexpr float staggerDrag = 3.5f;         // knockback bleed-off per second while staggered
 // A Guardian "reads" the threat: every bounce (wall, core, enemy) sends it off
@@ -153,6 +153,32 @@ inline constexpr float staggerDrag = 3.5f;         // knockback bleed-off per se
 // never curves mid-flight; only its bounce angle is chosen.
 inline constexpr bool  guardianAimsBounces = true;
 inline constexpr float guardianAimJitter = 0.06f;  // rad of wobble so it isn't robotic
+// The other classes' own feel (2026-10-06): one trait each, on contact hits
+// (World::strike) or speed (World::roleCruise). Two classes multiply.
+inline constexpr float mageContactMul = 0.5f;       // its strength is its abilities
+inline constexpr float shooterContactMul = 0.7f;    // ...its bullets
+inline constexpr float summonerContactMul = 0.6f;   // ...its summons
+inline constexpr float alchemistContactMul = 0.85f; // ...its elements
+inline constexpr float assassinCruiseMul = 1.25f;
+inline constexpr float assassinBackMul = 1.8f;      // a hit from behind the enemy (its side away from the core)...
+inline constexpr float assassinBackCos = 0.35f;     // ...within this cone (cos of the angle)
+inline constexpr float jesterRollMin = 0.5f, jesterRollMax = 1.7f;   // every contact hit x a roll in here
+inline constexpr float slingerThrowMul = 1.6f;      // your throw x this...
+inline constexpr float slingerIdleGrace = 1.5f;     // ...then, left alone this long,...
+inline constexpr float slingerIdleFade = 5.f;       // ...its cruise sinks over this many s...
+inline constexpr float slingerIdleMin = 0.55f;      // ...down to this (a throw or a new wave resets it)
+// Small stat perks every class hands its ball besides its items (2026-10-06,
+// App::ballSpec). Shown in the class tooltip.
+inline constexpr float strikerDamage = 0.08f, strikerTop = 0.10f;      // + damage, + top speed
+inline constexpr float guardianKnock = 0.20f, guardianMend = 0.2f;    // + knockback, core hp per core bounce
+inline constexpr float supportElem = 0.10f, supportFocus = 0.05f;     // + element potency, + ability recharge
+inline constexpr float mageFocus = 0.15f, mageElem = 0.05f;
+inline constexpr float shooterBullet = 0.10f, shooterCrit = 0.05f;    // + bullet damage, + crit chance
+inline constexpr float assassinCrit = 0.10f, assassinCritMult = 0.25f;
+inline constexpr float summonerBond = 0.15f, summonerFocus = 0.05f;   // + summon damage
+inline constexpr float jesterCrit = 0.08f, jesterEcho = 0.05f;        // + crit, + chance a hit strikes twice
+inline constexpr float slingerReach = 0.20f, slingerHeavy = 0.15f;    // grabbed from further, + thrown first hit
+inline constexpr float alchemistElem = 0.15f, alchemistFocus = 0.05f;
 }  // namespace role
 
 // Luck: one run stat, in points (shown on the map, in the shop and in TAB).
@@ -223,6 +249,8 @@ inline constexpr float supportSpread = 100.f;      // marks spread this far
 // cooldownPerLevel per level past 1, and each one's power grows its own way.
 namespace ability {
 inline constexpr float cooldownPerLevel = 0.9f;
+inline constexpr float refundCap = 0.4f;       // cooldown refunds (Insight, Arcane charge, Mana spring, a Mage's hits...) between two casts: at most this share
+inline constexpr float rateCap = 2.f;          // recharge-speed bonuses (Focus, Meditate, Archmage...) add up with diminishing returns: x(1 + this) at most
 inline constexpr float firstDelay = 0.35f;     // share of the cooldown already charged when a wave starts
 // Dash: a burst straight at the nearest enemy.
 inline constexpr float dashCooldown = 5.0f;
@@ -301,8 +329,15 @@ inline constexpr float portalCooldown = 7.f, portalTime = 3.f, portalTimePerLeve
                        portalCd = 0.4f,
                        portalRange = 220.f,    // the exit sits at most this far past the mouth by the core
                        portalLaunch = 2.4f;    // what comes out is shot at the nearest enemy, x cruise
-inline constexpr float leashCooldown = 11.f, leashTime = 4.f, leashTimePerLevel = 0.5f, leashMin = 120.f,
-                       leashMax = 260.f, leashSpeed = 1.6f, leashSpeedPerLevel = 0.1f;   // x its cruise at least
+// "Leash" (reworked 2026-10-06): tied to the core it spins up - from
+// leashSpinFrom to leashSpinTo turns a second over leashRamp s, then a last
+// second flat out - and is let go along the swing at its top speed, holding
+// that speed for leashFly s (+ per level) so it ricochets all over.
+inline constexpr float leashCooldown = 11.f, leashTime = 4.f, leashRamp = 3.f,
+                       leashSpinFrom = 0.5f, leashSpinTo = 4.f,          // turns per second
+                       leashMin = 110.f, leashMax = 190.f,               // rope length (px, arena-scaled)
+                       leashFly = 2.5f, leashFlyPerLevel = 0.5f, leashLaunchHit = 0.5f,
+                       leashLaunch = 0.85f;   // let go at this x the hard speed cap
 inline constexpr float swapCooldown = 8.f, swapFrac = 0.8f, swapFracPerLevel = 0.15f, swapStun = 0.8f,
                        swapStunPerLevel = 0.1f;
 inline constexpr float shrinkCooldown = 9.f, shrinkRadius = 160.f, shrinkRadiusPerLevel = 15.f, shrinkTime = 4.f,
@@ -337,6 +372,12 @@ inline constexpr float giantRadius = 1.8f, giantDamage = 1.3f, giantCruise = 0.8
 inline constexpr float giantDamagePerLevel = 0.15f;
 inline constexpr float satelliteRadius = 150.f;    // Satellite: orbit radius around the core (with nothing close)...
 inline constexpr float satelliteSpeed = 1.6f;      // ...orbit speed x its cruise
+// ...not a rail (2026-10-06): the core's pull holds it in wobbly loops
+inline constexpr float satelliteSpring = 5.f;       // pull toward its radius (per s^2)...
+inline constexpr float satelliteDamp = 1.1f;        // ...barely damped, so it swings in and out
+inline constexpr float satelliteTurnEase = 1.5f;    // how fast it gets back to its pace
+inline constexpr float satelliteBreathe = 0.18f;    // its radius breathes +-this...
+inline constexpr float satelliteBreatheRate = 0.9f; // ...this fast (rad/s)
 // Anything orbiting the core (Satellite, Warden spirits) swings its radius out
 // or in toward the enemy closest to the core, within [orbitMin, orbitMax x its
 // usual radius], easing there at orbitEase per second.
@@ -544,8 +585,7 @@ inline constexpr int driftPct = 34;     // % chance a path drifts a lane over ea
 inline constexpr int wCombat = 46;
 inline constexpr int wElite = 16;
 inline constexpr int wShop = 6;
-inline constexpr int wForge = 9;
-inline constexpr int wRest = 9;
+inline constexpr int wRest = 14;   // repair the core OR forge (no separate Forge stops since 2026-10-05)
 inline constexpr int wUpgrade = 10;
 inline constexpr int wRecruit = 8;      // a new ball or a free pick (unused: see the path leanings below)
 // Every path leans one way, never said out loud: a "recruit" path turns up
@@ -615,7 +655,7 @@ inline constexpr int rerollBase = 15;
 inline constexpr float rerollGrowth = 1.7f;
 inline constexpr float sellFrac = 0.45f;   // selling an item pays this of its tier price, x its level
 inline constexpr int forgeServicePrice = 45;   // level up an item without a Forge node
-inline constexpr int forgePoints = 2;          // a forge visit: common..rare cost 1, an Epic 1 (one per visit), a Legendary 2
+inline constexpr int forgePoints = 2;          // a forge visit: common/uncommon 1, rare/epic 1 but only first, legendary 2
 }  // namespace gold
 
 // Wave 10 is a miniboss duel in a wider arena.
@@ -902,7 +942,7 @@ namespace player {
 // Q, Volley: like clicking every ball at once - each free ball is thrown
 // straight at the enemy (or boss) nearest to it, faster than a click throw,
 // with no catch reward.
-inline constexpr float markCooldown = 1.25f;
+inline constexpr float markCooldown = 2.5f;   // 1.25 until 2026-10-06: a good click should beat spamming Q
 inline constexpr float volleySpeedMul = 1.4f;   // x the click throw's speed
 // E, Bullet time: hold it and the fight runs slow. A gauge: it drains while
 // held and refills on its own a moment after you let go, so you choose
@@ -925,7 +965,6 @@ inline constexpr float repulseStagger = 1.0f;   // s it drifts instead of walkin
 // "?" stops (progression/Events.hpp): now and then a stranger with deals for
 // gold instead of the free pick. Prices and payouts are base + perAct * (act - 1).
 namespace event {
-inline constexpr int chancePct = 40;          // % of "?" stops that hold an event
 inline constexpr int deals = 2;               // deals on offer (plus walking away)
 inline constexpr int ballPrice = 120, ballPerAct = 40;        // a new ball
 inline constexpr int smugglerPrice = 70, smugglerPerAct = 20; // an item pick at elite odds
@@ -1024,7 +1063,8 @@ inline constexpr float slingMaxSpeed = 1500.f;
 // at this fraction of the slingshot range (~1090 px/s, a firm pull - full power
 // stays a reward for aiming by hand). Pulling further aims with the slingshot.
 inline constexpr float quickThrowSlop = 12.f;
-inline constexpr float regrabDelay = 1.f;   // s after a throw before that ball can be grabbed again (no click-spam)
+inline constexpr float regrabDelay = 0.6f;   // s after a throw before that ball can be grabbed again (no click-spam; 1 s until 2026-10-06)
+inline constexpr int endlessCrowd = 20;      // dev endless: enemies the button throws in
 inline constexpr float quickThrowPower = 0.65f;
 inline constexpr float aimTimeScale = 0.3f;
 inline constexpr float aimSlowMax = 2.5f;

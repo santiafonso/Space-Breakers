@@ -70,9 +70,9 @@ template <> struct ClassHooks<BallRole::Support> : NoClassHooks {
 template <> struct ClassHooks<BallRole::Mage> : NoClassHooks {
     using Missile = MageWorld::Missile;
 
-    static void onHit(World&, Ball& b, Enemy&, float, bool, const WorldParams&, FrameEvents&) {
+    static void onHit(World& w, Ball& b, Enemy&, float, bool, const WorldParams&, FrameEvents&) {
         if (b.ghost) return;   // copies never cast
-        for (float& cd : b.abilityCd) cd = std::max(0.f, cd - cfg::mage::hitRefund);
+        w.refundAbilities(b, cfg::mage::hitRefund);
     }
 
     static Enemy* findEnemy(World& w, int id) {
@@ -166,9 +166,13 @@ template <> struct ClassHooks<BallRole::Mage> : NoClassHooks {
     }
 };
 
-float World::mageCastRate(const Ball& b) const {   // "Focus", Channel, Archive; "Meditate" when still
-    return (1.f + b.mods.cls.mage.focus + b.mods.cls.mage.meditate * b.cls.mage.still) *
-           std::max(1.f, b.mods.cls.common.archmage);   // "Archmage"
+// Recharge speed: "Focus", Channel, Archive, "Meditate" when still, "Archmage"
+// - their bonuses add up with diminishing returns, to x(1 + rateCap) at most.
+float World::mageCastRate(const Ball& b) const {
+    const float bonus = b.mods.cls.mage.focus + b.mods.cls.mage.meditate * b.cls.mage.still +
+                        std::max(0.f, b.mods.cls.common.archmage - 1.f);
+    const float cap = cfg::ability::rateCap;
+    return 1.f + cap * bonus / (cap + bonus);
 }
 
 // `count` missiles at the nearest enemies (spread over them, nearest first),
@@ -224,8 +228,7 @@ void World::mageOnCast(Ball& b, int slot, bool echo, const WorldParams& p, Frame
     if (g.manaSpring > 0.f) {   // "Mana spring": the other abilities get closer
         itemFx(CommonWorld::Fx::Mana, b.pos, b.radius * 3.f, theme::classMage, 0.5f);
         for (int j = 0; j < kMaxAbilitySlots; ++j)
-            if (j != slot && b.abilities[j].id != Ability::None)
-                b.abilityCd[j] = std::max(0.f, b.abilityCd[j] - abilityCooldown(b.abilities[j].id, b.abilities[j].level) * g.manaSpring);
+            if (j != slot) refundAbility(b, j, 0.f, g.manaSpring);
     }
 }
 
@@ -491,6 +494,7 @@ template <> struct ClassHooks<BallRole::Shooter> : NoClassHooks {
             const float flash = e.hitFlash;
             const bool hollow = u.hollow > 0.f && (e.burn > 0.f || e.poison > 0.f || e.frozen > 0.f || e.soak > 0.f ||
                                                    e.cracks > 0 || (e.elemT > 0.f && e.elem != Element::Plain));
+            e.lastBy = u.owner;   // kill credit
             w.damageEnemy(e, u.dmg * (e.mark > 0.f ? p.markMul : 1.f) * (hollow ? 1.f + u.hollow : 1.f));   // "Hollow point"
             e.hitFlash = std::max(flash, 0.55f);   // a bullet is a tick, not a big hit
             if (u.frag > 0.f) {   // "Frag rounds": a little burst
@@ -520,6 +524,7 @@ template <> struct ClassHooks<BallRole::Shooter> : NoClassHooks {
                     }
                     if (!nx) break;
                     d *= u.chainKeep;
+                    nx->lastBy = u.owner;
                     w.damageEnemy(*nx, d * (nx->mark > 0.f ? p.markMul : 1.f));
                     nx->hitFlash = std::max(nx->hitFlash, 0.55f);
                     if (u.elem != 0) w.applyElement(*nx, static_cast<Element>(u.elem), u.owner, d, p, ev);
@@ -805,6 +810,7 @@ template <> struct ClassHooks<BallRole::Summoner> : NoClassHooks {
         if (o) dmg *= 1.f + o->mods.cls.common.guardDog;   // "Guard dog"
         if (o && o->mods.cls.common.soulbind) full = true; // "Soulbind": the element's full effect
         const bool wasAlive = e.hp > 0.f;
+        if (owner >= 0) e.lastBy = owner;   // kill credit: the summoner
         w.damageEnemy(e, dmg);
         if (o && wasAlive && e.hp <= 0.f && o->mods.cls.common.hatchery > 0)   // "Hatchery": a kill hatches wisps
             hatch(w, *o, e.pos, o->mods.cls.common.hatchery, p);
@@ -1428,6 +1434,9 @@ template <> struct ClassHooks<BallRole::Jester> : NoClassHooks {
         }
         if (j.wildChance > 0.f && roll(w, b, j.wildChance, p)) wildCard(w, b, e, dmg * j.wildPower, kill, p, ev);
         b.cls.jester.chaosArmed = false;   // "Chaos bounce": spent
+        if (j.coinHeads > 0.f)   // "Coin flip": the coin this hit used, tossed up over the enemy - gold heads, grey tails
+            w.itemFx(CommonWorld::Fx::Flip, e.pos - sf::Vector2f{0.f, e.radius + 4.f}, 5.f * w.arenaScale(), theme::puGolden, 0.6f,
+                     {b.cls.jester.coinMul > 1.f ? 1.f : 0.f, 0.f});
         // "Coin flip": flip the next hit's coin now (damageMul reads it).
         b.cls.jester.coinMul = j.coinHeads <= 0.f ? 1.f
                              : roll(w, b, J::coinHeadsChance, p) ? j.coinHeads : J::coinTails;
@@ -1581,6 +1590,7 @@ template <> struct ClassHooks<BallRole::Slinger> : NoClassHooks {
         SlingerState& st = b.cls.slinger;
         const SlingerMods& m = b.mods.cls.slinger;
         st.sinceThrow += dt;
+        if (!b.held) st.idleT += dt;   // the class's slowdown (World::roleCruise)
         if (st.armed && (st.armedT -= dt) <= 0.f) st.armed = false;   // the thrown hit went unused
         // "Afterburner": fire along the throw while it's still flying fast.
         if (st.burnT > 0.f) {
@@ -1606,22 +1616,20 @@ template <> struct ClassHooks<BallRole::Slinger> : NoClassHooks {
         }
     }
 
-    static void onGrab(World&, Ball& b) {
+    static void onGrab(World& w, Ball& b) {
         namespace S = cfg::slinger;
         SlingerState& st = b.cls.slinger;
         const SlingerMods& m = b.mods.cls.slinger;
         const bool quick = st.sinceThrow < S::releaseWindow;   // caught back soon after your throw
         if (m.releaseMax > 0) st.stacks = quick ? std::min(st.stacks + 1, m.releaseMax) : 0;   // "Catch & release"
         if (b.isAscended(BallRole::Slinger))   // Master Slinger: a catch recharges its abilities
-            for (int i = 0; i < kMaxAbilitySlots; ++i)
-                if (b.abilities[i].id != Ability::None)
-                    b.abilityCd[i] = std::max(0.f, b.abilityCd[i] - S::masterRecharge *
-                                                   abilityCooldown(b.abilities[i].id, b.abilities[i].level));
+            w.refundAbilities(b, 0.f, S::masterRecharge);
     }
 
     static void onThrow(World&, Ball& b) {
         SlingerState& st = b.cls.slinger;
         st.sinceThrow = 0.f;
+        st.idleT = 0.f;
         st.armed = true;
         st.armedT = cfg::slinger::armedTime;
         st.burnT = b.mods.cls.slinger.burnTime;   // "Afterburner" (0 without it)
@@ -1709,7 +1717,10 @@ template <> struct ClassHooks<BallRole::Slinger> : NoClassHooks {
         fl.erase(std::remove_if(fl.begin(), fl.end(), [](const SlingerWorld::Flame& f) { return f.life <= 0.f; }), fl.end());
     }
 
-    static void waveStart(World& w, const WorldParams&) { w.classWorld_.slinger.flames.clear(); }
+    static void waveStart(World& w, const WorldParams&) {
+        w.classWorld_.slinger.flames.clear();
+        for (Ball& b : w.balls_) b.cls.slinger.idleT = 0.f;   // the opening whirl counts as a throw
+    }
 };
 
 // "Golem" (a rare, sim/WorldCommons.cpp): every so often a ball calls a stone
@@ -2054,16 +2065,19 @@ void World::commonDragons(float dt, const WorldParams& p, FrameEvents& ev) {
         if (l > t->radius + 2.f) g.pos += g.vel * dt;
         if (l > t->radius + 4.f * k || g.biteT > 0.f) continue;
         g.biteT = C::hiveBiteEvery;
+        dmgOwner_ = g.owner;   // kill credit: the Swarm's ball (its bites carry no owner for reactions)
         if (g.lit) {   // lit by a dragon: it goes up
             const float R = C::hiveLitRadius * k;
             for (Enemy& e : enemies_)
                 if (e.hp > 0.f && length(e.pos - g.pos) <= R + e.radius) H::touch(*this, e, g.dmg * C::hiveLitBlast, g.elem, -1, false, p, ev);
             itemFx(CommonWorld::Fx::Blast, g.pos, R, g.elem != 0 ? elementColor(static_cast<Element>(g.elem)) : theme::elemFire, 0.35f);
             g.life = 0.f;
+            dmgOwner_ = -1;
             continue;
         }
         const bool alive = t->hp > 0.f;
         H::touch(*this, *t, g.dmg, g.elem, -1, false, p, ev);   // no owner: its element reacts with anything
+        dmgOwner_ = -1;
         if (alive && t->hp <= 0.f && static_cast<int>(cw.bugs.size() + split.size()) < C::hiveMax) {   // a kill: it splits
             g.life = std::max(g.life, C::hiveSplitLife);
             CommonWorld::Bug twin = g;

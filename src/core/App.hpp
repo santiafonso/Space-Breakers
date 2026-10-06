@@ -73,6 +73,11 @@ public:
         int bestCombo = 0;
         float time = 0.f;         // seconds
         int cores = 0, prisms = 0;
+        // the build it ended with, for the card (2026-10-05)
+        std::vector<BallLoadout> balls;
+        std::vector<int> ballKills;   // per ball, same order
+        RunMods mods;                 // its relics
+        std::vector<int> creeds, pacts;
     };
     const RunSummary& runSummary() const { return summary_; }
     // First-run hints: one line in the bottom band, once ever, gone the moment
@@ -92,6 +97,7 @@ public:
 
     void openLoadout();     // Menu -> the game menu
     void newRun();          // Loadout "Start" -> a fresh run (drops a saved one)
+    void startEndless();    // dev (main menu): endless waves to try things out - no map, nothing saved
     bool hasSavedRun() const;   // a run in progress on disk (saves/run.txt)
     bool resumeRun();           // Menu "Continue run": back on its map; false if it couldn't be read
     void applyUpgrade(int idx);   // Choice: take card idx (asks for a ball first when it needs one)
@@ -382,16 +388,18 @@ private:
     std::vector<EventKind> eventDeals_;   // the "?" event on screen
     bool openEvent();         // a "?" stop rolled an event: false = nothing to offer
     bool openForgePicker();   // the Forge's item picker: false = nothing to level up
-    // A forge visit has a budget (2026-10-05): common / uncommon / rare picks
-    // cost 1 point, an Epic 1 (one per visit), a Legendary 2.
+    // A forge visit has a budget (2026-10-05): 2 points. A common / uncommon
+    // level costs 1; a rare / epic costs 1 but only as the visit's first; a
+    // legendary takes both (so it's the only one).
     int forgePoints_ = 0;
-    bool forgeEpicUsed_ = false;
 public:
     int forgePoints() const { return forgePoints_; }
     static int forgeCost(UpgradeKind k) { return upgradeTier(k) == Tier::Legendary ? 2 : 1; }
 private:
     void openRestStop();      // a Rest stop: repair the core or forge an item
     void restRepair();
+    float endlessNextT_ = -1.f;   // dev endless: s to the next wave (-1 = a wave is on)
+    MetaState endlessMeta_;       // ...the real progress, put back untouched when it ends
     std::vector<UpgradeKind> giftQueue_;   // event picks still to place, one Equip screen each
     void nextGift();          // place the next queued gift, or back to the map
     bool eventApplies(EventKind k) const;   // could the deal do anything (gold aside)

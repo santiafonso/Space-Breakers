@@ -355,6 +355,7 @@ struct SlingerMods {
 };
 struct SlingerState {
     float sinceThrow = 99.f;   // seconds since you threw it ("Catch & release")
+    float idleT = 0.f;         // the class: s since your throw / the wave's start (its cruise sinks after a while)
     bool armed = false;        // you threw it and its first hit hasn't landed...
     float armedT = 0.f;        // ...for this much longer
     int stacks = 0;            // "Catch & release"
@@ -490,6 +491,8 @@ struct CommonMods {
     float slotEvery = 0.f;     // "777": s between spins (0 = off)...
     float slotBuff = 0.f;      // ...a triple lasts this long
     float luckyEvery = 0.f;    // "Lucky number": s between rolls (0 = off)
+    float rouletteEvery = 0.f; // "Roulette": s between spins (0 = off)...
+    float roulette = 0.f;      // ...red: + damage, black: + speed (green: both)
     float wildCd = 0.f;        // "Wild magic": s between casts (0 = off)
     int chorus = 0;            // "Spell chorus": every Nth cast
     float chrono = 0.f;        // "Chronomancy": slow per cast
@@ -566,6 +569,10 @@ struct CommonState {
     float spinT = -1.f;        // ...s into the spin (-1 = still), the reels showing...
     int reel[3] = {0, 0, 0};   // ...symbols: 0 = 7, 1 = clover, 2 = coin
     float frenzyT = 0.f, rainT = 0.f, rainDropT = 0.f;   // ...a frenzy / a coin rain, s left
+    float rouletteT = 0.f;     // "Roulette": to the next spin...
+    float rouletteSpin = -1.f; // ...s into the spin (-1 = still)...
+    int rouletteLand = -1;     // ...where it will land / landed: 0 red, 1 black, 2 green (-1 none yet)
+    int rouletteWin = -1;      // ...the colour paying out now
     int luckyN = 0;            // "Lucky number": the roll showing (0 = none)...
     float luckyT = 0.f;        // ...to the next roll
     float luckyStopT = 0.f;    // ...a 1: stopped dead
@@ -606,7 +613,10 @@ struct CommonState {
     bool beamOn = false;
     float bladesT = 0.f, bladeAng = 0.f, bladeTickT = 0.f, bladeDmg = 0.f;   // "Blades"
     int bladeN = 0;
-    float leashT = 0.f, leashL = 0.f, leashSpeed = 0.f;   // "Leash": s left, rope length, the swing's floor
+    float leashT = 0.f, leashL = 0.f;    // "Leash": s of spin left (World::advanceLeash), rope length...
+    float leashAng = 0.f, leashDir = 1.f; // ...where round the core it is, which way it turns...
+    float leashFlyT = 0.f;                // ...then s of free flight that keeps its launch speed
+    float leashFlyLen = 0.f;              // ...this long (set on the cast)
     float portalCd = 0.f;      // "Portal": not again right away
 };
 struct CommonWorld {
@@ -731,7 +741,7 @@ struct CommonWorld {
                     Star, Hexshield, Link, Sonic, Rune, Spokes, Pellets, Smoke, Wisps, Pillar, Blast, Fuse,
                     Confetti, Cards, Arrow, Rise, Slam, Spiral, Collapse, Sight, Ping, Beckon,
                     Mana, Leap, Saturate, Wild, Chrono, Scythe, Streak,
-                    Breath, Swath, Frost, Rubble, Splash, Storm, Drop, Boulder, Ion, Card };
+                    Breath, Swath, Frost, Rubble, Splash, Storm, Drop, Boulder, Ion, Card, Flip };
         Kind kind = Shock;
         sf::Vector2f a, b;     // from / to (a hook's ball / its head; a swap's two ends...)
         float life = 0.f, maxLife = 1.f, r = 0.f;

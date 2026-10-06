@@ -53,6 +53,7 @@ float World::commonPreHit(Ball& b, Enemy& e, const WorldParams&) {
         s.empowerHit = true;
     }
     if (s.frenzyT > 0.f) k *= cfg::common::slotFrenzyDamage;       // "777": a frenzy
+    if (s.rouletteWin == 0 || s.rouletteWin == 2) k *= 1.f + b.mods.cls.common.roulette;   // "Roulette": red (or green)
     if (s.luckyN > 5)                                               // "Lucky number": a high roll hits harder...
         k *= 1.f + cfg::common::luckyDamagePer * static_cast<float>(s.luckyN - 5);
     if (s.luckyN == 10) k *= cfg::common::luckyTenCrit;             // ...a 10 crits every hit
@@ -214,7 +215,7 @@ void World::commonOnKill(Ball& b, Enemy& e, const WorldParams& p) {
     CommonState& s = b.cls.common;
     if (c.insight > 0.f)   // "Insight"
         for (int i = 0; i < kMaxAbilitySlots; ++i)
-            if (b.abilities[i].id != Ability::None) b.abilityCd[i] = std::max(0.f, b.abilityCd[i] - c.insight);
+            refundAbility(b, i, c.insight);
     if (c.adrenaline > 0.f && s.adrenaline < C::adrenalineMax) ++s.adrenaline;   // "Adrenaline" (ballCruise reads it)
     if (s.luckyN > 0 && s.luckyN < 5) {   // "Lucky number": a low roll is heavy - it shoves and stuns
         const float lo = static_cast<float>(5 - s.luckyN);
@@ -378,6 +379,21 @@ void World::commonTick(Ball& b, float dt, const WorldParams& p, FrameEvents& ev)
         tr.push_back(cl);
     }
     if (c.primal > 0.f && live && b.elemN > 0) primalTick(b, dt, p, ev);   // "Primal"
+    if (c.rouletteEvery > 0.f && live) {   // "Roulette": spin, land, pay till the next spin
+        if (s.rouletteSpin < 0.f && (s.rouletteT -= dt) <= 0.f) {
+            s.rouletteT = c.rouletteEvery;
+            s.rouletteSpin = 0.f;
+            s.rouletteLand = rng_.irange(0, cfg::common::rouletteGreenIn - 1) == 0 ? 2 : rng_.irange(0, 1);
+        }
+        if (s.rouletteSpin >= 0.f && (s.rouletteSpin += dt) >= cfg::common::rouletteSpin) {
+            s.rouletteSpin = -1.f;
+            s.rouletteWin = s.rouletteLand;
+            if (s.rouletteWin == 2) {
+                ev.midasGold += cfg::common::rouletteGold;
+                ev.bursts.push_back({b.pos, 0.f, sf::Color(80, 210, 110), "GREEN!"});
+            }
+        }
+    }
     if (c.luckyEvery > 0.f && live && (s.luckyT -= dt) <= 0.f) {   // "Lucky number": roll the d10
         s.luckyT = c.luckyEvery;
         s.luckyN = rng_.irange(1, 10);
@@ -567,7 +583,7 @@ void World::commonWallBounce(Ball& b, const WorldParams& p) {
     const CommonMods& c = b.mods.cls.common;
     if (c.arcaneCharge > 0.f)   // "Arcane charge"
         for (int i = 0; i < kMaxAbilitySlots; ++i)
-            if (b.abilities[i].id != Ability::None) b.abilityCd[i] = std::max(0.f, b.abilityCd[i] - c.arcaneCharge);
+            refundAbility(b, i, c.arcaneCharge);
     if (b.cls.common.pingLeft > 0) {   // "Ping-pong": off the wall, straight at the nearest enemy
         sf::Vector2f aim;
         bool has = false;
@@ -699,7 +715,7 @@ void World::commonOnCast(Ball& b, const WorldParams& p, FrameEvents& ev) {
         for (Ball& o : balls_) {
             if (o.owner == b.owner) continue;
             for (int i = 0; i < kMaxAbilitySlots; ++i)
-                if (o.abilities[i].id != Ability::None) o.abilityCd[i] = std::max(0.f, o.abilityCd[i] - c.sync);
+                refundAbility(o, i, c.sync);
         }
 }
 
@@ -875,6 +891,9 @@ void World::commonWaveStart() {
         b.cls.common.spinT = -1.f;
         b.cls.common.frenzyT = b.cls.common.rainT = 0.f;
         b.cls.common.luckyT = 0.f;   // "Lucky number": a roll right away
+        b.cls.common.rouletteT = 0.5f;   // "Roulette": a spin right away
+        b.cls.common.rouletteSpin = -1.f;
+        b.cls.common.rouletteWin = -1;
         b.cls.common.luckyN = 0;
         b.cls.common.luckyStopT = 0.f;
         b.cls.common.luckyArmed = false;
@@ -885,7 +904,7 @@ void World::commonWaveStart() {
         b.cls.common.titan = 0.f;
         b.cls.common.archStacks = b.cls.common.stopCasts = b.cls.common.showStacks = 0;
         b.cls.common.stormOn = 0.f;
-        b.cls.common.empower = b.cls.common.beamT = b.cls.common.bladesT = b.cls.common.leashT = 0.f;
+        b.cls.common.empower = b.cls.common.beamT = b.cls.common.bladesT = b.cls.common.leashT = b.cls.common.leashFlyT = 0.f;
         b.cls.common.empowerHit = false;
         b.cls.common.stormT = b.mods.cls.common.leadStorm * 0.5f;   // the first storm comes early
     }

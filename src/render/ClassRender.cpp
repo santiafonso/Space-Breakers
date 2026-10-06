@@ -969,6 +969,15 @@ void drawFx(sf::RenderTarget& t, const CommonWorld::Fx& f, float k) {
             }
             break;
         }
+        case F::Flip: {   // "Coin flip": a coin tossed up, spinning, landing gold (heads) or grey (tails)
+            const bool heads = f.b.x > 0.5f;
+            const sf::Vector2f q = f.a - sf::Vector2f{0.f, 22.f * k * std::sin(clampf(u / 0.7f, 0.f, 1.f) * kPi)};
+            const float spin = u < 0.7f ? std::fabs(std::cos(u * 30.f)) : 1.f;
+            const sf::Color cc = u < 0.7f ? theme::puGolden : heads ? theme::puGolden : sf::Color(150, 150, 160);
+            draw::disc(t, q, f.r, withAlpha(lerpColor(cc, sf::Color::White, 0.35f), fl), withAlpha(cc, fl), {0.15f + 0.85f * spin, 1.f}, 12);
+            if (u >= 0.7f && heads) draw::glow(t, q, f.r * 2.5f, theme::puGolden, 0.4f * fl);
+            break;
+        }
         case F::Shock: {   // Empower landing: a sharp ring and a star of spikes
             const float e = easeOut(u);
             draw::ring(t, f.a, f.r * e, (3.f * fl + 1.f) * k, withAlpha(sf::Color::White, 0.8f * fl));
@@ -1402,6 +1411,31 @@ void worldJesterToys(sf::RenderTarget& t, const World& world) {
                     drawSlotSymbol(t, cpos, h, s.reel[i], a);
                 }
             }
+        }
+        if (c.rouletteEvery > 0.f) {   // "Roulette": a little wheel by the ball; while it pays, a tinted ring
+            static const sf::Color kCol[3] = {sf::Color(220, 50, 56), sf::Color(36, 36, 44), sf::Color(70, 200, 100)};
+            const sf::Vector2f wc = b.pos + sf::Vector2f{-b.radius - 14.f * k, -b.radius - 10.f * k};
+            const float R = 10.f * k;
+            const bool spinning = s.rouletteSpin >= 0.f;
+            const float held = c.rouletteEvery - s.rouletteT;   // s since the last spin started
+            if (spinning || held < cfg::common::rouletteSpin + 0.8f) {
+                // the wheel: 7 slices, red / black alternating, one green; it slows to a stop on the result
+                const float q = spinning ? s.rouletteSpin / cfg::common::rouletteSpin : 1.f;
+                const float landAng = s.rouletteLand == 2 ? 0.f : (s.rouletteLand == 0 ? 1.f : 2.f) * 2.f * kPi / 7.f;
+                const float ang = -kPi * 0.5f - landAng - (1.f - q) * (1.f - q) * 14.f;   // eases out onto the slice under the pointer
+                for (int i = 0; i < 7; ++i) {
+                    const float a0 = ang + static_cast<float>(i) * 2.f * kPi / 7.f;
+                    const sf::Color sc = i == 0 ? kCol[2] : kCol[(i + 1) % 2];
+                    fillShape(t, {wc, wc + sf::Vector2f{std::cos(a0), std::sin(a0)} * R,
+                                  wc + sf::Vector2f{std::cos(a0 + 0.9f), std::sin(a0 + 0.9f)} * R}, sc);
+                }
+                draw::ring(t, wc, R, 1.2f * k, withAlpha(theme::puGolden, 0.9f), 0.f, 6.283f, 16);
+                draw::disc(t, wc, 1.6f * k, theme::puGolden, theme::puGolden, {1.f, 1.f}, 6);
+                fillShape(t, {wc - sf::Vector2f{0.f, R - 1.f * k}, wc - sf::Vector2f{2.5f * k, R + 3.f * k}, wc - sf::Vector2f{-2.5f * k, R + 3.f * k}},
+                          sf::Color::White);   // the pointer
+            }
+            if (s.rouletteWin >= 0 && !spinning)
+                draw::ring(t, b.pos, b.radius + 2.5f * k, 1.5f * k, withAlpha(s.rouletteWin == 1 ? sf::Color(200, 200, 210) : kCol[s.rouletteWin], 0.55f));
         }
         if (c.luckyEvery > 0.f && s.luckyN > 0) {   // the d10's roll
             const int n = s.luckyN;

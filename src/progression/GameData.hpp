@@ -65,6 +65,7 @@ struct RunState {
     bool active = false;
     bool hard = false;        // hard mode, fixed at the run start
     bool tutorial = false;    // the very first run: a straight map and a soft boss (cfg::tutorial)
+    bool endless = false;     // dev: endless waves, no map, nothing saved (App::startEndless)
     float platingHp = 0.f;    // core max hp the balls' "Plating" items add (already in coreMaxHp)
     std::array<int, 4> bosses{0, 1, 2, 3};   // acts 1-4's bosses (BossKind), shuffled per run; act 5 is always the Orbital
     int wave = 0;

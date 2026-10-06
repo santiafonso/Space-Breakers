@@ -38,7 +38,7 @@ inline const ItemDef* mageItemDef(UpgradeKind k) {
          "30% chance an ability fires a second time a moment later",
          "+8% chance", Tier::Rare, ItemTag::Mage},
         {UpgradeKind::ManaSpring, "ManaSpring", "Mana spring",
-         "every ability it casts recharges its other abilities by 25% - with several, they chain",
+         "every ability it casts recharges its other abilities by 15% - with several, they chain",
          "+7% of their cooldown", Tier::Epic, ItemTag::Mage},
     };
     return findItemDef(defs, k);
@@ -279,12 +279,14 @@ inline const ItemDef* commonItemDef(UpgradeKind k) {
          "+2% chance", Tier::Common, ItemTag::Jester},
         {K::Confetti, "Confetti", "Confetti", "a doubled hit (crit, coin heads, a Jester double) throws 3 sparks at enemies nearby for 30% of the hit",
          "+1 spark, +10%", Tier::Common, ItemTag::Jester},
+        {K::Roulette, "Roulette", "Roulette", "every 5 s a little roulette spins over it, and what it lands on lasts till the next spin: red +40% damage, black +40% speed, green (rare) both and 5 gold",
+         "spins sooner, a bigger win", Tier::Common, ItemTag::Jester},
         // Mage
         {K::Spellblade, "Spellblade", "Spellblade", "the first hit after it casts an ability deals +40%",
          "+15%", Tier::Common, ItemTag::Mage},
         {K::AetherStep, "AetherStep", "Aether step", "casting an ability kicks it to x1.4 speed",
          "+0.1x", Tier::Common, ItemTag::Mage},
-        {K::Insight, "Insight", "Insight", "each kill takes 0.5 s off its ability cooldowns",
+        {K::Insight, "Insight", "Insight", "each kill takes 0.3 s off its ability cooldowns",
          "+0.25 s", Tier::Common, ItemTag::Mage},
         // Summoner
         {K::Lingering, "Lingering", "Lingering", "its summons (turrets, totems, wisps, spritelings) last 30% longer",
@@ -358,7 +360,7 @@ inline const ItemDef* commonItemDef(UpgradeKind k) {
          "+4% chance", Tier::Uncommon, ItemTag::Jester},
         {K::Sigil, "Sigil", "Sigil", "each ability it casts leaves a glyph for 4 s; another ball crossing it sets off a small nova (40% of its hit)",
          "+15% of the hit", Tier::Uncommon, ItemTag::Mage},
-        {K::ArcaneCharge, "ArcaneCharge", "Arcane charge", "each wall bounce takes 0.3 s off its ability cooldowns",
+        {K::ArcaneCharge, "ArcaneCharge", "Arcane charge", "each wall bounce takes 0.2 s off its ability cooldowns",
          "+0.1 s", Tier::Uncommon, ItemTag::Mage},
         {K::Conduit, "Conduit", "Conduit", "each ability it casts leaves the nearest other ball's element on the enemies around it - its own hits then set off reactions",
          "wider", Tier::Uncommon, ItemTag::Mage},

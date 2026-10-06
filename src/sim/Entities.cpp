@@ -173,13 +173,30 @@ const char* roleDesc(BallRole r) {
         case BallRole::Striker:  return "hits far harder when flung fast - the one to throw";
         case BallRole::Guardian: return "big; bounces toward the closest threat, shoves and staggers it, smashes through shields";
         case BallRole::Support:  return "weak hits, but marks enemies so every ball hits them harder";
-        case BallRole::Mage:     return "carries more abilities: a 2nd ability slot, and every hit it lands brings its abilities 0.25 s closer";
+        case BallRole::Mage:     return "carries more abilities: a 2nd ability slot, and every hit it lands brings its abilities 0.2 s closer";
         case BallRole::Shooter:  return "fires small bullets at the nearest enemy as it flies - faster the faster it goes";
         case BallRole::Assassin: return "after a kill it blinks next to the nearest enemy and dives at it";
         case BallRole::Summoner: return "calls a small spriteling ball every few seconds; all its summons hit harder and last longer";
         case BallRole::Jester:   return "chaos: every few seconds it pulls a random trick from another class - a blink, missiles, a burst of bullets, a launch, a nova, a zap, blades, a smite (more often with more Jester items) - and each hit may land twice";
         case BallRole::Slinger:  return "made for your hands: catching it pays 50% more, and the first hit after you throw it lands 25% harder";
         case BallRole::Alchemist: return "carries 2 elements and switches between them hit by hit - its own elements react with each other";
+    }
+    return "";
+}
+
+const char* roleTraits(BallRole r) {
+    switch (r) {
+        case BallRole::Normal:   return "";
+        case BallRole::Striker:  return "+8% damage, +10% top speed";
+        case BallRole::Guardian: return "much slower (x0.65 speed), 75% hits; +20% knockback, heals the core a little per core bounce";
+        case BallRole::Support:  return "+10% element potency, +5% ability recharge";
+        case BallRole::Mage:     return "half damage on contact; +15% ability recharge, +5% element potency";
+        case BallRole::Shooter:  return "70% damage on contact; +10% bullet damage, +5% crit";
+        case BallRole::Assassin: return "fast (x1.25 speed), hits from behind (the side away from the core) x1.8; +10% crit, +25% crit damage";
+        case BallRole::Summoner: return "60% damage on contact; summons +15% stronger, +5% ability recharge";
+        case BallRole::Jester:   return "every contact hit rolls x0.5 to x1.7; +8% crit, +5% chance a hit lands twice";
+        case BallRole::Slinger:  return "your throw x1.6, but left alone it slows down to half speed - throw it again; grabbed from further, +15% thrown hit";
+        case BallRole::Alchemist: return "85% damage on contact; +15% element potency, +5% ability recharge";
     }
     return "";
 }

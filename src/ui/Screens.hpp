@@ -107,6 +107,7 @@ public:
     bool frozen() const override { return peek_.open; }
     bool ownsTab() const override { return true; }
 
+    static sf::FloatRect endlessButton(App& app);   // dev endless: "+N enemies"
 private:
     void grab(App& app, sf::Vector2f mouse);
     void release(App& app);

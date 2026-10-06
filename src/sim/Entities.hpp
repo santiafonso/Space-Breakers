@@ -58,6 +58,7 @@ inline constexpr BallRole classAt(int i) { return static_cast<BallRole>(i + 1); 
 
 const char* roleName(BallRole r);       // "Striker"
 const char* roleDesc(BallRole r);       // what the class does
+const char* roleTraits(BallRole r);     // its own feel (speed / contact) and small stat perks
 const char* ascendedName(BallRole r);   // "Mega Striker"
 const char* ascendedDesc(BallRole r);   // what 4 items of the tag add
 // A class's colour - the vivid one: it's the ball's body colour, its name in
@@ -237,6 +238,7 @@ struct Ball {
     // abilities (sim/WorldAbilities.cpp)
     AbilitySpec abilities[kMaxAbilitySlots];
     float abilityCd[kMaxAbilitySlots] = {};   // seconds until each can fire again
+    float refunded[kMaxAbilitySlots] = {};    // seconds taken off each cooldown since it last fired (capped: World::refundAbility)
     float abilityFlash = 0.f;                 // 1 when one just fired, fades (the cooldown arc flashes)
     float overclockT = 0.f;                   // "Overclock": seconds left hot...
     float overclockMul = 1.f;                 // ...hitting this much harder
@@ -323,6 +325,7 @@ struct Enemy {
     float shrinkT = 0.f, shrinkR = 0.f;  // "Shrink" (ability): s left, and the radius it had
     float shrinkPop = 0.f;               // ...1 -> 0 as it squeezes down (drawn only)
     float plagueT = 0.f, plagueDps = 0.f; // "Black plague": s left mad and sick, hp lost per s
+    int lastBy = -1;                     // the ball (owner) that hurt it last - its kill, if it dies
     int bounty = 0;                      // "Bounty" (ability): gold its killer earns
     Gait gait = Gait::Straight;
     float gaitPhase = 0.f;  // Weave: where in its sway it started

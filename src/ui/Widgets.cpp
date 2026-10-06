@@ -730,7 +730,12 @@ bool loadoutTooltip(const BallLoadout& L, int part, std::string& title, std::str
             title += roles[i] == asc ? ascendedName(r) : roleName(r);
             std::string what = roleDesc(r);
             if (!what.empty()) what[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(what[0])));
-            desc += what + ".\n\n";
+            desc += what + ".\n";
+            if (std::string tr = roleTraits(r); !tr.empty()) {
+                tr[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(tr[0])));
+                desc += tr + ".\n";
+            }
+            desc += "\n";
             desc += std::string("2 items: ") + roleName(r) + "  (done)\n";
             desc += std::string("4 items: ") + ascendedName(r) + (c >= 4 ? "  (done)" : "  (" + std::to_string(c) + "/4)");
             std::string more = ascendedDesc(r);

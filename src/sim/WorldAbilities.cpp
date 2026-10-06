@@ -26,6 +26,16 @@ void World::resetAbilityCooldowns(Ball& b) {
         b.abilityCd[i] = abilityCooldown(b.abilities[i].id, b.abilities[i].level) * (1.f - cfg::ability::firstDelay);
 }
 
+void World::refundAbility(Ball& b, int i, float seconds, float frac) {
+    const AbilitySpec& a = b.abilities[i];
+    if (a.id == Ability::None || b.abilityCd[i] <= 0.f) return;
+    const float full = abilityCooldown(a.id, a.level);
+    const float room = std::max(0.f, full * cfg::ability::refundCap - b.refunded[i]);
+    const float take = std::min({seconds + frac * full, room, b.abilityCd[i]});
+    b.abilityCd[i] -= take;
+    b.refunded[i] += take;
+}
+
 void World::updateAbilities(Ball& b, float dt, const WorldParams& p, FrameEvents& ev) {
     b.abilityFlash = std::max(0.f, b.abilityFlash - dt * 2.5f);
     if (!waveRunning_) return;
@@ -43,6 +53,7 @@ void World::updateAbilities(Ball& b, float dt, const WorldParams& p, FrameEvents
         castBall_ = nullptr;
         if (fired) {
             b.abilityCd[i] = abilityCooldown(a.id, a.level);
+            b.refunded[i] = 0.f;   // a fresh cooldown, a fresh refund budget
             b.abilityFlash = 1.f;
             mageOnCast(b, i, false, p, ev);   // Mage items / Ancient Mage react to the cast
             commonOnCast(b, p, ev);           // Spellblade / Aether step / Sync / Chorus / Chronomancy
@@ -102,24 +113,6 @@ void World::abilityTick(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
                     if (e.hp > 0.f && length(e.pos - at) <= A::bladeRadius * as + e.radius) damageEnemy(e, s.bladeDmg);
             }
             castBall_ = nullptr;
-        }
-    }
-    if (s.leashT > 0.f) {   // "Leash": a rope to the core - never further than its length, always swinging
-        s.leashT -= dt;
-        if (b.held) {
-            s.leashT = 0.f;
-        } else {
-            const sf::Vector2f r = b.pos - core_.pos;
-            const float d = std::max(1.f, length(r));
-            const sf::Vector2f rh = r / d;
-            if (d > s.leashL) {
-                b.pos = core_.pos + rh * s.leashL;
-                if (const float vr = dot(b.vel, rh); vr > 0.f) b.vel -= rh * vr;
-            }
-            const sf::Vector2f tn{-rh.y, rh.x};
-            const float vt = dot(b.vel, tn);
-            const float floor = ballCruise(b, p) * s.leashSpeed;
-            if (std::fabs(vt) < floor) b.vel += tn * ((vt < 0.f ? -floor : floor) - vt);
         }
     }
 }
@@ -204,11 +197,13 @@ void World::abilityWorldTick(float dt, const WorldParams& p, FrameEvents& ev) {
         bt.t += dt / cfg::common::bottleFlight;
         if (bt.t < 1.f) continue;
         const float R = cfg::common::bottleRadius * as;
+        dmgOwner_ = bt.owner;
         for (Enemy& e : enemies_) {
             if (e.hp <= 0.f || length(e.pos - bt.to) > R + e.radius) continue;
             damageEnemy(e, bt.dmg);
             applyElement(e, Element::Poison, bt.owner, bt.dmg, p, ev);
         }
+        dmgOwner_ = -1;
         itemFx(CommonWorld::Fx::Splash, bt.to, R, elementColor(Element::Poison), 0.5f);
         CommonWorld::Field pd;   // ...and a puddle that keeps poisoning
         pd.pos = bt.to;
@@ -224,12 +219,14 @@ void World::abilityWorldTick(float dt, const WorldParams& p, FrameEvents& ev) {
         f.life -= dt;
         if ((f.tickT -= dt) > 0.f) continue;
         f.tickT = f.tick;
+        dmgOwner_ = f.owner;
         for (Enemy& e : enemies_) {
             if (e.hp <= 0.f || e.orbiter || length(e.pos - f.pos) > f.r + e.radius) continue;
             damageEnemy(e, f.dmg);
             applyElement(e, static_cast<Element>(f.elem), f.owner, f.dmg, p, ev);
             if (f.elem == static_cast<int>(Element::Ice)) e.frozen = std::max(e.frozen, cfg::common::frostFreeze);
         }
+        dmgOwner_ = -1;
     }
     cw.fields.erase(std::remove_if(cw.fields.begin(), cw.fields.end(), [](const CommonWorld::Field& f) { return f.life <= 0.f; }),
                     cw.fields.end());
@@ -238,12 +235,14 @@ void World::abilityWorldTick(float dt, const WorldParams& p, FrameEvents& ev) {
         bo.t += dt / cfg::common::boulderFall;
         if (before >= 1.f || bo.t < 1.f) continue;
         const float R = cfg::common::boulderRadius * as;
+        dmgOwner_ = bo.owner;
         for (Enemy& e : enemies_) {
             if (e.hp <= 0.f || e.orbiter || length(e.pos - bo.at) > R + e.radius) continue;
             damageEnemy(e, bo.dmg);
             applyElement(e, Element::Stone, bo.owner, bo.dmg, p, ev);
             e.stagger = std::max(e.stagger, cfg::common::quakeStun);
         }
+        dmgOwner_ = -1;
         itemFx(CommonWorld::Fx::Rubble, bo.at, R * 0.6f, elementColor(Element::Stone), 0.6f);
         ev.kick = std::max(ev.kick, 5.f);
     }
@@ -256,6 +255,7 @@ void World::abilityWorldTick(float dt, const WorldParams& p, FrameEvents& ev) {
             if (e.hp > 0.f && !e.orbiter && e.pos.x > 0.f && e.pos.y > 0.f && e.pos.x < size_.x && e.pos.y < size_.y) live.push_back(&e);
         if (!live.empty()) {
             Enemy& e = *live[static_cast<std::size_t>(rng_.irange(0, static_cast<int>(live.size()) - 1))];
+            e.lastBy = cw.rainOwner;
             damageEnemy(e, cw.rainDmg);
             applyElement(e, Element::Water, cw.rainOwner, cw.rainDmg, p, ev);
             itemFx(CommonWorld::Fx::Drop, e.pos + sf::Vector2f{rng_.range(-1.f, 1.f), rng_.range(-1.f, 1.f)} * e.radius, e.radius,
@@ -278,8 +278,10 @@ void World::abilityWorldTick(float dt, const WorldParams& p, FrameEvents& ev) {
         const float R = cfg::common::slotRainRadius * as;
         for (Enemy& e : enemies_) {
             if (e.hp <= 0.f || length(e.pos - co.pos) > e.radius + 6.f * as) continue;
+            dmgOwner_ = co.owner;
             for (Enemy& o : enemies_)
                 if (o.hp > 0.f && length(o.pos - co.pos) <= R + o.radius) damageEnemy(o, co.dmg);
+            dmgOwner_ = -1;
             ev.midasGold += cfg::common::slotGold;
             itemFx(CommonWorld::Fx::Pellets, co.pos, R, theme::puGolden, 0.25f);
             co.pos.y = size_.y + 100.f;   // spent
@@ -297,11 +299,13 @@ void World::abilityWorldTick(float dt, const WorldParams& p, FrameEvents& ev) {
             if (e.hp > 0.f && length(e.pos - m.pos) <= A::mineTrigger * as + e.radius) { hit = true; break; }
         if (!hit) continue;
         m.life = 0.f;
+        dmgOwner_ = m.owner;   // kill credit
         for (Enemy& e : enemies_) {
             if (e.hp <= 0.f || length(e.pos - m.pos) > m.r + e.radius) continue;
             damageEnemy(e, m.dmg);
             if (m.elem != 0) applyElement(e, static_cast<Element>(m.elem), m.owner, m.dmg, p, ev);
         }
+        dmgOwner_ = -1;
         const sf::Color mc = m.elem != 0 ? elementColor(static_cast<Element>(m.elem)) : theme::accent;
         ev.bursts.push_back({m.pos, m.r, mc, nullptr});
         CommonWorld::Fx f;   // shrapnel flying out
@@ -767,12 +771,20 @@ bool World::fireAbility(Ball& b, const AbilitySpec& a, const WorldParams& p, Fra
             return true;
         }
 
-        case Ability::Leash: {   // tied to the core a while: it swings around it (abilityTick)
+        case Ability::Leash: {   // tied to the core it spins up, then it's let go (World::advanceLeash)
             if (!anyEnemy || b.mods.satellite || b.held) return false;
             CommonState& s = b.cls.common;
-            s.leashT = (A::leashTime + A::leashTimePerLevel * n) * reach;
-            s.leashL = clampf(length(b.pos - core_.pos), A::leashMin * as, A::leashMax * as);
-            s.leashSpeed = A::leashSpeed + A::leashSpeedPerLevel * n;
+            if (s.leashT > 0.f || s.leashFlyT > 0.f) return false;   // one swing at a time (a 2nd Leash waits its turn)
+            const sf::Vector2f r = b.pos - core_.pos;
+            // The rope fits inside the arena, so the spin never meets a wall.
+            const float room = std::min({core_.pos.x, size_.x - core_.pos.x, core_.pos.y, size_.y - core_.pos.y}) -
+                               b.radius - 4.f;
+            s.leashT = A::leashTime;
+            s.leashL = std::min(clampf(length(r), A::leashMin * as, A::leashMax * as), room);
+            s.leashL = std::max(s.leashL, core_.radius + b.radius + 6.f);
+            s.leashAng = std::atan2(r.y, r.x);
+            s.leashDir = (r.x * b.vel.y - r.y * b.vel.x) >= 0.f ? 1.f : -1.f;   // the way it was already going round
+            s.leashFlyLen = (A::leashFly + A::leashFlyPerLevel * n) * reach;
             return true;
         }
 
