@@ -178,16 +178,15 @@ inline constexpr float wardenRadius = 7.f;
 inline constexpr float wardenRest = 0.55f;       // after a hit, a spirit rests this long
 inline constexpr float wardenKnock = 170.f;      // shoves what it hits away from the core
 inline constexpr int   maxWardens = 4;
-// Dragonling (Rare): a small dragon trails the ball and breathes its element
-// in a cone at the nearest enemy.
-inline constexpr float dragonInterval = 1.7f, dragonIntervalPerLevel = -0.15f;
-inline constexpr float dragonFrac = 0.8f, dragonFracPerLevel = 0.2f;
-inline constexpr float dragonRange = 250.f;
-inline constexpr float dragonCone = 0.45f, dragonConePerLevel = 0.05f;  // half-angle, radians
-inline constexpr float dragonHover = 26.f;       // how far from the ball it flies
-inline constexpr float dragonFollow = 6.f;       // catch-up rate
-inline constexpr float breathLife = 0.3f;        // the cone's fading visual
-inline constexpr float dragonFreeze = 0.5f;      // its ice freezes this long (x potency)
+// Spectral sword (Rare, 2026-10-05 - was the Dragonling): a sword floats by
+// the ball; every so often it darts through the nearest enemy, cutting all it
+// passes, and flies back.
+inline constexpr float swordEvery = 2.2f, swordEveryPerLevel = -0.2f;
+inline constexpr float swordFrac = 1.f, swordFracPerLevel = 0.25f;
+inline constexpr float swordRange = 420.f, swordRangePerLevel = 40.f, swordHover = 30.f, swordFollow = 8.f;
+inline constexpr float swordDash = 0.18f, swordBack = 0.3f, swordOvershoot = 60.f, swordWidth = 14.f;
+inline constexpr float breathLife = 0.3f;        // (old dragonling breath visual, unused)
+inline constexpr float summonFreeze = 0.5f;      // a summon's full ice freezes this long (x potency)
 // World caps, for performance.
 inline constexpr int maxShots = 48;              // turret shots + wisps
 inline constexpr int maxTurrets = 8;
@@ -197,6 +196,11 @@ inline constexpr int maxBreaths = 8;
 
 // ==================================================================== Jester
 namespace jester {
+// The class's chaos (2026-10-05): every few seconds a Jester pulls a trick
+// out of another class's bag - a blink, missiles, a burst of bullets, a launch,
+// a nova, an arc, blades, a smite. More Jester items: more often; a Grand
+// Jester pulls two (three with 6+ items) at once.
+inline constexpr float chaosEvery = 3.5f, chaosPerItem = 0.4f, chaosMin = 1.2f;
 // Role (2 items): every hit rolls an outcome. Each band is x the run's luck;
 // together they never pass bandCap (the rest is a normal hit).
 inline constexpr float rollDouble = 0.15f;     // the hit lands again (x2)
@@ -272,15 +276,14 @@ inline constexpr float ambushRange = 420.f;
 inline constexpr float trick = 3.f, trickPerLevel = 0.5f;
 // "Double down": catch a ball you threw (within releaseWindow): its next hit
 // is doubled-and-more or nothing (heads x luck).
-inline constexpr float doubleWin = 2.5f, doubleWinPerLevel = 0.3f;
-inline constexpr float doubleChance = 0.5f;
+inline constexpr float beckonCd = 1.5f, beckonCdPerLevel = 0.125f;   // "Beckon": s between blinks (1.25 at Lv3, 1 at Lv5)
 // "Execution throw": thrown first hit on an enemy at full health x this.
 inline constexpr float execution = 2.2f, executionPerLevel = 0.3f;
 }  // namespace slinger
 
 // ==================================================================== Alchemist
 namespace alchemist {
-inline constexpr float archReaction = 1.3f;    // Archalchemist: its reactions x this
+inline constexpr float archReaction = 1.5f;    // Archalchemist: its reactions x this
 inline constexpr float attune = 0.25f, attunePerLevel = 0.1f;          // + element potency
 inline constexpr float crucible = 1.4f, crucibleRadius = 1.2f, cruciblePerLevel = 0.12f;
 inline constexpr float aftershock = 90.f, aftershockPerLevel = 15.f;  // reach (px)
@@ -399,7 +402,7 @@ inline constexpr float chainKill = 1.f, chainKillPerLevel = 0.3f;
 inline constexpr float venomBlade = 0.f, venomBladePerLevel = 0.15f;   // the hit's bonus (the element twice is the item)
 inline constexpr float suppress = 0.1f, suppressPerLevel = 0.05f, suppressMax = 0.4f;
 inline constexpr float windUp = 0.5f, windUpPerLevel = 0.15f, windUpTime = 1.5f;
-inline constexpr float bankThrow = 0.15f, bankThrowPerLevel = 0.05f;
+inline constexpr int pingPong = 4;   // "Ping-pong": walls per throw that aim it at an enemy (+1 per level)
 inline constexpr float bully = 0.3f, bullyPerLevel = 0.1f;
 inline constexpr float carom = 0.4f, caromPerLevel = 0.15f, caromWindow = 0.5f;
 // rares
@@ -439,9 +442,22 @@ inline constexpr float wardEvery = 6.f, wardEveryPerLevel = -1.f, wardKnock = 42
 inline constexpr float juggernaut = 2.f, juggernautPerLevel = 0.5f;
 inline constexpr float lastLine = 1.f, lastLinePerLevel = 0.5f, lastLineAt = 0.25f, lastLineKnock = 900.f,
                        lastLineStun = 1.5f, lastLineStunPerLevel = 0.5f;
-inline constexpr float slotEvery = 10.f, slotEveryPerLevel = -1.5f, slotBuff = 6.f, slotDamage = 1.5f, slotSpeed = 1.3f,
-                       slotJackpot = 3.f, slotJackpotRadius = 160.f;
-inline constexpr int slotGold = 1, slotJackpotGold = 10;
+// "777" (legendary): reels over the ball, then a prize
+inline constexpr float slotEvery = 7.f, slotEveryPerLevel = -0.5f, slotSpin = 1.6f;   // s between spins; the reels roll this long
+inline constexpr int slotTriplePct = 30, slotPairPct = 50;          // three of a kind / a pair (luck helps the triple)
+inline constexpr int slotTripleJester = 60, slotTripleGrand = 92;   // ...as a Jester / a Grand Jester (all the Jester items): nearly sure
+inline constexpr int slotFrenzyW = 50, slotLuckW = 35, slotRainW = 15;   // which triple
+inline constexpr float slotBuff = 1.f, slotBuffPerLevel = 0.15f;    // a triple lasts this x the spin interval (till the next pull, and past it)
+inline constexpr float slotPairBuff = 0.5f;                         // a pair: half of that
+inline constexpr float slotFrenzySpeed = 1.7f, slotFrenzyDamage = 2.f, slotFrenzyJolt = 0.35f;   // ...and it lurches about
+inline constexpr float slotLuckMul = 3.f;                           // every chance in the run x this (x the run's luck)
+inline constexpr float slotRainEvery = 0.045f, slotRainFrac = 0.8f, slotRainRadius = 34.f, slotRainLong = 1.4f;   // the rain outlasts the rest
+inline constexpr int slotGold = 1;                                  // a coin that lands on an enemy pays this
+// "Lucky number" (epic): a d10 every few seconds
+inline constexpr float luckyEvery = 8.f, luckyEveryPerLevel = -0.75f;
+inline constexpr float luckySpeedPer = 0.07f, luckyDamagePer = 0.09f;   // per point above 5
+inline constexpr float luckySlowPer = 0.08f, luckyKnockPer = 0.3f, luckyStunPer = 0.15f;   // per point below 5
+inline constexpr float luckyStop = 1.f, luckyOneHit = 3.f, luckyTenCrit = 2.f;
 inline constexpr float wildCd = 1.5f, wildCdPerLevel = -0.4f;
 inline constexpr int chorus = 5;
 inline constexpr float chrono = 0.2f, chronoPerLevel = 0.05f, chronoTime = 1.5f;
@@ -456,32 +472,84 @@ inline constexpr float lightspeed = 0.5f, lightspeedPerLevel = 0.1f, lightspeedA
 inline constexpr int lightChains = 3;
 inline constexpr float spiritHost = 3.f, spiritHostPerLevel = 0.5f, spiritLife = 2.5f;
 inline constexpr int spiritAt = 5, spiritPierce = 5;
+inline constexpr float spiritWispEvery = 1.2f;   // "Spirit host" lets a wisp loose itself this often
 inline constexpr float twinCallPerLevel = 0.1f;
-inline constexpr float fortify = 1.5f, fortifyPerLevel = 0.25f, fortifyRadius = 22.f;
+// "Baby dragon" (epic): a cone of its element at the nearest enemy
+inline constexpr float babyFrac = 0.4f, babyFracPerLevel = 0.05f, babyEvery = 2.f, babyEveryPerLevel = 0.15f;
+inline constexpr float babyRange = 220.f, babyCone = 0.55f, babyOrbit = 30.f;   // reach, half-angle (rad), from the ball
+inline constexpr float babyCharge = 0.35f, elderCharge = 0.8f;   // s drawing breath (turning to aim) before it lets go
+inline constexpr float babyTurn = 7.f, elderTurn = 2.2f;         // rad/s it turns its head
+inline constexpr float babyBreathTime = 0.9f, elderBreathTime = 1.6f;   // s a breath of fire lasts (the damage spread over it)
+inline constexpr float breathTick = 0.15f;
+inline constexpr float headReach = 1.8f;                          // rad the head turns away from the body at most
 // legendaries (2026-10-05)
 inline constexpr float titan = 0.12f, titanPerLevel = 0.03f;      // size gained per core bounce (1 = twice the size)
 inline constexpr float titanQuake = 1.f, titanQuakePerLevel = 0.25f, titanStun = 1.5f, titanStunPerLevel = 0.25f;
 inline constexpr float titanDamage = 0.5f;                         // its growth counts this much as damage
 inline constexpr float archmage = 2.f, archmagePerLevel = 0.25f;   // cast rate x
 inline constexpr float archStack = 0.1f, archStackPerLevel = 0.0125f;
-inline constexpr int timeStopEvery = 5;
+inline constexpr int timeStopEvery = 15;
 inline constexpr float timeStop = 2.f, timeStopPerLevel = 0.25f;
-inline constexpr float ion = 4.f, ionPerLevel = 0.5f, ionCharge = 2.f, ionChargePerLevel = -0.15f, ionCruise = 0.6f,
-                       ionWidth = 16.f, ionLife = 0.35f;
+// "Ion cannon" (2026-10-05 rework): every bullet that lands turns into a bolt
+// that jumps enemy to enemy - more jumps the faster it fires.
+inline constexpr float ion = 0.85f, ionPerLevel = 0.04f;   // each jump keeps this much of the hit
+inline constexpr int ionJumps = 2;                          // +1 per level past the first...
+inline constexpr float ionRateJumps = 3.f;                  // ...+this per +100% fire rate over the base
+inline constexpr int ionJumpsMax = 12;
+inline constexpr float ionRange = 170.f;
+inline constexpr float ionLife = 0.35f;                     // (the old beam's fade, for the rail drawing)
 inline constexpr float gunship = 0.4f, gunshipPerLevel = 0.05f;
 inline constexpr float leadStorm = 10.f, leadStormPerLevel = -1.f, leadStormTime = 2.f, leadStormRate = 6.f,
                        leadStormTurn = 0.55f;   // rad between shots: a spiral
 inline constexpr float reaper = 0.3f, reaperPerLevel = -0.05f;    // s: the blink's cooldown
 inline constexpr float contract = 0.1f, contractPerLevel = 0.0125f, contractBoss = 0.02f, contractBossPerLevel = 0.0025f;
-inline constexpr float necro = 0.8f, necroPerLevel = 0.1f, necroRadius = 70.f;
-inline constexpr float overlord = 0.2f, overlordPerLevel = 0.0375f;
+// "Hive" (legendary, the many): tiny bugs that run and bite
+inline constexpr float hive = 0.08f, hivePerLevel = 0.015f;     // a bite x its hit
+inline constexpr int hivePer = 3, hiveMax = 32;                 // bugs per hatch (+1 per 2 levels), alive at once
+inline constexpr float hiveSplitLife = 3.f;                     // a bug that kills splits in two, both with this long to hunt
+inline constexpr float hiveEvery = 1.f, hiveLife = 5.f, hiveSpeed = 230.f, hiveBiteEvery = 0.45f;
+inline constexpr float hiveLitBlast = 3.f, hiveLitRadius = 45.f;   // lit by a baby dragon's breath: the next bite explodes
+// "Elder dragon" (legendary, the one): circles the arena, breath sweeps a swath
+inline constexpr float elder = 4.f, elderPerLevel = 0.5f, elderEvery = 4.f, elderEveryPerLevel = 0.25f;
+inline constexpr float elderSpin = 0.35f, elderOrbit = 0.36f;   // rad/s round the core, x the arena's short side
+inline constexpr float elderLength = 620.f, elderWidth = 70.f;  // the swath: reach, half-width
+inline constexpr float elderBabyMul = 1.5f;                     // with an elder about, baby breath x this
+inline constexpr int elderHiveBugs = 4;                         // with a Hive about, each swath hatches this many
 inline constexpr int riggedLuck = 2;                                // luck per level past the first
 inline constexpr float steady = 0.2f, steadyPerLevel = -0.025f;   // time scale while aiming
 inline constexpr float steadyBonus = 0.6f, steadyBonusPerLevel = 0.1f, steadyFull = 0.5f;   // s of sim time aimed for the full bonus
 inline constexpr float showtime = 0.2f, showtimePerLevel = 0.025f;
-inline constexpr int philoElems = 2;                               // +1 per level past the first
-inline constexpr int grandEvery = 10;
-inline constexpr float grand = 5.f, grandPerLevel = 0.25f;
+// "Toxic trail": puffs dropped as it flies, its elements in turn
+inline constexpr float toxicEvery = 0.1f, toxicLife = 4.f, toxicLifePerLevel = 0.75f, toxicRadius = 34.f;
+inline constexpr float toxicFrac = 0.35f, toxicFracPerLevel = 0.1f, toxicTick = 0.4f;
+inline constexpr float toxicSwell = 2.2f, toxicSwellTime = 0.5f, toxicLast = 0.4f;   // it billows to this x, then shrinks back to this x
+// a puff's reach right now: billowing out fast, then slowly shrinking away
+inline float toxicNow(float r, float life, float maxLife) {
+    const float age = maxLife - life;
+    if (age < toxicSwellTime) return r * (0.5f + (toxicSwell - 0.5f) * age / toxicSwellTime);
+    const float q = (age - toxicSwellTime) / std::max(0.01f, maxLife - toxicSwellTime);
+    return r * (toxicSwell + (toxicLast - toxicSwell) * q);
+}
+inline constexpr int toxicMax = 70;
+// "Primal": its first element's power, every few seconds
+inline constexpr float primalEvery = 5.f, primalEveryPerLevel = -0.6f, primalPower = 1.f, primalPowerPerLevel = 0.25f;
+inline constexpr float flameTime = 2.2f, flameTick = 0.15f, flameFrac = 0.45f, flameRange = 240.f, flameCone = 0.45f;
+inline constexpr float frostRadius = 170.f, frostTime = 3.f, frostFrac = 0.8f, frostTick = 0.3f, frostFreeze = 0.6f;
+inline constexpr float rainTime = 5.f, rainSlow = 0.75f, rainHaste = 1.2f, rainFrac = 0.3f;   // the first drops soak everything...
+inline constexpr float rainDropEvery = 0.07f, rainDropFrac = 0.08f;                           // ...then drops keep pelting enemies
+inline constexpr float quakeFrac = 0.45f, quakeStun = 0.6f, quakeEvery = 0.5f;
+inline constexpr int quakeWaves = 3, boulders = 5;
+inline constexpr float boulderFrac = 1.f, boulderRadius = 60.f, boulderFall = 0.45f;
+inline constexpr int bottles = 6;
+inline constexpr float bottleFlight = 0.5f, bottleRadius = 70.f, bottleFrac = 0.6f;
+inline constexpr float puddleTime = 3.f, puddleTick = 0.4f, puddleFrac = 0.25f;
+inline constexpr int strikes = 14, strikeChain = 2;
+inline constexpr float strikeEvery = 0.12f, strikeFrac = 0.7f, strikeChainRange = 150.f;
+// "Black plague": a mad, spreading sickness
+inline constexpr float plague = 0.25f, plaguePerLevel = 0.05f, plagueTime = 6.f;
+inline constexpr float plagueDps = 0.3f, plagueDpsPerLevel = 0.08f;    // x the hit, per s: it burns them out fast...
+inline constexpr float plagueSpeed = 1.9f, plagueBite = 1.f;            // ...but they run mad and fast; touching, they bite (x their dps)
+inline constexpr int plagueMax = 8;
 }  // namespace common
 
 }  // namespace sb::cfg

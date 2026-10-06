@@ -78,6 +78,8 @@ sf::Vector2f panelCenter(sf::Vector2f size, int i, int n, float cy, float cx = -
 // panel. The ability row splits into abilityBoxes(L) boxes.
 sf::FloatRect slotRect(sf::Vector2f panelCentre, int slot, const BallLoadout& L);
 int abilityBoxes(const BallLoadout& L);   // open ability slots + any filled closed ones
+sf::Vector2f extraElementPos(sf::Vector2f typeCentre, float typeR, int i);   // an Alchemist's i-th extra element
+bool extraElementAt(sf::Vector2f panelCentre, sf::Vector2f mouse, const BallLoadout& L);   // over its 2nd element?
 std::string modifierLine(const BallLoadout& L, const sf::Font* font = nullptr, unsigned size = 11, float maxW = 0.f);
 sf::Color catColor(UpgradeCat c);
 sf::Color tagColor(ItemTag t);   // a class's colour (its items, its name)

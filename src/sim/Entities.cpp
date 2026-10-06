@@ -177,7 +177,7 @@ const char* roleDesc(BallRole r) {
         case BallRole::Shooter:  return "fires small bullets at the nearest enemy as it flies - faster the faster it goes";
         case BallRole::Assassin: return "after a kill it blinks next to the nearest enemy and dives at it";
         case BallRole::Summoner: return "calls a small spriteling ball every few seconds; all its summons hit harder and last longer";
-        case BallRole::Jester:   return "plays on chance: each hit may land twice, spark to another enemy or leave a random element (luck helps)";
+        case BallRole::Jester:   return "chaos: every few seconds it pulls a random trick from another class - a blink, missiles, a burst of bullets, a launch, a nova, a zap, blades, a smite (more often with more Jester items) - and each hit may land twice";
         case BallRole::Slinger:  return "made for your hands: catching it pays 50% more, and the first hit after you throw it lands 25% harder";
         case BallRole::Alchemist: return "carries 2 elements and switches between them hit by hit - its own elements react with each other";
     }
@@ -204,16 +204,16 @@ const char* ascendedName(BallRole r) {
 const char* ascendedDesc(BallRole r) {
     switch (r) {
         case BallRole::Normal:   return "";
-        case BallRole::Striker:  return "hits well above its cruise speed also throw a shockwave";
+        case BallRole::Striker:  return "its fastest hits also send out a shockwave";
         case BallRole::Guardian: return "every core bounce sends out a pulse that shoves and staggers";
         case BallRole::Support:  return "its marks spread to the enemies around the one it hits";
         case BallRole::Mage:     return "a 3rd ability slot, and every ability it casts also lets out an arcane nova around it";
         case BallRole::Shooter:  return "every 4th volley is also a rail shot through the whole line; bullets hop once more";
         case BallRole::Assassin: return "each blink cuts through up to 3 enemies on the way, and blinks come twice as often";
         case BallRole::Summoner: return "spritelings twice as often, carrying its items; summons stronger and leave their full element";
-        case BallRole::Jester:   return "every Jester roll is taken twice and the best kept; its doubles triple";
+        case BallRole::Jester:   return "two tricks at a time (three with 6+ Jester items); every Jester roll is taken twice and the best kept";
         case BallRole::Slinger:  return "every catch recharges its abilities by 35%, and its thrown first hit lands 50% harder";
-        case BallRole::Alchemist: return "a 3rd element, and its reactions hit 30% harder";
+        case BallRole::Alchemist: return "its reactions hit 50% harder";
     }
     return "";
 }

@@ -56,6 +56,7 @@ enum class UpgradeCat { NewBall, Element, Ability, Item, Modifier, Relic };
 
 inline UpgradeCat upgradeCat(UpgradeKind k) {
     const int i = static_cast<int>(k);
+    if (k >= UpgradeKind::Cocoon) return UpgradeCat::Item;   // event-only, and items added after the abilities
     if (i >= static_cast<int>(UpgradeKind::AbilityHook)) return UpgradeCat::Ability;   // the second batch, after the relics
     if (i <= static_cast<int>(UpgradeKind::AddBall)) return UpgradeCat::NewBall;
     if (i <= static_cast<int>(UpgradeKind::ElemElectric)) return UpgradeCat::Element;
@@ -83,9 +84,9 @@ inline const char* upgradeCatName(UpgradeCat c) {
 inline const char* upgradeCatDesc(UpgradeCat c) {
     switch (c) {
         case UpgradeCat::NewBall:  return "adds one more ball to the arena";
-        case UpgradeCat::Element:  return "goes in the ball's type slot (one element per ball, a new one swaps it; an Alchemist holds 2, 3 ascended). Two different elements meeting on an enemy set off a reaction - from two balls, or one Alchemist. Taking it again on the same ball levels it up. Doesn't count toward a class.";
+        case UpgradeCat::Element:  return "goes in the ball's type slot (one element per ball, a new one swaps it; an Alchemist holds 2). Two different elements meeting on an enemy set off a reaction - from two balls, or one Alchemist. Taking it again on the same ball levels it up. Doesn't count toward a class.";
         case UpgradeCat::Ability:  return "a timed active in the ball's ability slot: it fires by itself every few seconds. Taking it again on the same ball levels it up. Doesn't count toward a class.";
-        case UpgradeCat::Item:     return "a unique effect for one ball; takes one of its 4 item slots. Its tag counts toward the ball's class: 2 of a tag = that class, 4 = its ascended form. Taking it again on the same ball levels it up (max level 3, each level a big step).";
+        case UpgradeCat::Item:     return "A unique effect for one ball, in one of its 4 item slots. Taking it again on the same ball levels it up (max level 3).\n\n2 items of a tag: gets that class.\n4 items of a tag: ascends.";
         case UpgradeCat::Modifier: return "a stat bump for one ball; no slot, stacks without limit";
         case UpgradeCat::Relic:    return "a passive for the whole run, on every ball";
     }
@@ -119,6 +120,7 @@ inline Tier upgradeTier(UpgradeKind k) {
         case UpgradeKind::AbilityMeteor:
         case UpgradeKind::AbilityVortex: case UpgradeKind::AbilityBeam: case UpgradeKind::AbilityBlades:
         case UpgradeKind::AbilityCloud: case UpgradeKind::AbilitySmite: case UpgradeKind::AbilityWarp:
+        case UpgradeKind::Cocoon:
         case UpgradeKind::Tesla: case UpgradeKind::Bomber: case UpgradeKind::Echo:
         case UpgradeKind::Berserk: case UpgradeKind::Giant:
         case UpgradeKind::Storm: case UpgradeKind::Tether:   // (2026-10-04: down from Epic - the rarity pyramid)
@@ -158,12 +160,12 @@ inline const char* tierName(Tier t) {
 inline ItemTag itemTag(UpgradeKind k) {
     switch (k) {
         case UpgradeKind::Ricochet: case UpgradeKind::Cleave: case UpgradeKind::Crit:
-        case UpgradeKind::Executioner: case UpgradeKind::Conductor: case UpgradeKind::Echo:
+        case UpgradeKind::Executioner: case UpgradeKind::Echo:
         case UpgradeKind::Hunter: case UpgradeKind::Comet: case UpgradeKind::Mitosis:
         case UpgradeKind::Seeker: case UpgradeKind::Piercing: case UpgradeKind::Railgun:
         case UpgradeKind::Berserk:
             return ItemTag::Striker;
-        case UpgradeKind::Bedrock: case UpgradeKind::Rampart: case UpgradeKind::Mender:
+        case UpgradeKind::Rampart: case UpgradeKind::Mender:
         case UpgradeKind::Boomerang: case UpgradeKind::Bumper: case UpgradeKind::Glutton:
         case UpgradeKind::Giant: case UpgradeKind::Satellite:
             return ItemTag::Guardian;
@@ -173,6 +175,8 @@ inline ItemTag itemTag(UpgradeKind k) {
         case UpgradeKind::GravityWell: case UpgradeKind::Storm: case UpgradeKind::Gemini:
         case UpgradeKind::Midas:
             return ItemTag::Support;
+        case UpgradeKind::Conductor: case UpgradeKind::Bedrock:   // they work its element: the Alchemist's
+            return ItemTag::Alchemist;
         default:
             break;
     }
@@ -245,6 +249,7 @@ inline const char* upgradeKindId(UpgradeKind k) {
         case UpgradeKind::AbilitySwap:    return "AbilitySwap";
         case UpgradeKind::AbilityShrink:  return "AbilityShrink";
         case UpgradeKind::AbilityBounty:  return "AbilityBounty";
+        case UpgradeKind::Cocoon:         return "Cocoon";
         case UpgradeKind::Ricochet:       return "Ricochet";
         case UpgradeKind::Cleave:         return "Cleave";
         case UpgradeKind::Crit:           return "Crit";
@@ -337,19 +342,20 @@ inline UpgradeInfo upgradeInfo(UpgradeKind k) {
         case UpgradeKind::AbilityCloud:  return {"Cloud", "every few seconds a cloud of its element hangs where the ball is for 3 s; enemies inside take it - reactions"};
         case UpgradeKind::AbilitySmite:  return {"Smite", "every few seconds lightning strikes the 3 strongest enemies, anywhere, with its element"};
         case UpgradeKind::AbilityWarp:   return {"Warp", "every few seconds the ball teleports onto the enemy nearest the core and strikes it away"};
-        case UpgradeKind::AbilityPortal: return {"Portal", "every few seconds two portals open for 4 s, one by the core and one out by the enemies: a ball flying into one comes out of the other"};
+        case UpgradeKind::AbilityPortal: return {"Portal", "every few seconds two portals open for 3 s, one by the core and one a short way out toward the enemies: a ball flying into one is shot out of the other at the nearest enemy"};
         case UpgradeKind::AbilityLeash:  return {"Leash", "every few seconds the ball is tied to the core for 4 s and swings around it like a flail, fast"};
         case UpgradeKind::AbilitySwap:   return {"Swap", "every few seconds the ball trades places with the enemy nearest the core, striking and stunning it"};
         case UpgradeKind::AbilityShrink: return {"Shrink", "every few seconds the enemies near the ball shrink for 4 s: half the size, slower, and they take double damage"};
         case UpgradeKind::AbilityBounty: return {"Bounty", "every few seconds a price goes on the strongest enemy's head: whoever kills it earns 5 gold"};
+        case UpgradeKind::Cocoon:        return {"Cocoon", "does nothing yet - after 3 fights it hatches into a random Epic or Legendary item (its level counts the fights left)"};
         case UpgradeKind::Ricochet:      return {"Ricochet", "every wall bounce speeds it up and arms a harder hit for a moment"};
         case UpgradeKind::Cleave:        return {"Cleave", "punches straight through an enemy it kills"};
         case UpgradeKind::Crit:          return {"Keen eye", "12% chance a hit deals double damage"};
         case UpgradeKind::Executioner:   return {"Executioner", "big bonus damage to badly hurt enemies"};
         case UpgradeKind::Overkill:      return {"Overkill", "leftover damage from a kill splashes onto the next enemy"};
         case UpgradeKind::Shatter:       return {"Shatter", "hitting a frozen enemy deals bonus damage"};
-        case UpgradeKind::Conductor:     return {"Conductor", "its electric arc jumps on to another enemy"};
-        case UpgradeKind::Bedrock:       return {"Bedrock", "its cracks last 50% longer and go deeper: up to 7 per enemy"};
+        case UpgradeKind::Conductor:     return {"Conductor", "needs the Electric element: the spark each electric hit gives off jumps on to one more enemy (60% of its damage)"};
+        case UpgradeKind::Bedrock:       return {"Bedrock", "needs the Stone element: its cracks last 50% longer and go deeper, up to 7 per enemy"};
         case UpgradeKind::Echo:          return {"Echo", "25% chance a hit strikes twice (effects and all)"};
         case UpgradeKind::Tesla:         return {"Tesla", "20% chance a hit zaps up to 3 enemies nearby"};
         case UpgradeKind::Bomber:        return {"Bomber", "30% chance an enemy it kills explodes"};
@@ -358,14 +364,14 @@ inline UpgradeInfo upgradeInfo(UpgradeKind k) {
         case UpgradeKind::Mender:        return {"Mender", "every time it bounces off the core, the core repairs a little"};
         case UpgradeKind::Hunter:        return {"Hunter", "locks onto the biggest threat and chases it down, hitting it harder, until it dies"};
         case UpgradeKind::Comet:         return {"Comet", "flung, it flies far faster and keeps the speed - and while that fast it plows through enemies"};
-        case UpgradeKind::Mitosis:       return {"Mitosis", "every kill splits off a small copy of the ball, with its items, for a few seconds"};
+        case UpgradeKind::Mitosis:       return {"Mitosis", "every kill splits off a small bare copy of the ball (its stats and element, no items or abilities) for a few seconds"};
         case UpgradeKind::Boomerang:     return {"Boomerang", "after a hit it flies back to the core, then out at the nearest threat; each trip home charges a harder hit"};
         case UpgradeKind::Bumper:        return {"Bumper", "a pinball bumper: bigger, and other balls that bounce off it are launched much faster"};
         case UpgradeKind::Glutton:       return {"Glutton", "every kill makes it bigger and hit harder, until the wave ends"};
         case UpgradeKind::Tether:        return {"Tether", "a laser links it to the nearest other ball and burns every enemy that crosses the line"};
         case UpgradeKind::BlackHole:     return {"Black hole", "35% chance a kill leaves a black hole that sucks enemies in, then bursts with the ball's element"};
         case UpgradeKind::Resonance:     return {"Resonance", "its hits arc lightning to every other ball of the same element, and each of those zaps an enemy"};
-        case UpgradeKind::Seeker:        return {"Seeker", "the ball curves in flight toward the nearest enemy"};
+        case UpgradeKind::Seeker:        return {"Seeker", "every enemy it hits sends it straight at the next nearest one - enemy to enemy, like a pinball, until it reaches a wall or the core"};
         case UpgradeKind::Piercing:      return {"Piercing", "the ball passes straight through enemies, hitting every one on its path"};
         case UpgradeKind::Railgun:       return {"Railgun", "every wall bounce fires a beam along its new path, hitting all in line"};
         case UpgradeKind::Berserk:       return {"Berserk", "each enemy hit in a row adds +15% damage; touching a wall resets it"};
@@ -373,7 +379,7 @@ inline UpgradeInfo upgradeInfo(UpgradeKind k) {
         case UpgradeKind::Satellite:     return {"Satellite", "the ball stops bouncing and orbits the core, grinding whatever comes close"};
         case UpgradeKind::GravityWell:   return {"Gravity well", "drags every enemy near it toward itself - packs them up for reactions"};
         case UpgradeKind::Storm:         return {"Storm", "a constant storm around the ball zaps every enemy near it"};
-        case UpgradeKind::Gemini:        return {"Gemini", "a permanent ghost twin flies with it, copying all its items"};
+        case UpgradeKind::Gemini:        return {"Gemini", "a permanent ghost twin flies with it, copying all its items - and casting its abilities too"};
         case UpgradeKind::Midas:         return {"Midas", "enemies it kills pay 3 extra gold"};
         case UpgradeKind::HeavyImpact:   return {"Heavy impact", "+15% contact damage (stacks)"};
         case UpgradeKind::BigBall:       return {"Big ball", "+10% radius and harder knockback (stacks)"};
@@ -437,6 +443,7 @@ inline const char* upgradeLevelDesc(UpgradeKind k) {
         case UpgradeKind::AbilitySwap:   return "a harder strike, a longer stun, a shorter cooldown";
         case UpgradeKind::AbilityShrink: return "wider and longer, a shorter cooldown";
         case UpgradeKind::AbilityBounty: return "+1 gold, a shorter cooldown";
+        case UpgradeKind::Cocoon:        return "";
         case UpgradeKind::Ricochet:      return "a bigger speed kick and a harder armed hit";
         case UpgradeKind::Cleave:        return "also cuts through - and finishes - enemies it leaves under 8% more health";
         case UpgradeKind::Crit:          return "+7% chance, and crits hit harder";
@@ -460,7 +467,7 @@ inline const char* upgradeLevelDesc(UpgradeKind k) {
         case UpgradeKind::Tether:        return "a hotter, wider laser";
         case UpgradeKind::BlackHole:     return "+10% chance, a stronger pull and burst";
         case UpgradeKind::Resonance:     return "stronger arcs, more often";
-        case UpgradeKind::Seeker:        return "turns tighter and sees further";
+        case UpgradeKind::Seeker:        return "leaves each hit faster";
         case UpgradeKind::Piercing:      return "+15% damage on every enemy it passes through";
         case UpgradeKind::Railgun:       return "a heavier, wider beam";
         case UpgradeKind::Berserk:       return "more damage per hit in a row, higher cap";
@@ -536,10 +543,9 @@ struct BallLoadout {
                         : static_cast<Element>(elementItemSlot(static_cast<UpgradeKind>(type)) + 1);
     }
 
-    // How many elements it can hold: 1, 2 as an Alchemist, 3 ascended.
-    int elementCap() const {
-        const int n = tagCount(ItemTag::Alchemist);
-        return n >= 4 ? 3 : (n >= 2 ? 2 : 1);
+    // How many elements it can hold: 1, 2 as an Alchemist (ascended too).
+    int elementCap() const {   // an Alchemist (2 items of the tag or 4) holds 2; everyone else 1
+        return tagCount(ItemTag::Alchemist) >= 2 ? 2 : 1;
     }
     // Every element it carries right now (the type slot first), up to its cap.
     int elements(Element out[kMaxElements]) const {

@@ -22,7 +22,9 @@ enum class ScreenId { Menu, Loadout, Play, Choice, Pause, Stats, HowTo, BossWin,
 
 // Who opened the ball / slot picker, and so what confirming it does.
 // ShopForge / Sell are the shop's paid forge and its "sell an item" counter.
-enum class EquipSource { Choice, Shop, Forge, ShopForge, Sell };
+enum class EquipSource { Choice, Shop, Forge, ShopForge, Sell,
+                         Barter,   // "Barter" event: pick an item to give up
+                         Gift };   // an event's free pick: place it (Back leaves it behind)
 
 // Where a creed choice comes from: the run start ("Covenant") or the act-1 boss.
 enum class CreedSource { Start, Boss };
@@ -116,6 +118,11 @@ public:
     // -1 = the drop is refused. moveSlot does it (a filled target swaps).
     int slotMoveTarget(int fromBall, int fromSlot, int toBall, int toSlot) const;
     bool moveSlot(int fromBall, int fromSlot, int toBall, int toSlot);
+    // TAB merge (2026-10-05): the same item / ability on two balls; held, the
+    // one in hand takes the other's levels and the other's slot is freed.
+    bool mergePartner(int ball, int slot, int& otherBall, int& otherSlot) const;
+    bool mergeSlot(int ball, int slot);
+    bool swapElements(int ball);   // an Alchemist: its second element becomes the first (TAB click)
 
     // ---- shop ----
     int shopPrice(UpgradeKind k) const;
@@ -167,6 +174,7 @@ public:
     bool hasCreed(CreedId id) const { return data_.run.hasCreed(id); }
     int luck() const;   // the run's luck, in points (Lucky clover, Lucky star, Loaded Dice, Lucky charm)
     bool canGrab() const;              // "Hunters" / "Clockwork" take the balls out of your hands
+    bool beckon(sf::Vector2f at);      // "Beckon": a click on empty ground - the best-built ready ball blinks there
     float flingPower() const;          // throw speed multiplier (Strong arm, Hot Hands, Pinball)
     void useCreedAbility();             // "Nova" (SPACE / right-click in a fight)
     // ---- pacts (2026-09-28, core/AppPacts.cpp) ----
@@ -282,6 +290,8 @@ private:
     void applyDuet();
     void applyLegion();
     int randomItemFor(const BallLoadout& b, Tier maxTier);   // a random unlocked item that fits (-1 none)
+    int randomItemOfTier(Tier t, const BallLoadout* fits);   // exactly this tier; fits that ball, or any ball (-1 none)
+    void afterFight();        // a fight won: cocoons count down, benched balls come back
     void rollShopOffers();                                           // fresh stock (keeps prepaid reveals)
     BallSpec ballSpec(const BallLoadout& b) const;
     std::vector<BallSpec> ballSpecs() const;
@@ -359,8 +369,6 @@ private:
     RollSource rollSource_ = RollSource::Normal;   // what the current Choice was rolled from (rerolls keep it)
     std::string choiceTitle_;                      // custom Choice heading ("Starter kit ..."), empty = default
     bool starterChoice_ = false;                   // the Choice is the Quartermaster starter pick (rerolls stay items)
-    int jokerAs_ = -1;                             // "Joker": the legendary it copies this fight (UpgradeKind, -1 = none)
-    void rollJoker();                              // ...picked as each fight starts
     std::vector<CreedId> creedChoices_;
     std::vector<PactId> pactChoices_;
     bool pactFromMap_ = true;   // the Altar was a map stop: closing it goes back to the map
@@ -378,8 +386,19 @@ private:
     std::vector<EventKind> eventDeals_;   // the "?" event on screen
     bool openEvent();         // a "?" stop rolled an event: false = nothing to offer
     bool openForgePicker();   // the Forge's item picker: false = nothing to level up
+    // A forge visit has a budget (2026-10-05): common / uncommon / rare picks
+    // cost 1 point, an Epic 1 (one per visit), a Legendary 2.
+    int forgePoints_ = 0;
+    bool forgeEpicUsed_ = false;
+public:
+    int forgePoints() const { return forgePoints_; }
+    static int forgeCost(UpgradeKind k) { return upgradeTier(k) == Tier::Legendary ? 2 : 1; }
+private:
     void openRestStop();      // a Rest stop: repair the core or forge an item
     void restRepair();
+    std::vector<UpgradeKind> giftQueue_;   // event picks still to place, one Equip screen each
+    void nextGift();          // place the next queued gift, or back to the map
+    bool eventApplies(EventKind k) const;   // could the deal do anything (gold aside)
 public:
     bool choiceIsBossTreasure() const { return rollSource_ == RollSource::Boss; }
 private:

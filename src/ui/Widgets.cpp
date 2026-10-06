@@ -159,6 +159,12 @@ void drawStatsPanel(sf::RenderWindow& window, const sf::Font& font, sf::Vector2f
 // Greedy word-wrap: break `str` into lines no wider than `maxW` at `size`.
 std::vector<std::string> wrapText(const sf::Font& font, const std::string& str, unsigned size,
                                   float maxW) {
+    if (const std::size_t nl = str.find('\n'); nl != std::string::npos) {   // paragraphs: "" = a gap
+        std::vector<std::string> lines = wrapText(font, str.substr(0, nl), size, maxW);
+        if (nl == 0) lines.push_back("");
+        for (const std::string& l : wrapText(font, str.substr(nl + 1), size, maxW)) lines.push_back(l);
+        return lines;
+    }
     std::vector<std::string> lines;
     std::string line;
     std::size_t i = 0;
@@ -194,6 +200,20 @@ sf::Vector2f panelCenter(sf::Vector2f size, int i, int n, float cy, float cx) {
     return {x0 + static_cast<float>(i) * (kPanelW + kPanelGap), cy};
 }
 
+// An Alchemist's second element: a small hexagon tucked left of the type slot
+// (inside the panel, so the pointer reaches it).
+sf::Vector2f extraElementPos(sf::Vector2f typeCentre, float typeR, int i) {
+    return {typeCentre.x - typeR - 8.f, typeCentre.y - typeR * 0.55f + 13.f * static_cast<float>(i - 1)};
+}
+
+bool extraElementAt(sf::Vector2f c, sf::Vector2f m, const BallLoadout& L) {
+    Element els[kMaxElements];
+    if (L.elements(els) < 2) return false;
+    const sf::FloatRect tr = slotRect(c, kSlotType, L);
+    const sf::Vector2f pc{tr.left + tr.width * 0.5f, tr.top + tr.height * 0.5f};
+    return length(m - extraElementPos(pc, tr.width * 0.5f, 1)) < 9.f;
+}
+
 int abilityBoxes(const BallLoadout& L) {
     int n = std::max(1, std::min(abilitySlotCount(L), kMaxAbilitySlots));
     for (int i = n; i < kMaxAbilitySlots; ++i)
@@ -220,9 +240,8 @@ sf::FloatRect slotRect(sf::Vector2f c, int slot, const BallLoadout& L) {
             const float r = 16.f;
             return {c.x + 58.f - r, hy - r, 2.f * r, 2.f * r};
         }
-        const float r = 6.f;   // like an Alchemist's extra elements, mirrored to the right
-        const sf::Vector2f q{c.x + 58.f + 16.f + 4.f + 11.f * static_cast<float>(i),
-                             hy - 16.f * 0.55f + 13.f * static_cast<float>(i - 1)};
+        const float r = 6.f;   // stacked just right of the diamond - inside the panel, so the pointer can reach them
+        const sf::Vector2f q{c.x + 58.f + 16.f + r, hy - 8.f + 15.f * static_cast<float>(i - 1)};
         return {q.x - r, q.y - r, 2.f * r, 2.f * r};
     }
     return {};
@@ -494,6 +513,7 @@ void drawLoadoutPanel(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f c,
     look.lead = nRoles > 0 ? tagRole(roles[0]) : BallRole::Normal;
     look.second = nRoles > 1 ? tagRole(roles[1]) : BallRole::Normal;
     look.element = el;
+    look.legend = look.ascended;   // all 4 items of a class: its cosmetic, as in the arena
     const sf::Color bc = nRoles > 0 ? theme::hueSpeedColor(tagColor(roles[0]), 1.f, 1.f, roles[0] == asc)
                                     : theme::speedColor(1.f, 1.f);
     draw::glow(w, bp, r * (asc != ItemTag::None ? 2.f : 1.6f), bc, (asc != ItemTag::None ? 0.11f : 0.06f) * a);
@@ -575,7 +595,7 @@ void drawLoadoutPanel(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f c,
             const int ne = L.elements(els);
             for (int i = 1; i < ne; ++i) {
                 const sf::Color c2 = elementColor(els[i]);
-                const sf::Vector2f q{pc.x - r - 4.f - 11.f * static_cast<float>(i), pc.y - r * 0.55f + 13.f * static_cast<float>(i - 1)};
+                const sf::Vector2f q = extraElementPos(pc, r, i);
                 draw::polygon(w, q, 6.f, 6, kHexRot, withAlpha(lerpColor(c2, theme::bgDeep, 0.3f), 0.95f * sa),
                               withAlpha(lerpColor(c2, theme::bgDeep, 0.55f), 0.95f * sa));
                 draw::polygonOutline(w, q, 6.f, 6, kHexRot, 1.2f, withAlpha(c2, 0.95f * sa));
@@ -661,10 +681,10 @@ bool loadoutTooltip(const BallLoadout& L, int part, std::string& title, std::str
         if (kind < 0) {
             if (isItemSlot(part)) {
                 title = "Empty item slot";
-                desc = "items go here (4 per ball); 2 items of one tag give the ball that class, 4 its ascended form";
+                desc = "Items go here, 4 per ball.\n\n2 items of a tag: gets that class.\n4 items of a tag: ascends.";
             } else if (part == kSlotType) {
                 title = "Type slot";
-                desc = "the ball's element goes here - one per ball (an Alchemist holds 2, 3 ascended); a new one swaps it. It doesn't count toward a class.";
+                desc = "the ball's element goes here - one per ball (an Alchemist holds 2: click the small one to make it the first); a new one swaps it. It doesn't count toward a class.";
             } else if (part - kSlotAbility < abilitySlotCount(L)) {
                 title = "Ability slot";
                 desc = "an ability goes here: it fires by itself every few seconds. It doesn't count toward a class.";
@@ -682,7 +702,10 @@ bool loadoutTooltip(const BallLoadout& L, int part, std::string& title, std::str
             const int ne = L.elements(els);
             for (int i = 1; i < ne; ++i) title += std::string(" + ") + elementName(els[i]);
         }
-        title += "  Lv " + std::to_string(L.levelAt(part)) + "/" + std::to_string(maxLevelOf(k));
+        if (k == UpgradeKind::Cocoon)   // its level counts the fights left
+            title += "  hatches in " + std::to_string(L.levelAt(part)) + (L.levelAt(part) == 1 ? " fight" : " fights");
+        else
+            title += "  Lv " + std::to_string(L.levelAt(part)) + "/" + std::to_string(maxLevelOf(k));
         desc = info.desc;
         if (isAbilitySlot(part) && part - kSlotAbility >= abilitySlotCount(L))
             desc = "(asleep: this slot closed when the ball lost its Mage items - it wakes up when they're back)  " + desc;
@@ -700,27 +723,31 @@ bool loadoutTooltip(const BallLoadout& L, int part, std::string& title, std::str
         const ItemTag asc = L.ascended();
         title.clear();
         desc.clear();
-        for (int i = 0; i < n; ++i) {
+        for (int i = 0; i < n; ++i) {   // per class: what it does, then its two steps
             const BallRole r = tagRole(roles[i]);
-            if (i > 0) { title += " / "; desc += ".  "; }
+            const int c = L.tagCount(roles[i]);
+            if (i > 0) { title += " / "; desc += "\n\n"; }
             title += roles[i] == asc ? ascendedName(r) : roleName(r);
-            desc += std::string(roleName(r)) + ": " + roleDesc(r);
-            if (roles[i] == asc) desc += std::string(".  Ascended: ") + ascendedDesc(r);
+            std::string what = roleDesc(r);
+            if (!what.empty()) what[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(what[0])));
+            desc += what + ".\n\n";
+            desc += std::string("2 items: ") + roleName(r) + "  (done)\n";
+            desc += std::string("4 items: ") + ascendedName(r) + (c >= 4 ? "  (done)" : "  (" + std::to_string(c) + "/4)");
+            std::string more = ascendedDesc(r);
+            if (!more.empty()) more[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(more[0])));
+            desc += "\n" + more + ".";
         }
-        if (n == 0) {
+        if (n == 0) {   // no class yet: what it's building toward
             title = roleName(BallRole::Normal);
-            desc = roleDesc(BallRole::Normal);
+            desc = "No class yet.\n\n2 items of a tag: gets that class.\n4 items of a tag: ascends.";
+            std::string counts;
+            for (int i = 0; i < kClassCount; ++i) {
+                const int c = L.tagCount(classTag(i));
+                if (c <= 0) continue;
+                counts += std::string("\n") + itemTagName(classTag(i)) + ": " + std::to_string(c) + "/2";
+            }
+            if (!counts.empty()) desc += "\n" + counts;
         }
-        // Tag count: which classes it is building toward.
-        std::string counts;
-        for (int i = 0; i < kClassCount; ++i) {
-            const int c = L.tagCount(classTag(i));
-            if (c <= 0) continue;
-            if (!counts.empty()) counts += ", ";
-            counts += std::to_string(c) + " " + itemTagName(classTag(i));
-        }
-        desc += ".  Classes come from item tags: 2 of a tag = that class (a ball can have two), 4 = ascended.";
-        if (!counts.empty()) desc += " Now: " + counts + ".";
         const Element e = L.element();
         if (e != Element::Plain) title = std::string(elementName(e)) + "  " + title;
         return true;
@@ -744,7 +771,9 @@ void drawTooltip(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f mouse, 
                  const std::string& title, const std::string& desc, sf::Color titleColor) {
     const float wd = 270.f, pad = 10.f, lineH = 17.f;
     const std::vector<std::string> lines = wrapText(font, desc, theme::fsSmall, wd - 2.f * pad);
-    const float ht = pad * 2.f + 20.f + lineH * static_cast<float>(lines.size());
+    float textH = 0.f;   // an empty line is a half-height gap between paragraphs
+    for (const std::string& l : lines) textH += l.empty() ? lineH * 0.5f : lineH;
+    const float ht = pad * 2.f + 20.f + textH;
     float x = mouse.x + 16.f, y = mouse.y + 18.f;
     if (x + wd > screen.x - 4.f) x = mouse.x - wd - 12.f;
     if (y + ht > screen.y - 4.f) y = mouse.y - ht - 10.f;
@@ -761,6 +790,7 @@ void drawTooltip(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f mouse, 
     w.draw(t);
     float ly = y + pad + 22.f;
     for (const std::string& l : lines) {
+        if (l.empty()) { ly += lineH * 0.5f; continue; }
         sf::Text d = makeText(font, l, theme::fsSmall, theme::textLo);
         d.setPosition(std::round(x + pad), std::round(ly));
         w.draw(d);

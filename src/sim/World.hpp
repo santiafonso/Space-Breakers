@@ -277,6 +277,7 @@ private:
     void commonGunship(Ball& b, const Enemy& e, const WorldParams& p);       // "Gunship" (WorldClasses.cpp)
     int midasPending_ = 0;                        // gold earned off the events path, flushed each step
     void commonGolems(float dt, const WorldParams& p, FrameEvents& ev);   // "Golem" (WorldClasses.cpp)
+    void commonDragons(float dt, const WorldParams& p, FrameEvents& ev);  // "Baby / Elder dragon", "Hive"
     Ball* castBall_ = nullptr;   // the ball whose ability is firing right now ("Spellweave")
     void commonOnBlink(Ball& b, Enemy& t, const WorldParams& p, sf::Vector2f from);   // Mark for death / Quickstep / Razor wire
     void commonOnGrab(Ball& b);                              // Relay / Second wind
@@ -318,6 +319,18 @@ private:
     bool fireAbility(Ball& b, const AbilitySpec& a, const WorldParams& p, FrameEvents& ev);   // false = nothing to act on yet
     void abilityTick(Ball& b, float dt, const WorldParams& p, FrameEvents& ev);   // Beam / Blades / Leash, after the cast
     void abilityWorldTick(float dt, const WorldParams& p, FrameEvents& ev);   // mines, vortices, clouds, portals
+    void seekNext(Ball& b, const Enemy& hit, sf::Vector2f normal, const WorldParams& p);   // "Seeker"
+    void infect(Enemy& e, float dps);   // "Black plague"
+    void primalTick(Ball& b, float dt, const WorldParams& p, FrameEvents& ev);   // "Primal"
+public:
+    // "Beckon": the balls that could blink to a click on empty ground right
+    // now (indices into balls()), and the blink itself. App picks which.
+    std::vector<int> beckonReady() const;
+    bool beckon(int ball, sf::Vector2f at, const WorldParams& p);
+private:
+    void addFx(const CommonWorld::Fx& f);   // an ability's flourish (drawn only)
+    void itemFx(CommonWorld::Fx::Kind k, sf::Vector2f at, float r, sf::Color c, float life,
+                sf::Vector2f b = {0.f, 0.f}, sf::Color c2 = sf::Color::White);   // an item's own shape
     void resetAbilityCooldowns(Ball& b);   // a wave starts: every ability part-charged
     // Mage (defined in its section of sim/WorldClasses.cpp): its items act through casts.
     float mageCastRate(const Ball& b) const;   // cooldowns tick this much faster ("Focus")

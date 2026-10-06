@@ -186,6 +186,7 @@ BallSpec App::ballSpec(const BallLoadout& L) const {
     s.primary = tagRole(L.leadTag());
     if (const ItemTag asc = L.ascended(); asc != ItemTag::None) s.ascended = roleBit(tagRole(asc));
     if (hasCreed(CreedId::Duet)) s.ascended = s.roles;   // "Duet": every class it has is ascended
+    s.legend = s.ascended;   // all 4 items of a class: that class's cosmetic
     s.elemN = L.elements(s.elems);   // an Alchemist carries more than one
     s.element = s.elemN > 0 ? s.elems[0] : Element::Plain;
     BallMods& m = s.mods;
@@ -221,8 +222,7 @@ BallSpec App::ballSpec(const BallLoadout& L) const {
         const int lvl = gearPower(L.gearLvl[i]);       // Lv1-3 play as the old 1 / 3 / 5
         const float n = static_cast<float>(lvl - 1);   // levels past the first
         m.damageMult *= 1.f + C::itemLevelDamage * n;
-        UpgradeKind gk = static_cast<UpgradeKind>(L.gear[i]);
-        if (gk == UpgradeKind::Joker && jokerAs_ >= 0) gk = static_cast<UpgradeKind>(jokerAs_);   // "Joker": this fight's copy
+        const UpgradeKind gk = static_cast<UpgradeKind>(L.gear[i]);
         switch (gk) {
             case UpgradeKind::Ricochet:
                 m.ricochetMult = C::ricochetMult + C::ricochetMultPerLevel * n;
@@ -303,8 +303,8 @@ BallSpec App::ballSpec(const BallLoadout& L) const {
                 m.resonanceCd = G::resonanceCooldown + G::resonanceCooldownPerLevel * n;
                 break;
             case UpgradeKind::Seeker:
-                m.seekerTurn = G::seekerTurn * (1.f + G::seekerPerLevel * n);
-                m.seekerRange = G::seekerRange * (1.f + G::seekerPerLevel * n);
+                m.seekerRange = G::seekerRange * (1.f + G::seekerRangePerLevel * n);
+                m.seekerKick = G::seekerKick + G::seekerKickPerLevel * n;
                 break;
             case UpgradeKind::Piercing:
                 m.piercing = true;
@@ -731,7 +731,6 @@ void App::startWaveAt(int wave, bool elite) {
                           cfg::core::mendPerLevel * static_cast<float>(data_.meta.unlock[MetaMend]));
     if (const int bastion = data_.meta.unlock[MetaBastion]; bastion > 0)   // "Bastion": max HP grows each wave
         world_.addCoreMaxHp(cfg::core::bastionPerWavePerLevel * static_cast<float>(bastion));
-    rollJoker();
     const int w = data_.run.wave;
     if (cfg::run::isBossWave(w)) audio_.bossAppear();
     else audio_.waveStart();
@@ -745,39 +744,11 @@ void App::startWaveAt(int wave, bool elite) {
         std::max(data_.meta.stats.bestWave, static_cast<std::uint32_t>(data_.run.wave));
 }
 
-// "Joker": a fresh copy each fight - any legendary item the web lets you find.
-void App::rollJoker() {
-    bool any = false;
-    for (const BallLoadout& b : data_.run.balls)
-        for (int i = 0; i < kBallSlots; ++i) any = any || b.gear[i] == static_cast<int>(UpgradeKind::Joker);
-    if (!any) {
-        jokerAs_ = -1;
-        return;
-    }
-    const UpgradeCtx ctx = buildUpgradeCtx();
-    std::vector<UpgradeKind> pool;
-    for (int i = 0; i < kUpgradeKindCount; ++i) {
-        const auto k = static_cast<UpgradeKind>(i);
-        if (k != UpgradeKind::Joker && upgradeCat(k) == UpgradeCat::Item && upgradeTier(k) == Tier::Legendary &&
-            !ctx.isLocked(k))
-            pool.push_back(k);
-    }
-    if (pool.empty()) {
-        jokerAs_ = -1;
-        return;
-    }
-    const UpgradeKind k = pool[static_cast<std::size_t>(rng_.irange(0, static_cast<int>(pool.size()) - 1))];
-    jokerAs_ = static_cast<int>(k);
-    syncWorldBalls();
-    effects_.addLabel(std::string("Joker: ") + upgradeInfo(k).title, {size().x * 0.5f, size().y * 0.36f},
-                      theme::classJester, 22, 1.6f);
-}
-
 UpgradeCtx App::buildUpgradeCtx() const {
     const RunState& r = data_.run;
     UpgradeCtx c;
     c.balls = &r.balls;
-    c.maxBalls = ballCap();
+    c.maxBalls = ballCap() - static_cast<int>(r.bench.size());   // balls away with the Recruiter keep their place
     static const int kElemNode[kElementItemCount] = {MetaFireItem, MetaVenom, MetaTide,
                                                      MetaFrost, MetaQuarry, MetaArc};
     for (int i = 0; i < kElementItemCount; ++i)
@@ -801,6 +772,7 @@ UpgradeCtx App::buildUpgradeCtx() const {
     if (u[MetaSatellite] == 0) c.lock(UpgradeKind::Satellite);
     if (u[MetaGravity] == 0)   c.lock(UpgradeKind::GravityWell);
     if (u[MetaGemini] == 0)    c.lock(UpgradeKind::Gemini);
+    c.lock(UpgradeKind::Cocoon);   // event-only: never rolled
     if (u[MetaPrism] == 0)     c.lock(UpgradeKind::PrismCore);
     // Items of a class that isn't unlocked yet on the web.
     for (int i = 0; i < kUpgradeKindCount; ++i) {
@@ -1033,8 +1005,8 @@ void App::applyUpgradeKind(UpgradeKind k, int ball, int slot) {
         return;
     }
     switch (k) {
-        case UpgradeKind::AddBall:
-            if (static_cast<int>(r.balls.size()) >= ballCap()) return;
+        case UpgradeKind::AddBall:   // (balls away with the Recruiter keep their place)
+            if (static_cast<int>(r.balls.size() + r.bench.size()) >= ballCap()) return;
             r.balls.push_back(BallLoadout{});
             if (data_.meta.unlock[MetaMuster] > 0) {   // web "Muster": it joins with a Common item
                 const int item = randomItemFor(r.balls.back(), Tier::Common);
@@ -1229,14 +1201,12 @@ void App::travelTo(int node) {
 
 // The Forge's picker: an item a ball carries that can still level up.
 bool App::openForgePicker() {
-    const RunState& r = data_.run;
-    bool any = false;
-    for (int b = 0; b < runBallCount() && !any; ++b)
-        for (int sl = 0; sl < kLoadoutSlots; ++sl)
-            if (r.balls[static_cast<std::size_t>(b)].kindAt(sl) >= 0 &&
-                r.balls[static_cast<std::size_t>(b)].levelAt(sl) < forgeCap()) any = true;
-    if (!any) return false;
     equipSrc_ = EquipSource::Forge;
+    forgePoints_ = cfg::gold::forgePoints;
+    forgeEpicUsed_ = false;
+    bool any = false;
+    for (int b = 0; b < runBallCount() && !any; ++b) any = equipFitsBall(b);
+    if (!any) return false;
     equipRef_ = -1;
     push(ScreenId::Equip);
     return true;
@@ -1256,14 +1226,23 @@ bool App::equipFitsSlot(int ball, int slot) const {
     const BallLoadout& b = data_.run.balls[static_cast<std::size_t>(ball)];
     // The forge levels any filled slot (items, element, abilities); selling
     // takes items only.
-    if (equipSrc_ == EquipSource::Forge || equipSrc_ == EquipSource::ShopForge)
-        return slot >= 0 && slot < kLoadoutSlots && b.kindAt(slot) >= 0 && b.levelAt(slot) < forgeCap();
+    const int cocoon = static_cast<int>(UpgradeKind::Cocoon);   // it counts fights in its level: no forging it
+    if (equipSrc_ == EquipSource::Forge || equipSrc_ == EquipSource::ShopForge) {
+        if (slot < 0 || slot >= kLoadoutSlots || b.kindAt(slot) < 0 || b.kindAt(slot) == cocoon || b.levelAt(slot) >= forgeCap())
+            return false;
+        if (equipSrc_ == EquipSource::ShopForge) return true;   // paid per level: no budget
+        const auto k = static_cast<UpgradeKind>(b.kindAt(slot));   // the visit's budget
+        return forgeCost(k) <= forgePoints_ && !(upgradeTier(k) == Tier::Epic && forgeEpicUsed_);
+    }
     if (equipSrc_ == EquipSource::Sell) return isItemSlot(slot) && b.gear[slot] >= 0;
+    if (equipSrc_ == EquipSource::Barter) return isItemSlot(slot) && b.gear[slot] >= 0 && b.gear[slot] != cocoon;
+    if (equipKind_ == UpgradeKind::Cocoon && b.has(UpgradeKind::Cocoon)) return false;   // one per ball
     return upgradeFitsBall(equipKind_, b);
 }
 
 bool App::equipFitsBall(int ball) const {
-    if (equipSrc_ == EquipSource::Forge || equipSrc_ == EquipSource::ShopForge || equipSrc_ == EquipSource::Sell) {
+    if (equipSrc_ == EquipSource::Forge || equipSrc_ == EquipSource::ShopForge || equipSrc_ == EquipSource::Sell ||
+        equipSrc_ == EquipSource::Barter) {
         for (int sl = 0; sl < kLoadoutSlots; ++sl)
             if (equipFitsSlot(ball, sl)) return true;
         return false;
@@ -1280,6 +1259,38 @@ void App::confirmEquip(int ball, int slot) {
             applyUpgradeKind(equipKind_, ball, slot);
             finishChoice();
             break;
+        case EquipSource::Gift: {   // an event's pick: placed, then the next one (or the map)
+            back();
+            applyUpgradeKind(equipKind_, ball, slot);
+            if (equipKind_ == UpgradeKind::Cocoon) {   // its level counts the fights to hatching
+                BallLoadout& L = r.balls[static_cast<std::size_t>(ball)];
+                if (L.has(UpgradeKind::Cocoon)) L.gearLvl[L.slotOf(UpgradeKind::Cocoon)] = cfg::event::cocoonFights;
+            }
+            nextGift();
+            save();
+            break;
+        }
+        case EquipSource::Barter: {   // the item goes; two random ones come to place
+            if (!equipFitsSlot(ball, slot)) return;
+            BallLoadout& L = r.balls[static_cast<std::size_t>(ball)];
+            const std::string name = upgradeInfo(static_cast<UpgradeKind>(L.gear[slot])).title;
+            L.gear[slot] = -1;
+            L.gearLvl[slot] = 0;
+            syncWorldBalls();
+            back();
+            effects_.addLabel("traded " + name, {size().x * 0.5f, size().y * 0.14f}, theme::textLo, 20, 1.2f);
+            for (int i = 0; i < cfg::event::barterItems; ++i) {
+                int roll = rng_.irange(0, 99), t = 0;
+                while (t < 4 && roll >= cfg::event::barterTierW[t]) roll -= cfg::event::barterTierW[t++];
+                int k = randomItemOfTier(static_cast<Tier>(t), nullptr);
+                if (k < 0) k = randomItemOfTier(Tier::Common, nullptr);
+                if (k >= 0) giftQueue_.push_back(static_cast<UpgradeKind>(k));
+            }
+            audio_.purchase();
+            nextGift();
+            save();
+            break;
+        }
         case EquipSource::Shop: {
             const int price = shopOfferPrice(equipRef_);
             if (r.gold < price || equipRef_ < 0 || equipRef_ >= static_cast<int>(r.shopSold.size())) return;
@@ -1295,9 +1306,15 @@ void App::confirmEquip(int ball, int slot) {
             if (!equipFitsSlot(ball, slot))
                 for (slot = 0; slot < kLoadoutSlots && !equipFitsSlot(ball, slot); ++slot) {}
             if (!equipFitsSlot(ball, slot)) return;
+            const auto k = static_cast<UpgradeKind>(r.balls[static_cast<std::size_t>(ball)].kindAt(slot));
+            forgePoints_ -= forgeCost(k);
+            if (upgradeTier(k) == Tier::Epic) forgeEpicUsed_ = true;
             audio_.levelUp(r.balls[static_cast<std::size_t>(ball)].levelUp(slot));
             syncWorldBalls();
             effects_.flash(theme::accent, 0.4f);
+            bool more = false;   // budget left for something: stay at the anvil
+            for (int b = 0; b < runBallCount() && !more; ++b) more = equipFitsBall(b);
+            if (more) { save(); break; }
             back();
             openMap();
             break;
@@ -1335,7 +1352,8 @@ void App::confirmEquip(int ball, int slot) {
 
 void App::cancelEquip() {
     back();
-    if (equipSrc_ == EquipSource::Forge) openMap();   // walking away from the forge
+    if (equipSrc_ == EquipSource::Forge || equipSrc_ == EquipSource::Barter) openMap();   // walking away
+    if (equipSrc_ == EquipSource::Gift) nextGift();   // left behind: on to the next one
 }
 
 // ---------------------------------------------------------------- TAB: move a slot between balls
@@ -1392,6 +1410,50 @@ int App::slotMoveTarget(int fromBall, int fromSlot, int toBall, int toSlot) cons
 // so re-syncing the world balls is all it takes. A moved ability restarts its
 // cooldown like a fresh pick (World::applySpec), so a charged one can't be
 // passed around to fire twice.
+bool App::swapElements(int ball) {
+    if (ball < 0 || ball >= runBallCount()) return false;
+    BallLoadout& L = data_.run.balls[static_cast<std::size_t>(ball)];
+    if (L.type < 0 || L.extraType[0] < 0) return false;
+    std::swap(L.type, L.extraType[0]);   // they share the type slot's level
+    syncWorldBalls();
+    audio_.uiClick();
+    save();
+    return true;
+}
+
+bool App::mergePartner(int ball, int slot, int& ob, int& os) const {
+    ob = os = -1;
+    if (ball < 0 || ball >= runBallCount() || !(isItemSlot(slot) || isAbilitySlot(slot))) return false;
+    const BallLoadout& L = data_.run.balls[static_cast<std::size_t>(ball)];
+    const int kind = L.kindAt(slot);
+    if (kind < 0 || kind == static_cast<int>(UpgradeKind::Cocoon)) return false;
+    const auto k = static_cast<UpgradeKind>(kind);
+    if (L.levelAt(slot) >= maxLevelOf(k)) return false;   // nothing left to gain
+    for (int b = 0; b < runBallCount(); ++b) {
+        if (b == ball) continue;
+        const int s = data_.run.balls[static_cast<std::size_t>(b)].slotOf(k);
+        if (s >= 0) { ob = b; os = s; return true; }
+    }
+    return false;
+}
+
+bool App::mergeSlot(int ball, int slot) {
+    int ob, os;
+    if (!mergePartner(ball, slot, ob, os)) return false;
+    BallLoadout& L = data_.run.balls[static_cast<std::size_t>(ball)];
+    BallLoadout& O = data_.run.balls[static_cast<std::size_t>(ob)];
+    const auto k = static_cast<UpgradeKind>(L.kindAt(slot));
+    L.setSlot(slot, static_cast<int>(k), std::min(L.levelAt(slot) + O.levelAt(os), maxLevelOf(k)));   // their levels add up
+    O.clearSlot(os);
+    syncWorldBalls();
+    audio_.levelUp(L.levelAt(slot));
+    effects_.flash(tierColor(upgradeTier(k)), 0.35f);
+    effects_.addLabel(std::string(upgradeInfo(k).title) + " merged  Lv " + std::to_string(L.levelAt(slot)),
+                      {size().x * 0.5f, size().y * 0.14f}, tierColor(upgradeTier(k)), 22, 1.3f);
+    save();
+    return true;
+}
+
 bool App::moveSlot(int fromBall, int fromSlot, int toBall, int toSlot) {
     toSlot = slotMoveTarget(fromBall, fromSlot, toBall, toSlot);
     if (toSlot < 0) return false;
@@ -1702,7 +1764,7 @@ void App::devOpen(DevOpen what) {
     back();   // close the dev panel, back on the fight
     switch (what) {
         case DevOpen::Shop:         rollShop(); push(ScreenId::Shop); break;
-        case DevOpen::Forge:        equipSrc_ = EquipSource::Forge; equipRef_ = -1; push(ScreenId::Equip); break;
+        case DevOpen::Forge:        if (!openForgePicker()) effects_.addLabel("nothing to forge", {size().x * 0.5f, size().y * 0.5f}, theme::textLo, 18, 0.8f); break;
         case DevOpen::Upgrade:      openChoice(RollSource::Normal); break;
         case DevOpen::PostFight:    openChoice(RollSource::PostFight); break;
         case DevOpen::Elite:        openChoice(RollSource::Elite); break;
@@ -1992,6 +2054,13 @@ void App::processEvents(const FrameEvents& ev) {
     if (ev.autoFlung) audio_.thrown(0.35f);
     if (ev.midasGold > 0 && data_.run.active)   // "Midas": extra gold per kill
         data_.run.gold += houseEdge(ev.midasGold);
+    if (ev.kick > 0.f) camKick_ = std::max(camKick_, ev.kick);   // an ability landing hard
+    for (const auto& [at, gold] : ev.bounties) {   // "Bounty": the head pays out - a shower of coins
+        const sf::Vector2f ui = worldToUi(at);
+        effects_.addLabel("+" + std::to_string(gold), ui + sf::Vector2f{0.f, -22.f}, theme::puGolden, 20, 0.9f);
+        for (int i = 0; i < std::min(gold, 6); ++i) effects_.addCoin(ui, goldCounterPos(), coinRadius(0) * 1.1f);
+        audio_.gold();
+    }
     if (ev.phoenix) {
         // The Phoenix relic (once per act) goes first; "Last stand" is the once-per-run spare.
         RunState& rr = data_.run;
@@ -2069,6 +2138,7 @@ void App::processEvents(const FrameEvents& ev) {
     if (ev.waveCleared) {
         flushMultiKill();   // the last burst of the wave still counts
         audio_.waveClear();
+        afterFight();       // cocoons hatch, benched balls come back
         if (const int interest = data_.meta.unlock[MetaInterest];   // "Interest": reward a clean wave
             interest > 0 && world_.coreCleanWave())
             data_.run.bountyCores += cfg::meta::interestPerLevel * static_cast<float>(interest);
@@ -2198,6 +2268,7 @@ void App::update(float frameDt) {
     uisound::beginFrame();
     if (!data_.run.active || stack_.empty() || stack_.back()->ownsTab() || onOptions()) peek_.close();
     peek_.update(frameDt);
+    loadoutPeekTick(*this, peek_);
     if (!stack_.empty()) {
         // Under the TAB peek the screen gets no pointer (no hover, no tooltips).
         stack_.back()->update(*this, frameDt, peek_.open ? sf::Vector2f{-1e6f, -1e6f} : mouse);

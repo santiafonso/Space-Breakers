@@ -13,8 +13,11 @@ namespace sb {
 
 // Rest and Temper are the Rest stop's two choices (2026-10-02), never rolled
 // on a "?": they sit after kEventKindCount.
-enum class EventKind { Drifter, Smuggler, BloodPrice, Tithe, Gamble, Smith, Rest, Temper };
-inline constexpr int kEventKindCount = 6;
+// The second batch (2026-10-05) trades in items, balls and abilities, not just gold.
+enum class EventKind { Drifter, Smuggler, BloodPrice, Tithe, Gamble, Smith,
+                       Barter, Mercenary, Gift, Tome, BloodForge, Cocoon,
+                       Rest, Temper };
+inline constexpr int kEventKindCount = 12;
 
 // The gold a deal costs (or, for Blood price, pays) in act `act`.
 inline int eventGold(EventKind k, int act) {
@@ -27,6 +30,12 @@ inline int eventGold(EventKind k, int act) {
         case EventKind::Tithe:      return E::tithePrice + E::tithePerAct * a;
         case EventKind::Gamble:     return E::gambleStake + E::gamblePerAct * a;
         case EventKind::Smith:      return E::smithPrice + E::smithPerAct * a;
+        case EventKind::Tome:       return E::tomePrice + E::tomePerAct * a;
+        case EventKind::Barter:
+        case EventKind::Mercenary:
+        case EventKind::Gift:
+        case EventKind::BloodForge:
+        case EventKind::Cocoon:
         case EventKind::Rest:
         case EventKind::Temper:     return 0;
     }
@@ -35,6 +44,11 @@ inline int eventGold(EventKind k, int act) {
 
 // Does taking it cost gold (the button needs that much), or pay it?
 inline bool eventPays(EventKind k) { return k == EventKind::BloodPrice; }
+// Free of gold: its price is something else (an item, a ball's time, core HP...).
+inline bool eventFree(EventKind k) {
+    return k == EventKind::Barter || k == EventKind::Mercenary || k == EventKind::Gift ||
+           k == EventKind::BloodForge || k == EventKind::Cocoon || k == EventKind::Rest || k == EventKind::Temper;
+}
 
 inline const char* eventName(EventKind k) {
     switch (k) {
@@ -44,6 +58,12 @@ inline const char* eventName(EventKind k) {
         case EventKind::Tithe:      return "Tithe";
         case EventKind::Gamble:     return "Coin flip";
         case EventKind::Smith:      return "Wandering smith";
+        case EventKind::Barter:     return "Barter";
+        case EventKind::Mercenary:  return "Recruiter";
+        case EventKind::Gift:       return "Lucky find";
+        case EventKind::Tome:       return "Old tome";
+        case EventKind::BloodForge: return "Blood forge";
+        case EventKind::Cocoon:     return "Strange cocoon";
         case EventKind::Rest:       return "Rest";
         case EventKind::Temper:     return "Forge";
     }
@@ -58,6 +78,12 @@ inline const char* eventHint(EventKind k) {
         case EventKind::Tithe:      return "pay into the core";
         case EventKind::Gamble:     return "heads or tails";
         case EventKind::Smith:      return "a forge on a cart";
+        case EventKind::Barter:     return "one of yours for two of theirs";
+        case EventKind::Mercenary:  return "a contract for one of your balls";
+        case EventKind::Gift:       return "something shiny on the road";
+        case EventKind::Tome:       return "a spell, half legible";
+        case EventKind::BloodForge: return "the anvil drinks from the core";
+        case EventKind::Cocoon:     return "it twitches";
         case EventKind::Rest:       return "tend to the core";
         case EventKind::Temper:     return "a quiet hour at the anvil";
     }
@@ -77,7 +103,13 @@ inline std::string eventGain(EventKind k, int gold) {
             return std::to_string(E::gambleWinPct) + "%: win " +
                    std::to_string(static_cast<int>(static_cast<float>(gold) * E::gambleWinMul + 0.5f)) + " gold";
         case EventKind::Smith:
-        case EventKind::Temper:     return "level up one item";
+        case EventKind::Temper:     return "a forge visit: 2 points of levels";
+        case EventKind::Barter:     return "2 random items, any rarity";
+        case EventKind::Mercenary:  return "pick 1 of 3 items, at elite odds";
+        case EventKind::Gift:       return "a random modifier on a random ball";
+        case EventKind::Tome:       return "a random ability";
+        case EventKind::BloodForge: return "a random item levels up";
+        case EventKind::Cocoon:     return "in 3 fights: an Epic or Legendary item";
         case EventKind::Rest:       return "the core is repaired to full";
     }
     return "";
@@ -90,6 +122,13 @@ inline std::string eventCost(EventKind k, int gold) {
     if (k == EventKind::Gamble) return std::to_string(gold) + " gold, win or lose";
     if (k == EventKind::Rest) return "the core stays as it is";
     if (k == EventKind::Temper) return "the core is not repaired";
+    if (k == EventKind::Barter) return "give up one of your items";
+    if (k == EventKind::Mercenary)
+        return "a random ball sits out the next " + std::to_string(E::mercenaryFights) + " fights";
+    if (k == EventKind::Gift) return "free - but you don't choose";
+    if (k == EventKind::BloodForge)
+        return "-" + std::to_string(static_cast<int>(E::bloodForgeHpFrac * 100.f + 0.5f)) + "% core max HP";
+    if (k == EventKind::Cocoon) return "it takes an item slot meanwhile";
     return std::to_string(gold) + " gold";
 }
 

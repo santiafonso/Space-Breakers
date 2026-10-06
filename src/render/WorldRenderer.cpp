@@ -201,6 +201,13 @@ void WorldRenderer::drawBolt(sf::RenderWindow& window, const Bolt& bo) const {
 
 void WorldRenderer::drawBoss(sf::RenderWindow& window, const Boss& b, sf::Vector2f corePos) const {
     if (!b.alive) return;
+    if (b.dormant) {   // downed, not dead: a dim husk breathing where it fell
+        const float t0 = clockSeconds();
+        const float br = 0.5f + 0.5f * std::sin(t0 * 2.5f);
+        draw::disc(window, b.restPos, b.radius, withAlpha(theme::bgDeep, 0.85f), withAlpha(theme::coreLow, 0.15f), {1.f, 1.f}, 32);
+        draw::ring(window, b.restPos, b.radius * (1.1f + 0.15f * br), 2.f, withAlpha(theme::coreLow, 0.3f + 0.4f * br));
+        return;
+    }
     const float frac = b.maxHp > 0.f ? clampf(b.hp / b.maxHp, 0.f, 1.f) : 0.f;
     const float t = clockSeconds();
 
@@ -231,8 +238,8 @@ void WorldRenderer::drawBoss(sf::RenderWindow& window, const Boss& b, sf::Vector
 
     // Dasher: while it aims, the dash line it's about to take (brightening).
     if (b.kind == BossKind::Dasher && b.phase == 1) {
-        const float k = 1.f - clampf(b.timer / cfg::boss::dasherAim, 0.f, 1.f);
-        const float len = cfg::boss::dasherDashSpeed * cfg::boss::dasherDash + b.radius;
+        const float k = 1.f - clampf(b.timer / (b.dashes % 3 == 2 ? cfg::boss::dasherAim : cfg::boss::dasherRoamAim), 0.f, 1.f);
+        const float len = b.dashLen + b.radius;
         for (int i = 1; i <= 14; ++i) {
             const sf::Vector2f pt = b.pos + b.dashDir * (b.radius + len * static_cast<float>(i) / 14.f);
             draw::disc(window, pt, 2.5f, withAlpha(theme::coreLow, 0.2f + 0.6f * k),
@@ -298,7 +305,11 @@ void WorldRenderer::drawBoss(sf::RenderWindow& window, const Boss& b, sf::Vector
 
 void WorldRenderer::drawEnemy(sf::RenderWindow& window, const Enemy& e, sf::Vector2f corePos) const {
     const float frac = e.maxHp > 0.f ? clampf(e.hp / e.maxHp, 0.f, 1.f) : 0.f;
-    const float r = e.radius * popIn(e.age, 0.28f);   // spawns pop in
+    float r = e.radius * popIn(e.age, 0.28f);   // spawns pop in
+    if (e.shrinkPop > 0.f) {   // "Shrink": squeezes down from its old size with a small wobble
+        const float q = e.shrinkPop;
+        r *= 1.f + (1.f / cfg::ability::shrinkSize - 1.f) * q * q - 0.18f * std::sin(q * kPi) * (1.f - q);
+    }
     if (r <= 0.5f) return;
     // Enemies are dark hulls with a crisp bright rim - solid, readable, but
     // never as bright as a ball. Each kind has its own silhouette: grunt disc

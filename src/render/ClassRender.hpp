@@ -25,6 +25,7 @@ struct BallLook {
     BallRole lead = BallRole::Normal;
     BallRole second = BallRole::Normal;
     Element element = Element::Plain;
+    RoleMask legend = 0;   // a Legendary of each of these classes: its cosmetic (hat, visor, dagger...)
 };
 BallLook ballLook(const Ball& b);
 void drawBallIdentity(sf::RenderTarget& t, const BallLook& look, sf::Vector2f pos, float r, float heading,

@@ -74,6 +74,14 @@ struct RunState {
     int rerollsLeft = 0;       // "Foresight" web node: item-reroll charges remaining this run
     float bountyCores = 0.f;   // cores accrued from the "Fortune" node this run
     std::vector<BallLoadout> balls;   // one per ball in play, same order as World::balls()
+    // "Recruiter" event: balls away on a contract - out of `balls` until their
+    // fights run out, then back at their old place.
+    struct Benched {
+        BallLoadout ball;
+        int fights = 0;   // fights still to sit out
+        int slot = 0;     // where it goes back in `balls`
+    };
+    std::vector<Benched> bench;
     RunMods mods;
 
     // Path map. mapNode = node you're standing on (-1 = start of the act: any

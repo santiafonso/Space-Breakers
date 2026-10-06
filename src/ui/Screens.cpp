@@ -1044,7 +1044,11 @@ void PlayScreen::grab(App& app, sf::Vector2f mouse) {
     if (!app.canGrab()) return;   // "Hunters" / "Clockwork" creeds: hands off
     // The wide arena is framed by a pulled-back camera: scale the reach with it
     // so a grab covers the same on screen as in act 1.
-    if (app.world().grabAt(mouse, cfg::app::catchRadius * app.world().arenaScale())) {
+    if (!app.world().grabAt(mouse, cfg::app::catchRadius * app.world().arenaScale())) {
+        // "Beckon": empty ground calls a ball over - straight into your hand, to aim like any throw
+        if (onBall || !app.beckon(mouse) || !app.world().grabAt(mouse, cfg::app::catchRadius * app.world().arenaScale())) return;
+    }
+    {
         app.audio().grab();
         if (const float c = app.world().heldCatch(); c > 0.f)   // caught in flight: a flash that grows with the reward
             if (const Ball* b = app.world().heldBall())
@@ -1150,6 +1154,7 @@ void PlayScreen::update(App& app, float dt, sf::Vector2f mouse) {
     app.world().setPointer(mouse);   // "Grip" bends balls toward it
     sceneIn_ += dt;
     peek_.update(dt);
+    loadoutPeekTick(app, peek_);
     app.setBulletHeld(!peek_.open && app.hasFocus() && sf::Keyboard::isKeyPressed(sf::Keyboard::E));
     if (peek_.open) return;   // paused: the stage banner and drag sampling wait too
     clock_ += dt;
@@ -1491,9 +1496,17 @@ bool loadoutDragEvent(App& app, TabPeek& peek, const sf::Event& e) {
     peekSlotAt(app, app.uiMouse() / loadoutZoom(app), ball, slot);
     if (e.type == sf::Event::MouseButtonPressed) {   // pick up a filled slot
         peek.dragBall = peek.dragSlot = -1;
+        if (ball >= 0 && extraElementAt(loadoutPanelCenter(app, ball), app.uiMouse() / loadoutZoom(app),
+                                        app.data().run.balls[static_cast<std::size_t>(ball)])) {
+            app.swapElements(ball);   // an Alchemist's second element: click it to lead with it
+            return true;
+        }
         if (ball >= 0 && slot >= 0 && app.data().run.balls[static_cast<std::size_t>(ball)].kindAt(slot) >= 0) {
             peek.dragBall = ball;
             peek.dragSlot = slot;
+            peek.dragT = 0.f;
+            peek.dragFrom = app.uiMouse() / loadoutZoom(app);
+            peek.dragMoved = false;
             app.audio().grab();
         }
         return true;
@@ -1507,6 +1520,17 @@ bool loadoutDragEvent(App& app, TabPeek& peek, const sf::Event& e) {
     peek.dragBall = peek.dragSlot = -1;
     if (peek.closeOnDrop) peek.close();
     return true;
+}
+
+// TAB merge: a slot held still long enough, with a twin on another ball, merges.
+void loadoutPeekTick(App& app, TabPeek& peek) {
+    if (!peek.dragging()) return;
+    const sf::Vector2f um = app.uiMouse() / loadoutZoom(app);
+    if (length(um - peek.dragFrom) > 10.f) peek.dragMoved = true;   // it's a drag, not a hold
+    int ob, os;
+    if (peek.dragMoved || peek.dragT < cfg::app::mergeHold || !app.mergePartner(peek.dragBall, peek.dragSlot, ob, os)) return;
+    app.mergeSlot(peek.dragBall, peek.dragSlot);
+    peek.dragBall = peek.dragSlot = -1;   // done: the release that follows does nothing
 }
 
 void drawLoadoutOverlay(App& app, sf::RenderWindow& w, bool paused, const TabPeek& peek) {
@@ -1544,6 +1568,20 @@ void drawLoadoutOverlay(App& app, sf::RenderWindow& w, bool paused, const TabPee
     const bool dragging = peek.dragging() && peek.dragBall < n &&
                           r.balls[static_cast<std::size_t>(peek.dragBall)].kindAt(peek.dragSlot) >= 0;
     int land = -1;   // where the slot in hand would land, -1 = nowhere
+    int mergeB = -1, mergeS = -1;   // a held slot with a twin: the merge ring fills
+    if (dragging && !peek.dragMoved && app.mergePartner(peek.dragBall, peek.dragSlot, mergeB, mergeS)) {
+        const float k = clampf(peek.dragT / cfg::app::mergeHold, 0.f, 1.f);
+        const sf::FloatRect a = slotRect(panelCenter(s, peek.dragBall, n, rowY, rowCx), peek.dragSlot,
+                                         r.balls[static_cast<std::size_t>(peek.dragBall)]);
+        const sf::FloatRect b = slotRect(panelCenter(s, mergeB, n, rowY, rowCx), mergeS, r.balls[static_cast<std::size_t>(mergeB)]);
+        const sf::Vector2f ca{a.left + a.width * 0.5f, a.top + a.height * 0.5f};
+        draw::box(w, b, theme::corner, withAlpha(theme::accent, 0.08f * k), withAlpha(theme::accent, 0.f),
+                  withAlpha(theme::accent, 0.3f + 0.6f * k), 1.5f);   // the copy it will take in
+        draw::ring(w, ca, 16.f, 3.f, withAlpha(theme::textDim, 0.4f));
+        draw::ring(w, ca, 16.f, 3.f, withAlpha(theme::accent, 0.95f), -kPi * 0.5f, -kPi * 0.5f + 2.f * kPi * k, 32);
+        if (peek.dragT > 0.15f)
+            drawCentered(w, app.font(), "hold to merge", theme::fsSmall, {ca.x, a.top - 14.f}, withAlpha(theme::accent, 0.9f));
+    }
     if (dragging) {
         int hb, hs;
         peekSlotAt(app, um, hb, hs);

@@ -147,8 +147,8 @@ struct BallMods {
     float resonanceFrac = 0.f;     // Resonance: zap x the hit...
     float resonanceCd = 0.f;       // ...at most this often
     // game-changers (Fase J)
-    float seekerTurn = 0.f;    // Seeker: rad/s (0 = off)
-    float seekerRange = 0.f;
+    float seekerRange = 0.f;   // Seeker: how far it sees the next enemy (0 = off)...
+    float seekerKick = 1.f;    // ...and its speed x this off each hit
     bool piercing = false;
     float pierceMult = 1.f;
     float railFrac = 0.f;      // Railgun (0 = off)
@@ -170,6 +170,7 @@ struct BallSpec {
     RoleMask roles = 0;        // classes it has (2 items of a tag each)
     BallRole primary = BallRole::Normal;   // its first class (slot order): the body colour
     RoleMask ascended = 0;     // classes it has in ascended form (4 items of a tag)
+    RoleMask legend = 0;       // classes it wears the cosmetic of (all 4 items of the class)
     Element element = Element::Plain;
     Element elems[kMaxElements] = {};   // every element it carries (elems[0] = element); an Alchemist holds more
     int elemN = 0;
@@ -187,6 +188,7 @@ struct Ball {
     int snaredBy = -1;       // a Snare's id while one holds it (it can't move or be grabbed)
     RoleMask roles = 0;      // its classes (see BallRole)
     RoleMask ascended = 0;   // ...and which of them are ascended
+    RoleMask legend = 0;     // classes it wears the cosmetic of (all 4 items of the class)
     BallRole primary = BallRole::Normal;   // its first class (see leadRole)
     float classPulse = 0.f;  // 1 -> 0: it just gained a class, a flare in its class colour
     float elemPulse = 0.f;   // 1 -> 0: it just took an element, rings in the element's colour
@@ -218,6 +220,7 @@ struct Ball {
     float ghostLife = 0.f;
     float scale = 1.f;       // body size x this ("Mitosis" copies are small)
     bool twin = false;       // "Gemini": a permanent ghost that follows its parent's items
+    float regrabT = 0.f;     // s until you can grab it again after a throw (cfg::app::regrabDelay)
     int twinIdx = 0;         // which of its parent's twins
     int berserkStacks = 0;   // "Berserk": hits in a row since the last wall
     float stormT = 0.f;      // "Storm": time to the next zap
@@ -318,6 +321,8 @@ struct Enemy {
     float sentence = 0.f;                // ...dies under this share of its max hp...
     int sentenceOwner = -1;              // ...and that ball's blink fires
     float shrinkT = 0.f, shrinkR = 0.f;  // "Shrink" (ability): s left, and the radius it had
+    float shrinkPop = 0.f;               // ...1 -> 0 as it squeezes down (drawn only)
+    float plagueT = 0.f, plagueDps = 0.f; // "Black plague": s left mad and sick, hp lost per s
     int bounty = 0;                      // "Bounty" (ability): gold its killer earns
     Gait gait = Gait::Straight;
     float gaitPhase = 0.f;  // Weave: where in its sway it started
@@ -435,6 +440,11 @@ struct Boss {
     bool enraged = false;     // below cfg::boss::enrageAt: faster everything
     int summons = 0;          // Brutes it has called in (cfg::boss::summonAt)
     float shockR = 0.f;       // Charger: its shockwave's reach (world units; the render's warning ring)
+    int dashes = 0;           // Dasher: dashes so far (every 3rd goes for the core)...
+    float dashLen = 0.f;      // ...this one's length (the drawn line)
+    bool dormant = false;     // a second-phase boss, downed once: out of reach while its wave runs...
+    bool revived = false;     // ...and it already came back once
+    sf::Vector2f restPos;     // ...where it lies meanwhile
     float pace() const { return enraged ? cfg::boss::enragePace : 1.f; }
 };
 
@@ -488,6 +498,8 @@ struct FrameEvents {
     bool launched = false;                // the fight-opening whirl just let the balls fly
     bool autoFlung = false;               // the "Clockwork" creed launched a ball
     int midasGold = 0;                    // extra gold from kills by Midas balls
+    std::vector<std::pair<sf::Vector2f, int>> bounties;   // "Bounty" heads collected: where, and the gold
+    float kick = 0.f;                     // an ability asks for a camera jolt this strong
     bool phoenix = false;                 // the Phoenix relic just saved the core
     bool bossHit = false;                 // a ball landed on the miniboss this step
     bool waveCleared = false;

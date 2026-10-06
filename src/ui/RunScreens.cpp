@@ -162,7 +162,8 @@ void EquipScreen::targetAt(App& app, sf::Vector2f mouse, int& ball, int& slot) c
     const int n = app.runBallCount();
     // Forge, the shop's forge and selling all point at an item already on a ball.
     const EquipSource src = app.equipSource();
-    const bool forge = src == EquipSource::Forge || src == EquipSource::ShopForge || src == EquipSource::Sell;
+    const bool forge = src == EquipSource::Forge || src == EquipSource::ShopForge || src == EquipSource::Sell ||
+                       src == EquipSource::Barter;
     const UpgradeKind k = app.equipKind();
     for (int i = 0; i < n; ++i) {
         const sf::Vector2f c = panelCenter(s, i, n, equipRowY(app));
@@ -203,6 +204,8 @@ static const char* equipBackLabel(EquipSource src) {
     switch (src) {
         case EquipSource::Choice: return "Back to the cards";
         case EquipSource::Forge:  return "Leave the forge";
+        case EquipSource::Barter: return "Walk away";
+        case EquipSource::Gift:   return "Leave it behind";
         default:                  return "Back to the shop";
     }
 }
@@ -236,18 +239,26 @@ void EquipScreen::draw(App& app, sf::RenderWindow& w) {
     const EquipSource src = app.equipSource();
     const bool forge = src == EquipSource::Forge || src == EquipSource::ShopForge;
     const bool sell = src == EquipSource::Sell;
+    const bool barter = src == EquipSource::Barter;
     const UpgradeKind k = app.equipKind();
     const UpgradeInfo info = upgradeInfo(k);
 
     std::string title, sub, hint;
     if (forge) {
+        const int pts = app.forgePoints();
         title = src == EquipSource::ShopForge
             ? "Forge - pick an item to level up (" + std::to_string(cfg::gold::forgeServicePrice) + " gold)"
-            : "Forge - pick an item to level up";
-        sub = "each level: the item's bonus or chance grows by half, and the ball hits 10% harder (max level " +
-              std::to_string(app.forgeCap()) + ")";
+            : "Forge - " + std::to_string(pts) + (pts == 1 ? " point left" : " points left");
+        sub = src == EquipSource::ShopForge
+            ? "each level: the item's bonus or chance grows by half, and the ball hits 10% harder (max level " +
+                  std::to_string(app.forgeCap()) + ")"
+            : "a level costs 1 point (an Epic too, but only one Epic per visit) - a Legendary costs 2";
         hint = src == EquipSource::ShopForge ? "click an item   -   Back: the shop"
                                              : "click an item   -   Back: leave the forge";
+    } else if (barter) {
+        title = "Barter - pick an item to give up";
+        sub = "it's gone for good; two random items, of any rarity, come back to place";
+        hint = "click an item   -   Back: walk away";
     } else if (sell) {
         title = "Sell - pick an item to sell";
         sub = "it pays " + std::to_string(static_cast<int>(cfg::gold::sellFrac * 100.f)) +
@@ -307,7 +318,7 @@ void EquipScreen::draw(App& app, sf::RenderWindow& w) {
         const bool hot = hoverBall_ == i;
         drawLoadoutPanel(w, app.font(), c, balls[static_cast<std::size_t>(i)], cp, hot ? 1.f : 0.f,
                          hot ? hoverSlot_ : -1, !app.equipFitsBall(i),
-                         forge || sell || !upgradeTakesSlot(k) ? -1 : static_cast<int>(k));
+                         forge || sell || barter || !upgradeTakesSlot(k) ? -1 : static_cast<int>(k));
     }
 
     for (int i = 0; i < n; ++i) {   // what's in the slot / on the ball under the pointer
@@ -465,6 +476,7 @@ void MapScreen::update(App& app, float dt, sf::Vector2f mouse) {
     backdrop_.update(dt);
     mouse_ = mouse;
     peek_.update(dt);
+    loadoutPeekTick(app, peek_);
     if (!scrollInit_) {   // open on where you stand: the next row just above centre
         scrollInit_ = true;
         const float from = scrollFor(app, app.data().run.mapRow);
@@ -946,7 +958,7 @@ void ShopScreen::draw(App& app, sf::RenderWindow& w) {
         const UpgradeCat cat = upgradeCat(k);
         std::string d = upgradeCatDesc(cat);
         const int deal = hover_ < static_cast<int>(r.shopDeal.size()) ? r.shopDeal[static_cast<std::size_t>(hover_)] : 0;
-        if (deal == 1) d += "  On sale: " + std::to_string(app.saleOffPercent()) + "% off, this visit only.";
+        if (deal == 1) d += "\n\nOn sale: " + std::to_string(app.saleOffPercent()) + "% off, this visit only.";
         drawTooltip(w, f, mouse_, s, upgradeCatName(cat), d, catColor(cat));
     } else if (hover_ == 100) {
         drawTooltip(w, f, mouse_, s, "Sell",

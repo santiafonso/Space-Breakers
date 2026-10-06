@@ -111,10 +111,11 @@ bool foldSummoner(UpgradeKind k, int level, BallMods& m) {
             s.wardens = std::min(S::wardenCount + extra, S::maxWardens);
             s.wardenFrac = S::wardenFrac + S::wardenFracPerLevel * l;
             return true;
-        case UpgradeKind::SummonDragon:
-            s.dragonInterval = S::dragonInterval + S::dragonIntervalPerLevel * l;
-            s.dragonFrac = S::dragonFrac + S::dragonFracPerLevel * l;
-            s.dragonCone = S::dragonCone + S::dragonConePerLevel * l;
+        case UpgradeKind::SummonSword:
+            s.swordEvery = S::swordEvery + S::swordEveryPerLevel * l;
+            s.swordFrac = S::swordFrac + S::swordFracPerLevel * l;
+            s.swords = std::min(3, 1 + static_cast<int>(l) / 2);   // a sword per item level (1 / 2 / 3)
+            s.swordRange = S::swordRange + S::swordRangePerLevel * l;
             return true;
         default: return false;
     }
@@ -127,7 +128,10 @@ bool foldJester(UpgradeKind k, int level, BallMods& m) {
     JesterMods& j = m.cls.jester;
     // Its items work on any ball: the hooks run with one Jester item too
     // (the role's own roll still needs the class).
-    if (itemTag(k) == ItemTag::Jester) m.cls.loose |= roleBit(BallRole::Jester);
+    if (itemTag(k) == ItemTag::Jester) {
+        m.cls.loose |= roleBit(BallRole::Jester);
+        ++j.items;   // the class's chaos grows with every Jester item
+    }
     switch (k) {
         case UpgradeKind::LuckyCharm: return true;   // its luck is counted in App::luck
         case UpgradeKind::CoinFlip:    j.coinHeads = J::coinHeads + J::coinHeadsPerLevel * n; return true;
@@ -174,7 +178,7 @@ bool foldSlinger(UpgradeKind k, int level, BallMods& m) {
             return true;
         case UpgradeKind::Ambush:     s.ambush = S::ambush + S::ambushPerLevel * n; return true;
         case UpgradeKind::TrickShot:  s.trick = S::trick + S::trickPerLevel * n; return true;
-        case UpgradeKind::DoubleDown: s.doubleDown = S::doubleWin + S::doubleWinPerLevel * n; return true;
+        case UpgradeKind::Beckon:     s.beckonCd = S::beckonCd - S::beckonCdPerLevel * n; return true;
         case UpgradeKind::ExecutionThrow: s.execution = S::execution + S::executionPerLevel * n; return true;
         default: return false;
     }
@@ -316,7 +320,7 @@ bool foldCommon(UpgradeKind k, int level, BallMods& m) {
         case K::SuppressingFire: c.suppress = C::suppress + C::suppressPerLevel * n; return true;
         case K::AmmoFeed:    c.ammoFeed = level; return true;
         case K::WindUp:      c.windUp = C::windUp + C::windUpPerLevel * n; return true;
-        case K::BankThrow:   c.bankThrow = C::bankThrow + C::bankThrowPerLevel * n; return true;
+        case K::PingPong:    c.pingPong = C::pingPong + static_cast<int>(n) / 2; return true;
         case K::Bully:       c.bully = C::bully + C::bullyPerLevel * n; return true;
         case K::Carom:       c.carom = C::carom + C::caromPerLevel * n; return true;
         // rares
@@ -371,7 +375,7 @@ bool foldCommon(UpgradeKind k, int level, BallMods& m) {
             c.lastLine = C::lastLine + C::lastLinePerLevel * n;
             c.lastLineStun = C::lastLineStun + C::lastLineStunPerLevel * n;
             return true;
-        case K::SlotMachine: c.slotEvery = C::slotEvery + C::slotEveryPerLevel * n; return true;
+        case K::LuckyNumber: c.luckyEvery = C::luckyEvery + C::luckyEveryPerLevel * n; return true;
         case K::WildMagic:   c.wildCd = C::wildCd + C::wildCdPerLevel * n; return true;
         case K::SpellChorus: c.chorus = std::max(3, C::chorus - (level - 1)); return true;
         case K::Chronomancy: c.chrono = C::chrono + C::chronoPerLevel * n; return true;
@@ -392,7 +396,10 @@ bool foldCommon(UpgradeKind k, int level, BallMods& m) {
             c.twinCall = true;
             m.cls.summoner.bond *= 1.f + C::twinCallPerLevel * n;
             return true;
-        case K::Fortify:     c.fortify = C::fortify + C::fortifyPerLevel * n; return true;
+        case K::BabyDragon:
+            c.babyDragon = C::babyFrac + C::babyFracPerLevel * n;
+            c.babyEvery = C::babyEvery - C::babyEveryPerLevel * n;
+            return true;
         // legendaries (2026-10-05)
         case K::Titan:
             c.titan = C::titan + C::titanPerLevel * n;
@@ -406,7 +413,7 @@ bool foldCommon(UpgradeKind k, int level, BallMods& m) {
         case K::TimeStop:    c.timeStop = C::timeStop + C::timeStopPerLevel * n; return true;
         case K::IonCannon:
             c.ion = C::ion + C::ionPerLevel * n;
-            c.ionCharge = C::ionCharge + C::ionChargePerLevel * n;
+            c.ionJumps = C::ionJumps + static_cast<int>(n);
             return true;
         case K::Gunship:     c.gunship = C::gunship + C::gunshipPerLevel * n; return true;
         case K::LeadStorm:   c.leadStorm = C::leadStorm + C::leadStormPerLevel * n; return true;
@@ -415,19 +422,35 @@ bool foldCommon(UpgradeKind k, int level, BallMods& m) {
             c.contract = C::contract + C::contractPerLevel * n;
             c.contractBoss = C::contractBoss + C::contractBossPerLevel * n;
             return true;
-        case K::Necromancer: c.necro = C::necro + C::necroPerLevel * n; return true;
-        case K::Overlord:    c.overlord = C::overlord + C::overlordPerLevel * n; return true;
+        case K::Hive:
+            c.hive = C::hive + C::hivePerLevel * n;
+            c.hivePer = C::hivePer + static_cast<int>(n) / 2;
+            return true;
+        case K::ElderDragon:
+            c.elderDragon = C::elder + C::elderPerLevel * n;
+            c.elderEvery = C::elderEvery - C::elderEveryPerLevel * n;
+            return true;
         case K::Rigged:      c.rigged = true; return true;   // its luck: App::luck
-        case K::Joker:       return true;                    // App::ballSpec folds the copy instead
+        case K::Slot777:
+            c.slotEvery = C::slotEvery + C::slotEveryPerLevel * n;
+            c.slotBuff = (C::slotBuff + C::slotBuffPerLevel * n) * c.slotEvery;
+            return true;
         case K::SteadyHand:
             c.steady = C::steady + C::steadyPerLevel * n;
             c.steadyBonus = C::steadyBonus + C::steadyBonusPerLevel * n;
             return true;
         case K::Showtime:    c.showtime = C::showtime + C::showtimePerLevel * n; return true;
-        case K::PhilosopherStone: c.philo = C::philoElems + (level - 1) / 2; return true;
-        case K::GrandReaction:
-            c.grandEvery = std::max(2, C::grandEvery - (level - 1) / 2);
-            c.grand = C::grand + C::grandPerLevel * n;
+        case K::ToxicTrail:
+            c.toxic = C::toxicFrac + C::toxicFracPerLevel * n;
+            c.toxicLife = C::toxicLife + C::toxicLifePerLevel * n;
+            return true;
+        case K::Primal:
+            c.primal = C::primalPower + C::primalPowerPerLevel * n;
+            c.primalEvery = C::primalEvery + C::primalEveryPerLevel * n;
+            return true;
+        case K::BlackPlague:
+            c.plague = C::plague + C::plaguePerLevel * n;
+            c.plagueDps = C::plagueDps + C::plagueDpsPerLevel * n;
             return true;
         default: return false;
     }

@@ -63,6 +63,28 @@ void App::foldCreeds(WorldParams& p) const {
 
 bool App::canGrab() const { return !hasCreed(CreedId::Hunters) && !hasCreed(CreedId::Clockwork); }
 
+// "Beckon": of the balls ready to blink, the one with the most levels in it
+// (items, abilities, modifiers) goes; a tie is a coin flip.
+bool App::beckon(sf::Vector2f at) {
+    const std::vector<int> ready = world_.beckonReady();
+    if (ready.empty()) return false;
+    int best = -1, bestScore = -1, ties = 0;
+    for (int i : ready) {
+        int score = 0;
+        if (i < static_cast<int>(data_.run.balls.size())) {
+            const BallLoadout& L = data_.run.balls[static_cast<std::size_t>(i)];
+            for (int s = 0; s < kBallSlots; ++s) score += L.gear[s] >= 0 ? L.gearLvl[s] : 0;
+            for (int s = 0; s < kMaxAbilitySlots; ++s) score += L.ability[s] >= 0 ? L.abilityLvl[s] : 0;
+            for (int m : L.mods) score += m;
+        }
+        if (score > bestScore) { bestScore = score; best = i; ties = 1; }
+        else if (score == bestScore && rng_.irange(0, ties++) == 0) best = i;   // even odds across a tie
+    }
+    if (!world_.beckon(best, at, params())) return false;
+    audio_.thrown(0.4f);
+    return true;
+}
+
 float App::flingPower() const {
     float k = data_.run.mods.strongArm ? cfg::combat::flingPowerBoost : 1.f;
     if (hasCreed(CreedId::HotHands)) k *= cfg::creed::hotFling;

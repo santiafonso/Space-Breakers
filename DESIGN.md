@@ -2444,6 +2444,178 @@ de las pelotas: Q, el anillo de E y F.
   (`AbilityHook..AbilityBounty`) para que las runs guardadas no cambien de
   números; `upgradeCat` y `abilityOf` leen ese rango.
 - **Panel F1:** la pestaña Run tiene una columna propia de habilidades.
+- **Personalidad visual (mismo día):** cada habilidad tiene su gesto, corto y
+  fino, en los colores de la pelota. Hook = cadena que sale, muerde y recoge;
+  Smite = rayo quebrado desde arriba que parpadea y deja chispas; Warp =
+  fantasma donde estaba + costura punteada + anillo que se cierra al llegar;
+  Swap = dos cometas curvos que se cruzan; Shrink = anillo que se cierra y el
+  enemigo se encoge con rebote; Empower = aro que respira y, al pegar, estrella
+  de púas; Mines = caen con rebote, anillo que se cierra al armarse, parpadean,
+  metralla al explotar; Bounty = aro dorado girando, moneda flotando, lluvia de
+  monedas + "+N" al cobrar. Las que duran se mueven: Vortex con motas en
+  espiral y ojo oscuro, Cloud con bocanadas y pulso en cada mordida, Portal que
+  se abre con dos anillos a contramano, Beam que zumba con chispas, Blades con
+  estela, Leash con cuentas que corren (más brillante tensa), Tailwind con
+  rayas de viento. De las viejas: Dash deja copias, Meteor cola de fuego +
+  cráter con brasas, Overclock anillo de calor. Algunas sacuden la cámara
+  (Smite, Meteor, Empower, Warp, minas). Los gestos viven en
+  `CommonWorld::fx` (sólo dibujo, `World::addFx`), dibujados en
+  `render/ClassRender.cpp` (`worldAbilities`).
+- **Efectos de items únicos (mismo día):** ningún item reusa el anillo genérico;
+  cada uno tiene su forma en `CommonWorld::fx` (`World::itemFx`): Death
+  sentence = corte, Lucky break = trébol, Maelstrom = cuentas de sus elementos,
+  Slot machine = fuente de monedas / rodillos, Homecoming = bumerán, Last line =
+  muro hexagonal, Sigil = triángulos, Titan = grietas, Heavy landing = polvo,
+  Time stop = reloj, Spell chorus = eco, Grand reaction = estrella, Ward =
+  placa hexagonal, Fission = hilo al vecino, Mega Striker = boom sónico, Mage
+  ascendido = rombo, Lead storm = cañones, Frag = perdigones, Smoke bomb = humo,
+  Necromancer = almas que suben, Martyr = columna de luz, Bomber = bola de fuego,
+  bomba del Jester = chispas, Jackpot del Jester = confeti, Sleight = cartas,
+  Ambush = flechas, Golem = losa que sube / golpe cuadrado, gran espíritu =
+  espiral, Black hole = colapso, Seeker = línea de mira.
+- **Portal (rework):** cooldown 7 s (era 12), 3 s abierto, portales más cerca
+  (el de salida a lo sumo 220 px más allá del del núcleo, hacia el enemigo más
+  cercano al núcleo) y más grandes (34). Lo que entra sale **disparado** hacia el
+  enemigo más cercano a la salida (x2.4 crucero).
+- **Seeker (rework):** ya no curva en vuelo (eso era casi Hunter). Ahora cada
+  enemigo que golpea lo hace salir derecho al siguiente más cercano (pinball);
+  niveles: ve más lejos y sale más rápido. Hunter sigue siendo el que persigue.
+- **Sin spam de click:** una pelota recién tirada no se puede volver a agarrar
+  por 1 s (`cfg::app::regrabDelay`), así mantiene su camino. (Q sigue en 1.25 s.)
+- **Seeker (ajuste):** busca en toda la arena, siempre un enemigo del lado del
+  rebote: encadena enemigo a enemigo hasta tocar pared o núcleo.
+- **Time stop:** cada 15 habilidades (era 5).
+- **Panel de pelota:** las habilidades 2 y 3 del Mago van apiladas dentro del
+  panel (la 3ra quedaba afuera y no se podía agarrar en el TAB).
+- **Eventos "?" nuevos** (además de los 6 de oro): Barter (das un item, recibís
+  2 al azar de rareza al azar), Recruiter (elegís 1 de 3 items; una pelota al
+  azar se va 2 peleas - `RunState::bench`, vuelve sola a su lugar), Lucky find
+  (una mejora al azar en una pelota al azar, gratis), Old tome (una habilidad al
+  azar por oro), Blood forge (un item al azar sube de nivel por -10% vida máx. del
+  núcleo), Strange cocoon (item Cocoon que no hace nada; su nivel cuenta las
+  peleas, a las 3 sale un épico o legendario - 25% legendario). Los regalos se
+  colocan con la pantalla de equipar (`EquipSource::Gift`, Back = dejarlo).
+- **Marcas de épicos/legendarios:** Homecoming (flecha en U volviendo), Perfect
+  release (brillo), Juggernaut (borde pesado), Minigun (cañones girando),
+  Lightspeed (chispa alrededor cuando va rápido), Archmage (motas por cast),
+  Showtime (foco que crece), Philosopher's stone (6 cuentas de elementos),
+  Overlord (corona), Rigged (dado), Gunship (alitas), Hunter (flechas sobre la
+  presa), Death sentence (X sobre los sentenciados), Smart rounds (aro en la
+  bala). Al activarse: Mana spring (motas que entran), Conflux (salto en arco),
+  Saturate (dos anillos), Wild magic (chispas de colores), Chronomancy (onda
+  punteada lenta), Reaper (guadaña), Lightspeed (rayo recto blanco).
+- **Mitosis / Gemini:** las copias de Mitosis salen "desnudas" (stats y
+  elemento, sin items, clase ni habilidades); los gemelos de Gemini copian todo
+  y además lanzan las habilidades, medio cooldown desfasados de su pelota.
+- **Slinger, dos items nuevos en lugar de viejos (mismo lugar en el enum):**
+  Beckon (épico, en lugar de Double down): click en suelo vacío = la pelota con
+  Beckon aparece ahí y sigue volando; cada 1.5 s (1 s a Lv5); con varias, va la
+  que tiene más niveles (items + habilidades + mejoras), empate al azar.
+  Ping-pong (poco común, en lugar de Bank throw): después de tu tiro, cada pared
+  lo manda derecho al enemigo más cercano (pared, enemigo, pared...), 4 paredes
+  (+1 cada dos niveles) o hasta tocar el núcleo.
+- **Conductor y Bedrock pasan al Alquimista** (trabajan con su elemento); los
+  textos dicen que necesitan Eléctrico / Piedra.
+- **Forja con presupuesto:** cada visita (nodo Forge, Wandering smith, Rest ->
+  forja) tiene 2 puntos: común / poco común / raro 1, épico 1 (uno solo por
+  visita), legendario 2. Te quedás en la forja mientras alcance. La forja paga de
+  la tienda sigue siendo un nivel por pago (`cfg::gold::forgePoints`).
+- **Unir en el TAB:** un item o habilidad repetido en dos pelotas: apretarlo
+  quieto 1.5 s (círculo que se llena, "hold to merge") lo une; los niveles se
+  suman (con tope) y el otro lugar queda libre (`App::mergeSlot`).
+- **Invocador (reemplazos, mismo lugar en el enum):** Baby dragon (épico, era
+  Fortify): un dragoncito al lado escupe un cono de su elemento cada 2 s (Twin
+  call: dos). Elder dragon (legendario, era Overlord): un dragón enorme da
+  vueltas a la arena, cada 4 s barre una franja x4. Swarm (legendario, era
+  Necromancer; en el código `Hive`, no confundir con el jefe Hive): bichitos de su elemento, 3 por segundo, hasta 30, corren y
+  muerden (dejan el elemento sin dueño: reaccionan con todo). Sinergias: el
+  rugido del grande hace escupir a los chicos (y x1.5), el aliento de un
+  dragoncito prende bichos (su próxima mordida explota), la franja del grande
+  suelta bichos.
+- **Bufón (reemplazos):** Lucky number (épico, era Slot machine): cada 8 s un
+  d10 que flota sobre la pelota (7 segmentos): >5 más rápida y fuerte, <5 más
+  lenta pero empuja y aturde, 10 = crítico en cada golpe, 1 = se frena 1 s y el
+  próximo golpe x3. 777 (legendario, era Joker): rodillos sobre la pelota giran
+  1.2 s y paran de izquierda a derecha; triple 7 = frenesí, tréboles = toda la
+  suerte de la run x2 un rato, monedas (la más rara) = lluvia de monedas que
+  pegan y dan oro; un par = una probadita.
+- **Alquimista (legendarios, ahora 3):** Toxic trail (era Philosopher's stone):
+  rastro de nubes, una de cada elemento por turno. Primal (era Grand reaction):
+  cada 6 s su primer elemento: fuego lanzallamas, hielo nube de escarcha que
+  congela, agua lluvia (enemigos -30%, pelotas +20%, empapa), piedra terremoto,
+  veneno 3 botellas, eléctrico 6 rayos con nubecita. Black plague (nuevo, al
+  final del enum): 25% por golpe, el enemigo se pone negro, enloquece, persigue
+  a otros enemigos (60% más rápido), los muerde y contagia; no ataca al núcleo.
+- **Cosméticos de clase** (al principio por legendario; después, sólo con los 4
+  items de la clase): accesorio chico: Striker vincha roja, Guardián escudito, Mago sombrero,
+  Shooter visor, Bufón gorro, Alquimista doctor de la peste, Asesino daga,
+  Support aureola, Invocador cuernitos, Slinger sombrero de vaquero
+  (`BallSpec::legend`, `drawLegendCosmetics`).
+- **Ajustes (2a vuelta, mismo día):**
+  - Cosméticos: Striker vincha que cruza toda la pelota, Support vincha blanca
+    con cruz roja, Guardián escudo gris oscuro, Mago sombrero viejo marrón con
+    la punta doblada, Shooter scouter rojo de un ojo, Asesino daga ancha,
+    Invocador cuernos rojos separados, Bufón gorro violeta y amarillo grande,
+    Slinger sombrero de vaquero grande, Alquimista sólo máscara de la peste
+    (pico largo, ojos de vidrio).
+  - Swarm: un bicho que mata se divide en dos (tope 32 en pantalla).
+  - Dragones: antes de escupir cargan (brillo en la garganta) y giran la
+    cabeza suave hacia el blanco; el aliento es una llamarada de bocanadas.
+  - Spectral sword (raro, en lugar del Dragonling, que repetía al Baby dragon):
+    una espada flota junto a la pelota y cada 2 s atraviesa al enemigo más
+    cercano cortando todo en el camino, y vuelve girando.
+  - Spirit host suelta sus propios wisps (~1 por segundo): no necesita otro item.
+  - 777: cada 7 s; lo ganado dura hasta la próxima tirada (la lluvia más);
+    triple 30% normal, 60% siendo Bufón, 92% Gran Bufón; frenesí x1.7 velocidad
+    x2 daño y da tirones; tréboles x3 la suerte; muchas más monedas. Rodillos
+    con luces, temblor y el último frena despacio.
+  - Beckon: apretar suelo vacío trae la pelota a tu mano: apuntás y tirás con
+    la gomera.
+  - Alquimista: 2 elementos como máximo (también ascendido); click en el
+    elemento chico en el TAB lo pasa a principal. Archalchemist: reacciones +50%.
+  - Toxic trail: cada nube se infla rápido (x2.2) y se achica despacio; más daño.
+  - Primal: con 2 elementos se disparan los dos poderes a la vez.
+  - Primal más intenso (cada 5 s): hielo nube 3 s que congela, agua lluvia 5 s
+    con gotas que pegan, piedra 3 sacudidas + 5 rocas, veneno 6 botellas con
+    charcos, eléctrico 14 rayos que saltan a 2 más.
+  - Black plague: los infectados corren x1.9 y se mueren más rápido.
+  - Ion cannon (rework): ya no frena ni deja de disparar; cada bala que pega
+    salta como rayo de enemigo en enemigo: 2 saltos (+1 por nivel) +3 por cada
+    +100% de cadencia, hasta 12.
+  - Time stop: cada 15 habilidades.
+- **Dragones (3a vuelta):** el cuerpo mira hacia donde vuela y sólo giran
+  cuello y cabeza (hasta ~100°); escupen un chorro sostenido (chico 0.9 s,
+  grande 1.6 s) que va mordiendo cada 0.15 s y sigue al blanco con la cabeza.
+- **Spectral sword:** una espada por nivel del item (1/2/3), alcance 420 px
+  (+40 por nivel), desfasadas entre sí.
+- **Bufón caótico (clase):** cada 6 s (−0.7 por item de Bufón, mínimo 2 s)
+  saca un truco al azar de otra clase: salto (Warp), misiles, ráfaga de balas,
+  lanzamiento a toda velocidad, nova, zap encadenado, cuchillas, rayo del
+  cielo; anunciado con un cartel. Gran Bufón: 2 trucos a la vez (3 con 6+
+  items). Los trucos son más fuertes con más items.
+- **Bufón con cartas (reemplaza la bolsa de trucos):** cada 3.5 s (−0.4 por
+  item, mínimo 1.2 s) saca una carta que aparece sobre la pelota (palo y
+  número dibujados) y se anuncia ("KING OF HEARTS!"). Corazones: cura el núcleo
+  y Tailwind; diamantes: oro y ráfaga de balas; picas: cuchillas (baja) o rayo
+  del cielo (alta); tréboles: nova (baja) o zap (alta). J salto, Q misiles,
+  K lanzamiento a toda velocidad + nova, As uno de cada palo. El número sube la
+  fuerza. Cartas por vez: 1, +1 con 3+ items, +1 Gran Bufón, +1 con 6+ items.
+- **Cosméticos:** sólo con los 4 items de la clase (ascendida), ya no por legendario.
+- **Jefes:** Dasher embiste por todo el mapa (rebota en paredes, encadena
+  embestidas; cada 3ra va al núcleo). Charger, Hive y Warden tienen segunda
+  fase: al bajarlos la primera vez caen dormidos, entra una oleada
+  (10 + 3 por acto) y al limpiarla reviven con 60% de vida, enfurecidos.
+- **Anotado para después (pedido del usuario):** reliquias nuevas que
+  aumenten más cosas; estadísticas por clase (una principal y 2-3
+  secundarias, p. ej. Striker daño / tamaño, Asesino crítico / velocidad,
+  Mago cooldown / daño elemental, Guardián tamaño, Slinger distancia de
+  atrapado, Invocador daño de invocación / cooldown, Alquimista daño
+  elemental, Support cooldown, Bufón suerte) y que la reducción de cooldown
+  valga también para disparos y reacciones; pasada de dificultad (enemigos
+  con patrones distintos, mejor composición, mejores decisiones con Q y F).
+- **Tooltips de clase más simples:** el texto se separa en párrafos ("\n" en
+  `wrapText`, una línea vacía = medio renglón). La pelota muestra qué hace su
+  clase y aparte "2 items: X (done) / 4 items: Mega X (3/4)".
 
 ### Anotado para después (el usuario lo pidió así)
 

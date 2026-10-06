@@ -53,8 +53,8 @@ enum class UpgradeKind {
     Executioner,       // big bonus vs badly hurt enemies                  [Striker]
     Overkill,          // a kill's leftover damage splashes                [Support]
     Shatter,           // bonus damage vs frozen enemies (needs Frost)     [Support]
-    Conductor,         // its electric arc jumps on to more enemies        [Striker]
-    Bedrock,           // its stone cracks last longer and go deeper       [Guardian]
+    Conductor,         // its electric arc jumps on to more enemies        [Alchemist]
+    Bedrock,           // its stone cracks last longer and go deeper       [Alchemist]
     Echo,              // chance a hit strikes twice                       [Striker]
     Tesla,             // chance a hit zaps nearby enemies                 [Support]
     Bomber,            // chance a kill explodes                           [Support]
@@ -111,7 +111,7 @@ enum class UpgradeKind {
     SummonWisps,       // kills let loose homing wisps                     [Summoner]
     SummonTotem,       // plants a totem that slows enemies around it      [Summoner]
     SummonWarden,      // spirits circle the core, hitting what they touch [Summoner]
-    SummonDragon,      // a dragonling breathes the ball's element         [Summoner]
+    SummonSword,       // a spectral sword darts through enemies (was the Dragonling) [Summoner]
 
     // ---- Jester items ----
     LuckyCharm,        // + luck points for the whole run                  [Jester]
@@ -129,7 +129,7 @@ enum class UpgradeKind {
     Grip,              // curves toward your pointer when it's near            [Slinger]
     Ambush,            // a thrown ball's first hit blinks it onto the next enemy [Slinger]
     TrickShot,         // until the first hit after a throw, every chance x3   [Slinger]
-    DoubleDown,        // catch a ball you threw: its next hit is double or nothing [Slinger]
+    Beckon,            // click empty ground: it blinks there (was Double down) [Slinger]
     ExecutionThrow,    // a thrown ball's first hit on an unhurt enemy crits   [Slinger]
 
     // ---- speed items for the other classes (2026-09-28): "still" ones grow
@@ -216,7 +216,7 @@ enum class UpgradeKind {
     SuppressingFire,   // bullets slow what they hit                          [Shooter]
     AmmoFeed,          // a wall bounce fires a volley                        [Shooter]
     WindUp,            // held longer before your throw, it flies faster      [Slinger]
-    BankThrow,         // wall bounces after your throw charge its first hit  [Slinger]
+    PingPong,          // after a throw: wall, enemy, wall... (was Bank throw)  [Slinger]
     Bully,             // + damage vs bigger enemies                          [Striker]
     Carom,             // a hit right after a clack hits harder               [Striker]
     // ---- rares (2026-10-04), same home and same rule ----
@@ -247,7 +247,7 @@ enum class UpgradeKind {
     WardRing,          // the core throws back the first enemy every few s    [Guardian]
     Juggernaut,        // its size bonus counts double as damage              [Guardian]
     LastLine,          // once a fight, a low core blasts everything away     [Guardian]
-    SlotMachine,       // spins for buffs now and then                        [Jester]
+    LuckyNumber,       // rolls 1-10 now and then: high = fast, low = heavy (was Slot machine) [Jester]
     WildMagic,         // a double casts a random ability from the run        [Jester]
     SpellChorus,       // every 5th cast, every ball casts                    [Mage]
     Chronomancy,       // each cast slows every enemy a moment                [Mage]
@@ -259,7 +259,7 @@ enum class UpgradeKind {
     Lightspeed,        // very fast, its hits chain and don't slow it         [Striker]
     SpiritHost,        // 5 wisps out merge into a great spirit               [Summoner]
     TwinCall,          // everything it summons comes in pairs                [Summoner]
-    Fortify,           // its turrets stop what touches them and last longer  [Summoner]
+    BabyDragon,        // a little dragon at its side breathes its element (was Fortify) [Summoner]
     // ---- legendaries (2026-10-05), same home and same rule ----
     Titan,             // grows on every core bounce; full size, a quake      [Guardian]
     Archmage,          // abilities twice as fast, each cast stronger         [Mage]
@@ -269,14 +269,14 @@ enum class UpgradeKind {
     LeadStorm,         // now and then it empties the gun all around          [Shooter]
     Reaper,            // the blink fires after every hit                     [Assassin]
     Contract,          // the strongest enemy takes a share of its max hp     [Assassin]
-    Necromancer,       // what its summons kill rises as an exploding ghost   [Summoner]
-    Overlord,          // every ball's summons are its own                    [Summoner]
+    Hive,              // a swarm of tiny elemental bugs (was Necromancer)   [Summoner]
+    ElderDragon,       // one huge dragon circles the arena (was Overlord)   [Summoner]
     Rigged,            // every chance in the run rolls twice                 [Jester]
-    Joker,             // each fight, a copy of a random legendary            [Jester]
+    Slot777,           // a slot machine over it: 777 frenzy, luck, coin rain (was Joker) [Jester]
     SteadyHand,        // aiming, time almost stops - and the throw hits more [Slinger]
     Showtime,          // quick catch-and-throws stack damage and speed       [Slinger]
-    PhilosopherStone,  // every hit carries elements of all six              [Alchemist]
-    GrandReaction,     // every 10th reaction is huge                         [Alchemist]
+    ToxicTrail,        // a trail of clouds in its elements (was Philosopher's stone) [Alchemist]
+    Primal,            // its first element's own power (was Grand reaction) [Alchemist]
 
     // ---- relics (keep CoreSpring first and Overcharge last) ----
     CoreSpring,        // balls ricochet off the core faster
@@ -312,8 +312,12 @@ enum class UpgradeKind {
     AbilitySwap,       // trades places with the enemy nearest the core
     AbilityShrink,     // enemies nearby shrink: slower, and take double
     AbilityBounty,     // a price on the strongest enemy's head
+    // ---- event-only (2026-10-05): never rolled ----
+    Cocoon,            // does nothing; hatches into an Epic+ item after 3 fights (its level = fights left)
+    // ---- items added after the abilities (2026-10-05) ----
+    BlackPlague,       // enemies it hits may catch a plague: they go mad and spread it [Alchemist]
 };
-inline constexpr int kUpgradeKindCount = static_cast<int>(UpgradeKind::AbilityBounty) + 1;
+inline constexpr int kUpgradeKindCount = static_cast<int>(UpgradeKind::BlackPlague) + 1;
 inline constexpr int kMaxUpgradeKinds = 384;   // capacity of UpgradeCtx::locked
 static_assert(kUpgradeKindCount <= kMaxUpgradeKinds, "raise kMaxUpgradeKinds");
 

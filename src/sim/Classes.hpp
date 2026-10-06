@@ -151,6 +151,8 @@ struct ShooterBullet {
     float frag = 0.f;         // "Frag rounds": burst x the bullet
     bool mark = false;        // "Marksman": this one marks
     float smart = 0.f;        // "Smart rounds": turn rate (rad/s)
+    int chain = 0;            // "Ion cannon": on a hit it becomes a bolt that jumps this many times...
+    float chainKeep = 1.f;    // ...keeping this much per jump
 };
 struct ShooterRail {          // Deadeye's rail shot, kept only to be drawn
     sf::Vector2f a, b;
@@ -216,9 +218,10 @@ struct SummonerMods {
     float totemSlow = 0.f;
     int wardens = 0;           // Warden: spirits around the core
     float wardenFrac = 0.f;
-    float dragonInterval = 0.f;   // Dragonling: seconds between breaths (0 = off)
-    float dragonFrac = 0.f;
-    float dragonCone = 0.f;
+    float swordEvery = 0.f;    // "Spectral sword": s between darts (0 = off)...
+    float swordFrac = 0.f;     // ...each cut x the hit...
+    int swords = 0;            // ...how many (one per item level)...
+    float swordRange = 0.f;    // ...and how far they reach
     float bond = 1.f;          // web "Bond": every summon hits harder and lasts longer by this
     float kennel = 0.f;        // "Kennel": s between wisps at a standstill (0 = off; slower = sooner)...
     float kennelFrac = 0.f;    // ...each x its hit
@@ -230,10 +233,18 @@ struct SummonerState {
     float spriteT = 0.f;       // time to the next spriteling
     float turretCd = 0.f;
     float totemT = 0.f;
-    float dragonT = 0.f;
-    bool dragonOut = false;    // the dragon has been placed (dragonPos is valid)
-    sf::Vector2f dragonPos{0.f, 0.f};
-    float dragonHeading = 0.f;
+    struct Sword {             // "Spectral sword" (one per item level)
+        float t = 0.f;         // to the next dart
+        bool out = false;      // placed (pos is valid)
+        sf::Vector2f pos{0.f, 0.f};
+        float ang = 0.f;       // where its point faces
+        int phase = 0;         // 0 floating, 1 darting, 2 flying back
+        float clock = 0.f;     // s into the phase
+        sf::Vector2f from{0.f, 0.f}, to{0.f, 0.f};
+        int hit[8] = {};       // enemies already cut this dart (Enemy::id)
+        int hits = 0;
+    };
+    Sword swords[3];
     float wardenAng = 0.f;
     float wardenR = 0.f;       // the spirits' current orbit (0 = not set yet: the usual one)
     float wardenRest[kMaxWardens] = {};
@@ -261,7 +272,6 @@ struct SummonShot {
     int pierce = 0;            // "Spirit host": a great spirit goes through this many more
     int lastHit = -1;          // ...not the same one twice in a row
     bool great = false;        // ...drawn big
-    bool boom = false;         // "Necromancer": a ghost that explodes on the first enemy
 };
 struct SummonTurret {
     sf::Vector2f pos;
@@ -307,11 +317,13 @@ struct JesterMods {
     int jackpotGold = 0;
     float sleight = 0.f;       // "Sleight": the teleport-strike hits x this (0 = off)...
     float sleightEvery = 0.f;  // ...charged this long at a standstill (slower = sooner)
+    int items = 0;             // Jester items it carries (the chaos grows with them)
 };
 struct JesterState {
     float coinMul = 1.f;       // this hit's coin, flipped after the last one
     bool chaosArmed = false;   // off a chaos bounce: the next hit is armed
     float sleightT = 0.f;      // "Sleight": charge toward the next trick
+    float chaosT = 0.f;        // the class's chaos: to its next trick
 };
 struct JesterWorld {
     struct Pop {               // a small outcome pip over an enemy (a double)
@@ -338,15 +350,15 @@ struct SlingerMods {
     float gripRange = 0.f;     // ...within this
     float ambush = 0.f;        // "Ambush": the thrown first hit blinks on and hits the next enemy x this (0 = off)
     float trick = 1.f;         // "Trick shot": chances x this until the thrown first hit
-    float doubleDown = 0.f;    // "Double down": the won hit x this (0 = off)
+    float beckonCd = 0.f;      // "Beckon": s between blinks to a click on empty ground (0 = off)
     float execution = 0.f;     // "Execution throw": thrown first hit on an unhurt enemy x this (0 = off)
 };
 struct SlingerState {
-    float sinceThrow = 99.f;   // seconds since you threw it ("Catch & release", "Double down")
+    float sinceThrow = 99.f;   // seconds since you threw it ("Catch & release")
     bool armed = false;        // you threw it and its first hit hasn't landed...
     float armedT = 0.f;        // ...for this much longer
     int stacks = 0;            // "Catch & release"
-    bool doubleDown = false;   // "Double down": the next hit rolls double or nothing
+    float beckonT = 0.f;       // "Beckon": s until it can blink again
     float burnT = 0.f;         // "Afterburner": seconds of flames left...
     float flameT = 0.f;        // ...to the next flame
 };
@@ -439,7 +451,7 @@ struct CommonMods {
     float suppress = 0.f;      // "Suppressing fire": slow per bullet
     int ammoFeed = 0;          // "Ammo feed": bullets per wall bounce
     float windUp = 0.f;        // "Wind-up": a throw + up to this when held long enough
-    float bankThrow = 0.f;     // "Bank throw": + this per wall before the thrown first hit
+    int pingPong = 0;          // "Ping-pong": walls per throw that aim it at the nearest enemy
     float bully = 0.f;         // "Bully": + damage vs bigger enemies (and bosses)
     float carom = 0.f;         // "Carom": + damage right after a clack
     // rares (2026-10-04)
@@ -475,7 +487,9 @@ struct CommonMods {
     float juggernaut = 0.f;    // "Juggernaut": damage + this x its size bonus
     float lastLine = 0.f;      // "Last line": the blast x its hit (0 = off)...
     float lastLineStun = 0.f;  // ...and the stun
-    float slotEvery = 0.f;     // "Slot machine": s between spins (0 = off)
+    float slotEvery = 0.f;     // "777": s between spins (0 = off)...
+    float slotBuff = 0.f;      // ...a triple lasts this long
+    float luckyEvery = 0.f;    // "Lucky number": s between rolls (0 = off)
     float wildCd = 0.f;        // "Wild magic": s between casts (0 = off)
     int chorus = 0;            // "Spell chorus": every Nth cast
     float chrono = 0.f;        // "Chronomancy": slow per cast
@@ -489,29 +503,35 @@ struct CommonMods {
     float spiritHost = 0.f;    // "Spirit host": the spirit's damage x (0 = off)...
     int spiritPierce = 0;      // ...enemies it goes through
     bool twinCall = false;     // "Twin call"
-    float fortify = 0.f;       // "Fortify": its turrets last x this (0 = off)
+    float babyDragon = 0.f;    // "Baby dragon": its breath x the hit (0 = off)...
+    float babyEvery = 0.f;     // ...every this many s
     // legendaries (2026-10-05)
     float titan = 0.f;         // "Titan": growth per core bounce (0 = off)...
     float titanQuake = 0.f, titanStun = 0.f;   // ...the quake at full size
     float archmage = 0.f;      // "Archmage": cast rate x this (0 = off)...
     float archStack = 0.f;     // ...+ ability damage per cast
     float timeStop = 0.f;      // "Time stop": s every enemy stands still (0 = off)
-    float ion = 0.f;           // "Ion cannon": the laser x its hit (0 = off)...
-    float ionCharge = 0.f;     // ...s to charge
+    float ion = 0.f;           // "Ion cannon": each jump keeps this of the hit (0 = off)...
+    int ionJumps = 0;          // ...jumps at the base fire rate
     float gunship = 0.f;       // "Gunship": the other balls' bullet x their hit (0 = off)
     float leadStorm = 0.f;     // "Lead storm": s between storms (0 = off)
     float reaper = 0.f;        // "Reaper": the blink's cooldown (0 = off)
     float contract = 0.f;      // "Contract": share of max hp per hit (0 = off)...
     float contractBoss = 0.f;  // ...of a boss's
-    float necro = 0.f;         // "Necromancer": the ghost's blast x its hit (0 = off)
-    float overlord = 0.f;      // "Overlord": every summon + this damage (0 = off)
+    float hive = 0.f;          // "Hive": a bite x its hit (0 = off)...
+    int hivePer = 0;           // ...bugs per hatch
+    float elderDragon = 0.f;   // "Elder dragon": its breath x the hit (0 = off)...
+    float elderEvery = 0.f;    // ...every this many s
     bool rigged = false;       // "Rigged"
     float steady = 0.f;        // "Steady hand": time scale while aimed (0 = off)...
     float steadyBonus = 0.f;   // ...the throw's first hit + up to this
     float showtime = 0.f;      // "Showtime": per quick catch (0 = off)
-    int philo = 0;             // "Philosopher's stone": elements per hit (0 = off)
-    int grandEvery = 0;        // "Grand reaction": every Nth (0 = off)...
-    float grand = 0.f;         // ...x the hit
+    float toxic = 0.f;         // "Toxic trail": a puff's bite x the hit (0 = off)...
+    float toxicLife = 0.f;     // ...how long a puff hangs
+    float primal = 0.f;        // "Primal": power x this (0 = off)...
+    float primalEvery = 0.f;   // ...every this many s
+    float plague = 0.f;        // "Black plague": chance a hit infects (0 = off)...
+    float plagueDps = 0.f;     // ...its sickness x the hit, per s
 };
 struct CommonState {
     bool doubled = false;      // this hit was doubled (crit, coin heads, a Jester double)
@@ -529,8 +549,7 @@ struct CommonState {
     bool coverPending = false; // "Covering fire": fire on the next tick (it needs the params)
     float chainT = 0.f;        // "Chain kill": s left to land a kill after a blink
     bool venom = false;        // "Venom blade": armed by a blink
-    bool bankArmed = false;    // "Bank throw": thrown, first hit not landed yet...
-    int banks = 0;             // ...walls since
+    int pingLeft = 0;          // "Ping-pong": aimed walls left this throw
     float caromT = 0.f;        // "Carom": s left after a clack
     float transT = 0.f;        // "Transmute": s it still carries...
     int transElem = 0;         // ...this element (an Element)
@@ -543,8 +562,14 @@ struct CommonState {
     bool skipping = false;     // "Skipping stone": thrown, not back at the core yet
     float golemT = 0.f;        // "Golem": to the next one
     float maelT = 0.f;         // "Maelstrom": to the next ring
-    float slotT = 0.f;         // "Slot machine": to the next spin...
-    float slotDmgT = 0.f, slotSpeedT = 0.f, slotGoldT = 0.f;   // ...its buffs, s left
+    float slotT = 0.f;         // "777": to the next spin...
+    float spinT = -1.f;        // ...s into the spin (-1 = still), the reels showing...
+    int reel[3] = {0, 0, 0};   // ...symbols: 0 = 7, 1 = clover, 2 = coin
+    float frenzyT = 0.f, rainT = 0.f, rainDropT = 0.f;   // ...a frenzy / a coin rain, s left
+    int luckyN = 0;            // "Lucky number": the roll showing (0 = none)...
+    float luckyT = 0.f;        // ...to the next roll
+    float luckyStopT = 0.f;    // ...a 1: stopped dead
+    bool luckyArmed = false;   // ...a 1: the next hit x3
     float wildT = 0.f;         // "Wild magic": cooldown
     int casts = 0;             // "Spell chorus": casts so far
     float spin = 0.f;          // "Minigun": 0..1 spun up...
@@ -556,13 +581,21 @@ struct CommonState {
     float titan = 0.f;         // "Titan": 0..1 grown (1 = twice the size)
     int archStacks = 0;        // "Archmage": casts this fight
     int stopCasts = 0;         // "Time stop": casts toward the next
-    float ionT = 0.f;          // "Ion cannon": 0..1 charged...
-    sf::Vector2f ionDir{1.f, 0.f};   // ...where it'll fire
+    float fireRateNow = 1.f;   // "Ion cannon": how fast it's firing right now (x its base)
     float stormT = 0.f;        // "Lead storm": to the next...
     float stormOn = 0.f;       // ...s left firing...
     float stormFireT = 0.f, stormAng = 0.f;
     int showStacks = 0;        // "Showtime": quick catches this fight
-    int grandN = 0;            // "Grand reaction": reactions so far
+    float spiritT = 0.f;       // "Spirit host": to its next wisp
+    float toxicT = 0.f;        // "Toxic trail": to the next puff...
+    int toxicTurn = 0;         // ...whose element is next
+    float primalT = 0.f;       // "Primal": to the next burst...
+    float flameT = 0.f, flameTickT = 0.f;   // ...fire: the flamethrower burning
+    sf::Vector2f flameDir{1.f, 0.f};
+    int strikesLeft = 0;       // ...electric: bolts still to fall
+    int quakesLeft = 0;        // ...stone: shocks still to come
+    float quakeT = 0.f;
+    float strikeT = 0.f;
     // abilities, second batch (2026-10-05; sim/WorldAbilities.cpp)
     float empower = 0.f;       // "Empower": the next hit x this (0 = not armed)...
     float empowerR = 0.f;      // ...and its wave this wide...
@@ -637,6 +670,76 @@ struct CommonWorld {
     };
     std::vector<Portal> portals;
     float tailT = 0.f, tailMul = 1.f;   // "Tailwind": every ball's cruise x tailMul while tailT runs
+    float luckT = 0.f;         // "777" clovers: every chance x cfg::common::slotLuckMul while it runs
+    std::vector<Cloud> trail;  // "Toxic trail" puffs
+    float rainT = 0.f;         // "Primal" water: rain - enemies slower, balls quicker
+    struct Bottle {            // "Primal" poison: thrown, it splashes where it lands
+        sf::Vector2f from, to;
+        float t = 0.f, dmg = 0.f;
+        int owner = -1;
+    };
+    std::vector<Bottle> bottles;
+    struct Field {             // "Primal": a lingering patch - frost (freezes) or a poison puddle
+        sf::Vector2f pos;
+        float r = 0.f, life = 0.f, maxLife = 1.f, tickT = 0.f, tick = 0.5f, dmg = 0.f;
+        int elem = 0, owner = -1;
+    };
+    std::vector<Field> fields;
+    struct Boulder {           // "Primal" stone: a rock falling out of the sky
+        sf::Vector2f at;
+        float t = 0.f, dmg = 0.f;
+        int owner = -1;
+    };
+    std::vector<Boulder> boulders;
+    float rainDmg = 0.f, rainDropT = 0.f;   // "Primal" water: each drop's bite...
+    int rainOwner = -1;                     // ...for this ball
+    struct Coin {              // "777" coin rain: falls from the top, hits and pays
+        sf::Vector2f pos, vel;
+        float dmg = 0.f, spin = 0.f;
+        int owner = -1;
+    };
+    std::vector<Coin> coins;
+    // Summoner epics / legendaries (2026-10-05): dragons and the swarm.
+    struct Dragon {            // "Baby dragon" (rides its ball) / "Elder dragon" (circles the arena)
+        int owner = -1;
+        bool elder = false;
+        int side = 0;          // a baby's place round its ball (Twin call: two, opposite)
+        sf::Vector2f pos, face{1.f, 0.f};
+        float ang = 0.f;       // round the ball / the core
+        float breathT = 0.f;   // s to the next breath
+        float flap = 0.f;      // wing beat clock (drawn)
+        float roar = 0.f;      // 1 -> 0 after a breath (drawn)
+        float charge = -1.f;   // s into drawing breath (-1 = not), turning its head toward...
+        int target = -1;       // ...this enemy (Enemy::id)
+        sf::Vector2f head{1.f, 0.f};   // where its head (and the fire) points - the body keeps facing its flight
+        float breathing = 0.f; // s of fire left in this breath...
+        float tickT = 0.f;     // ...to its next bite
+    };
+    std::vector<Dragon> dragons;
+    struct Bug {               // "Hive": a tiny biter
+        sf::Vector2f pos, vel;
+        float life = 0.f, biteT = 0.f, dmg = 0.f;
+        int elem = 0, owner = -1;
+        bool lit = false;      // a baby dragon breathed on it: its next bite explodes
+    };
+    std::vector<Bug> bugs;
+    std::vector<float> hiveT;  // per real ball: s to its next hatch
+    struct Fx {                // a cast's short flourish: drawn only (render/ClassRender.cpp)
+        enum Kind { Hook, Smite, Warp, Swap, Implode, Shards, Meteor, Afterimage, Shock,
+                    // items: each its own shape, so no two read alike
+                    Slash, Clover, Petals, Coins, Reels, Boomerang, Bastion, Glyph, Cracks, Dust, Clock, Echo,
+                    Star, Hexshield, Link, Sonic, Rune, Spokes, Pellets, Smoke, Wisps, Pillar, Blast, Fuse,
+                    Confetti, Cards, Arrow, Rise, Slam, Spiral, Collapse, Sight, Ping, Beckon,
+                    Mana, Leap, Saturate, Wild, Chrono, Scythe, Streak,
+                    Breath, Swath, Frost, Rubble, Splash, Storm, Drop, Boulder, Ion, Card };
+        Kind kind = Shock;
+        sf::Vector2f a, b;     // from / to (a hook's ball / its head; a swap's two ends...)
+        float life = 0.f, maxLife = 1.f, r = 0.f;
+        sf::Color color = sf::Color::White, color2 = sf::Color::White;
+        int ball = -1;         // the ball (owner) `a` rides, -1 none
+        int enemy = -1;        // the enemy (id) `b` rides, -1 none
+    };
+    std::vector<Fx> fx;
 };
 
 // On BallMods (`mods.cls`): what the ball's class items add up to.

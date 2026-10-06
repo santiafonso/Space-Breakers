@@ -29,7 +29,7 @@ template <> struct ClassHooks<BallRole::Striker> : NoClassHooks {
         namespace S = cfg::synergy;
         if (!b.isAscended(BallRole::Striker) || length(b.vel) <= w.ballCruise(b, p) * S::strikerShockSpeed) return;
         w.areaDamage(e.pos, S::strikerShockRadius, dmg * S::strikerShockFrac, &e);
-        ev.bursts.push_back({e.pos, S::strikerShockRadius, theme::ballFast, nullptr});
+        w.itemFx(CommonWorld::Fx::Sonic, e.pos, S::strikerShockRadius, theme::ballFast, 0.35f, normalized(b.vel, {1.f, 0.f}));
     }
 };
 
@@ -162,7 +162,7 @@ template <> struct ClassHooks<BallRole::Mage> : NoClassHooks {
             w.applyElement(e, el, b.owner, dmg, p, ev);
             any = true;
         }
-        if (any) ev.bursts.push_back({b.pos, R, theme::classMage, nullptr});
+        if (any) w.itemFx(CommonWorld::Fx::Rune, b.pos, R, theme::classMage, 0.45f);
     }
 };
 
@@ -221,10 +221,12 @@ void World::mageOnCast(Ball& b, int slot, bool echo, const WorldParams& p, Frame
         b.cls.mage.echoSlot = slot;
         b.cls.mage.echoT = cfg::mage::echoDelay;
     }
-    if (g.manaSpring > 0.f)   // "Mana spring": the other abilities get closer
+    if (g.manaSpring > 0.f) {   // "Mana spring": the other abilities get closer
+        itemFx(CommonWorld::Fx::Mana, b.pos, b.radius * 3.f, theme::classMage, 0.5f);
         for (int j = 0; j < kMaxAbilitySlots; ++j)
             if (j != slot && b.abilities[j].id != Ability::None)
                 b.abilityCd[j] = std::max(0.f, b.abilityCd[j] - abilityCooldown(b.abilities[j].id, b.abilities[j].level) * g.manaSpring);
+    }
 }
 
 void World::mageTick(Ball& b, float dt, const WorldParams& p, FrameEvents& ev) {
@@ -298,6 +300,11 @@ template <> struct ClassHooks<BallRole::Shooter> : NoClassHooks {
         u.suppress = b.mods.cls.common.suppress; // "Suppressing fire"
         u.frag = b.mods.cls.common.frag;         // "Frag rounds"
         u.smart = b.mods.cls.common.smart;       // "Smart rounds"
+        if (const CommonMods& cm = b.mods.cls.common; cm.ion > 0.f) {   // "Ion cannon": the faster it fires, the further it jumps
+            const float over = std::max(0.f, b.cls.common.fireRateNow - 1.f);
+            u.chain = std::min(cfg::common::ionJumpsMax, cm.ionJumps + static_cast<int>(over * cfg::common::ionRateJumps));
+            u.chainKeep = cm.ion;
+        }
         if (const int mk = b.mods.cls.common.marksman; mk > 0 && ++b.cls.common.shots % mk == 0) {   // "Marksman"
             u.dmg *= cfg::common::marksmanMul;
             u.mark = true;
@@ -329,71 +336,6 @@ template <> struct ClassHooks<BallRole::Shooter> : NoClassHooks {
         }
         auto& rails = w.classWorld_.shooter.rails;
         if (rails.size() < 8) rails.push_back({b.pos, b.pos + dir * t, S::deadeyeRailLife});
-    }
-
-    // "Ion cannon": the heading from the ball down which a beam would cut the
-    // most enemies (the nearest such one breaks a tie), or the boss.
-    static bool ionAim(const World& w, const Ball& b, sf::Vector2f& dir) {
-        const float hw = cfg::common::ionWidth * w.arenaScale();
-        int best = 0;
-        float bestD = 1e18f;
-        for (const Enemy& e : w.enemies_) {
-            if (e.hp <= 0.f || e.orbiter) continue;
-            const sf::Vector2f d = normalized(e.pos - b.pos, {1.f, 0.f});
-            int n = 0;
-            for (const Enemy& o : w.enemies_) {
-                if (o.hp <= 0.f || o.orbiter) continue;
-                const float along = dot(o.pos - b.pos, d);
-                if (along > 0.f && length(o.pos - (b.pos + d * along)) <= hw + o.radius) ++n;
-            }
-            const float dist = dot(e.pos - b.pos, e.pos - b.pos);
-            if (n > best || (n == best && dist < bestD)) { best = n; bestD = dist; dir = d; }
-        }
-        if (best > 0) return true;
-        if (w.boss_.alive && w.boss_.intro <= 0.f) {
-            dir = normalized(w.boss_.pos - b.pos, {1.f, 0.f});
-            return true;
-        }
-        return false;
-    }
-
-    // ...and the beam: through everything to the wall, with its element.
-    static void ionFire(World& w, Ball& b, sf::Vector2f dir, const WorldParams& p, FrameEvents& ev) {
-        namespace C = cfg::common;
-        float t = 1e9f;
-        const sf::Vector2f sz = w.size_;
-        if (dir.x > 1e-4f) t = std::min(t, (sz.x - b.pos.x) / dir.x);
-        if (dir.x < -1e-4f) t = std::min(t, -b.pos.x / dir.x);
-        if (dir.y > 1e-4f) t = std::min(t, (sz.y - b.pos.y) / dir.y);
-        if (dir.y < -1e-4f) t = std::min(t, -b.pos.y / dir.y);
-        t = clampf(t, 0.f, 4000.f);
-        const CommonMods& c = b.mods.cls.common;
-        const float dmg = w.ballDamage(b, p) * c.ion * b.mods.cls.shooter.dmgMul;
-        const float hw = C::ionWidth * w.arenaScale();
-        const Element el = w.hitElement(b, p);
-        for (Enemy& e : w.enemies_) {
-            if (e.hp <= 0.f) continue;
-            const float along = clampf(dot(e.pos - b.pos, dir), 0.f, t);
-            if (length(e.pos - (b.pos + dir * along)) > hw + e.radius) continue;
-            const bool hollow = c.hollow > 0.f && (e.burn > 0.f || e.poison > 0.f || e.frozen > 0.f || e.soak > 0.f ||
-                                                   e.cracks > 0 || (e.elemT > 0.f && e.elem != Element::Plain));
-            w.damageEnemy(e, dmg * (e.mark > 0.f ? p.markMul : 1.f) * (hollow ? 1.f + c.hollow : 1.f));   // "Hollow point"
-            if (c.marksman > 0) e.mark = std::max(e.mark, cfg::role::markDuration);                        // "Marksman"
-            w.applyElement(e, el, b.owner, dmg, p, ev);
-        }
-        Boss& bo = w.boss_;
-        if (bo.alive && bo.intro <= 0.f) {
-            const float along = clampf(dot(bo.pos - b.pos, dir), 0.f, t);
-            if (length(bo.pos - (b.pos + dir * along)) <= hw + bo.radius) {
-                bo.hp -= dmg * cfg::shooter::bossFrac;
-                bo.hitFlash = 1.f;
-            }
-        }
-        auto& rails = w.classWorld_.shooter.rails;
-        if (rails.size() < 8) rails.push_back({b.pos, b.pos + dir * t, C::ionLife, C::ionLife, hw});
-        b.squash = 1.f;
-        b.squashAxis = dir;
-        b.vel -= dir * std::min(length(b.vel) * 0.5f, 120.f * w.arenaScale());   // a kick back
     }
 
     static void tick(World& w, Ball& b, float dt, const WorldParams& p, FrameEvents& ev) {
@@ -432,22 +374,11 @@ template <> struct ClassHooks<BallRole::Shooter> : NoClassHooks {
                 cs.stormT = cm.leadStorm;
                 cs.stormOn = cfg::common::leadStormTime;
                 cs.stormFireT = 0.f;
-                ev.bursts.push_back({b.pos, b.radius * 3.f, theme::classShooter, nullptr});
+                w.itemFx(CommonWorld::Fx::Spokes, b.pos, b.radius * 3.f, theme::classShooter, 0.4f);
             }
         }
-        if (cm.ion > 0.f) {   // "Ion cannon": no bullets - it charges the beam ("Slug" / "Rapid fire" charge it faster)
-            const float rate = m.rate * (m.slug > 0.f ? 1.f + m.slug * still : 1.f);
-            sf::Vector2f dir;
-            const bool aimed = ionAim(w, b, dir);
-            if (aimed) cs.ionDir = dir;
-            cs.ionT = std::min(1.f, cs.ionT + dt * rate / std::max(0.2f, cm.ionCharge));
-            if (aimed && cs.ionT >= 1.f) {   // held at full until there's something to hit
-                cs.ionT = 0.f;
-                ionFire(w, b, dir, p, ev);
-            }
-            return;
-        }
-        st.fireT -= dt * speedRate * m.rate * (1.f + cfg::common::minigunMax * cs.spin);
+        cs.fireRateNow = speedRate * m.rate * (1.f + cfg::common::minigunMax * cs.spin);   // ("Ion cannon" reads it)
+        st.fireT -= dt * cs.fireRateNow;
         if (st.fireT > 0.f) return;
         sf::Vector2f at;
         const float range = S::range * w.arenaScale() * (1.f + 0.5f * m.slug * still);   // "Slug" reaches further
@@ -565,7 +496,7 @@ template <> struct ClassHooks<BallRole::Shooter> : NoClassHooks {
             if (u.frag > 0.f) {   // "Frag rounds": a little burst
                 const float R = cfg::common::fragRadius * w.arenaScale();
                 w.areaDamage(e.pos, R, u.dmg * u.frag, &e);
-                if (static_cast<int>(ev.bursts.size()) < 24) ev.bursts.push_back({e.pos, R, theme::classShooter, nullptr});
+                w.itemFx(CommonWorld::Fx::Pellets, e.pos, R, theme::classShooter, 0.25f);
             }
             if (u.mark) e.mark = std::max(e.mark, cfg::role::markDuration);   // "Marksman"
             if (u.suppress > 0.f) {   // "Suppressing fire": each one slows it a little more
@@ -574,6 +505,31 @@ template <> struct ClassHooks<BallRole::Shooter> : NoClassHooks {
             }
             if (u.elem != 0) w.applyElement(e, static_cast<Element>(u.elem), u.owner, u.dmg, p, ev);
             u.lastHit = e.id;
+            if (u.chain > 0) {   // "Ion cannon": the round turns into a bolt, jumping enemy to enemy
+                std::vector<const Enemy*> struck{&e};
+                const Enemy* from = &e;
+                float d = u.dmg;
+                for (int n = 0; n < u.chain; ++n) {
+                    Enemy* nx = nullptr;
+                    float bd = cfg::common::ionRange * w.arenaScale();
+                    bd *= bd;
+                    for (Enemy& o : w.enemies_) {
+                        if (o.hp <= 0.f || o.orbiter || std::find(struck.begin(), struck.end(), &o) != struck.end()) continue;
+                        const float d2 = dot(o.pos - from->pos, o.pos - from->pos);
+                        if (d2 < bd) { bd = d2; nx = &o; }
+                    }
+                    if (!nx) break;
+                    d *= u.chainKeep;
+                    w.damageEnemy(*nx, d * (nx->mark > 0.f ? p.markMul : 1.f));
+                    nx->hitFlash = std::max(nx->hitFlash, 0.55f);
+                    if (u.elem != 0) w.applyElement(*nx, static_cast<Element>(u.elem), u.owner, d, p, ev);
+                    w.itemFx(CommonWorld::Fx::Ion, from->pos, 0.f, theme::classShooter, 0.22f, nx->pos);
+                    struck.push_back(nx);
+                    from = nx;
+                }
+                u.life = 0.f;
+                continue;
+            }
             if (u.pierce > 0) { --u.pierce; continue; }
             if (u.hops > 0) {
                 sf::Vector2f at;
@@ -747,7 +703,7 @@ template <> struct ClassHooks<BallRole::Assassin> : NoClassHooks {
                 w.damageEnemy(e, hit * m.smokeFrac);
                 w.applyElement(e, el, b.owner, hit, p, ev);
             }
-            ev.bursts.push_back({dest, R, el == Element::Plain ? theme::classAssassin : elementColor(el), nullptr});
+            w.itemFx(CommonWorld::Fx::Smoke, dest, R, el == Element::Plain ? theme::classAssassin : elementColor(el), 0.8f);
         }
         if (m.backstab > 0.f) s.armedT = A::backstabWindow;
         s.blinked = true;   // "Lurk": the next hit spends the charge
@@ -782,6 +738,7 @@ template <> struct ClassHooks<BallRole::Assassin> : NoClassHooks {
     static void onHit(World& w, Ball& b, Enemy& e, float dmg, bool kill, const WorldParams& p, FrameEvents& ev) {
         b.cls.assassin.armedT = 0.f;   // "Backstab" is spent
         if (b.mods.cls.common.reaper > 0.f && !b.held) {   // "Reaper": every hit queues a blink, not just kills
+            w.itemFx(CommonWorld::Fx::Scythe, b.pos, b.radius * 2.2f, theme::classAssassin, 0.3f, normalized(b.vel, {1.f, 0.f}));
             b.cls.assassin.pending = true;
             b.cls.assassin.pendingAt = w.classWorld_.assassin.clock;
         }
@@ -845,13 +802,12 @@ template <> struct ClassHooks<BallRole::Summoner> : NoClassHooks {
                       FrameEvents& ev) {
         namespace E = cfg::element;
         const Ball* o = ownerBall(w, owner);
-        if (o) dmg *= (1.f + o->mods.cls.common.guardDog) * (1.f + o->mods.cls.common.overlord);   // "Guard dog" / "Overlord"
+        if (o) dmg *= 1.f + o->mods.cls.common.guardDog;   // "Guard dog"
         if (o && o->mods.cls.common.soulbind) full = true; // "Soulbind": the element's full effect
         const bool wasAlive = e.hp > 0.f;
         w.damageEnemy(e, dmg);
         if (o && wasAlive && e.hp <= 0.f && o->mods.cls.common.hatchery > 0)   // "Hatchery": a kill hatches wisps
             hatch(w, *o, e.pos, o->mods.cls.common.hatchery, p);
-        if (o && wasAlive && e.hp <= 0.f && o->mods.cls.common.necro > 0.f) raise(w, *o, e.pos, p);   // "Necromancer"
         const Element el = static_cast<Element>(elem);
         if (el == Element::Plain) return;
         if (full) {   // the element's own effect, like a ball hit
@@ -860,7 +816,7 @@ template <> struct ClassHooks<BallRole::Summoner> : NoClassHooks {
                 e.poison = E::poisonDuration;
                 e.poisonDps = std::min(e.poisonDps + E::poisonDpsPerHit * pot, E::poisonDpsMax * pot);
             } else if (el == Element::Ice) {
-                e.frozen = std::max(e.frozen, cfg::summoner::dragonFreeze * pot);
+                e.frozen = std::max(e.frozen, cfg::summoner::summonFreeze * pot);
             } else if (el == Element::Fire) {
                 e.burn = E::burnDuration;
                 e.burnDps = std::min(e.burnDps + E::burnPerHit * pot, E::burnMax * pot);
@@ -956,34 +912,6 @@ template <> struct ClassHooks<BallRole::Summoner> : NoClassHooks {
         }
     }
 
-    // "Necromancer": what a summon killed rises as a ghost that seeks an enemy and explodes.
-    static void raise(World& w, const Ball& o, sf::Vector2f at, const WorldParams& p) {
-        namespace S = cfg::summoner;
-        SummonerWorld& sw = w.classWorld_.summoner;
-        if (static_cast<int>(sw.shots.size()) >= S::maxShots) return;
-        SummonShot s;
-        s.pos = at;
-        s.vel = w.rng_.direction() * S::wispSpeed * 0.4f;
-        s.dmg = w.ballDamage(o, p) * o.mods.cls.common.necro * power(o);
-        s.life = S::wispLife * power(o) * (1.f + o.mods.cls.common.linger);
-        s.elem = static_cast<int>(o.element);
-        s.owner = o.owner;
-        s.wisp = true;
-        s.boom = true;
-        sw.shots.push_back(s);
-        twin(w, o, sw.shots);   // "Twin call"
-    }
-    // ...its blast: straight damage, so a ghost's kills don't raise more ghosts.
-    static void explode(World& w, const SummonShot& s, const WorldParams& p, FrameEvents& ev) {
-        const float R = cfg::common::necroRadius * w.arenaScale();
-        for (Enemy& e : w.enemies_) {
-            if (e.hp <= 0.f || length(e.pos - s.pos) > R + e.radius) continue;
-            w.damageEnemy(e, s.dmg);
-            if (s.elem != 0) w.applyElement(e, static_cast<Element>(s.elem), s.owner, s.dmg, p, ev);
-        }
-        ev.bursts.push_back({s.pos, R, s.elem != 0 ? elementColor(static_cast<Element>(s.elem)) : theme::classSummoner, nullptr});
-    }
-
     // "Martyr": a turret / totem that runs out bursts with its element.
     static void martyr(World& w, sf::Vector2f at, int elem, int owner, const WorldParams& p, FrameEvents& ev) {
         const Ball* o = ownerBall(w, owner);
@@ -992,7 +920,7 @@ template <> struct ClassHooks<BallRole::Summoner> : NoClassHooks {
         const float dmg = w.ballDamage(*o, p) * o->mods.cls.common.martyr;
         for (Enemy& e : w.enemies_)
             if (e.hp > 0.f && length(e.pos - at) <= R + e.radius) touch(w, e, dmg, elem, owner, false, p, ev);
-        ev.bursts.push_back({at, R, elem != 0 ? elementColor(static_cast<Element>(elem)) : theme::classSummoner, nullptr});
+        w.itemFx(CommonWorld::Fx::Pillar, at, R, elem != 0 ? elementColor(static_cast<Element>(elem)) : theme::classSummoner, 0.6f);
     }
 
     static int ownedBy(const std::vector<SummonTurret>& v, int owner) {
@@ -1074,8 +1002,7 @@ template <> struct ClassHooks<BallRole::Summoner> : NoClassHooks {
                 SummonTurret t;
                 t.pos = {std::clamp(s.dropAt.x, S::turretInset, w.size_.x - S::turretInset),
                          std::clamp(s.dropAt.y, S::turretInset, w.size_.y - S::turretInset)};
-                t.life = t.maxLife = cfg::style::dropLife * pw * (1.f + b.mods.cls.common.linger) *
-                                     std::max(1.f, b.mods.cls.common.fortify);   // "Fortify"
+                t.life = t.maxLife = cfg::style::dropLife * pw * (1.f + b.mods.cls.common.linger);
                 t.rate = cfg::style::dropRate;
                 t.dmg = w.ballDamage(b, p) * m.drop * pw;
                 t.aim = std::atan2(w.core_.pos.y - t.pos.y, w.core_.pos.x - t.pos.x);
@@ -1104,8 +1031,7 @@ template <> struct ClassHooks<BallRole::Summoner> : NoClassHooks {
                 SummonTurret t;
                 t.pos = {std::clamp(b.pos.x, S::turretInset, sz.x - S::turretInset),
                          std::clamp(b.pos.y, S::turretInset, sz.y - S::turretInset)};
-                t.life = t.maxLife = m.turretLife * pw * (1.f + b.mods.cls.common.linger) *
-                                     std::max(1.f, b.mods.cls.common.fortify);   // "Fortify"
+                t.life = t.maxLife = m.turretLife * pw * (1.f + b.mods.cls.common.linger);
                 t.rate = m.turretRate;
                 t.dmg = w.ballDamage(b, p) * m.turretFrac * pw;
                 t.aim = std::atan2(w.core_.pos.y - t.pos.y, w.core_.pos.x - t.pos.x);
@@ -1140,38 +1066,57 @@ template <> struct ClassHooks<BallRole::Summoner> : NoClassHooks {
             }
         }
 
-        // Dragonling: hovers beside the ball, breathes at the nearest enemy.
-        if (m.dragonInterval > 0.f) {
-            const float side = std::atan2(b.vel.y, b.vel.x) + kPi * 0.75f;   // behind-left of the heading
-            const sf::Vector2f want = b.pos + sf::Vector2f{std::cos(side), std::sin(side)} *
-                                                  (b.radius + S::dragonHover);
-            if (!s.dragonOut) { s.dragonPos = want; s.dragonOut = true; }
-            const sf::Vector2f prev = s.dragonPos;
-            s.dragonPos += (want - s.dragonPos) * (1.f - std::exp(-S::dragonFollow * dt));
-            const sf::Vector2f mv = s.dragonPos - prev;
-            if (length(mv) > 0.2f) s.dragonHeading = std::atan2(mv.y, mv.x);
-            sf::Vector2f to;
-            if ((s.dragonT -= dt) <= 0.f && target(w, s.dragonPos, S::dragonRange, to)) {
-                const float dir = std::atan2(to.y - s.dragonPos.y, to.x - s.dragonPos.x);
-                s.dragonHeading = dir;
-                const float dmg = w.ballDamage(b, p) * m.dragonFrac * pw;
-                auto inCone = [&](sf::Vector2f at, float r) {
-                    const sf::Vector2f d = at - s.dragonPos;
-                    const float dl = length(d);
-                    if (dl > S::dragonRange + r) return false;
-                    if (dl < r + 4.f) return true;
-                    return std::fabs(std::remainder(std::atan2(d.y, d.x) - dir, 2.f * kPi)) <
-                           m.dragonCone + std::asin(std::min(1.f, r / dl));
-                };
-                for (Enemy& e : w.enemies_)
-                    if (e.hp > 0.f && inCone(e.pos, e.radius)) touch(w, e, dmg, elem, b.owner, true, p, ev);
-                if (w.boss_.alive && inCone(w.boss_.pos, w.boss_.radius)) hitBoss(w, dmg);
-                if (static_cast<int>(sw.breaths.size()) < S::maxBreaths)
-                    sw.breaths.push_back({s.dragonPos, dir, m.dragonCone, S::dragonRange, S::breathLife, elem});
-                s.dragonT = m.dragonInterval;
+        // "Spectral sword": they float beside the ball (one per item level); each
+        // darts through the nearest enemy and back, out of step with the others.
+        for (int si = 0; si < 3; ++si) {
+            SummonerState::Sword& sw2 = s.swords[si];
+            if (si >= m.swords || m.swordEvery <= 0.f) { sw2.out = false; continue; }
+            const float k = w.arenaScale();
+            const float side = std::atan2(b.vel.y, b.vel.x) + kPi * 0.6f + static_cast<float>(si) * 1.2f;   // fanned out behind the ball
+            const sf::Vector2f home = b.pos + sf::Vector2f{std::cos(side), std::sin(side)} * (b.radius + S::swordHover * k);
+            if (!sw2.out) { sw2.pos = home; sw2.out = true; sw2.phase = 0; sw2.t = m.swordEvery * static_cast<float>(si) / 3.f; }
+            sw2.clock += dt;
+            if (sw2.phase == 0) {   // floating, point toward the nearest enemy
+                sw2.pos += (home - sw2.pos) * (1.f - std::exp(-S::swordFollow * dt));
+                sf::Vector2f to;
+                const bool seen = target(w, sw2.pos, m.swordRange * k, to);
+                if (seen) {
+                    const float want = std::atan2(to.y - sw2.pos.y, to.x - sw2.pos.x);
+                    sw2.ang += clampf(std::remainder(want - sw2.ang, 2.f * kPi), -8.f * dt, 8.f * dt);
+                }
+                if ((sw2.t -= dt) <= 0.f && seen) {   // dart: through it and a bit beyond
+                    sw2.phase = 1;
+                    sw2.clock = 0.f;
+                    sw2.from = sw2.pos;
+                    const sf::Vector2f d = normalized(to - sw2.pos, {1.f, 0.f});
+                    sw2.to = to + d * (S::swordOvershoot * k);
+                    sw2.ang = std::atan2(d.y, d.x);
+                    sw2.hits = 0;
+                }
+            } else if (sw2.phase == 1) {   // darting: cut everything the blade passes
+                const sf::Vector2f prev = sw2.pos;
+                const float dash = S::swordDash * std::max(1.f, length(sw2.to - sw2.from) / (320.f * k));   // a longer dart takes longer
+                sw2.pos = sw2.from + (sw2.to - sw2.from) * clampf(sw2.clock / dash, 0.f, 1.f);
+                const float dmg = w.ballDamage(b, p) * m.swordFrac * pw;
+                for (Enemy& e : w.enemies_) {
+                    if (e.hp <= 0.f || sw2.hits >= 8) continue;
+                    bool done = false;
+                    for (int h = 0; h < sw2.hits; ++h) done = done || sw2.hit[h] == e.id;
+                    if (done) continue;
+                    const sf::Vector2f ab = sw2.pos - prev, ap = e.pos - prev;   // distance to this step's segment
+                    const float tt = clampf(dot(ap, ab) / std::max(1e-3f, dot(ab, ab)), 0.f, 1.f);
+                    if (length(e.pos - (prev + ab * tt)) > e.radius + S::swordWidth * k) continue;
+                    sw2.hit[sw2.hits++] = e.id;
+                    touch(w, e, dmg, elem, b.owner, false, p, ev);
+                }
+                if (w.boss_.alive && length(w.boss_.pos - sw2.pos) < w.boss_.radius + S::swordWidth * k) hitBoss(w, dmg * 0.25f);
+                if (sw2.clock >= dash) { sw2.phase = 2; sw2.clock = 0.f; sw2.from = sw2.pos; }
+            } else {   // flying back, spinning once
+                const float q = clampf(sw2.clock / S::swordBack, 0.f, 1.f);
+                sw2.pos = sw2.from + (home - sw2.from) * (q * q * (3.f - 2.f * q));
+                sw2.ang += 2.f * kPi * dt / S::swordBack;
+                if (q >= 1.f) { sw2.phase = 0; sw2.t = m.swordEvery; }
             }
-        } else {
-            s.dragonOut = false;
         }
 
         // Warden: spirits on a ring around the core.
@@ -1238,25 +1183,6 @@ template <> struct ClassHooks<BallRole::Summoner> : NoClassHooks {
 
         for (Ball& b : w.balls_) tickBall(w, b, dt, p, ev);
 
-        // "Overlord": every summon on the field serves the ball that carries it.
-        const Ball* lord = nullptr;
-        for (const Ball& b : w.balls_)
-            if (!b.ghost && b.mods.cls.common.overlord > 0.f &&
-                (!lord || b.mods.cls.common.overlord > lord->mods.cls.common.overlord))
-                lord = &b;
-        if (lord) {
-            const int le = static_cast<int>(lord->element);
-            auto claim = [&](int& owner, int& elem) {
-                if (owner == lord->owner) return;
-                owner = lord->owner;
-                if (le != 0) elem = le;
-            };
-            for (SummonTurret& t : sw.turrets) claim(t.owner, t.elem);
-            for (SummonTotem& t : sw.totems) claim(t.owner, t.elem);
-            for (SummonShot& s : sw.shots) claim(s.owner, s.elem);
-            for (CommonWorld::Golem& g : w.classWorld_.common.golems) claim(g.owner, g.elem);
-        }
-
         // Turrets: aim and fire at the nearest enemy in range.
         for (SummonTurret& t : sw.turrets) {
             t.life -= dt;
@@ -1303,11 +1229,6 @@ template <> struct ClassHooks<BallRole::Summoner> : NoClassHooks {
                 if (s.owner >= 0 && s.owner < static_cast<int>(w.balls_.size()))
                     full = w.balls_[static_cast<std::size_t>(s.owner)].isAscended(BallRole::Summoner);
                 if (e.id == s.lastHit) continue;   // a great spirit passing through
-                if (s.boom) {   // "Necromancer": a ghost bursts on the first one
-                    explode(w, s, p, ev);
-                    s.life = 0.f;
-                    break;
-                }
                 touch(w, e, s.dmg, s.elem, s.owner, full, p, ev);
                 s.lastHit = e.id;
                 if (s.pierce > 0) --s.pierce;   // "Spirit host": on to the next one
@@ -1342,6 +1263,7 @@ template <> struct ClassHooks<BallRole::Summoner> : NoClassHooks {
             }
         }
         w.commonGolems(dt, p, ev);   // "Golem" (a common's summon, same rules as these)
+        w.commonDragons(dt, p, ev);  // the dragons and the swarm
         for (const SummonTotem& t : sw.totems)
             if (t.life <= 0.f) martyr(w, t.pos, t.elem, t.owner, p, ev);   // "Martyr"
         sw.totems.erase(std::remove_if(sw.totems.begin(), sw.totems.end(),
@@ -1361,7 +1283,7 @@ template <> struct ClassHooks<BallRole::Summoner> : NoClassHooks {
             SummonerState& s = b.cls.summoner;
             s.spriteT = cfg::summoner::spriteInterval * 0.5f;
             s.totemT = 0.f;
-            s.dragonT = 0.f;
+            for (auto& sw2 : s.swords) { sw2.t = 0.f; sw2.phase = 0; sw2.out = false; }
             s.turretCd = 0.f;
             for (float& r : s.wardenRest) r = 0.f;
         }
@@ -1466,7 +1388,7 @@ template <> struct ClassHooks<BallRole::Jester> : NoClassHooks {
             case Bomb: {
                 const float r = pk.m ? pk.m->bombRadius : S::bombRadius;
                 w.areaDamage(e.pos, r, dmg * S::bombFrac, &e);
-                ev.bursts.push_back({e.pos, r, theme::elemFire, nullptr});
+                w.itemFx(CommonWorld::Fx::Fuse, e.pos, r, theme::elemFire, 0.45f);
                 break;
             }
             case Hole:
@@ -1516,12 +1438,86 @@ template <> struct ClassHooks<BallRole::Jester> : NoClassHooks {
         if (j.jackpotChance <= 0.f || !roll(w, b, j.jackpotChance, p)) return;
         w.areaDamage(e.pos, cfg::jester::jackpotRadius, dmg * j.jackpotBlast, &e);   // "Jackpot"
         ev.midasGold += j.jackpotGold;
-        ev.bursts.push_back({e.pos, cfg::jester::jackpotRadius, theme::puGolden, "JACKPOT"});
+        ev.bursts.push_back({e.pos, 0.f, theme::puGolden, "JACKPOT"});
+        w.itemFx(CommonWorld::Fx::Confetti, e.pos, cfg::jester::jackpotRadius, theme::puGolden, 0.9f);
+    }
+
+    // The chaos: now and then it draws a card. The suit says what kind of
+    // trick, the rank how big; the face cards are their own.
+    //   Hearts   - mends the core, and every ball quickens (Tailwind)
+    //   Diamonds - gold, and a burst of bullets
+    //   Spades   - blades (low) or a smite (high)
+    //   Clubs    - a nova that shoves (low) or a chain zap (high)
+    //   Jack: a blink   Queen: a flock of missiles   King: a launch at full tilt and a nova where it lands
+    //   Ace: one of every suit
+    static const char* cardName(int suit, int rank) {
+        static std::string names[4][14];
+        static bool built = false;
+        if (!built) {
+            static const char* kSuit[4] = {"HEARTS", "DIAMONDS", "SPADES", "CLUBS"};
+            static const char* kRank[14] = {"", "ACE", "2", "3", "4", "5", "6", "7", "8", "9", "10", "JACK", "QUEEN", "KING"};
+            for (int s2 = 0; s2 < 4; ++s2)
+                for (int r = 1; r <= 13; ++r) names[s2][r] = std::string(kRank[r]) + " OF " + kSuit[s2] + "!";
+            built = true;
+        }
+        return names[suit][rank].c_str();
+    }
+    static bool suitTrick(World& w, Ball& b, int suit, int rank, const WorldParams& p, FrameEvents& ev) {
+        const int lvl = 1 + rank / 4;
+        const bool high = rank >= 8;
+        switch (suit) {
+            case 0:   // hearts
+                w.repairCore(w.core_.maxHp * 0.006f * static_cast<float>(rank));
+                w.fireAbility(b, AbilitySpec{Ability::Tailwind, lvl}, p, ev);
+                return true;
+            case 1: {   // diamonds
+                ev.midasGold += std::max(1, rank / 3);
+                w.commonVolley(b, p, 2 + rank / 2, b.pos);
+                return true;
+            }
+            case 2: return w.fireAbility(b, AbilitySpec{high ? Ability::Smite : Ability::Blades, lvl}, p, ev);
+            default: return w.fireAbility(b, AbilitySpec{high ? Ability::Arc : Ability::Nova, lvl}, p, ev);
+        }
+    }
+    static void chaos(World& w, Ball& b, float dt, const WorldParams& p, FrameEvents& ev) {
+        namespace J = cfg::jester;
+        if (!b.hasRole(BallRole::Jester) || b.ghost || b.held || !w.waveRunning_) return;
+        JesterState& s = b.cls.jester;
+        const int items = b.mods.cls.jester.items;
+        if ((s.chaosT -= dt) > 0.f) return;
+        int alive = 0;
+        for (const Enemy& e : w.enemies_) alive += e.hp > 0.f && !e.orbiter ? 1 : 0;
+        if (alive == 0 && !(w.boss_.alive && w.boss_.intro <= 0.f)) { s.chaosT = 0.f; return; }   // a card for when it counts
+        s.chaosT = std::max(J::chaosMin, J::chaosEvery - J::chaosPerItem * static_cast<float>(items));
+        const int draws = 1 + (items >= 3 ? 1 : 0) + (b.isAscended(BallRole::Jester) ? 1 : 0) + (items >= 6 ? 1 : 0);
+        for (int d = 0; d < draws; ++d) {
+            // the deeper the bag, the higher the cards run
+            const int rank = std::clamp(w.rng_.irange(1, 13) + (w.rng_.irange(0, 99) < 10 * items ? 3 : 0), 1, 13);
+            const int suit = w.rng_.irange(0, 3);
+            w.castBall_ = &b;
+            const int lvl = 1 + rank / 4;
+            if (rank == 11) w.fireAbility(b, AbilitySpec{Ability::Warp, lvl}, p, ev);   // Jack: a blink
+            else if (rank == 12)   // Queen: a flock of missiles
+                w.mageMissiles(b, 3 + items / 2, cfg::ability::missileFrac + cfg::ability::missileFracPerLevel * static_cast<float>(lvl), p);
+            else if (rank == 13) {   // King: flung at full tilt, a nova where it is
+                if (w.fireAbility(b, AbilitySpec{Ability::Dash, lvl}, p, ev)) b.vel = normalized(b.vel, {1.f, 0.f}) * w.ballMaxSpeed(b, p);
+                w.fireAbility(b, AbilitySpec{Ability::Nova, lvl}, p, ev);
+            } else if (rank == 1) {   // Ace: a bit of every suit
+                for (int s2 = 0; s2 < 4; ++s2) suitTrick(w, b, s2, 9, p, ev);
+            } else {
+                suitTrick(w, b, suit, rank, p, ev);
+            }
+            w.castBall_ = nullptr;
+            ev.bursts.push_back({b.pos, 0.f, suit < 2 ? sf::Color(236, 70, 80) : theme::classJester, cardName(suit, rank)});
+            w.itemFx(CommonWorld::Fx::Card, b.pos - sf::Vector2f{0.f, b.radius + 18.f * w.arenaScale()}, b.radius, theme::classJester, 1.1f,
+                     {static_cast<float>(suit), static_cast<float>(rank)});
+        }
     }
 
     // "Sleight": the slower it moves, the sooner it vanishes and reappears on
     // a random enemy, striking it.
     static void tick(World& w, Ball& b, float dt, const WorldParams& p, FrameEvents& ev) {
+        chaos(w, b, dt, p, ev);
         const JesterMods& m = b.mods.cls.jester;
         if (m.sleight <= 0.f || b.ghost || b.held || !w.waveRunning_) return;
         JesterState& s = b.cls.jester;
@@ -1545,7 +1541,7 @@ template <> struct ClassHooks<BallRole::Jester> : NoClassHooks {
         w.damageEnemy(*t, w.ballDamage(b, p) * m.sleight);
         pop(w, t->pos);
         ClassHooks<BallRole::Assassin>::addFx(w, from, b.pos, b.radius, false);
-        ev.bursts.push_back({t->pos, t->radius * 2.f, theme::classJester, nullptr});
+        w.itemFx(CommonWorld::Fx::Cards, t->pos, t->radius * 2.f, theme::classJester, 0.5f);
     }
 
     // "Chaos bounce": off the wall at a random angle, next hit armed.
@@ -1616,7 +1612,6 @@ template <> struct ClassHooks<BallRole::Slinger> : NoClassHooks {
         const SlingerMods& m = b.mods.cls.slinger;
         const bool quick = st.sinceThrow < S::releaseWindow;   // caught back soon after your throw
         if (m.releaseMax > 0) st.stacks = quick ? std::min(st.stacks + 1, m.releaseMax) : 0;   // "Catch & release"
-        if (m.doubleDown > 0.f && quick) st.doubleDown = true;                                // "Double down"
         if (b.isAscended(BallRole::Slinger))   // Master Slinger: a catch recharges its abilities
             for (int i = 0; i < kMaxAbilitySlots; ++i)
                 if (b.abilities[i].id != Ability::None)
@@ -1643,15 +1638,11 @@ template <> struct ClassHooks<BallRole::Slinger> : NoClassHooks {
         return k;
     }
 
-    static float preHit(World& w, Ball& b, const Enemy& e, const WorldParams& p) {
+    static float preHit(World&, Ball& b, const Enemy& e, const WorldParams&) {
         namespace S = cfg::slinger;
         SlingerState& st = b.cls.slinger;
         const SlingerMods& m = b.mods.cls.slinger;
         float k = 1.f;
-        if (st.doubleDown) {   // "Double down": double or nothing, luck on the win
-            st.doubleDown = false;
-            k *= w.chance(S::doubleChance, p) ? m.doubleDown : 0.f;
-        }
         if (!st.armed) return k;
         if (b.hasRole(BallRole::Slinger))   // the class: your throw's first hit lands harder
             k *= b.isAscended(BallRole::Slinger) ? S::masterThrownHit : S::thrownHit;
@@ -1689,7 +1680,7 @@ template <> struct ClassHooks<BallRole::Slinger> : NoClassHooks {
         b.trail.clear();
         w.damageEnemy(*t, dmg * amb);
         ClassHooks<BallRole::Assassin>::addFx(w, from, b.pos, b.radius, true);
-        ev.bursts.push_back({t->pos, t->radius * 2.2f, theme::classSlinger, nullptr});
+        w.itemFx(CommonWorld::Fx::Arrow, t->pos, t->radius * 2.2f, theme::classSlinger, 0.4f, dir);
     }
 
     // "Afterburner": the flames burn what stands in them - the Fire element
@@ -1744,7 +1735,7 @@ void World::commonGolems(float dt, const WorldParams& p, FrameEvents& ev) {
         g.owner = b.owner;
         gs.push_back(g);
         H::twin(*this, b, gs);   // "Twin call"
-        ev.bursts.push_back({g.pos, C::golemRadius * 2.f * k, theme::classSummoner, nullptr});
+        itemFx(CommonWorld::Fx::Rise, g.pos, C::golemRadius * 2.f * k, theme::classSummoner, 0.5f);
     }
     for (CommonWorld::Golem& g : gs) {
         g.life -= dt;
@@ -1774,25 +1765,30 @@ void World::commonGolems(float dt, const WorldParams& p, FrameEvents& ev) {
             e.vel += normalized(e.pos - core_.pos, {1.f, 0.f}) * C::golemKnock * k * e.knockTaken;
             e.stagger = std::max(e.stagger, 0.3f);
         }
-        ev.bursts.push_back({g.pos, R, theme::classSummoner, nullptr});
+        itemFx(CommonWorld::Fx::Slam, g.pos, R, theme::classSummoner, 0.4f);
     }
     for (const CommonWorld::Golem& g : gs)
         if (g.life <= 0.f) H::martyr(*this, g.pos, g.elem, g.owner, p, ev);   // "Martyr"
 
-    // "Spirit host": five of a ball's wisps out merge into one great spirit.
+    // "Spirit host": five of a ball's wisps out merge into one great spirit -
+    // and it lets wisps loose on its own now and then, so it needs no other item.
     auto& shots = classWorld_.summoner.shots;
-    for (const Ball& b : balls_) {
+    for (Ball& b : balls_) {
         const CommonMods& c = b.mods.cls.common;
         if (c.spiritHost <= 0.f) continue;
+        if (waveRunning_ && !b.held && (b.cls.common.spiritT -= dt) <= 0.f) {
+            b.cls.common.spiritT = C::spiritWispEvery;
+            H::hatch(*this, b, b.pos, 1, p);
+        }
         int n = 0;
-        for (const SummonShot& s : shots) n += s.wisp && !s.great && !s.boom && s.owner == b.owner ? 1 : 0;
+        for (const SummonShot& s : shots) n += s.wisp && !s.great && s.owner == b.owner ? 1 : 0;
         if (n < C::spiritAt) continue;
         SummonShot great;
         sf::Vector2f at{0.f, 0.f};
         float dmg = 0.f;
         int taken = 0;
         for (SummonShot& s : shots)
-            if (taken < C::spiritAt && s.wisp && !s.great && !s.boom && s.owner == b.owner && s.life > 0.f) {
+            if (taken < C::spiritAt && s.wisp && !s.great && s.owner == b.owner && s.life > 0.f) {
                 at += s.pos;
                 dmg += s.dmg;
                 great.elem = s.elem;
@@ -1808,9 +1804,276 @@ void World::commonGolems(float dt, const WorldParams& p, FrameEvents& ev) {
         great.great = true;
         great.pierce = c.spiritPierce;
         shots.push_back(great);
-        ev.bursts.push_back({great.pos, 50.f * k, theme::classSummoner, nullptr});
+        itemFx(CommonWorld::Fx::Spiral, great.pos, 50.f * k, theme::classSummoner, 0.6f);
     }
     gs.erase(std::remove_if(gs.begin(), gs.end(), [](const CommonWorld::Golem& g) { return g.life <= 0.f; }), gs.end());
+}
+
+// The Summoner's big ones (2026-10-05). "Baby dragon" (epic): a little dragon
+// rides beside its ball and breathes a cone of its element. "Elder dragon"
+// (legendary, the one): a huge dragon circles the arena all fight; its breath
+// sweeps a long, wide swath. "Hive" (legendary, the many): tiny bugs hatch,
+// run at the nearest enemy and nibble it. Together: the elder's roar makes
+// every baby breathe (and harder), a baby's breath lights bugs (their next
+// bite explodes), and the elder's swath hatches more bugs.
+void World::commonDragons(float dt, const WorldParams& p, FrameEvents& ev) {
+    namespace C = cfg::common;
+    using H = ClassHooks<BallRole::Summoner>;
+    CommonWorld& cw = classWorld_.common;
+    const float k = arenaScale();
+    if (!waveRunning_) return;
+    bool anyElder = false, anyHive = false;
+    for (const Ball& b : balls_) {
+        anyElder = anyElder || b.mods.cls.common.elderDragon > 0.f;
+        anyHive = anyHive || b.mods.cls.common.hive > 0.f;
+    }
+
+    // Who should have which dragons: one baby per ball (two with Twin call), one elder.
+    auto has = [&](int owner, bool elder, int side) {
+        for (const auto& d : cw.dragons)
+            if (d.owner == owner && d.elder == elder && d.side == side) return true;
+        return false;
+    };
+    for (const Ball& b : balls_) {
+        const CommonMods& c = b.mods.cls.common;
+        const int babies = c.babyDragon > 0.f ? (c.twinCall ? 2 : 1) : 0;
+        for (int side = 0; side < babies; ++side)
+            if (!has(b.owner, false, side)) {
+                CommonWorld::Dragon d;
+                d.owner = b.owner;
+                d.side = side;
+                d.ang = kPi * static_cast<float>(side);
+                d.pos = b.pos;
+                d.breathT = c.babyEvery * 0.5f;
+                cw.dragons.push_back(d);
+            }
+        if (c.elderDragon > 0.f && !has(b.owner, true, 0)) {
+            CommonWorld::Dragon d;
+            d.owner = b.owner;
+            d.elder = true;
+            d.ang = rng_.range(0.f, 2.f * kPi);
+            d.pos = core_.pos + sf::Vector2f{std::cos(d.ang), std::sin(d.ang)} * (std::min(size_.x, size_.y) * 2.f);   // flies in from afar
+            d.breathT = c.elderEvery * 0.6f;
+            cw.dragons.push_back(d);
+        }
+    }
+    cw.dragons.erase(std::remove_if(cw.dragons.begin(), cw.dragons.end(), [&](const CommonWorld::Dragon& d) {
+                         const Ball* o = H::ownerBall(*this, d.owner);
+                         if (!o) return true;
+                         const CommonMods& c = o->mods.cls.common;
+                         return d.elder ? c.elderDragon <= 0.f : (c.babyDragon <= 0.f || d.side >= (c.twinCall ? 2 : 1));
+                     }),
+                     cw.dragons.end());
+
+    auto nearest = [&](sf::Vector2f from, float range) -> Enemy* {
+        Enemy* t = nullptr;
+        float bd = range * range;
+        for (Enemy& e : enemies_) {
+            if (e.hp <= 0.f || e.orbiter) continue;
+            const float d2 = dot(e.pos - from, e.pos - from);
+            if (d2 < bd) { bd = d2; t = &e; }
+        }
+        return t;
+    };
+    // The body faces its flight; only the head (and its fire) swings round to a
+    // mark, never further than headReach from the body, never snapping.
+    auto turnHead = [&](CommonWorld::Dragon& d, sf::Vector2f want, float rate) {
+        const float body = std::atan2(d.face.y, d.face.x);
+        const float cur = std::atan2(d.head.y, d.head.x);
+        float to = std::atan2(want.y - d.pos.y, want.x - d.pos.x);
+        to = body + clampf(std::remainder(to - body, 2.f * kPi), -C::headReach, C::headReach);
+        const float da = clampf(std::remainder(to - cur, 2.f * kPi), -rate * dt, rate * dt);
+        d.head = {std::cos(cur + da), std::sin(cur + da)};
+    };
+    auto settleHead = [&](CommonWorld::Dragon& d, float rate) {   // idle: the head follows the body
+        turnHead(d, d.pos + d.face * 100.f, rate);
+    };
+    auto faceFlight = [&](CommonWorld::Dragon& d, sf::Vector2f step, float rate) {
+        if (length(step) < 1e-3f) return;
+        const float cur = std::atan2(d.face.y, d.face.x), to = std::atan2(step.y, step.x);
+        const float da = clampf(std::remainder(to - cur, 2.f * kPi), -rate * dt, rate * dt);
+        const sf::Vector2f nf{std::cos(cur + da), std::sin(cur + da)};
+        const float hd = std::atan2(d.head.y, d.head.x) + da;   // the head turns with the body
+        d.face = nf;
+        d.head = {std::cos(hd), std::sin(hd)};
+    };
+    auto byId = [&](int id) -> Enemy* {
+        for (Enemy& e : enemies_)
+            if (e.id == id && e.hp > 0.f) return &e;
+        return nullptr;
+    };
+    auto mouth = [&](const CommonWorld::Dragon& d) { return d.pos + d.head * ((d.elder ? 46.f : 10.f) * k * 0.65f); };
+    // One bite of a breath: a baby's cone, or the elder's long swath, out of its mouth.
+    auto burn = [&](CommonWorld::Dragon& d, const Ball& o, float share) {
+        const CommonMods& c = o.mods.cls.common;
+        const int elem = static_cast<int>(hitElement(o, p));
+        const sf::Vector2f m = mouth(d), dir = d.head;
+        if (!d.elder) {
+            const float dmg = ballDamage(o, p) * c.babyDragon * H::power(o) * (anyElder ? C::elderBabyMul : 1.f) * share;
+            const float reach = C::babyRange * k, cosCone = std::cos(C::babyCone);
+            for (Enemy& e : enemies_) {
+                if (e.hp <= 0.f || e.orbiter) continue;
+                const sf::Vector2f to = e.pos - m;
+                const float l = length(to);
+                if (l > reach + e.radius || (l > 1.f && dot(to / l, dir) < cosCone)) continue;
+                H::touch(*this, e, dmg, elem, o.owner, false, p, ev);
+            }
+            for (auto& g : cw.bugs) {   // ...and lights any bugs it passes over
+                const sf::Vector2f to = g.pos - m;
+                const float l = length(to);
+                if (l < reach && (l < 1.f || dot(to / l, dir) >= cosCone)) g.lit = true;
+            }
+            return;
+        }
+        const float L = C::elderLength * k, W = C::elderWidth * k;
+        const float dmg = ballDamage(o, p) * c.elderDragon * H::power(o) * share;
+        const sf::Vector2f side{-dir.y, dir.x};
+        for (Enemy& e : enemies_) {   // everything in the swath
+            if (e.hp <= 0.f || e.orbiter) continue;
+            const sf::Vector2f to = e.pos - m;
+            const float along = dot(to, dir);
+            if (along < 0.f || along > L || std::fabs(dot(to, side)) > W * (0.4f + 0.6f * along / L) + e.radius) continue;
+            H::touch(*this, e, dmg, elem, o.owner, true, p, ev);
+        }
+        if (boss_.alive && boss_.intro <= 0.f) {
+            const sf::Vector2f to = boss_.pos - m;
+            const float along = dot(to, dir);
+            if (along > 0.f && along < L && std::fabs(dot(to, side)) < W + boss_.radius) {
+                boss_.hp -= dmg * cfg::shooter::bossFrac;
+                boss_.hitFlash = 1.f;
+            }
+        }
+    };
+
+    bool roared = false;
+    for (auto& d : cw.dragons) {
+        const Ball* o = H::ownerBall(*this, d.owner);
+        if (!o) continue;
+        const CommonMods& c = o->mods.cls.common;
+        d.flap += dt * (d.elder ? 3.f : 9.f);
+        d.roar = std::max(0.f, d.roar - dt * 1.5f);
+        const float turn = d.elder ? C::elderTurn : C::babyTurn;
+        const float range = d.elder ? 1e9f : C::babyRange * k;
+        // Where it flies: a baby beside its ball, the elder on a slow wide circle round the core.
+        sf::Vector2f step;
+        if (!d.elder) {
+            d.ang += dt * 2.2f;
+            const sf::Vector2f want = o->pos + sf::Vector2f{std::cos(d.ang), std::sin(d.ang)} * (C::babyOrbit * k + o->radius);
+            step = (want - d.pos) * std::min(1.f, dt * 10.f);
+        } else {
+            d.ang += C::elderSpin * dt;
+            const float R = std::min(size_.x, size_.y) * C::elderOrbit;
+            const sf::Vector2f want = core_.pos + sf::Vector2f{std::cos(d.ang), std::sin(d.ang)} * R;
+            step = (want - d.pos) * std::min(1.f, dt * 1.5f);
+        }
+        d.pos += step;
+        faceFlight(d, step, d.elder ? 2.5f : 8.f);
+        Enemy* t = byId(d.target);
+        if (d.breathing > 0.f) {   // a breath of fire: the head tracks its mark, the fire bites as it goes
+            if (!t) t = nearest(d.pos, range);
+            if (t) { d.target = t->id; turnHead(d, t->pos, turn * 0.6f); }
+            d.breathing -= dt;
+            d.roar = 1.f;
+            if ((d.tickT -= dt) <= 0.f) {
+                d.tickT += C::breathTick;
+                burn(d, *o, C::breathTick / (d.elder ? C::elderBreathTime : C::babyBreathTime));
+            }
+            if (d.breathing <= 0.f) d.breathT = d.elder ? c.elderEvery : c.babyEvery;
+            continue;
+        }
+        if (d.charge >= 0.f) {   // drawing breath: the head turns to the mark
+            if (!t) t = nearest(d.pos, range);
+            if (t) { d.target = t->id; turnHead(d, t->pos, turn); }
+            if ((d.charge += dt) >= (d.elder ? C::elderCharge : C::babyCharge)) {
+                d.charge = -1.f;
+                d.breathing = d.elder ? C::elderBreathTime : C::babyBreathTime;
+                d.tickT = 0.f;
+                if (d.elder) {
+                    roared = true;
+                    ev.kick = std::max(ev.kick, 6.f);
+                    if (anyHive)   // the fire hatches bugs along its path
+                        for (const Ball& hb : balls_) {
+                            if (hb.mods.cls.common.hive <= 0.f) continue;
+                            for (int i = 0; i < C::elderHiveBugs && static_cast<int>(cw.bugs.size()) < C::hiveMax; ++i) {
+                                CommonWorld::Bug g;
+                                g.pos = mouth(d) + d.head * (C::elderLength * k * (0.2f + 0.2f * static_cast<float>(i)));
+                                g.vel = rng_.direction() * 40.f;
+                                g.life = C::hiveLife;
+                                g.dmg = ballDamage(hb, p) * hb.mods.cls.common.hive * H::power(hb);
+                                g.elem = static_cast<int>(hitElement(hb, p));
+                                g.owner = hb.owner;
+                                cw.bugs.push_back(g);
+                            }
+                            break;
+                        }
+                }
+            }
+            continue;
+        }
+        settleHead(d, turn * 0.5f);
+        if ((d.breathT -= dt) > 0.f) continue;
+        d.breathT = 0.f;   // ready: it starts the moment something is in reach
+        if (Enemy* nt = nearest(d.pos, range)) { d.charge = 0.f; d.target = nt->id; }
+    }
+    if (roared)   // the young answer the elder's roar: they all draw breath at once
+        for (auto& d : cw.dragons)
+            if (!d.elder && d.charge < 0.f && d.breathing <= 0.f)
+                if (Enemy* nt = nearest(d.pos, C::babyRange * k * 1.5f)) { d.charge = 0.f; d.target = nt->id; }
+
+    // The Hive: every ball carrying it hatches a few bugs a second.
+    if (cw.hiveT.size() < balls_.size()) cw.hiveT.resize(balls_.size(), 0.f);
+    for (std::size_t i = 0; i < balls_.size(); ++i) {
+        const Ball& b = balls_[i];
+        const CommonMods& c = b.mods.cls.common;
+        if (c.hive <= 0.f || b.held) continue;
+        if ((cw.hiveT[i] -= dt) > 0.f) continue;
+        cw.hiveT[i] = C::hiveEvery;
+        for (int n = 0; n < c.hivePer && static_cast<int>(cw.bugs.size()) < C::hiveMax; ++n) {
+            CommonWorld::Bug g;
+            g.pos = b.pos;
+            g.vel = rng_.direction() * C::hiveSpeed * k * 0.6f;
+            g.life = C::hiveLife * (1.f + c.linger);
+            g.dmg = ballDamage(b, p) * c.hive * H::power(b);
+            g.elem = static_cast<int>(hitElement(b, p));
+            g.owner = b.owner;
+            cw.bugs.push_back(g);
+        }
+    }
+    std::vector<CommonWorld::Bug> split;   // bugs born of a kill this step
+    for (auto& g : cw.bugs) {   // run at the nearest enemy, nibble it
+        g.life -= dt;
+        g.biteT -= dt;
+        Enemy* t = nearest(g.pos, 1e9f);
+        if (!t) { g.vel *= std::exp(-3.f * dt); g.pos += g.vel * dt; continue; }
+        const sf::Vector2f to = t->pos - g.pos;
+        const float l = length(to);
+        const float jit = (rng_.range(0.f, 1.f) - 0.5f) * 1.2f;   // a scurry, not a beeline
+        const sf::Vector2f dir = normalized(to, {1.f, 0.f});
+        const sf::Vector2f want = sf::Vector2f{dir.x - dir.y * jit, dir.y + dir.x * jit} * C::hiveSpeed * k;
+        g.vel += (want - g.vel) * std::min(1.f, dt * 6.f);
+        if (l > t->radius + 2.f) g.pos += g.vel * dt;
+        if (l > t->radius + 4.f * k || g.biteT > 0.f) continue;
+        g.biteT = C::hiveBiteEvery;
+        if (g.lit) {   // lit by a dragon: it goes up
+            const float R = C::hiveLitRadius * k;
+            for (Enemy& e : enemies_)
+                if (e.hp > 0.f && length(e.pos - g.pos) <= R + e.radius) H::touch(*this, e, g.dmg * C::hiveLitBlast, g.elem, -1, false, p, ev);
+            itemFx(CommonWorld::Fx::Blast, g.pos, R, g.elem != 0 ? elementColor(static_cast<Element>(g.elem)) : theme::elemFire, 0.35f);
+            g.life = 0.f;
+            continue;
+        }
+        const bool alive = t->hp > 0.f;
+        H::touch(*this, *t, g.dmg, g.elem, -1, false, p, ev);   // no owner: its element reacts with anything
+        if (alive && t->hp <= 0.f && static_cast<int>(cw.bugs.size() + split.size()) < C::hiveMax) {   // a kill: it splits
+            g.life = std::max(g.life, C::hiveSplitLife);
+            CommonWorld::Bug twin = g;
+            twin.vel = sf::Vector2f{-g.vel.y, g.vel.x};
+            split.push_back(twin);
+        }
+    }
+    for (const auto& g : split) cw.bugs.push_back(g);
+    cw.bugs.erase(std::remove_if(cw.bugs.begin(), cw.bugs.end(), [](const CommonWorld::Bug& g) { return g.life <= 0.f; }),
+                  cw.bugs.end());
 }
 
 // "Shrapnel" (an epic): a ring of bullets out of the enemy it just killed.

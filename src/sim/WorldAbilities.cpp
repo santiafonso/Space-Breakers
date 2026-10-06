@@ -124,12 +124,170 @@ void World::abilityTick(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
     }
 }
 
+void World::addFx(const CommonWorld::Fx& f) {
+    auto& fx = classWorld_.common.fx;
+    if (fx.size() >= 96) fx.erase(fx.begin());
+    fx.push_back(f);
+}
+
+std::vector<int> World::beckonReady() const {
+    std::vector<int> out;
+    if (!waveRunning_) return out;
+    for (int i = 0; i < static_cast<int>(balls_.size()); ++i) {
+        const Ball& b = balls_[i];
+        if (b.mods.cls.slinger.beckonCd > 0.f && b.cls.slinger.beckonT <= 0.f && !b.held && !b.mods.satellite) out.push_back(i);
+    }
+    return out;
+}
+
+bool World::beckon(int i, sf::Vector2f at, const WorldParams& p) {
+    if (i < 0 || i >= static_cast<int>(balls_.size())) return false;
+    Ball& b = balls_[i];
+    if (b.mods.cls.slinger.beckonCd <= 0.f || b.cls.slinger.beckonT > 0.f || b.held) return false;
+    const sf::Vector2f from = b.pos;
+    b.pos = {clampf(at.x, b.radius, size_.x - b.radius), clampf(at.y, b.radius, size_.y - b.radius)};
+    if (length(b.vel) < ballCruise(b, p) * 0.5f)   // stopped: leave at cruise, at the nearest enemy
+        if (const Enemy* t = nearestEnemy(b.pos, 1e9f)) b.vel = normalized(t->pos - b.pos, {1.f, 0.f}) * ballCruise(b, p);
+    b.trail.clear();
+    b.waterTrail.clear();
+    b.cls.slinger.beckonT = b.mods.cls.slinger.beckonCd;
+    b.regrabT = 0.f;   // it lands in your hand: grab it, aim, throw
+    itemFx(CommonWorld::Fx::Beckon, b.pos, b.radius, b.color, 0.4f, from);
+    return true;
+}
+
+void World::itemFx(CommonWorld::Fx::Kind k, sf::Vector2f at, float r, sf::Color c, float life, sf::Vector2f b, sf::Color c2) {
+    CommonWorld::Fx f;
+    f.kind = k;
+    f.a = at;
+    f.b = b;
+    f.r = r;
+    f.life = f.maxLife = life;
+    f.color = c;
+    f.color2 = c2;
+    addFx(f);
+}
+
 // The field things of the second batch: mines, vortices, clouds, portals, the tailwind.
 void World::abilityWorldTick(float dt, const WorldParams& p, FrameEvents& ev) {
     namespace A = cfg::ability;
     CommonWorld& cw = classWorld_.common;
     const float as = arenaScale();
+    for (auto& f : cw.fx) {   // flourishes age, and ride what they're tied to
+        f.life -= dt;
+        if (f.ball >= 0)
+            for (const Ball& b : balls_)
+                if (b.owner == f.ball && !b.ghost) { f.a = b.pos; break; }
+        if (f.enemy >= 0)
+            for (const Enemy& e : enemies_)
+                if (e.id == f.enemy) { if (e.hp > 0.f) f.b = e.pos; break; }
+    }
+    cw.fx.erase(std::remove_if(cw.fx.begin(), cw.fx.end(), [](const CommonWorld::Fx& f) { return f.life <= 0.f; }),
+                cw.fx.end());
     if (cw.tailT > 0.f && (cw.tailT -= dt) <= 0.f) cw.tailMul = 1.f;   // "Tailwind" dies down
+    cw.luckT = std::max(0.f, cw.luckT - dt);   // "777" clovers
+    cw.rainT = std::max(0.f, cw.rainT - dt);   // "Primal" water
+    for (auto& c : cw.trail) {   // "Toxic trail": every so often, what's inside is hurt and takes the element
+        c.life -= dt;
+        if ((c.tickT -= dt) > 0.f) continue;
+        c.tickT = cfg::common::toxicTick;
+        const float R = cfg::common::toxicNow(c.r, c.life, c.maxLife);
+        for (Enemy& e : enemies_) {
+            if (e.hp <= 0.f || length(e.pos - c.pos) > R + e.radius) continue;
+            damageEnemy(e, c.dmg);
+            if (c.elem != 0) applyElement(e, static_cast<Element>(c.elem), -1, c.dmg, p, ev);   // no owner: reacts with anything
+        }
+    }
+    cw.trail.erase(std::remove_if(cw.trail.begin(), cw.trail.end(), [](const CommonWorld::Cloud& c) { return c.life <= 0.f; }),
+                   cw.trail.end());
+    for (auto& bt : cw.bottles) {   // "Primal" poison: a bottle in the air, then a splash
+        bt.t += dt / cfg::common::bottleFlight;
+        if (bt.t < 1.f) continue;
+        const float R = cfg::common::bottleRadius * as;
+        for (Enemy& e : enemies_) {
+            if (e.hp <= 0.f || length(e.pos - bt.to) > R + e.radius) continue;
+            damageEnemy(e, bt.dmg);
+            applyElement(e, Element::Poison, bt.owner, bt.dmg, p, ev);
+        }
+        itemFx(CommonWorld::Fx::Splash, bt.to, R, elementColor(Element::Poison), 0.5f);
+        CommonWorld::Field pd;   // ...and a puddle that keeps poisoning
+        pd.pos = bt.to;
+        pd.r = R * 0.8f;
+        pd.life = pd.maxLife = cfg::common::puddleTime;
+        pd.tick = cfg::common::puddleTick;
+        pd.dmg = bt.dmg * cfg::common::puddleFrac / cfg::common::bottleFrac;
+        pd.elem = static_cast<int>(Element::Poison);
+        pd.owner = bt.owner;
+        cw.fields.push_back(pd);
+    }
+    for (auto& f : cw.fields) {   // "Primal" frost / puddles: they keep biting
+        f.life -= dt;
+        if ((f.tickT -= dt) > 0.f) continue;
+        f.tickT = f.tick;
+        for (Enemy& e : enemies_) {
+            if (e.hp <= 0.f || e.orbiter || length(e.pos - f.pos) > f.r + e.radius) continue;
+            damageEnemy(e, f.dmg);
+            applyElement(e, static_cast<Element>(f.elem), f.owner, f.dmg, p, ev);
+            if (f.elem == static_cast<int>(Element::Ice)) e.frozen = std::max(e.frozen, cfg::common::frostFreeze);
+        }
+    }
+    cw.fields.erase(std::remove_if(cw.fields.begin(), cw.fields.end(), [](const CommonWorld::Field& f) { return f.life <= 0.f; }),
+                    cw.fields.end());
+    for (auto& bo : cw.boulders) {   // "Primal" stone: rocks fall, and land hard
+        const float before = bo.t;
+        bo.t += dt / cfg::common::boulderFall;
+        if (before >= 1.f || bo.t < 1.f) continue;
+        const float R = cfg::common::boulderRadius * as;
+        for (Enemy& e : enemies_) {
+            if (e.hp <= 0.f || e.orbiter || length(e.pos - bo.at) > R + e.radius) continue;
+            damageEnemy(e, bo.dmg);
+            applyElement(e, Element::Stone, bo.owner, bo.dmg, p, ev);
+            e.stagger = std::max(e.stagger, cfg::common::quakeStun);
+        }
+        itemFx(CommonWorld::Fx::Rubble, bo.at, R * 0.6f, elementColor(Element::Stone), 0.6f);
+        ev.kick = std::max(ev.kick, 5.f);
+    }
+    cw.boulders.erase(std::remove_if(cw.boulders.begin(), cw.boulders.end(), [](const CommonWorld::Boulder& b) { return b.t >= 1.2f; }),
+                      cw.boulders.end());
+    if (cw.rainT > 0.f && (cw.rainDropT -= dt) <= 0.f) {   // "Primal" water: drops pelting the enemies
+        cw.rainDropT = cfg::common::rainDropEvery;
+        std::vector<Enemy*> live;
+        for (Enemy& e : enemies_)
+            if (e.hp > 0.f && !e.orbiter && e.pos.x > 0.f && e.pos.y > 0.f && e.pos.x < size_.x && e.pos.y < size_.y) live.push_back(&e);
+        if (!live.empty()) {
+            Enemy& e = *live[static_cast<std::size_t>(rng_.irange(0, static_cast<int>(live.size()) - 1))];
+            damageEnemy(e, cw.rainDmg);
+            applyElement(e, Element::Water, cw.rainOwner, cw.rainDmg, p, ev);
+            itemFx(CommonWorld::Fx::Drop, e.pos + sf::Vector2f{rng_.range(-1.f, 1.f), rng_.range(-1.f, 1.f)} * e.radius, e.radius,
+                   elementColor(Element::Water), 0.35f);
+        }
+    }
+    cw.bottles.erase(std::remove_if(cw.bottles.begin(), cw.bottles.end(), [](const CommonWorld::Bottle& b) { return b.t >= 1.f; }),
+                     cw.bottles.end());
+    for (Enemy& e : enemies_) {   // "Black plague": the mad pass it on to whatever they touch
+        if (e.plagueT <= 0.f || e.hp <= 0.f) continue;
+        for (Enemy& o : enemies_)
+            if (&o != &e && o.hp > 0.f && o.plagueT <= 0.f && !o.orbiter && length(o.pos - e.pos) <= o.radius + e.radius + 2.f) {
+                damageEnemy(o, e.plagueDps * cfg::common::plagueBite);   // a bite...
+                infect(o, e.plagueDps);                                  // ...and it spreads
+            }
+    }
+    for (auto& co : cw.coins) {   // "777" coin rain: falling, they hit what they meet and pay
+        co.pos += co.vel * dt;
+        co.spin += dt * 9.f;
+        const float R = cfg::common::slotRainRadius * as;
+        for (Enemy& e : enemies_) {
+            if (e.hp <= 0.f || length(e.pos - co.pos) > e.radius + 6.f * as) continue;
+            for (Enemy& o : enemies_)
+                if (o.hp > 0.f && length(o.pos - co.pos) <= R + o.radius) damageEnemy(o, co.dmg);
+            ev.midasGold += cfg::common::slotGold;
+            itemFx(CommonWorld::Fx::Pellets, co.pos, R, theme::puGolden, 0.25f);
+            co.pos.y = size_.y + 100.f;   // spent
+            break;
+        }
+    }
+    cw.coins.erase(std::remove_if(cw.coins.begin(), cw.coins.end(), [&](const CommonWorld::Coin& co) { return co.pos.y > size_.y + 20.f; }),
+                   cw.coins.end());
     for (auto& m : cw.mines) {   // "Mines": an enemy steps on one
         m.life -= dt;
         m.arm -= dt;
@@ -144,7 +302,16 @@ void World::abilityWorldTick(float dt, const WorldParams& p, FrameEvents& ev) {
             damageEnemy(e, m.dmg);
             if (m.elem != 0) applyElement(e, static_cast<Element>(m.elem), m.owner, m.dmg, p, ev);
         }
-        ev.bursts.push_back({m.pos, m.r, m.elem != 0 ? elementColor(static_cast<Element>(m.elem)) : theme::accent, nullptr});
+        const sf::Color mc = m.elem != 0 ? elementColor(static_cast<Element>(m.elem)) : theme::accent;
+        ev.bursts.push_back({m.pos, m.r, mc, nullptr});
+        CommonWorld::Fx f;   // shrapnel flying out
+        f.kind = CommonWorld::Fx::Shards;
+        f.a = m.pos;
+        f.r = m.r;
+        f.life = f.maxLife = 0.3f;
+        f.color = mc;
+        addFx(f);
+        ev.kick = std::max(ev.kick, 2.5f);
     }
     cw.mines.erase(std::remove_if(cw.mines.begin(), cw.mines.end(), [](const CommonWorld::Mine& m) { return m.life <= 0.f; }),
                    cw.mines.end());
@@ -182,14 +349,35 @@ void World::abilityWorldTick(float dt, const WorldParams& p, FrameEvents& ev) {
                 const bool inA = length(b.pos - q.a) < R, inB = length(b.pos - q.b) < R;
                 if (!inA && !inB) continue;
                 const sf::Vector2f to = inA ? q.b : q.a;
-                const sf::Vector2f dir = normalized(b.vel, {1.f, 0.f});
+                CommonWorld::Fx f;   // swallowed: a ring closes on the mouth it went in by
+                f.kind = CommonWorld::Fx::Implode;
+                f.a = inA ? q.a : q.b;
+                f.r = R * 1.5f;
+                f.life = f.maxLife = 0.3f;
+                f.color = theme::classMage;
+                addFx(f);
+                // shot out of the far mouth, straight at the enemy nearest it (or on its way, if none)
+                sf::Vector2f dir = normalized(b.vel, {1.f, 0.f});
+                if (const Enemy* t = nearestEnemy(to, 1e9f)) dir = normalized(t->pos - to, dir);
                 b.pos = to + dir * (R + b.radius + 2.f);
                 b.pos = {clampf(b.pos.x, b.radius, size_.x - b.radius), clampf(b.pos.y, b.radius, size_.y - b.radius)};
+                b.vel = dir * std::min(std::max(length(b.vel), ballCruise(b, p) * A::portalLaunch), ballMaxSpeed(b, p));
+                b.homing = false;
+                b.squash = 1.f;
+                b.squashAxis = dir;
                 b.trail.clear();
                 b.waterTrail.clear();
                 b.cls.common.portalCd = A::portalCd;
-                boostSpeed(b, A::portalBoost, p);
                 ev.bursts.push_back({to, R * 1.6f, b.color, nullptr});
+                CommonWorld::Fx out;   // the shot: speed lines off the far mouth
+                out.kind = CommonWorld::Fx::Afterimage;
+                out.a = b.pos;
+                out.b = dir;
+                out.r = b.radius;
+                out.life = out.maxLife = 0.3f;
+                out.color = theme::classMage;
+                addFx(out);
+                ev.kick = std::max(ev.kick, 2.f);
                 break;
             }
         }
@@ -238,6 +426,14 @@ bool World::fireAbility(Ball& b, const AbilitySpec& a, const WorldParams& p, Fra
             b.squash = 1.f;
             b.squashAxis = d;
             ev.bursts.push_back({b.pos, b.radius * 2.2f, b.color, nullptr});
+            CommonWorld::Fx f;   // speed lines left behind, pointing the way it went
+            f.kind = CommonWorld::Fx::Afterimage;
+            f.a = b.pos;
+            f.b = d;
+            f.r = b.radius;
+            f.life = f.maxLife = 0.35f;
+            f.color = b.color;
+            addFx(f);
             return true;
         }
 
@@ -354,6 +550,14 @@ bool World::fireAbility(Ball& b, const AbilitySpec& a, const WorldParams& p, Fra
                 applyElement(e, el, b.owner, dmg, p, ev);
             }
             ev.bursts.push_back({c, R, b.color, nullptr});
+            CommonWorld::Fx f;   // the rock's fiery tail, still in the air, and a scorched crater
+            f.kind = CommonWorld::Fx::Meteor;
+            f.a = c;
+            f.r = R;
+            f.life = f.maxLife = 0.9f;
+            f.color = b.color;
+            addFx(f);
+            ev.kick = std::max(ev.kick, 7.f);
             return true;
         }
 
@@ -372,9 +576,15 @@ bool World::fireAbility(Ball& b, const AbilitySpec& a, const WorldParams& p, Fra
             applyElement(*t, hitElement(b, p), b.owner, dmg, p, ev);
             t->vel = normalized(b.pos - t->pos, {1.f, 0.f}) * A::hookSpeed * as * t->knockTaken;
             t->stagger = std::max(t->stagger, (A::hookStun + A::hookStunPerLevel * n) * reach);
-            Bolt line{b.pos, t->pos, 0.25f, 0.25f};
-            line.beam = true;
-            bolts_.push_back(line);
+            CommonWorld::Fx f;   // a chain shoots out, bites, and reels the enemy in
+            f.kind = CommonWorld::Fx::Hook;
+            f.a = b.pos;
+            f.b = t->pos;
+            f.ball = b.owner;
+            f.enemy = t->id;
+            f.life = f.maxLife = 0.45f;
+            f.color = b.color;
+            addFx(f);
             return true;
         }
 
@@ -478,18 +688,29 @@ bool World::fireAbility(Ball& b, const AbilitySpec& a, const WorldParams& p, Fra
             if (static_cast<int>(pick.size()) > count) pick.resize(static_cast<std::size_t>(count));
             const bool boss = boss_.alive && boss_.intro <= 0.f;
             if (pick.empty() && !boss) return false;
+            const sf::Color sc = el != Element::Plain ? elementColor(el) : b.color;
+            auto smiteFx = [&](sf::Vector2f at, float r) {   // a jagged bolt from the sky, a scorch where it lands
+                CommonWorld::Fx f;
+                f.kind = CommonWorld::Fx::Smite;
+                f.a = {at.x + std::sin(at.x * 12.9898f + at.y * 78.233f) * 40.f * as, 0.f};   // a slant, not off the sim's dice
+                f.b = at;
+                f.r = r;
+                f.life = f.maxLife = 0.5f;
+                f.color = sc;
+                addFx(f);
+            };
             for (Enemy* e : pick) {
                 damageEnemy(*e, dmg);
                 e->stagger = std::max(e->stagger, A::smiteStagger);
                 applyElement(*e, el, b.owner, dmg, p, ev);
-                if (static_cast<int>(bolts_.size()) < cfg::element::maxBolts)
-                    bolts_.push_back(Bolt{{e->pos.x, 0.f}, e->pos, cfg::element::boltLife * 1.5f, cfg::element::boltLife * 1.5f});
+                smiteFx(e->pos, e->radius);
             }
             if (boss) {
                 boss_.hp -= dmg * A::missileBossFrac;
                 boss_.hitFlash = 1.f;
-                bolts_.push_back(Bolt{{boss_.pos.x, 0.f}, boss_.pos, cfg::element::boltLife * 1.5f, cfg::element::boltLife * 1.5f});
+                smiteFx(boss_.pos, boss_.radius);
             }
+            ev.kick = std::max(ev.kick, 6.f);
             return true;
         }
 
@@ -510,26 +731,30 @@ bool World::fireAbility(Ball& b, const AbilitySpec& a, const WorldParams& p, Fra
             damageEnemy(*t, dmg);
             applyElement(*t, hitElement(b, p), b.owner, dmg, p, ev);
             t->vel += out * A::warpKnock * as * t->knockTaken;
-            ev.bursts.push_back({from, b.radius * 2.f, b.color, nullptr});
             ev.bursts.push_back({b.pos, b.radius * 2.5f, b.color, nullptr});
+            CommonWorld::Fx f;   // a ghost of the ball fades where it was; space folds shut where it lands
+            f.kind = CommonWorld::Fx::Warp;
+            f.a = from;
+            f.b = b.pos;
+            f.r = b.radius;
+            f.life = f.maxLife = 0.45f;
+            f.color = b.color;
+            addFx(f);
+            ev.kick = std::max(ev.kick, 3.f);
             commonOnBlink(b, *t, p, from);   // Assassin items that ride a blink ride this one too
             return true;
         }
 
-        case Ability::Portal: {   // two portals: by the core, and out by the enemies
-            if (!anyEnemy) return false;
-            const Enemy* far = nullptr;
-            float fd = -1.f;
-            for (const Enemy& e : enemies_) {
-                if (e.hp <= 0.f || e.orbiter || !inArena(e.pos)) continue;
-                const float d2 = dot(e.pos - core_.pos, e.pos - core_.pos);
-                if (d2 > fd) { fd = d2; far = &e; }
-            }
-            sf::Vector2f out = far ? far->pos : boss_.pos;
-            if (!far && !(boss_.alive && boss_.intro <= 0.f)) return false;
-            const float m = 50.f * as;
+        case Ability::Portal: {   // two portals close together: by the core, and a short way out toward the threat
+            Enemy* t = enemyNearCore();
+            if (!t && !(boss_.alive && boss_.intro <= 0.f)) return false;
+            const sf::Vector2f toward = t ? t->pos : boss_.pos;
+            const sf::Vector2f d = normalized(toward - core_.pos, {1.f, 0.f});
+            const sf::Vector2f in = core_.pos + d * (core_.radius + 70.f * as);
+            const float far = std::min(length(toward - in) * 0.6f, A::portalRange * as * reach);
+            const float m = 40.f * as;
+            sf::Vector2f out = in + d * std::max(far, A::portalRadius * 3.f * as);
             out = {clampf(out.x, m, size_.x - m), clampf(out.y, m, size_.y - m)};
-            const sf::Vector2f in = core_.pos + normalized(out - core_.pos, {1.f, 0.f}) * (core_.radius + 70.f * as);
             auto& ps = classWorld_.common.portals;
             ps.erase(std::remove_if(ps.begin(), ps.end(), [&](const CommonWorld::Portal& q) { return q.owner == b.owner; }),
                      ps.end());
@@ -567,6 +792,15 @@ bool World::fireAbility(Ball& b, const AbilitySpec& a, const WorldParams& p, Fra
             b.waterTrail.clear();
             ev.bursts.push_back({was, b.radius * 2.f, b.color, nullptr});
             ev.bursts.push_back({b.pos, b.radius * 2.f, b.color, nullptr});
+            CommonWorld::Fx f;   // two comets crossing: the ball one way, the enemy the other
+            f.kind = CommonWorld::Fx::Swap;
+            f.a = was;
+            f.b = b.pos;
+            f.r = b.radius;
+            f.life = f.maxLife = 0.35f;
+            f.color = b.color;
+            f.color2 = theme::enemy;
+            addFx(f);
             return true;
         }
 
@@ -578,12 +812,19 @@ bool World::fireAbility(Ball& b, const AbilitySpec& a, const WorldParams& p, Fra
                 if (e.shrinkT <= 0.f) {
                     e.shrinkR = e.radius;
                     e.radius *= A::shrinkSize;
+                    e.shrinkPop = 1.f;   // squeezes down with a wobble (drawn)
                 }
                 e.shrinkT = std::max(e.shrinkT, (A::shrinkTime + A::shrinkTimePerLevel * n) * reach);
                 any = true;
             }
             if (!any) return false;
-            ev.bursts.push_back({b.pos, R, b.color, nullptr});
+            CommonWorld::Fx f;   // a ring that closes in instead of going out
+            f.kind = CommonWorld::Fx::Implode;
+            f.a = b.pos;
+            f.r = R;
+            f.life = f.maxLife = 0.35f;
+            f.color = b.color;
+            addFx(f);
             return true;
         }
 

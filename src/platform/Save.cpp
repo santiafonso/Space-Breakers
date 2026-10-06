@@ -179,14 +179,21 @@ bool saveRun(const std::string& path, const RunState& r) {
         f << "run.pacts " << r.pacts.size();
         for (int c : r.pacts) f << ' ' << c;
         f << '\n';
-        for (const BallLoadout& L : r.balls) {
-            f << "run.ball";
+        auto writeBall = [&](const BallLoadout& L) {
             for (int i = 0; i < kBallSlots; ++i) f << ' ' << L.gear[i] << ' ' << L.gearLvl[i];
             f << ' ' << L.type << ' ' << L.typeLvl;
             for (int i = 0; i < kMaxElements - 1; ++i) f << ' ' << L.extraType[i];
             for (int i = 0; i < kMaxAbilitySlots; ++i) f << ' ' << L.ability[i] << ' ' << L.abilityLvl[i];
             for (int i = 0; i < kModifierCount; ++i) f << ' ' << L.mods[i];
             f << '\n';
+        };
+        for (const BallLoadout& L : r.balls) {
+            f << "run.ball";
+            writeBall(L);
+        }
+        for (const RunState::Benched& bn : r.bench) {   // "Recruiter": away on a contract
+            f << "run.bench " << bn.fights << ' ' << bn.slot;
+            writeBall(bn.ball);
         }
         f << "run.map " << r.map.act << ' ' << r.map.rows << '\n';   // rows 0 = the act's usual length
         for (const MapNode& n : r.map.nodes) {   // type row lane visited, then its links
@@ -242,14 +249,19 @@ bool loadRun(const std::string& path, RunState& out) {
             ls >> n;
             std::vector<int>& v = key == "run.creeds" ? r.creeds : r.pacts;
             for (std::size_t i = 0; i < n && i < 64; ++i) { int x = 0; if (ls >> x) v.push_back(x); }
-        } else if (key == "run.ball") {
-            BallLoadout L;
+        } else if (key == "run.ball" || key == "run.bench") {
+            RunState::Benched bn;
+            if (key == "run.bench") ls >> bn.fights >> bn.slot;
+            BallLoadout& L = bn.ball;
             for (int i = 0; i < kBallSlots; ++i) ls >> L.gear[i] >> L.gearLvl[i];
             ls >> L.type >> L.typeLvl;
             for (int i = 0; i < kMaxElements - 1; ++i) ls >> L.extraType[i];
             for (int i = 0; i < kMaxAbilitySlots; ++i) ls >> L.ability[i] >> L.abilityLvl[i];
             for (int i = 0; i < kModifierCount; ++i) ls >> L.mods[i];
-            if (!ls.fail()) r.balls.push_back(L);
+            if (!ls.fail()) {
+                if (key == "run.bench") r.bench.push_back(bn);
+                else r.balls.push_back(L);
+            }
         } else if (key == "run.map") {
             ls >> r.map.act;
             if (!(ls >> r.map.rows)) r.map.rows = 0;   // older saves: the usual length

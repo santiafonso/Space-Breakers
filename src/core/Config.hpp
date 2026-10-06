@@ -297,8 +297,10 @@ inline constexpr int maxClouds = 8;
 inline constexpr float smiteCooldown = 8.f, smiteFrac = 1.5f, smiteFracPerLevel = 0.25f, smiteStagger = 0.3f;
 inline constexpr int smites = 3;
 inline constexpr float warpCooldown = 7.f, warpFrac = 1.5f, warpFracPerLevel = 0.25f, warpKnock = 380.f;
-inline constexpr float portalCooldown = 12.f, portalTime = 4.f, portalTimePerLevel = 0.5f, portalRadius = 26.f,
-                       portalBoost = 1.2f, portalCd = 0.4f;
+inline constexpr float portalCooldown = 7.f, portalTime = 3.f, portalTimePerLevel = 0.5f, portalRadius = 34.f,
+                       portalCd = 0.4f,
+                       portalRange = 220.f,    // the exit sits at most this far past the mouth by the core
+                       portalLaunch = 2.4f;    // what comes out is shot at the nearest enemy, x cruise
 inline constexpr float leashCooldown = 11.f, leashTime = 4.f, leashTimePerLevel = 0.5f, leashMin = 120.f,
                        leashMax = 260.f, leashSpeed = 1.6f, leashSpeedPerLevel = 0.1f;   // x its cruise at least
 inline constexpr float swapCooldown = 8.f, swapFrac = 0.8f, swapFracPerLevel = 0.15f, swapStun = 0.8f,
@@ -323,8 +325,8 @@ inline constexpr int weightsBoss[5]   = {0, 0, 0, 65, 35};    // the treasure af
 // Game-changing items (Fase J) and behaviour items (Fase M). Level-1 values,
 // then + perLevel for each item level past it.
 namespace changer {
-inline constexpr float seekerTurn = 2.6f, seekerPerLevel = 0.3f;   // Seeker: rad/s toward its target (x(1 + this per level))
-inline constexpr float seekerRange = 520.f;                         // ...range grows by the same factor
+inline constexpr float seekerRange = 1.f, seekerRangePerLevel = 0.f;      // Seeker: on (it looks across the whole arena)
+inline constexpr float seekerKick = 1.f, seekerKickPerLevel = 0.08f;      // ...leaving each hit x this speed
 inline constexpr float pierceCooldown = 0.25f;     // Piercing / Satellite / Comet: time before the same enemy can be hit again
 inline constexpr float piercePerLevel = 0.15f;     // Piercing: + this damage per level
 inline constexpr float railWidth = 22.f, railWidthPerLevel = 4.f;   // Railgun: beam half-width...
@@ -613,6 +615,7 @@ inline constexpr int rerollBase = 15;
 inline constexpr float rerollGrowth = 1.7f;
 inline constexpr float sellFrac = 0.45f;   // selling an item pays this of its tier price, x its level
 inline constexpr int forgeServicePrice = 45;   // level up an item without a Forge node
+inline constexpr int forgePoints = 2;          // a forge visit: common..rare cost 1, an Epic 1 (one per visit), a Legendary 2
 }  // namespace gold
 
 // Wave 10 is a miniboss duel in a wider arena.
@@ -666,6 +669,13 @@ inline constexpr float dasherDash = 0.45f;       // seconds a dash lasts...
 inline constexpr float dasherDashSpeed = 420.f;  // ...at this speed
 inline constexpr float dasherRest = 2.4f;        // seconds between dashes
 inline constexpr float dasherKnock = 34.f;       // px pushed back per ball hit
+inline constexpr float dasherRoamAim = 0.55f;    // a dash across the map gets a short telegraph...
+inline constexpr float dasherRoamSpeed = 640.f;  // ...and is faster; every 3rd dash still goes for the core
+inline constexpr float dasherChain = 0.3f;       // between roaming dashes: barely a breath
+// Second phase (2026-10-05): the act 1-3 bosses, downed the first time, lie
+// still while a wave pours in; clear it and they get back up, enraged.
+inline constexpr float reviveHp = 0.6f;          // ...with this share of their health
+inline constexpr int reviveAdds = 10;            // the wave: this many, +3 per act past the first
 // Each boss's HP grows by this per player ball past the first, so a wide
 // squad doesn't just melt it.
 inline constexpr float hpPerExtraBall = 0.15f;
@@ -927,6 +937,14 @@ inline constexpr int gambleStake = 40, gamblePerAct = 15;     // coin flip: lose
 inline constexpr float gambleWinMul = 2.5f;                   // ...this times it back
 inline constexpr int gambleWinPct = 50;
 inline constexpr int smithPrice = 40, smithPerAct = 10;       // level up an item
+// second batch (2026-10-05)
+inline constexpr int barterItems = 2;                          // Barter: items you get for one of yours
+inline constexpr int barterTierW[5] = {40, 30, 18, 9, 3};      // ...their rarity odds (common..legendary)
+inline constexpr int mercenaryFights = 2;                      // Recruiter: fights a ball sits out
+inline constexpr int tomePrice = 45, tomePerAct = 15;          // Old tome: a random ability
+inline constexpr float bloodForgeHpFrac = 0.1f;                // Blood forge: core max HP for a level
+inline constexpr int cocoonFights = 3;                         // Strange cocoon: fights until it hatches
+inline constexpr int cocoonLegendaryPct = 25;                  // ...the odds it's a Legendary (else Epic)
 }  // namespace event
 
 // Pacts (progression/Pacts.hpp): a gift with a price.
@@ -1006,6 +1024,8 @@ inline constexpr float slingMaxSpeed = 1500.f;
 // at this fraction of the slingshot range (~1090 px/s, a firm pull - full power
 // stays a reward for aiming by hand). Pulling further aims with the slingshot.
 inline constexpr float quickThrowSlop = 12.f;
+inline constexpr float mergeHold = 1.5f;     // s holding a slot still in TAB to merge its twin
+inline constexpr float regrabDelay = 1.f;   // s after a throw before that ball can be grabbed again (no click-spam)
 inline constexpr float quickThrowPower = 0.65f;
 inline constexpr float aimTimeScale = 0.3f;
 inline constexpr float aimSlowMax = 2.5f;
