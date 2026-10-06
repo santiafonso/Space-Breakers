@@ -493,7 +493,7 @@ inline const ItemDef* commonItemDef(UpgradeKind k) {
          "+5% per catch", Tier::Legendary, ItemTag::Slinger},
         {K::ToxicTrail, "ToxicTrail", "Toxic trail", "it leaves a trail of toxic clouds behind it, each in one of its elements (taking turns): whatever walks in is hurt and takes the element - reactions in its wake",
          "the clouds last longer and hurt more", Tier::Legendary, ItemTag::Alchemist},
-        {K::Primal, "Primal", "Primal", "every 5 s each element it carries lets loose at once: fire a flamethrower, ice a frost cloud, water a rain (enemies slow, your balls quicken), stone an earthquake, poison bottles thrown at the enemies, electric a lightning storm",
+        {K::Primal, "Primal", "Primal", "every 2.5 s each element it carries lets loose at once (short, light bursts - made to keep reactions going): fire a flamethrower, ice a frost cloud, water a rain (enemies slow, your balls quicken), stone an earthquake, poison bottles thrown at the enemies, electric a lightning storm",
          "sooner, and stronger", Tier::Legendary, ItemTag::Alchemist},
         {K::BlackPlague, "BlackPlague", "Black plague", "its hits may give an enemy the plague (25%): it turns black, goes mad and hunts the other enemies instead of the core, sickening and spreading it to all it touches",
          "+5% chance, a deadlier plague", Tier::Legendary, ItemTag::Alchemist},

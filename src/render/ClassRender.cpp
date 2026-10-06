@@ -1549,7 +1549,11 @@ void drawLegendCosmetics(sf::RenderTarget& t, RoleMask legend, sf::Vector2f p, f
         draw::line(t, knot, knot + sf::Vector2f{-facing * r * 0.65f, r * 0.25f - wave}, r * 0.14f, col);
     };
     if (has(BallRole::Striker)) band(C(214, 40, 48));   // Rambo's red headband
-    if (has(BallRole::Support) && !has(BallRole::Striker)) band(C(245, 245, 250));   // a white medic's band...
+    if (has(BallRole::Support) && !has(BallRole::Striker)) {   // a plain white medic's band (no tails)...
+        const float y = -r * 0.35f;
+        const float half = std::sqrt(std::max(0.f, r * r - y * y));
+        draw::line(t, p + sf::Vector2f{-half, y}, p + sf::Vector2f{half, y}, r * 0.3f, C(245, 245, 250));
+    }
     if (has(BallRole::Support)) {   // ...with a red cross on the front
         const sf::Vector2f c = p + sf::Vector2f{facing * r * 0.3f, -r * 0.35f};
         draw::line(t, c - sf::Vector2f{r * 0.18f, 0.f}, c + sf::Vector2f{r * 0.18f, 0.f}, r * 0.1f, C(220, 40, 50));
@@ -1608,7 +1612,7 @@ void drawLegendCosmetics(sf::RenderTarget& t, RoleMask legend, sf::Vector2f p, f
         hat = true;
     }
     if (has(BallRole::Alchemist)) {   // a plague doctor's mask: a long curved beak, round glass eyes
-        const sf::Color leather = C(222, 210, 180), shade = C(150, 136, 110);
+        const sf::Color leather = C(22, 20, 24), shade = C(70, 66, 74);
         const sf::Vector2f eye = p + sf::Vector2f{facing * r * 0.25f, -r * 0.25f};
         const sf::Vector2f root = p + sf::Vector2f{facing * r * 0.45f, r * 0.05f};
         fillShape(t, {root + sf::Vector2f{0.f, -r * 0.32f}, root + sf::Vector2f{facing * r * 0.7f, -r * 0.05f},
@@ -1616,7 +1620,7 @@ void drawLegendCosmetics(sf::RenderTarget& t, RoleMask legend, sf::Vector2f p, f
                       root + sf::Vector2f{0.f, r * 0.3f}}, leather);
         draw::line(t, root + sf::Vector2f{0.f, -r * 0.05f}, root + sf::Vector2f{facing * r * 1.1f, r * 0.42f}, r * 0.05f, shade);
         for (float o : {0.f, -facing * r * 0.5f}) {
-            draw::disc(t, eye + sf::Vector2f{o, 0.f}, r * 0.2f, C(40, 40, 46), C(40, 40, 46), {1.f, 1.f}, 12);
+            draw::disc(t, eye + sf::Vector2f{o, 0.f}, r * 0.2f, C(70, 66, 74), C(70, 66, 74), {1.f, 1.f}, 12);
             draw::disc(t, eye + sf::Vector2f{o, 0.f}, r * 0.11f, C(170, 220, 160), C(110, 160, 100), {1.f, 1.f}, 10);
         }
     }

@@ -50,14 +50,8 @@ struct TabPeek {
     int dragBall = -1;     // the slot being dragged (ball, slot), -1 = none
     int dragSlot = -1;
     bool closeOnDrop = false;   // TAB was let go mid-drag: close once it lands
-    float dragT = 0.f;          // s the slot has been held...
-    sf::Vector2f dragFrom;      // ...pressed here (panel canvas)...
-    bool dragMoved = false;     // ...and the pointer wandered off (no merge then)
     bool handle(const sf::Event& e);   // true if it consumed the event
-    void update(float dt) {
-        if (down) held += dt;
-        if (dragBall >= 0) dragT += dt;
-    }
+    void update(float dt) { if (down) held += dt; }
     void close() { open = down = closeOnDrop = false; held = 0.f; dragBall = dragSlot = -1; }
     bool latched() const { return open && !down && !closeOnDrop; }
     bool dragging() const { return open && dragBall >= 0; }

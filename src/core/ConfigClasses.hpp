@@ -532,19 +532,19 @@ inline float toxicNow(float r, float life, float maxLife) {
 }
 inline constexpr int toxicMax = 70;
 // "Primal": its first element's power, every few seconds
-inline constexpr float primalEvery = 5.f, primalEveryPerLevel = -0.6f, primalPower = 1.f, primalPowerPerLevel = 0.25f;
-inline constexpr float flameTime = 2.2f, flameTick = 0.15f, flameFrac = 0.45f, flameRange = 240.f, flameCone = 0.45f;
-inline constexpr float frostRadius = 170.f, frostTime = 3.f, frostFrac = 0.8f, frostTick = 0.3f, frostFreeze = 0.6f;
-inline constexpr float rainTime = 5.f, rainSlow = 0.75f, rainHaste = 1.2f, rainFrac = 0.3f;   // the first drops soak everything...
-inline constexpr float rainDropEvery = 0.07f, rainDropFrac = 0.08f;                           // ...then drops keep pelting enemies
-inline constexpr float quakeFrac = 0.45f, quakeStun = 0.6f, quakeEvery = 0.5f;
-inline constexpr int quakeWaves = 3, boulders = 5;
-inline constexpr float boulderFrac = 1.f, boulderRadius = 60.f, boulderFall = 0.45f;
-inline constexpr int bottles = 6;
-inline constexpr float bottleFlight = 0.5f, bottleRadius = 70.f, bottleFrac = 0.6f;
-inline constexpr float puddleTime = 3.f, puddleTick = 0.4f, puddleFrac = 0.25f;
-inline constexpr int strikes = 14, strikeChain = 2;
-inline constexpr float strikeEvery = 0.12f, strikeFrac = 0.7f, strikeChainRange = 150.f;
+inline constexpr float primalEvery = 2.5f, primalEveryPerLevel = -0.25f, primalPower = 1.f, primalPowerPerLevel = 0.25f;
+inline constexpr float flameTime = 1.1f, flameTick = 0.15f, flameFrac = 0.3f, flameRange = 240.f, flameCone = 0.45f;
+inline constexpr float frostRadius = 150.f, frostTime = 1.6f, frostFrac = 0.45f, frostTick = 0.3f, frostFreeze = 0.6f;
+inline constexpr float rainTime = 2.5f, rainSlow = 0.75f, rainHaste = 1.2f, rainFrac = 0.15f;   // the first drops soak everything...
+inline constexpr float rainDropEvery = 0.07f, rainDropFrac = 0.06f;                           // ...then drops keep pelting enemies
+inline constexpr float quakeFrac = 0.3f, quakeStun = 0.4f, quakeEvery = 0.5f;
+inline constexpr int quakeWaves = 2, boulders = 3;
+inline constexpr float boulderFrac = 0.6f, boulderRadius = 60.f, boulderFall = 0.45f;
+inline constexpr int bottles = 4;
+inline constexpr float bottleFlight = 0.5f, bottleRadius = 70.f, bottleFrac = 0.4f;
+inline constexpr float puddleTime = 1.8f, puddleTick = 0.4f, puddleFrac = 0.25f;
+inline constexpr int strikes = 7, strikeChain = 2;
+inline constexpr float strikeEvery = 0.12f, strikeFrac = 0.5f, strikeChainRange = 150.f;
 // "Black plague": a mad, spreading sickness
 inline constexpr float plague = 0.25f, plaguePerLevel = 0.05f, plagueTime = 6.f;
 inline constexpr float plagueDps = 0.3f, plagueDpsPerLevel = 0.08f;    // x the hit, per s: it burns them out fast...

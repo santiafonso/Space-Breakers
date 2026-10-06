@@ -2520,9 +2520,10 @@ de las pelotas: Q, el anillo de E y F.
   forja) tiene 2 puntos: común / poco común / raro 1, épico 1 (uno solo por
   visita), legendario 2. Te quedás en la forja mientras alcance. La forja paga de
   la tienda sigue siendo un nivel por pago (`cfg::gold::forgePoints`).
-- **Unir en el TAB:** un item o habilidad repetido en dos pelotas: apretarlo
-  quieto 1.5 s (círculo que se llena, "hold to merge") lo une; los niveles se
-  suman (con tope) y el otro lugar queda libre (`App::mergeSlot`).
+- **Combinar en el TAB:** arrastrar un item o habilidad y soltarlo sobre el
+  mismo en otra pelota (o sobre su panel) los combina ahí: los niveles se
+  suman (con tope) y el lugar de origen queda libre. Sólo en el TAB (la
+  primera versión, "mantener 1.5 s", se sacó).
 - **Invocador (reemplazos, mismo lugar en el enum):** Baby dragon (épico, era
   Fortify): un dragoncito al lado escupe un cono de su elemento cada 2 s (Twin
   call: dos). Elder dragon (legendario, era Overlord): un dragón enorme da
@@ -2549,7 +2550,7 @@ de las pelotas: Q, el anillo de E y F.
 - **Cosméticos de clase** (al principio por legendario; después, sólo con los 4
   items de la clase): accesorio chico: Striker vincha roja, Guardián escudito, Mago sombrero,
   Shooter visor, Bufón gorro, Alquimista doctor de la peste, Asesino daga,
-  Support aureola, Invocador cuernitos, Slinger sombrero de vaquero
+  Support aureola (después: vincha blanca con cruz roja, sin tiras), Invocador cuernitos, Slinger sombrero de vaquero
   (`BallSpec::legend`, `drawLegendCosmetics`).
 - **Ajustes (2a vuelta, mismo día):**
   - Cosméticos: Striker vincha que cruza toda la pelota, Support vincha blanca
@@ -2557,7 +2558,7 @@ de las pelotas: Q, el anillo de E y F.
     la punta doblada, Shooter scouter rojo de un ojo, Asesino daga ancha,
     Invocador cuernos rojos separados, Bufón gorro violeta y amarillo grande,
     Slinger sombrero de vaquero grande, Alquimista sólo máscara de la peste
-    (pico largo, ojos de vidrio).
+    (pico largo, ojos de vidrio), negra para que se note.
   - Swarm: un bicho que mata se divide en dos (tope 32 en pantalla).
   - Dragones: antes de escupir cargan (brillo en la garganta) y giran la
     cabeza suave hacia el blanco; el aliento es una llamarada de bocanadas.
@@ -2574,7 +2575,10 @@ de las pelotas: Q, el anillo de E y F.
   - Alquimista: 2 elementos como máximo (también ascendido); click en el
     elemento chico en el TAB lo pasa a principal. Archalchemist: reacciones +50%.
   - Toxic trail: cada nube se infla rápido (x2.2) y se achica despacio; más daño.
-  - Primal: con 2 elementos se disparan los dos poderes a la vez.
+  - Primal: con 2 elementos se disparan los dos poderes a la vez. Después,
+    a pedido: cada 2.5 s (era 5) con ráfagas cortas y de menos daño
+    (lanzallamas 1.1 s, escarcha 1.6 s, lluvia 2.5 s, 2 temblores + 3 rocas,
+    4 botellas, 7 rayos) para dejar elementos seguido y encadenar reacciones.
   - Primal más intenso (cada 5 s): hielo nube 3 s que congela, agua lluvia 5 s
     con gotas que pegan, piedra 3 sacudidas + 5 rocas, veneno 6 botellas con
     charcos, eléctrico 14 rayos que saltan a 2 más.

@@ -118,10 +118,6 @@ public:
     // -1 = the drop is refused. moveSlot does it (a filled target swaps).
     int slotMoveTarget(int fromBall, int fromSlot, int toBall, int toSlot) const;
     bool moveSlot(int fromBall, int fromSlot, int toBall, int toSlot);
-    // TAB merge (2026-10-05): the same item / ability on two balls; held, the
-    // one in hand takes the other's levels and the other's slot is freed.
-    bool mergePartner(int ball, int slot, int& otherBall, int& otherSlot) const;
-    bool mergeSlot(int ball, int slot);
     bool swapElements(int ball);   // an Alchemist: its second element becomes the first (TAB click)
 
     // ---- shop ----

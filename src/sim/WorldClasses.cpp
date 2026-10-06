@@ -25,7 +25,7 @@ namespace sb {
 // Base: flung hits scale with speed (World::ballDamage, releaseHeld,
 // regulateSpeed). Mega Striker: a hit well above cruise throws a shockwave.
 template <> struct ClassHooks<BallRole::Striker> : NoClassHooks {
-    static void onHit(World& w, Ball& b, Enemy& e, float dmg, bool, const WorldParams& p, FrameEvents& ev) {
+    static void onHit(World& w, Ball& b, Enemy& e, float dmg, bool, const WorldParams& p, FrameEvents&) {
         namespace S = cfg::synergy;
         if (!b.isAscended(BallRole::Striker) || length(b.vel) <= w.ballCruise(b, p) * S::strikerShockSpeed) return;
         w.areaDamage(e.pos, S::strikerShockRadius, dmg * S::strikerShockFrac, &e);
@@ -1355,7 +1355,7 @@ template <> struct ClassHooks<BallRole::Jester> : NoClassHooks {
 
     // "Wild card": one proc borrowed at random from the items of any ball on
     // the field (its own numbers); with none around, a zap, a bomb or an echo.
-    static void wildCard(World& w, Ball& b, Enemy& e, float dmg, bool kill, const WorldParams& p, FrameEvents& ev) {
+    static void wildCard(World& w, Ball& b, Enemy& e, float dmg, bool kill, const WorldParams& p, FrameEvents&) {
         namespace S = cfg::synergy;
         namespace C = cfg::changer;
         struct Pick { Trick t; const BallMods* m; };
@@ -1650,7 +1650,7 @@ template <> struct ClassHooks<BallRole::Slinger> : NoClassHooks {
         return k;
     }
 
-    static void onHit(World& w, Ball& b, Enemy& e, float dmg, bool, const WorldParams& p, FrameEvents& ev) {
+    static void onHit(World& w, Ball& b, Enemy& e, float dmg, bool, const WorldParams& p, FrameEvents&) {
         SlingerState& st = b.cls.slinger;
         if (!st.armed) return;
         st.armed = false;   // the thrown first hit is spent

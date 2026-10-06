@@ -1371,6 +1371,15 @@ static bool alchemistTakes(const BallLoadout& src, int fromSlot, const BallLoado
     return dst.elements(have) < dst.elementCap() && !dst.carriesElement(static_cast<UpgradeKind>(src.type));
 }
 
+// TAB: an item or ability dropped on the same one on another ball combines
+// with it: their levels add up there (to the cap) and the source slot empties.
+static bool mergesInto(const BallLoadout& src, int fromSlot, const BallLoadout& dst, int toSlot) {
+    if (!(isItemSlot(fromSlot) || isAbilitySlot(fromSlot))) return false;
+    const int kind = src.kindAt(fromSlot);
+    if (kind < 0 || kind == static_cast<int>(UpgradeKind::Cocoon) || dst.kindAt(toSlot) != kind) return false;
+    return dst.levelAt(toSlot) < maxLevelOf(static_cast<UpgradeKind>(kind));
+}
+
 int App::slotMoveTarget(int fromBall, int fromSlot, int toBall, int toSlot) const {
     const int n = runBallCount();
     if (fromBall < 0 || fromBall >= n || toBall < 0 || toBall >= n) return -1;
@@ -1378,6 +1387,9 @@ int App::slotMoveTarget(int fromBall, int fromSlot, int toBall, int toSlot) cons
     const BallLoadout& src = data_.run.balls[static_cast<std::size_t>(fromBall)];
     const BallLoadout& dst = data_.run.balls[static_cast<std::size_t>(toBall)];
     if (src.kindAt(fromSlot) < 0) return -1;
+    if (toBall != fromBall && toSlot < 0 && src.kindAt(fromSlot) >= 0)   // dropped on the panel of a ball that has it: there
+        if (const int at = dst.slotOf(static_cast<UpgradeKind>(src.kindAt(fromSlot))); at >= 0 && mergesInto(src, fromSlot, dst, at)) return at;
+    if (toBall != fromBall && toSlot >= 0 && toSlot < kLoadoutSlots && mergesInto(src, fromSlot, dst, toSlot)) return toSlot;   // the same pick: they combine
     if ((toSlot < 0 || toSlot == kSlotType) && alchemistTakes(src, fromSlot, dst, fromBall == toBall)) return kSlotType;
     auto sameKind = [&](int s) {
         if (isItemSlot(fromSlot)) return isItemSlot(s);
@@ -1421,44 +1433,23 @@ bool App::swapElements(int ball) {
     return true;
 }
 
-bool App::mergePartner(int ball, int slot, int& ob, int& os) const {
-    ob = os = -1;
-    if (ball < 0 || ball >= runBallCount() || !(isItemSlot(slot) || isAbilitySlot(slot))) return false;
-    const BallLoadout& L = data_.run.balls[static_cast<std::size_t>(ball)];
-    const int kind = L.kindAt(slot);
-    if (kind < 0 || kind == static_cast<int>(UpgradeKind::Cocoon)) return false;
-    const auto k = static_cast<UpgradeKind>(kind);
-    if (L.levelAt(slot) >= maxLevelOf(k)) return false;   // nothing left to gain
-    for (int b = 0; b < runBallCount(); ++b) {
-        if (b == ball) continue;
-        const int s = data_.run.balls[static_cast<std::size_t>(b)].slotOf(k);
-        if (s >= 0) { ob = b; os = s; return true; }
-    }
-    return false;
-}
-
-bool App::mergeSlot(int ball, int slot) {
-    int ob, os;
-    if (!mergePartner(ball, slot, ob, os)) return false;
-    BallLoadout& L = data_.run.balls[static_cast<std::size_t>(ball)];
-    BallLoadout& O = data_.run.balls[static_cast<std::size_t>(ob)];
-    const auto k = static_cast<UpgradeKind>(L.kindAt(slot));
-    L.setSlot(slot, static_cast<int>(k), std::min(L.levelAt(slot) + O.levelAt(os), maxLevelOf(k)));   // their levels add up
-    O.clearSlot(os);
-    syncWorldBalls();
-    audio_.levelUp(L.levelAt(slot));
-    effects_.flash(tierColor(upgradeTier(k)), 0.35f);
-    effects_.addLabel(std::string(upgradeInfo(k).title) + " merged  Lv " + std::to_string(L.levelAt(slot)),
-                      {size().x * 0.5f, size().y * 0.14f}, tierColor(upgradeTier(k)), 22, 1.3f);
-    save();
-    return true;
-}
-
 bool App::moveSlot(int fromBall, int fromSlot, int toBall, int toSlot) {
     toSlot = slotMoveTarget(fromBall, fromSlot, toBall, toSlot);
     if (toSlot < 0) return false;
     BallLoadout& a = data_.run.balls[static_cast<std::size_t>(fromBall)];
     BallLoadout& b = data_.run.balls[static_cast<std::size_t>(toBall)];
+    if (fromBall != toBall && mergesInto(a, fromSlot, b, toSlot)) {   // the same pick: combine them there
+        const auto k = static_cast<UpgradeKind>(a.kindAt(fromSlot));
+        b.setSlot(toSlot, static_cast<int>(k), std::min(b.levelAt(toSlot) + a.levelAt(fromSlot), maxLevelOf(k)));
+        a.clearSlot(fromSlot);
+        syncWorldBalls();
+        audio_.levelUp(b.levelAt(toSlot));
+        effects_.flash(tierColor(upgradeTier(k)), 0.35f);
+        effects_.addLabel(std::string(upgradeInfo(k).title) + " combined  Lv " + std::to_string(b.levelAt(toSlot)),
+                          {size().x * 0.5f, size().y * 0.14f}, tierColor(upgradeTier(k)), 22, 1.3f);
+        save();
+        return true;
+    }
     if (alchemistTakes(a, fromSlot, b, fromBall == toBall)) {
         // An Alchemist takes it as one more element (sharing the type slot's
         // level: the higher of the two). The giver's next element steps up.
@@ -2268,7 +2259,6 @@ void App::update(float frameDt) {
     uisound::beginFrame();
     if (!data_.run.active || stack_.empty() || stack_.back()->ownsTab() || onOptions()) peek_.close();
     peek_.update(frameDt);
-    loadoutPeekTick(*this, peek_);
     if (!stack_.empty()) {
         // Under the TAB peek the screen gets no pointer (no hover, no tooltips).
         stack_.back()->update(*this, frameDt, peek_.open ? sf::Vector2f{-1e6f, -1e6f} : mouse);

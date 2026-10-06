@@ -476,7 +476,6 @@ void MapScreen::update(App& app, float dt, sf::Vector2f mouse) {
     backdrop_.update(dt);
     mouse_ = mouse;
     peek_.update(dt);
-    loadoutPeekTick(app, peek_);
     if (!scrollInit_) {   // open on where you stand: the next row just above centre
         scrollInit_ = true;
         const float from = scrollFor(app, app.data().run.mapRow);

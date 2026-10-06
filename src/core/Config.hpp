@@ -1024,7 +1024,6 @@ inline constexpr float slingMaxSpeed = 1500.f;
 // at this fraction of the slingshot range (~1090 px/s, a firm pull - full power
 // stays a reward for aiming by hand). Pulling further aims with the slingshot.
 inline constexpr float quickThrowSlop = 12.f;
-inline constexpr float mergeHold = 1.5f;     // s holding a slot still in TAB to merge its twin
 inline constexpr float regrabDelay = 1.f;   // s after a throw before that ball can be grabbed again (no click-spam)
 inline constexpr float quickThrowPower = 0.65f;
 inline constexpr float aimTimeScale = 0.3f;

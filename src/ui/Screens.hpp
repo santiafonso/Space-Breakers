@@ -86,7 +86,6 @@ void drawLoadoutOverlay(App& app, sf::RenderWindow& w, bool paused, const TabPee
 // letting go on another slot / ball moves or swaps it (App::moveSlot).
 // True if it used the event.
 bool loadoutDragEvent(App& app, TabPeek& peek, const sf::Event& e);
-void loadoutPeekTick(App& app, TabPeek& peek);   // per frame while it's open: the hold-to-merge
 // The peek scales up to fill the screen when there are few balls: it lays out
 // in UI units / loadoutZoom(app). Ball i's panel centre is in those units.
 float loadoutZoom(App& app);
