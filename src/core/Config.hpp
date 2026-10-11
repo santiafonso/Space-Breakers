@@ -236,6 +236,7 @@ inline constexpr float clashRadius = 80.f, clashFrac = 1.0f;          // any oth
 // ascended Striker / Guardian / Support (4 items of one tag; sim/WorldClasses.cpp)
 inline constexpr float strikerShockSpeed = 1.2f;   // above this x cruise, hits shockwave...
 inline constexpr float strikerShockRadius = 90.f;
+inline constexpr float strikerShockMaxScale = 2.5f;   // ...wider with speed: radius x (speed / threshold), up to this
 inline constexpr float strikerShockFrac = 0.5f;
 inline constexpr float guardianPulseRadius = 170.f;   // core bounce pulse
 inline constexpr float guardianPulseKnock = 380.f;
@@ -333,7 +334,7 @@ inline constexpr float portalCooldown = 7.f, portalTime = 3.f, portalTimePerLeve
 // leashSpinFrom to leashSpinTo turns a second over leashRamp s, then a last
 // second flat out - and is let go along the swing at its top speed, holding
 // that speed for leashFly s (+ per level) so it ricochets all over.
-inline constexpr float leashCooldown = 11.f, leashTime = 4.f, leashRamp = 3.f,
+inline constexpr float leashCooldown = 18.f, leashTime = 3.f, leashRamp = 2.f,
                        leashSpinFrom = 0.5f, leashSpinTo = 4.f,          // turns per second
                        leashMin = 110.f, leashMax = 190.f,               // rope length (px, arena-scaled)
                        leashFly = 2.5f, leashFlyPerLevel = 0.5f, leashLaunchHit = 0.5f,
@@ -370,20 +371,11 @@ inline constexpr float berserkPerHit = 0.15f, berserkPerLevel = 0.05f;  // Berse
 inline constexpr int   berserkMax = 12, berserkMaxPerLevel = 3;         // ...up to this many
 inline constexpr float giantRadius = 1.8f, giantDamage = 1.3f, giantCruise = 0.8f;
 inline constexpr float giantDamagePerLevel = 0.15f;
-inline constexpr float satelliteRadius = 150.f;    // Satellite: orbit radius around the core (with nothing close)...
-inline constexpr float satelliteSpeed = 1.6f;      // ...orbit speed x its cruise
-// ...not a rail (2026-10-06): the core's pull holds it in wobbly loops
-inline constexpr float satelliteSpring = 5.f;       // pull toward its radius (per s^2)...
-inline constexpr float satelliteDamp = 1.1f;        // ...barely damped, so it swings in and out
-inline constexpr float satelliteTurnEase = 1.5f;    // how fast it gets back to its pace
-inline constexpr float satelliteBreathe = 0.18f;    // its radius breathes +-this...
-inline constexpr float satelliteBreatheRate = 0.9f; // ...this fast (rad/s)
-// Anything orbiting the core (Satellite, Warden spirits) swings its radius out
+// Anything orbiting the core (Warden spirits) swings its radius out
 // or in toward the enemy closest to the core, within [orbitMin, orbitMax x its
 // usual radius], easing there at orbitEase per second.
 inline constexpr float orbitMax = 1.9f;
 inline constexpr float orbitEase = 3.5f;
-inline constexpr float satelliteDamage = 1.8f, satellitePerLevel = 0.35f;   // ...its hits x this
 inline constexpr float gravityRadius = 230.f;      // Gravity well: pull radius...
 inline constexpr float gravityPull = 210.f;        // ...px/s drag toward the ball at its centre (fades to 0 at the edge)
 inline constexpr float gravityPerLevel = 0.25f;    // ...pull x (1 + this per level), radius x (1 + 0.4 x this)
@@ -660,8 +652,8 @@ inline constexpr int forgePoints = 2;          // a forge visit: common/uncommon
 
 // Wave 10 is a miniboss duel in a wider arena.
 namespace boss {
-inline constexpr float arenaScaleX = 1.95f;   // boss arena vs the normal one (camera pulls way back)
-inline constexpr float arenaScaleY = 1.45f;
+inline constexpr float arenaScaleX = 2.35f;   // boss arena vs the normal one (camera pulls way back; 1.95 till 2026-10-07)
+inline constexpr float arenaScaleY = 1.75f;   // (1.45 till 2026-10-07)
 inline constexpr float coreMarginX = 250.f;   // core sits this far from the left wall (room for the opening whirl)
 // The wide arena (boss wave on) is framed by a pulled-back camera. Ball speeds
 // scale with it so they look and bounce the same on screen; radius grows by
@@ -669,9 +661,9 @@ inline constexpr float coreMarginX = 250.f;   // core sits this far from the lef
 inline constexpr float ballRadiusArenaFrac = 0.5f;
 // Boss HP is counted in plain enemies of its wave (cfg::wave), so it follows
 // the curve: "hp = 5" is five grunts' worth.
-inline constexpr float hp = 12.f;             // the Charger (act 1)
+inline constexpr float hp = 120.f;            // the Charger (act 1)
 inline constexpr float radius = 58.f;         // fat target - you are meant to fling at it
-inline constexpr float speed = 54.f;          // px/s, dead straight at the core, no steering
+inline constexpr float speed = 22.f;          // px/s, dead straight at the core, no steering
 // Charger shockwave: every so often (faster when enraged) it pulses and
 // flings every ball near it away. Telegraphed for shockWarn seconds.
 inline constexpr float shockEvery = 5.0f;
@@ -684,26 +676,26 @@ inline constexpr float addHpMul = 0.8f;       // boss adds are a touch softer th
 // Acts 2-4 (bosses in a centred core arena; each enters from an edge).
 // Hive (act 2): drifts in on a slow wobble and every few seconds bursts a fan
 // of runners at the core - the swarm is the fight.
-inline constexpr float hiveHp = 10.f;
+inline constexpr float hiveHp = 100.f;
 inline constexpr float hiveRadius = 64.f;
-inline constexpr float hiveSpeed = 26.f;
+inline constexpr float hiveSpeed = 14.f;
 inline constexpr float hiveWobble = 0.9f;       // rad/s of the side-to-side sway
 inline constexpr float hiveBurstEvery = 4.2f;   // seconds between bursts
 inline constexpr int   hiveBurstCount = 4;      // runners per burst
 inline constexpr int   hiveCap = 20;            // no burst while this many enemies are up
 // Warden (act 3): a shield arc slowly turns around it and blocks any ball
 // that lands on that side; it walks in, stops to plant, walks again.
-inline constexpr float wardenHp = 12.f;
+inline constexpr float wardenHp = 110.f;
 inline constexpr float wardenRadius = 60.f;
-inline constexpr float wardenSpeed = 34.f;
+inline constexpr float wardenSpeed = 20.f;
 inline constexpr float wardenShieldArc = 1.3f;   // radians either side of the shield's centre
 inline constexpr float wardenShieldSpin = 0.8f;  // rad/s the shield turns
 inline constexpr float wardenWalk = 3.0f, wardenPlant = 1.6f;   // seconds walking / standing
 // Dasher (act 4): circles at range, telegraphs a line, then dashes at the
 // core. Every clean hit knocks it back - keep hitting it or it gets through.
-inline constexpr float dasherHp = 12.f;
+inline constexpr float dasherHp = 64.f;
 inline constexpr float dasherRadius = 50.f;
-inline constexpr float dasherStalk = 40.f;       // px/s creeping in between dashes
+inline constexpr float dasherStalk = 16.f;       // px/s creeping in between dashes
 inline constexpr float dasherAim = 1.3f;         // seconds of telegraph before a dash
 inline constexpr float dasherDash = 0.45f;       // seconds a dash lasts...
 inline constexpr float dasherDashSpeed = 420.f;  // ...at this speed
@@ -712,17 +704,52 @@ inline constexpr float dasherKnock = 34.f;       // px pushed back per ball hit
 inline constexpr float dasherRoamAim = 0.55f;    // a dash across the map gets a short telegraph...
 inline constexpr float dasherRoamSpeed = 640.f;  // ...and is faster; every 3rd dash still goes for the core
 inline constexpr float dasherChain = 0.3f;       // between roaming dashes: barely a breath
-// Second phase (2026-10-05): the act 1-3 bosses, downed the first time, lie
-// still while a wave pours in; clear it and they get back up, enraged.
-inline constexpr float reviveHp = 0.6f;          // ...with this share of their health
-inline constexpr int reviveAdds = 10;            // the wave: this many, +3 per act past the first
+// Three phases (2026-10-06), split at stageAt of its health. Crossing one,
+// the boss pulls back to where it came in and runs its own mechanic; the
+// last phase it is enraged. Charger / Hive / Orbital raise parts (pillars,
+// nests, anchors): while any stands the boss takes no damage. Warden grows a
+// weak point on its back, the Dasher armours up and is only soft while it
+// lies stunned after slamming a wall.
+inline constexpr float stageAt[2] = {0.66f, 0.33f};
+inline constexpr float retreatTime = 2.2f;       // s sliding back to its entry point at a phase change
+inline constexpr float partRadius = 30.f;
+inline constexpr float partHp = 12.f;            // in grunts of the wave (padded like the boss for a wide squad)
+inline constexpr float partMinCoreDist = 0.30f;  // parts stand at least this share of the arena's short side from the core
+inline constexpr int   chargerParts[2] = {3, 4}; // pillars at phase 2 / 3
+inline constexpr float chargerKnock = 10.f;      // px a clean hit pushes the Charger back (a tug of war)
+inline constexpr int   hiveParts[2] = {3, 4};    // nests...
+inline constexpr float nestEvery = 3.2f;         // ...each spits a runner this often while the field has room
+inline constexpr float hiveKnock = 6.f;
+inline constexpr float wardenWeakArc = 0.65f;    // rad either side of its back: the weak point (phase 2+)
+inline constexpr float wardenWeakMul = 3.f;      // ...hits there do this much...
+inline constexpr float wardenBodyMul = 0.4f;     // ...anywhere else open, this
+inline constexpr float wardenStagger = 1.4f;     // s it stops walking after a weak-point hit...
+inline constexpr float wardenWeakKnock = 40.f;   // ...and px it's pushed back
+inline constexpr float wardenFlipMin = 2.5f, wardenFlipMax = 5.f;   // phase 3: its shield turns back now and then
+inline constexpr float dasherArmor = 0.2f;       // phase 2+: damage taken when not stunned...
+inline constexpr float dasherStunMul = 1.6f;     // ...and while stunned
+inline constexpr float dasherStun[2] = {2.4f, 1.8f};   // s stunned after a wall slam, phase 2 / 3
+inline constexpr float dasherSlamDash = 3.0f;    // s a phase-2 dash may run looking for its wall
+inline constexpr float dasherCoreClear = 90.f;   // a slam dash's line keeps this far off the core
+inline constexpr int   orbitalParts[2] = {4, 4}; // anchors; while they stand the ring refills twice as fast
+// Shots at the core: slow orbs a ball breaks by touching; one that lands
+// hurts the core. Charger pillars and Orbital anchors fire them while they
+// stand, the Warden fans them out after its first phase, the Dasher sprays
+// a few when it crashes.
+inline constexpr float shotSpeed = 150.f;        // px/s (x the arena scale)
+inline constexpr float shotRadius = 10.f;
+inline constexpr float shotDamage = 5.f;         // core hp
+inline constexpr float shotLife = 16.f;
+inline constexpr float partShotEvery = 7.f;      // a pillar / anchor fires this often
+inline constexpr float wardenShotEvery = 6.f;
+inline constexpr int   wardenShots[2] = {3, 5};  // a fan, phase 2 / 3
+inline constexpr int   dasherCrashShots = 3;
+inline constexpr float orbitalLaunchEvery = 5.f; // phase 3: an orbiter breaks off and rushes the core this often
 // Each boss's HP grows by this per player ball past the first, so a wide
 // squad doesn't just melt it.
 inline constexpr float hpPerExtraBall = 0.15f;
-// Every boss fights in two phases: below enrageAt of its HP it moves and
-// attacks enragePace x faster and its adds come quicker; at each of
-// summonAt a Brute (the miniboss) joins the fight.
-inline constexpr float enrageAt = 0.5f;
+// In its last phase it moves and attacks enragePace x faster and its adds
+// come quicker; at each of summonAt a Brute (the miniboss) joins the fight.
 inline constexpr float enragePace = 1.5f;
 inline constexpr float enrageAddMul = 0.6f;     // add interval x this once enraged
 inline constexpr float summonAt[2] = {0.66f, 0.33f};
@@ -738,11 +765,11 @@ inline constexpr float minHitCruiseFrac = 0.9f; // a ball must be at ~cruise spe
 // rushes the core - clear them to win.
 namespace finalBoss {
 inline constexpr float radius = 46.f;           // a touch smaller than the wave-10 boss (58)
-inline constexpr float hp = 14.f;               // the last boss (act 5), in wave-50 grunts
+inline constexpr float hp = 130.f;              // the last boss (act 5), in wave-50 grunts
 inline constexpr float introTime = 1.2f;        // slides in from the left edge, invulnerable, before it spirals
 inline constexpr float startAngle = 3.14159265f; // enters from the left of the centred core
-inline constexpr float spiralOmega = 1.0f;      // rad/s around the core (more loops = longer path)
-inline constexpr float spiralShrink = 18.f;     // px/s pulled toward the core (lower = longer descent)
+inline constexpr float spiralOmega = 0.5f;      // rad/s around the core (more loops = longer path)
+inline constexpr float spiralShrink = 4.f;      // px/s pulled toward the core (lower = longer descent)
 inline constexpr float spiralStartDist = 1200.f; // clamped to the arena edge - starts as far out as it fits
 inline constexpr int   shieldCount = 6;         // orbiters kept alive around the boss
 inline constexpr float shieldRadius = 118.f;    // orbiter ring radius around the boss
@@ -814,6 +841,13 @@ inline constexpr float mendPerSec = 0.10f;    // of the target's max HP per seco
 // Snare (act 2+): catches the first ball that hits it (never your last free
 // one) and holds it until another ball kills it.
 inline constexpr float snareHp = 1.5f, snareSpeed = 0.75f, snareRadius = 1.15f;
+// Caster (act 1 late+): never closes in - it stops at range and, after a
+// short charge, drains the core with a beam until it dies (or is frozen /
+// staggered).
+inline constexpr float casterHp = 1.3f, casterSpeed = 0.8f, casterRadius = 1.0f;
+inline constexpr float casterRange = 0.36f;   // stops this share of the arena's short side from the core
+inline constexpr float casterCharge = 1.5f;   // s at range before the beam bites
+inline constexpr float casterDrain = 0.8f;    // core hp per second while it beams
 // Gaits: some enemies don't walk straight in. Weave = sways across its line;
 // Spiral = circles the core as it closes in (a bit faster, so it arrives in
 // about the same time). Rolled per spawn on grunts, runners, splitters and
@@ -835,9 +869,9 @@ inline constexpr int   bruteWave = 12;            // first normal wave that may 
 inline constexpr float bruteFightChance = 0.35f;  // ...this chance per normal fight
 // First wave each kind can show up, and its roll weight (grunts fill the rest).
 inline constexpr int runnerWave = 2, splitterWave = 3, tankWave = 4, shieldWave = 5;
-inline constexpr int blinkerWave = 12, menderWave = 22, snareWave = 13;
+inline constexpr int blinkerWave = 12, menderWave = 22, snareWave = 13, casterWave = 7;
 inline constexpr int wGrunt = 46, wRunner = 20, wSplitter = 14, wTank = 11, wShield = 12;
-inline constexpr int wBlinker = 12, wMender = 6, wSnare = 7;
+inline constexpr int wBlinker = 12, wMender = 6, wSnare = 7, wCaster = 6;
 inline constexpr int eliteTankBonus = 10, eliteShieldBonus = 8;   // elites lean on the tough ones
 }  // namespace enemy
 
@@ -1065,6 +1099,7 @@ inline constexpr float slingMaxSpeed = 1500.f;
 inline constexpr float quickThrowSlop = 12.f;
 inline constexpr float regrabDelay = 0.6f;   // s after a throw before that ball can be grabbed again (no click-spam; 1 s until 2026-10-06)
 inline constexpr int endlessCrowd = 20;      // dev endless: enemies the button throws in
+inline constexpr float endlessTough = 8.f;   // ...and the tough button's, with this x the health
 inline constexpr float quickThrowPower = 0.65f;
 inline constexpr float aimTimeScale = 0.3f;
 inline constexpr float aimSlowMax = 2.5f;

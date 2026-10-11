@@ -37,7 +37,7 @@ void World::creedNova(const WorldParams& p) {
     forceRelease();
     std::vector<Ball*> movers;
     for (Ball& b : balls_)
-        if (!b.mods.satellite) movers.push_back(&b);
+        movers.push_back(&b);
     const float off = rng_.range(0.f, 2.f * kPi);
     const int n = static_cast<int>(movers.size());
     for (int i = 0; i < n; ++i) {
@@ -111,7 +111,7 @@ void World::updateHunters(float dt, const WorldParams& p) {
     // Steer.
     for (std::size_t i = 0; i < n; ++i) {
         Ball& b = balls_[i];
-        if (!huntHas_[i] || b.held || b.mods.satellite) continue;
+        if (!huntHas_[i] || b.held) continue;
         float sp = length(b.vel);
         if (sp < 1e-3f) continue;
         const float cur = std::atan2(b.vel.y, b.vel.x);

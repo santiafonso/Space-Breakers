@@ -76,12 +76,13 @@ void EventScreen::draw(App& app, sf::RenderWindow& w) {
     const auto& deals = app.eventDeals();
     // The Rest stop reuses this screen: repair the core or forge, in the core's colour.
     const bool rest = !deals.empty() && deals.front() == EventKind::Rest;
-    const sf::Color col = rest ? theme::core : theme::puSurge;   // the stop's colour on the map
+    const bool shrine = !deals.empty() && (deals.front() == EventKind::Ascend || deals.front() == EventKind::Expand);
+    const sf::Color col = shrine ? sf::Color(240, 226, 170) : rest ? theme::core : theme::puSurge;   // the stop's colour on the map
 
     drawDim(w, s, 0.88f * clampf(introPop(it, 0.f, 0.25f), 0.f, 1.f));
-    drawCenteredPop(w, f, rest ? "Rest" : "A stranger", theme::fsTitle, {s.x * 0.5f, s.y * 0.085f}, col,
+    drawCenteredPop(w, f, shrine ? "Shrine" : rest ? "Rest" : "A stranger", theme::fsTitle, {s.x * 0.5f, s.y * 0.085f}, col,
                     introPop(it, 0.04f, 0.32f));
-    if (!rest)
+    if (!rest && !shrine)
         drawCenteredPop(w, f, "gold  " + std::to_string(app.gold()), theme::fsBody, {s.x * 0.5f, s.y * 0.085f + 42.f},
                         theme::puGolden, introPop(it, 0.1f));
 
@@ -100,8 +101,8 @@ void EventScreen::draw(App& app, sf::RenderWindow& w) {
         std::string gain = eventGain(k, gold), cost = eventCost(k, gold);
         if (k == EventKind::Rest && app.hasCreed(CreedId::Fortress)) gain = "the core is half repaired";
         if (k == EventKind::Rest && app.ironCoreAlive()) cost = "ends this act's Iron core";
-        drawRuleCard(w, f, r, col, a, h, pulse, std::to_string(i + 1) + (rest ? "   CHOICE" : "   DEAL"),
-                     ok ? eventHint(k) : "not enough gold", eventName(k), gain, cost);
+        drawRuleCard(w, f, r, col, a, h, pulse, std::to_string(i + 1) + (rest || shrine ? "   CHOICE" : "   DEAL"),
+                     ok ? eventHint(k) : eventFree(k) ? "no ball can take it" : "not enough gold", eventName(k), gain, cost);
     }
 
     {   // walk away: nothing gained, nothing lost

@@ -155,6 +155,7 @@ bool saveRun(const std::string& path, const RunState& r) {
         f << "run.hard " << (r.hard ? 1 : 0) << '\n';
         f << "run.tutorial " << (r.tutorial ? 1 : 0) << '\n';
         f << "run.plating " << r.platingHp << '\n';
+        f << "run.ascend " << r.ascensions << ' ' << r.poolOut << ' ' << r.poolIn << '\n';
         f << "run.bosses";
         for (int b : r.bosses) f << ' ' << b;
         f << '\n';
@@ -180,11 +181,18 @@ bool saveRun(const std::string& path, const RunState& r) {
         for (int c : r.pacts) f << ' ' << c;
         f << '\n';
         auto writeBall = [&](const BallLoadout& L) {
-            for (int i = 0; i < kBallSlots; ++i) f << ' ' << L.gear[i] << ' ' << L.gearLvl[i];
+            for (int i = 0; i < kBaseItemSlots; ++i) f << ' ' << L.gear[i] << ' ' << L.gearLvl[i];
             f << ' ' << L.type << ' ' << L.typeLvl;
             for (int i = 0; i < kMaxElements - 1; ++i) f << ' ' << L.extraType[i];
             for (int i = 0; i < kMaxAbilitySlots; ++i) f << ' ' << L.ability[i] << ' ' << L.abilityLvl[i];
             for (int i = 0; i < kModifierCount; ++i) f << ' ' << L.mods[i];
+            f << ' ' << (L.freeMissile ? 1 : 0) << ' ' << (L.freePoison ? 1 : 0);
+            // (2026-10-06) the Shrine: open item slots, the 5th / 6th, used or not -
+            // at the end, so a run saved before still loads (its 4 slots stay first)
+            f << ' ' << L.itemSlots << ' ' << (L.shrineUsed ? 1 : 0);
+            for (int i = kBaseItemSlots; i < kBallSlots; ++i) f << ' ' << L.gear[i] << ' ' << L.gearLvl[i];
+            f << ' ' << L.ascendedFrom << ' ' << L.keptSize;
+            for (float x : L.dragonXp) f << ' ' << x;   // (2026-10-07) Tiamat's dragons' growth
             f << '\n';
         };
         for (const BallLoadout& L : r.balls) {
@@ -224,7 +232,18 @@ bool loadRun(const std::string& path, RunState& out) {
         else if (key == "run.hard") { int v = 0; ls >> v; r.hard = v != 0; }
         else if (key == "run.tutorial") { int v = 0; ls >> v; r.tutorial = v != 0; }
         else if (key == "run.plating") ls >> r.platingHp;
-        else if (key == "run.bosses") { for (int& b : r.bosses) ls >> b; }   // older saves: the fixed order
+        else if (key == "run.ascend") ls >> r.ascensions >> r.poolOut >> r.poolIn;
+        else if (key == "run.bosses") {   // older saves: the fixed order
+            for (int& b : r.bosses) ls >> b;
+            // No boss twice in a run: anything but an order of the four goes back to the fixed one.
+            bool seen[4] = {};
+            bool ok = true;
+            for (int b : r.bosses) {
+                if (b < 0 || b > 3 || seen[b]) { ok = false; break; }
+                seen[b] = true;
+            }
+            if (!ok) r.bosses = {0, 1, 2, 3};
+        }
         else if (key == "run.wave") ls >> r.wave;
         else if (key == "run.core") ls >> r.coreHp >> r.coreMaxHp;
         else if (key == "run.score") ls >> r.score;
@@ -253,12 +272,28 @@ bool loadRun(const std::string& path, RunState& out) {
             RunState::Benched bn;
             if (key == "run.bench") ls >> bn.fights >> bn.slot;
             BallLoadout& L = bn.ball;
-            for (int i = 0; i < kBallSlots; ++i) ls >> L.gear[i] >> L.gearLvl[i];
+            for (int i = 0; i < kBaseItemSlots; ++i) ls >> L.gear[i] >> L.gearLvl[i];
             ls >> L.type >> L.typeLvl;
             for (int i = 0; i < kMaxElements - 1; ++i) ls >> L.extraType[i];
             for (int i = 0; i < kMaxAbilitySlots; ++i) ls >> L.ability[i] >> L.abilityLvl[i];
             for (int i = 0; i < kModifierCount; ++i) ls >> L.mods[i];
             if (!ls.fail()) {
+                if (int fm = 0; ls >> fm) L.freeMissile = fm != 0;   // (older saves: not there)
+                if (int fp = 0; ls >> fp) L.freePoison = fp != 0;
+                if (int slots = 0, used = 0; ls >> slots >> used) {
+                    L.itemSlots = std::clamp(slots, kBaseItemSlots, kBallSlots);
+                    L.shrineUsed = used != 0;
+                    for (int i = kBaseItemSlots; i < kBallSlots; ++i) {
+                        int g = -1, gl = 0;
+                        if (!(ls >> g >> gl)) break;
+                        L.gear[i] = g;
+                        L.gearLvl[i] = gl;
+                    }
+                    if (int af = 0; ls >> af) L.ascendedFrom = af;
+                    if (float ks = 1.f; ls >> ks) L.keptSize = std::clamp(ks, 1.f, 4.f);
+                    for (float& x : L.dragonXp)
+                        if (float v = 0.f; ls >> v) x = std::max(0.f, v);
+                }
                 if (key == "run.bench") r.bench.push_back(bn);
                 else r.balls.push_back(L);
             }

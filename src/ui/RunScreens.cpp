@@ -90,6 +90,7 @@ sf::Color nodeColor(MapNodeType t) {
         case MapNodeType::Recruit: return theme::ballMid;
         case MapNodeType::Boss:    return theme::coreLow;
         case MapNodeType::Altar:   return theme::pact;
+        case MapNodeType::Shrine:  return sf::Color(240, 226, 170);   // pale gold: where balls become gods
     }
     return theme::textLo;
 }
@@ -105,6 +106,7 @@ const char* nodeGlyph(MapNodeType t) {
         case MapNodeType::Recruit: return "o";
         case MapNodeType::Boss:    return "B";
         case MapNodeType::Altar:   return "*";
+        case MapNodeType::Shrine:  return "A";
     }
     return "";
 }
@@ -115,7 +117,7 @@ void drawNode(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f p, MapNode
     // and the boss an octagon, the same silhouette as in the arena.
     const sf::Color col = nodeColor(t);
     const bool boss = t == MapNodeType::Boss;
-    const bool altar = t == MapNodeType::Altar;   // a hexagon: it isn't a stop like the others
+    const bool altar = t == MapNodeType::Altar || t == MapNodeType::Shrine;   // a hexagon: it isn't a stop like the others
     const int sides = boss ? 8 : (altar ? 6 : 4);
     const float rot = boss ? kPi / 8.f : (altar ? kPi / 6.f : 0.f);
     const bool elite = t == MapNodeType::Elite;
@@ -164,6 +166,7 @@ void EquipScreen::targetAt(App& app, sf::Vector2f mouse, int& ball, int& slot) c
     const EquipSource src = app.equipSource();
     const bool forge = src == EquipSource::Forge || src == EquipSource::ShopForge || src == EquipSource::Sell ||
                        src == EquipSource::Barter;
+    const bool shrine = src == EquipSource::Ascend || src == EquipSource::Expand;   // just a ball
     const UpgradeKind k = app.equipKind();
     for (int i = 0; i < n; ++i) {
         const sf::Vector2f c = panelCenter(s, i, n, equipRowY(app));
@@ -172,6 +175,7 @@ void EquipScreen::targetAt(App& app, sf::Vector2f mouse, int& ball, int& slot) c
         ball = i;
         const BallLoadout& L = app.data().run.balls[static_cast<std::size_t>(i)];
         const int shown = kSlotAbility + abilityBoxes(L);   // slots drawn on the panel
+        if (shrine) return;
         if (forge) {
             // The slot under the pointer, else the first one that can level.
             for (int sl = 0; sl < shown; ++sl)
@@ -206,6 +210,8 @@ static const char* equipBackLabel(EquipSource src) {
         case EquipSource::Forge:  return "Leave the forge";
         case EquipSource::Barter: return "Walk away";
         case EquipSource::Gift:   return "Leave it behind";
+        case EquipSource::Ascend:
+        case EquipSource::Expand: return "Leave the shrine";
         default:                  return "Back to the shop";
     }
 }
@@ -255,6 +261,14 @@ void EquipScreen::draw(App& app, sf::RenderWindow& w) {
             : "common / uncommon: 1 point - rare / epic: 1 point, only as your first - legendary: both points";
         hint = src == EquipSource::ShopForge ? "click an item   -   Back: the shop"
                                              : "click an item   -   Back: leave the forge";
+    } else if (src == EquipSource::Ascend) {
+        title = "Ascend - pick the ball that becomes a god";
+        sub = "its class's items are gone; it picks 1 of 3 of its god's items, and its class's items stop showing up this run";
+        hint = "click a ball   -   Back: leave the shrine";
+    } else if (src == EquipSource::Expand) {
+        title = "Expand - pick a ball for 2 more item slots";
+        sub = "6 item slots: room for a third class (or a full class and another). Once per ball.";
+        hint = "click a ball   -   Back: leave the shrine";
     } else if (barter) {
         title = "Barter - pick an item to give up";
         sub = "it's gone for good; two random items, of any rarity, come back to place";
@@ -327,7 +341,9 @@ void EquipScreen::draw(App& app, sf::RenderWindow& w) {
         if (part >= 0 && loadoutTooltip(balls[static_cast<std::size_t>(i)], part, tt, td)) {
             if (sell && isItemSlot(part) && balls[static_cast<std::size_t>(i)].gear[part] >= 0)
                 tt = "Sell " + tt + "  for " + std::to_string(app.sellValue(i, part)) + " gold";
-            drawTooltip(w, app.font(), zm, zs, tt, td);
+            std::string st;
+            const float g = loadoutGrowth(balls[static_cast<std::size_t>(i)], part, st);
+            drawTooltip(w, app.font(), zm, zs, tt, td, theme::textHi, g, st);
         }
     }
     app.useUiView();

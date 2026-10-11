@@ -481,9 +481,12 @@ inline constexpr float twinCallPerLevel = 0.1f;
 // "Baby dragon" (epic): a cone of its element at the nearest enemy
 inline constexpr float babyFrac = 0.4f, babyFracPerLevel = 0.05f, babyEvery = 2.f, babyEveryPerLevel = 0.15f;
 inline constexpr float babyRange = 220.f, babyCone = 0.55f, babyOrbit = 30.f;   // reach, half-angle (rad), from the ball
-inline constexpr float babyCharge = 0.35f, elderCharge = 0.8f;   // s drawing breath (turning to aim) before it lets go
+inline constexpr float babyCharge = 0.35f, elderCharge = 0.6f;   // s drawing breath (turning to aim) before it lets go
 inline constexpr float babyTurn = 7.f, elderTurn = 2.2f;         // rad/s it turns its head
-inline constexpr float babyBreathTime = 0.9f, elderBreathTime = 1.6f;   // s a breath of fire lasts (the damage spread over it)
+inline constexpr float babyBreathTime = 0.9f;   // s a breath of fire lasts (the damage spread over it)
+// The elder (2026-10-06): breathes longer than it rests, a steady stream - a
+// legendary should look it. Damage per tick as a 1.6 s breath x elderSustain.
+inline constexpr float elderBreathTime = 4.5f, elderBreathRef = 1.6f, elderSustain = 0.7f, elderTick = 0.08f;
 inline constexpr float breathTick = 0.15f;
 inline constexpr float headReach = 1.8f;                          // rad the head turns away from the body at most
 // legendaries (2026-10-05)
@@ -514,7 +517,7 @@ inline constexpr float hiveSplitLife = 3.f;                     // a bug that ki
 inline constexpr float hiveEvery = 1.f, hiveLife = 5.f, hiveSpeed = 230.f, hiveBiteEvery = 0.45f;
 inline constexpr float hiveLitBlast = 3.f, hiveLitRadius = 45.f;   // lit by a baby dragon's breath: the next bite explodes
 // "Elder dragon" (legendary, the one): circles the arena, breath sweeps a swath
-inline constexpr float elder = 4.f, elderPerLevel = 0.5f, elderEvery = 4.f, elderEveryPerLevel = 0.25f;
+inline constexpr float elder = 4.f, elderPerLevel = 0.5f, elderEvery = 2.5f, elderEveryPerLevel = 0.25f;   // rest 2.5 s (was 4)
 inline constexpr float elderSpin = 0.35f, elderOrbit = 0.36f;   // rad/s round the core, x the arena's short side
 inline constexpr float elderLength = 620.f, elderWidth = 70.f;  // the swath: reach, half-width
 inline constexpr float elderBabyMul = 1.5f;                     // with an elder about, baby breath x this
@@ -555,5 +558,305 @@ inline constexpr float plagueDps = 0.3f, plagueDpsPerLevel = 0.08f;    // x the 
 inline constexpr float plagueSpeed = 1.9f, plagueBite = 1.f;            // ...but they run mad and fast; touching, they bite (x their dps)
 inline constexpr int plagueMax = 8;
 }  // namespace common
+
+// ==================================================================== Astronomer
+// The Guardian's ascended class (2026-10-06): planets orbit the core, each at
+// its own distance and pace (sim/WorldPlanets.cpp). Orbits are ellipses that
+// fit the arena (squeezed to the room around the core). Damage is x the ball's
+// hit x the planet's power (its item level, weaker for a bonus planet). A
+// bigger ball means bigger planets and more of what they throw.
+namespace planet {
+// per PlanetKind: Mercury, Venus, Earth, Mars, Jupiter, Saturn, Neptune, Moon
+inline constexpr float orbit[]  = {95.f, 140.f, 185.f, 225.f, 330.f, 280.f, 375.f, 65.f};   // px past the core's edge
+inline constexpr float speed[]  = {4.2f, 2.0f, 1.6f, 1.35f, 0.62f, 0.9f, 0.55f, 1.7f};      // rad/s (x1.7 since the first take)
+inline constexpr float radius[] = {8.f, 13.f, 14.f, 12.f, 26.f, 17.f, 15.f, 8.f};           // px at size x1
+inline constexpr float frac[]   = {0.4f, 0.45f, 0.45f, 0.8f, 0.7f, 0.6f, 0.5f, 0.4f};     // a touch, x the ball's hit
+inline constexpr float hitCd[]  = {0.18f, 0.3f, 0.3f, 0.3f, 0.35f, 0.3f, 0.3f, 0.3f};      // s between two hits of one planet
+inline constexpr float powerPerLevel = 0.3f;   // + per item level past the first (gearPower: 1 / 3 / 5)
+inline constexpr float bonusPower = 0.5f;      // an ascension's bonus planet
+inline constexpr float starryBonusPower = 0.75f;
+inline constexpr int starryBonus = 3;          // "Starry night": planets that join each fight
+inline constexpr float starrySize = 1.3f;      // ...and every planet x this (size and hits)
+inline constexpr float knock = 380.f, stagger = 0.35f;   // what a touch does
+inline constexpr float bossFrac = 0.5f;
+inline constexpr float sizeMin = 0.8f, sizeMax = 2.6f;   // the ball's size, as it scales the planets
+// The Atlas ball itself: every homeEvery bounces (walls or enemies) it heads
+// straight for the core, so it swings between the field and the core and its
+// planets go off often.
+inline constexpr int homeEvery = 2;
+// a core bounce, per planet - each its own thing
+inline constexpr float mercuryBoost = 3.f;               // Mercury: s at double speed, leaving a burning trail
+inline constexpr float flareEvery = 0.04f, flareLife = 1.2f, flareR = 16.f, flareFrac = 0.8f;   // (dps, x the hit)
+inline constexpr float acidR = 85.f, acidTime = 3.5f, acidFrac = 0.6f, acidMark = 1.f;   // Venus: an acid storm riding it (dps; corrodes: marked)
+inline constexpr float earthEvery = 2.f, earthRange = 460.f;                             // Earth: a rocket now and then...
+inline constexpr int earthSalvo = 4;                                                     // ...a salvo on a core bounce
+inline constexpr float rocketFrac = 0.45f, rocketBlast = 55.f, rocketSpeed = 380.f, rocketTop = 1150.f, rocketTurn = 4.f;
+inline constexpr int marsMoons = 2;                                                      // Mars: Phobos and Deimos, thrown and back
+inline constexpr float moonletFrac = 0.6f, moonletSpeed = 900.f, moonletTurn = 9.f;
+inline constexpr float jupiterPuffEvery = 0.3f, jupiterPuff = 42.f, jupiterPuffLife = 3.f, jupiterPuffFrac = 0.12f;
+inline constexpr float spotR = 150.f, spotTime = 4.5f, spotFrac = 0.3f, spotPull = 130.f, spotDrift = 70.f;   // the Great Red Spot
+inline constexpr float saturnAura = 1.9f;              // Saturn: its rings cut this far out (x its radius)...
+inline constexpr float haloR = 75.f, haloTime = 5.f, haloFrac = 0.3f, haloKnock = 520.f, haloEvery = 0.4f;   // ...and settle round the core
+inline constexpr float tritonTime = 6.f, tritonSpeed = 2.8f, tritonFrac = 0.6f, tritonFreeze = 1.5f, tritonR = 7.f;   // Neptune: Triton, backwards
+inline constexpr float beltOrbit = 420.f;               // px past the core's edge (the outermost)
+inline constexpr int beltRocks = 16, beltRocksPerLevel = 4;
+inline constexpr float beltFrac = 0.4f, beltRegrow = 6.f, beltSpeed = 0.25f;
+inline constexpr float meteorFrac = 0.5f, meteorBlast = 45.f, meteorTime = 0.45f;       // a belt rock flung down on an enemy
+inline constexpr float starFrac = 0.6f, starBlast = 34.f, starTime = 0.35f;             // "Starry night": a falling star
+// the class (with any planet): contact hits x this, its planets x size
+inline constexpr float contactMul = 0.75f, classSize = 1.1f;
+inline constexpr float classPlating = 5.f;
+inline constexpr float growPer = 0.015f;   // the class's passive: every kill this fight, the ball (and its planets) +3%...
+inline constexpr int growMax = 20;        // ...up to this many
+}  // namespace planet
+
+// Shrines (2026-10-06): a map stop from act 2 on, one per act.
+namespace shrine {
+inline constexpr int fromAct = 4;
+inline constexpr int maxAscended = 3;   // balls that can ascend in a run
+inline constexpr int ascendPicks = 3;   // planets offered on ascending
+}  // namespace shrine
+
+// ==================================================================== Hermes
+// The Striker's god (2026-10-06): speed. Few items, each a big one.
+namespace hermes {
+inline constexpr float cruise = 1.5f, top = 1.7f;      // the class: cruise / top speed x this (very fast from the start)
+inline constexpr float regain = 12.f;                  // ...and it gets back up to speed almost at once after a hit
+inline constexpr float speedDamage = 0.f;    // (its speed is its edge already)
+inline constexpr float contactMul = 0.3f;      // ...so each hit is light: it lives on many, and on its message             // hits x (1 + this per cruise over its own)
+inline constexpr float fastAt = 2.f;                   // "flying fast": over this x its cruise
+inline constexpr float talaria = 0.12f, talariaPerLevel = 0.03f, talariaDecay = 0.3f;   // per wall bounce; fling fades x this
+inline constexpr float caduceus = 0.3f, caduceusPerLevel = 0.08f, caduceusRange = 230.f;
+inline constexpr float messengerEvery = 4.f, messengerPerLevel = -0.5f, messengerHit = 1.5f, messengerHitPerLevel = 0.3f;
+inline constexpr float petasos = 0.25f, petasosPerLevel = 0.08f, boomR = 70.f, boomEvery = 0.12f;
+inline constexpr float quicksilver = 0.3f, quicksilverPerLevel = 0.06f;
+// The class's own way to fly (2026-10-06): it shies away from the core and
+// leans toward the enemies; every bounce away from the core speeds it up, and
+// walls and time flown fast load a message it delivers at the core - a hit on
+// the whole arena.
+inline constexpr float momentumPer = 0.03f, momentumMax = 0.5f;   // cruise + this per bounce, up to +this
+inline constexpr float avoidRange = 230.f, avoidTurn = 14.f;       // px past the core's edge; rad/s at the closest
+inline constexpr int deliverAfter = 100;                            // ...till this many bounces: then it goes for the core to deliver (not before)
+inline constexpr float seekTurn = 1.1f, seekRange = 520.f;         // rad/s toward the nearest enemy
+inline constexpr float chargePerWall = 0.2f, chargePerSecFast = 0.35f, chargeMax = 8.f;
+inline constexpr float deliverFrac = 0.4f;                         // the arena hit: x its hit per point of charge
+inline constexpr float deliverMin = 0.6f;                          // (less charge than this: nothing)
+}  // namespace hermes
+
+// ==================================================================== Odin
+// The Mage's god (2026-10-06): ravens, runes, a spear.
+namespace odin {
+// (2026-10-06, toned down) Every recharge bonus - the class, Valknut, Focus,
+// the web - goes into one sum with diminishing returns (World::mageCastRate):
+// the first helps a lot, each more a little less, x3 at most. The all-cast,
+// Huginn and Gungnir all come round at that rate.
+inline constexpr float rate = 0.3f;                    // the class: + this recharge bonus...
+inline constexpr float power = 1.0f;                   // ...abilities this much harder, wider...
+inline constexpr float allEvery = 12.f;                // ...it casts only in volleys, all at once, every this-many s at its rate
+inline constexpr float contactMul = 0.6f;
+inline constexpr float killRefund = 0.04f;             // the class's passive: a kill brings its next volley this share sooner
+inline constexpr float huginn = 1.f, huginnPerLevel = 0.f, burstGap = 0.25f;   // (on / off) every huginnEvery-th volley, 3 times running
+inline constexpr int huginnCasts = 3, huginnEvery = 4;
+inline constexpr float muninn = 0.5f, muninnPerLevel = 0.12f, blastR = 110.f, blastRange = 650.f;
+inline constexpr float valknut = 0.4f, valknutPerLevel = 0.1f;   // + recharge bonus (into the same sum)
+inline constexpr float gungnir = 6.f, gungnirPerLevel = 1.5f, gungnirEvery = 14.f, gungnirEveryPerLevel = -1.2f;   // s at its rate
+inline constexpr int spearsMax = 10;                    // Gungnir: one more spear per spell cast since the last throw, up to this many more...
+inline constexpr float spearExtra = 0.3f, spearGap = 0.07f;   // ...each this x its hit, thrown this many s apart
+inline constexpr float spearTime = 0.3f, spearWidth = 18.f;   // s out (and as long back), px either side of the line
+inline constexpr float draupnirPower = 1.5f, draupnirPowerPerLevel = 0.25f;   // abilities x this (damage, reach)...
+inline constexpr int draupnirLevels = 1;               // ...and this many levels up (more of everything they throw)
+}  // namespace odin
+
+// ==================================================================== Thanatos
+// The Assassin's god (2026-10-06): it latches onto an enemy and stabs it till
+// it dies, then blinks to the next - one mark at a time.
+namespace thanatos {
+inline constexpr float stabEvery = 0.18f, stabMul = 1.7f;   // a stab from behind: x this
+inline constexpr float blinkCd = 0.9f;                      // s between blinks (a kill halves what's left); free flight meanwhile
+inline constexpr float daggerSpeed = 1500.f, daggerMin = 0.08f, daggerMax = 0.25f;   // the dagger thrown first: px/s, each flight (s)
+inline constexpr int daggerBounces = 3;                                              // ...it bounces on this many times: to far ones, the way that cuts through most
+inline constexpr float bounceRange = 800.f, daggerFrac = 0.6f, hopStep = 0.09f;      // ...how far; its cut (x the hit); s per blink along them
+inline constexpr float daggerWidth = 26.f, passFrac = 0.25f;                         // everything it flies through on the way: px either side, a lighter cut
+inline constexpr float blinkMin = 0.5f;                     // ...but never two blinks closer than this (Final hour aside)
+inline constexpr float soulPer = 0.08f;                     // the passive: +this damage per kill this fight...
+inline constexpr int soulMax = 15;
+inline constexpr float shadowStep = 0.6f, shadowStepPerLevel = 0.15f, cutWidth = 22.f;
+inline constexpr float deathMark = 0.25f, deathMarkPerLevel = 0.05f;
+inline constexpr int eclipseEvery = 4;
+inline constexpr float eclipse = 1.5f, eclipsePerLevel = 0.4f, eclipseR = 130.f;
+inline constexpr int scythe = 2;
+inline constexpr float finalHour = 15.f, finalHourPerLevel = -2.f, hourStep = 0.08f;
+inline constexpr int hourBlinks = 12;
+}  // namespace thanatos
+
+// ==================================================================== Tiamat
+// The Summoner's god (2026-10-06): a mount, dragons, lizards.
+namespace tiamat {
+inline constexpr float contactMul = 0.7f;
+inline constexpr float cruise = 0.55f, top = 0.75f;   // the class: slow and heavy - the dragon carries her
+inline constexpr float fireEvery = 1.f, fireRange = 520.f, fireR = 130.f, fireFrac = 3.5f, fireFlight = 0.55f;   // the mount's fireballs
+inline constexpr float skillEvery = 3.5f;              // ...and a move of its own every so often (7 till 2026-10-07):
+inline constexpr float roarR = 300.f, roarStun = 1.2f;               // roar: stuns what's near
+inline constexpr float diveR = 150.f, diveFrac = 2.5f;               // dive: it swoops onto the thickest pack
+inline constexpr float infernoR = 150.f, infernoTime = 4.f, infernoFrac = 1.2f;   // inferno: a ring of fire rides with it (dps)
+inline constexpr int meteors = 3;                                    // meteors: called down on packs
+inline constexpr float meteorR = 120.f, meteorFrac = 2.f;
+// always at it, so it's never idle
+inline constexpr float clawEvery = 0.35f, clawFrac = 1.8f, clawReach = 2.4f;     // claws: what's close (x its radius)
+inline constexpr float emberEvery = 0.12f, emberLife = 2.5f, emberR = 26.f, emberFrac = 0.5f;   // its wake burns (dps)
+inline constexpr int lizardMax = 18, broodMax = 24;   // (24 / 36 till 2026-10-07)
+inline constexpr float breathEvery = 1.2f, breathRange = 260.f, breathCone = 0.4f, breathFrac = 1.4f;   // between its moves it breathes fire at what's near
+inline constexpr float lizardLife = 10.f, lizardSpeed = 260.f, lizardBite = 0.5f, lizardFrac = 1.1f;
+inline constexpr float hordeEvery = 5.f, hordeEveryPerLevel = -0.6f;
+inline constexpr int hordeSize = 6;
+inline constexpr float dragonPerLevel = 0.3f;
+// Growth (2026-10-07): each dragon starts as an egg and grows all run long - every enemy that dies, whoever
+// killed it, feeds it (x its rate). Stages: 0 egg, 1 hatchling, 2 young, 3 adult - each stage a new move.
+// The quick growers stay small; the slow ones end up huge and hit harder.
+inline constexpr float stageXp[3] = {3.f, 60.f, 200.f};   // xp to hatch / to be young / to be adult
+inline constexpr float killXp = 0.5f;
+//                                    frost  drake  gold  ravager wyrmling
+inline constexpr float growRate[5]  = {0.7f, 1.6f, 0.5f, 1.f, 2.f};
+inline constexpr float adultSize[5] = {46.f, 28.f, 58.f, 38.f, 18.f};   // body length, fully grown (px)
+inline constexpr float adultPow[5]  = {1.15f, 0.85f, 1.3f, 1.f, 0.8f};  // its hit, fully grown
+inline constexpr float hatchSize = 0.35f, hatchPow = 0.45f;               // a fresh hatchling, of the adult's
+inline constexpr float mountRate = 1.f;                                   // her mount: always ridden (a hatchling at first), it grows too:
+inline constexpr float mountSize = 0.6f, mountPow = 0.65f;                // ...fresh, of its full size and hit. Young: embers + its moves; adult: every move, sooner
+inline constexpr float mountSkillAdult = 2.5f;
+inline constexpr int wyrmBody[4] = {0, 6, 9, 14};                        // the frost wyrm's body segments by stage
+inline constexpr float flyTurn[5] = {0.f, 2.6f, 1.3f, 2.f, 0.f};          // how hard each turns on the wing (rad/s): it carves arcs
+// on the wing: a few beats, then a glide on still wings while it loses speed; each downstroke a push
+inline constexpr float beatRate = 5.f, beatEffort = 3.5f, beatPush = 0.9f;   // wingbeats (rad/s, faster when it strains), the push of each
+inline constexpr float glideMin = 0.5f, glideMax = 1.3f, glideDrag = 0.35f;  // a glide: how long, how fast it bleeds speed
+// the ravager's run: it veers off, wings back, then hooks round and rushes in, steering as it goes
+inline constexpr float windup = 0.28f, runTurn = 3.2f, runAccel = 5.f, runMax = 1.8f;
+// the frost wyrm: circles the core; what its body touches freezes (once a lap), and it breathes ice outward
+inline constexpr float wyrmOrbit = 210.f, wyrmSpin = 1.6f, wyrmEvery = 3.f, wyrmRange = 330.f, wyrmFrac = 1.f, wyrmFreeze = 1.f;
+inline constexpr float coilR = 20.f, coilFrac = 0.8f, coilFreeze = 1.2f;   // its body: reach round each segment, hit, freeze
+inline constexpr float patchR = 70.f, patchLife = 3.f, patchFrac = 0.3f;   // an adult's breath leaves frost where it lands (dps)
+inline constexpr float staticEvery = 0.5f, staticRange = 190.f, staticFrac = 0.35f;            // the drake's field zaps what's near
+// they roam the field (never still): speeds px/s
+inline constexpr float drakeSpeed = 175.f, goldSpeed = 120.f;
+inline constexpr float orbEvery = 1.6f, orbFrac = 0.6f, orbZapR = 75.f, orbZapEvery = 0.2f, orbTime = 1.3f;   // the drake's ball lightning
+// an adult drake's storm: clouds over the thickest packs, drifting after them; each bolt blasts an area
+inline constexpr float stormEvery = 5.f, stormR = 150.f, stormTime = 4.f, stormStrikeEvery = 0.45f, stormFrac = 2.f;
+inline constexpr float boltR = 75.f, cloudDrift = 60.f;
+inline constexpr int stormClouds = 2;
+// the three-headed gold: each head its own - a flamethrower, molten gold, a pulling roar
+inline constexpr float flameEvery = 0.3f, flameRange = 220.f, flameFrac = 0.9f;
+inline constexpr float globHeadEvery = 1.5f;
+inline constexpr float pullEvery = 4.f, pullR = 280.f, pullSpeed = 520.f;
+// the ravager: charges straight through the thickest pack, hitting all on its way; its kills hatch lizards
+inline constexpr float ravageSpeed = 130.f, ravageEvery = 1.8f, ravageEveryPerLevel = -0.25f;   // roaming between runs
+inline constexpr float ravageRun = 900.f, ravageWidth = 42.f, ravageFrac = 3.f, ravagePast = 220.f;   // the run: px/s, its reach, past the pack
+// the three-headed gold's heads: how far each turns from its body (rad), how fast, how often it picks another enemy
+inline constexpr float headSwing = 1.3f, headTurn = 6.f, headPickMin = 1.2f, headPickMax = 3.f;
+// the wyrmling: darts from enemy to enemy finishing the weakest; each kill it grows (harder bites) for the fight
+inline constexpr float wyrmlingSpeed = 360.f, wyrmlingRange = 450.f, biteEvery = 0.3f, biteFrac = 1.8f;
+inline constexpr float pounceTime = 0.5f, pounceSpeed = 1.8f, splashR = 45.f, splashFrac = 0.5f;   // young: a pounce after a kill; adult: bites splash
+inline constexpr float globEvery = 2.5f, globFrac = 2.6f, globR = 90.f;                             // the gold spits molten gold
+inline constexpr float shadowR = 110.f, shadowFrac = 0.4f, moltenR = 120.f, moltenLife = 3.f, moltenFrac = 1.f;   // the gold's shadow, its molten pool
+inline constexpr float drakeEvery = 2.f, drakeFrac = 0.8f, drakeRange = 420.f, drakeMove = 8.f;
+inline constexpr int drakeChain = 4;
+inline constexpr float goldEvery = 7.f, goldDive = 0.6f, goldR = 160.f, goldFrac = 4.f;
+}  // namespace tiamat
+
+// ==================================================================== Loki
+// The Jester's god (2026-10-07): clones playing games of chance.
+namespace loki {
+inline constexpr float contactMul = 1.f;
+inline constexpr float cloneEvery = 0.45f, cloneLife = 4.f, cloneSpeed = 240.f, cloneSteer = 1.2f;   // its clones fly about, drifting at the enemies
+inline constexpr int clones = 3, clonesHigh = 4;
+inline constexpr float killClone = 0.25f;                         // the passive: a kill may split off a clone at once
+inline constexpr float flyMin = 0.3f, flyMax = 0.6f, gameShow = 0.45f;   // each clone flies a moment, plays one game (it spins this long), pays, and is gone
+inline constexpr float perLevel = 0.25f;                          // its items: each level, +this on that game's payout
+inline constexpr float coinHeads = 8.f, coinTails = 3.5f, coinRange = 520.f, coinR = 70.f;   // the coin: heads a bolt (x the hit, round where it lands)
+inline constexpr float diceFrac = 2.f, diceRange = 500.f;                                  // dice: that many knives
+inline constexpr float redFrac = 6.f, redR = 130.f;                                         // roulette: red a fire nova...
+inline constexpr float blackR = 260.f, blackPull = 480.f, blackStun = 1.f;                  // ...black drags in and stuns...
+inline constexpr float green = 0.1f, jackpotFrac = 16.f, jackpotR = 260.f;                   // ...green (this often) the jackpot
+inline constexpr int jackpotGold = 6;
+inline constexpr float cardFrac = 4.f, slashLen = 420.f, slashW = 30.f, clubR = 130.f, clubStun = 0.6f, heartHeal = 1.f;   // cards
+inline constexpr int shardTargets = 3;
+inline constexpr float pachinkoEvery = 2.f, pachinkoFrac = 1.8f, pinGravity = 900.f, pinLife = 4.f;   // pachinko: its steel balls
+inline constexpr int pachinkoBalls = 14, pinMax = 140;
+inline constexpr float highMul = 1.5f, highEvery = 0.32f, highPerLevel = 0.15f;
+}  // namespace loki
+
+// ==================================================================== Nergal
+// The Alchemist's god (2026-10-07): plague and pestilence.
+namespace nergal {
+inline constexpr float contactMul = 0.85f;
+inline constexpr float rotTime = 4.f, rotFrac = 0.12f, rotMax = 0.5f;   // every hit infects: + this x the hit a second, up to rotMax x, for rotTime
+inline constexpr int ratsPerDeath = 1, ratMax = 20;                    // the infected die into rats
+inline constexpr float ratLife = 8.f, ratSpeed = 240.f, ratBite = 0.5f, ratFrac = 0.2f;
+// the class: a trail of swarms behind it, each hunting what's near
+inline constexpr float swarmEvery = 0.5f, swarmLife = 3.f, swarmR = 38.f, swarmFrac = 0.3f, swarmSpeed = 190.f, swarmRange = 260.f;
+inline constexpr int swarmMax = 14;
+inline constexpr float locustMul = 2.f, locustPerLevel = 0.3f;         // "Locust swarm": swarms x2 as often, bigger, harder, longer
+inline constexpr float rainEvery = 6.f, rainPerLevel = -0.6f, rainR = 230.f, rainTime = 4.f, rainFrac = 0.35f, rainDrift = 45.f, rainMark = 0.6f;
+inline constexpr float tideEvery = 5.f, tidePerLevel = -0.5f, tideBite = 1.5f;
+inline constexpr int tideSize = 8;
+inline constexpr float deathR = 100.f, deathFrac = 0.6f, deathPerLevel = 0.15f;   // (it infects, it doesn't chain bursts)
+inline constexpr float horseEvery = 10.f, horsePerLevel = -1.f, horseFrac = 3.f, horseW = 55.f, horseSpeed = 1100.f;
+// the black plague meeting each element (x the hit)
+inline constexpr float pyreR = 120.f, pyreFrac = 1.6f;                 // fire: a pyre - burns, and spreads the rot
+inline constexpr float coldR = 110.f, coldFrac = 1.f, coldFreeze = 1.5f;   // ice: cold death - freezes, the rot cracks out at once
+inline constexpr float pestR = 150.f;                                  // poison: pestilence - the rot doubles and spreads
+inline constexpr float feverRange = 300.f, feverFrac = 1.2f;           // electric: fever - black lightning through the infected
+inline constexpr int feverJumps = 6;
+inline constexpr float miasmaR = 110.f, miasmaTime = 3.f, miasmaFrac = 0.6f;   // water: a miasma - a black cloud that lingers
+inline constexpr float graveR = 120.f, graveFrac = 1.5f, graveStun = 1.2f;     // stone: a mass grave - the ground swallows, rats crawl out
+inline constexpr int graveRats = 2;
+}  // namespace nergal
+
+// ==================================================================== Apolo
+// The Support's god (2026-10-07): the muses and their gifts.
+namespace apolo {
+inline constexpr float contactMul = 0.9f;
+inline constexpr float rotEvery = 5.f, killHold = 0.5f;           // the muses move on this often; a kill holds them a little
+inline constexpr float strength = 1.f, speed = 0.8f, giantSize = 0.5f, giantDamage = 0.5f;   // the gifts
+inline constexpr float markTime = 0.3f;        // each muse's weak point: kept until it dies, then the enemy nearest her
+inline constexpr float lyreHeal = 3.f, lyrePerLevel = 1.f, lyreLinger = 3.f, lyreHalf = 0.5f;
+inline constexpr float laurel = 0.4f, laurelPerLevel = 0.15f;
+inline constexpr float bowEvery = 0.8f, bowFrac = 2.f, bowPerLevel = 0.3f;
+inline constexpr float sunR = 95.f, sunFrac = 1.f, sunPerLevel = 0.25f, sunTick = 0.25f;
+inline constexpr float oracle = 3.f, oraclePerLevel = 0.5f;
+}  // namespace apolo
+
+// ==================================================================== Ares
+// The Shooter's god (2026-10-07): an arsenal; every item one more weapon.
+namespace ares {
+inline constexpr float contactMul = 0.4f;
+inline constexpr int cannons = 6;                                   // the class: ghost cannons round it...
+inline constexpr float fireEvery = 0.1f, bulletFrac = 0.55f, range = 650.f;   // ...one fires this often, this x its hit, at what's in reach
+inline constexpr float lustPerKill = 0.08f, lustMax = 1.f, lustHold = 2.f, lustFade = 0.25f;   // bloodlust: fire rate + this per kill; held, then fades /s
+inline constexpr float perLevel = 0.2f;                             // every weapon: x(1 + this per level past 1)
+inline constexpr float moonEvery = 1.1f, missileFrac = 1.5f, missileSpeed = 520.f, missileTurn = 5.f, missileR = 60.f, fear = 0.7f;   // Phobos & Deimos
+inline constexpr float teethEvery = 6.f, hopliteLife = 8.f, sprout = 0.6f, volleyEvery = 1.f, volleyFrac = 0.35f;        // Dragon's teeth
+inline constexpr int teeth = 3, hopliteMax = 9, volleyBullets = 3;
+inline constexpr float chariotEvery = 7.f, chariotFrac = 2.f, chariotSpeed = 900.f, flameEvery = 0.05f, flameLife = 3.f, flameR = 32.f, flameFrac = 0.6f;   // War chariot
+inline constexpr float wrathEvery = 2.5f, wrathWarn = 0.8f, wrathR = 150.f, wrathFrac = 6.f, craterLife = 3.f, craterFrac = 0.5f;          // Wrath of Olympus
+inline constexpr float troyEvery = 10.f, troyBand = 140.f, troyTime = 1.2f, troyR = 75.f, troyFrac = 2.5f;                                 // Trojan war
+inline constexpr int troySpears = 14;
+inline constexpr int wrathMax = 9;   // Wrath of Olympus: stars falling + craters burning, at most this many at once
+}  // namespace ares
+
+// ==================================================================== Artemisa
+// The Slinger's god (2026-10-07): the hunt, all on the throw.
+namespace artemisa {
+inline constexpr float contactMul = 0.8f, throwMul = 1.6f;
+inline constexpr float autoEvery = 4.f, autoPull = 0.85f;                 // left alone this long, she throws herself (this hard a pull)
+inline constexpr float arrowFrac = 0.8f, arrowWidth = 14.f;               // the silver arrow down the throw's line
+inline constexpr float preyTime = 6.f, preyMul = 2.f;                     // its prey: marked; the ball's first hit on it x this
+inline constexpr float perLevel = 0.2f;
+inline constexpr float houndSpeed = 900.f, houndLife = 2.5f, houndFrac = 1.f, houndBite = 24.f;   // Silver hounds
+inline constexpr float echoDelay = 0.12f, echoLife = 3.f;                 // Crescent moon: two balls on the throw's path, this far behind
+inline constexpr float rainR = 70.f, rainFrac = 1.2f, rainGap = 0.08f, rainFall = 0.3f;   // Arrow rain
+inline constexpr int rainMax = 12;
+inline constexpr float stagPull = 0.9f, stagSpeed = 1400.f, stagFrac = 3.f, stagW = 40.f;  // Golden stag
+inline constexpr float nightEvery = 15.f, nightTime = 5.f, nightSpeed = 2600.f, nightFrac = 1.5f;   // Night of the hunt
+inline constexpr int nightMax = 40;
+}  // namespace artemisa
 
 }  // namespace sb::cfg

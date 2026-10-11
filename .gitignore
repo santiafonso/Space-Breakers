@@ -8,3 +8,4 @@ dist/
 saves/
 # raw audio source; the game ships assets/music/
 /music/
+.claude/worktrees/

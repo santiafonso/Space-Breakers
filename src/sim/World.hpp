@@ -67,6 +67,7 @@ public:
 
     // ---- creeds (sim/WorldCreeds.cpp) -----------------------------------
     const std::vector<int>& ballKills() const { return ballKills_; }   // kills per ball (owner) this run
+    float tiamatXp(int owner, int kind) const;   // that ball's dragon of that kind: how grown (0 = none)
     void trimBalls(int n);                     // "Duet": drop every ball past the first n
     void creedNova(const WorldParams& p);       // "Nova": burst every ball out of the core in a ring
     // "Hunters": each ball's current prey (valid where huntHas()[i] is set).
@@ -75,11 +76,20 @@ public:
 
     // ---- dev tools (no-ops unless the caller is in dev mode) ---------
     void devWinWave();                    // clear the current wave now
+    void devHurtBoss(float frac);         // set the boss to this share of its HP (crossing a phase starts it)
     void devSpawn(EnemyKind k, int n);    // drop n enemies of a kind in from the edges
     void devKillAll();                    // everything on the field dies (counts as kills)
     void devSetInvuln(bool on) { invuln_ = on; }
     void setEndless(bool on) { endless_ = on; }   // dev endless: a fallen core just refills, the run goes on
     void devSpawn(int n) { for (int i = 0; i < n; ++i) spawnEnemy(); }   // dev: n more enemies at once
+    void devSpawnTough(int n, float hpMul) {   // dev endless: n more, each with hpMul x the health
+        for (int i = 0; i < n; ++i) {
+            spawnEnemy();
+            enemies_.back().hp *= hpMul;
+            enemies_.back().maxHp *= hpMul;
+        }
+        waveRunning_ = true;
+    }
     void setPhoenix(int charges) { phoenixLeft_ = charges; }   // "Phoenix" relic: saves left this act
     bool devInvuln() const { return invuln_; }
 
@@ -122,10 +132,12 @@ public:
     const std::vector<Enemy>& enemies() const { return enemies_; }
     const std::vector<Bolt>& bolts() const { return bolts_; }
     const std::vector<Obstacle>& obstacles() const { return obstacles_; }
+    const std::vector<Shot>& shots() const { return shots_; }
     const std::vector<Pool>& pools() const { return pools_; }
     const std::vector<Wave>& waves() const { return waves_; }
     const std::vector<BlackHole>& blackHoles() const { return blackHoles_; }   // "Black hole"
     const ClassWorldState& classWorld() const { return classWorld_; }          // per-class world state (bullets, summons...)
+    sf::Vector2f planetOrbit(float orbitPx, float ang) const;   // the Astronomer: a point on an orbit that fits the arena
     const std::vector<TetherBeam>& tethers() const { return tethers_; }        // "Tether" lasers, this step
     const std::vector<Pickup>& pickups() const { return pickups_; }
     const Core& core() const { return core_; }
@@ -147,6 +159,7 @@ public:
     bool runOver() const { return runOver_; }
     // What last reached the core: an EnemyKind, kCoreHitByBoss, or -1 (nothing yet).
     static constexpr int kCoreHitByBoss = -2;
+    static constexpr int kCoreHitByShot = -3;
     int lastCoreHitBy() const { return lastCoreHitBy_; }
     int wave() const { return wave_; }
     // What's left of the fight for the HUD: still to come + alive, not
@@ -196,11 +209,24 @@ private:
     float enemySpeed(int wave) const;
     void updateHive(float dt);                     // sway in, burst runners
     void updateWarden(float dt, const WorldParams& p);
-    void updateDasher(float dt, const WorldParams& p);
+    void updateDasher(float dt, const WorldParams& p, FrameEvents& ev);
     // A ball landed on the boss: damage (unless i-frames / too slow / the
     // Warden's shield), Dasher knockback. cdMul stretches the i-frames.
     void ballHitsBoss(Ball& b, float cdMul, const WorldParams& p, FrameEvents& ev, bool speedGate = true);
     bool wardenBlocks(sf::Vector2f from) const;
+    // Boss phases (cfg::boss::stageAt): what got through since the last
+    // update is scaled (no damage while guarded, the Dasher's armour); a
+    // threshold crossed starts the next phase - pull back, raise parts.
+    float bossTakenMul() const;
+    void settleBossDamage();
+    void enterBossStage(int stage, FrameEvents& ev);
+    void raiseParts(int n);                      // pillars / nests / anchors around the arena
+    void updateBossParts(float dt, FrameEvents& ev);
+    bool retreatBoss(float dt);                  // the pull-back at a phase change; true while it lasts
+    void fireShots(sf::Vector2f from, int n, float spread);   // a fan of orbs at the core
+    void updateShots(float dt, const WorldParams& p, FrameEvents& ev);
+    void updateCasters(float dt, const WorldParams& p, FrameEvents& ev);   // beams on the core
+    void coreLoses(float hp, const WorldParams& p, FrameEvents& ev);       // hard / creed scaling, Phoenix, the end
     EnemyKind rollEnemyKind();        // weighted by wave (kinds phase in) and elite
     static void setEnemyKind(Enemy& e, EnemyKind k, float hp, float speed);
     static bool shieldBlocks(const Enemy& e, sf::Vector2f from, sf::Vector2f corePos);
@@ -209,7 +235,69 @@ private:
     void updateCoreSlide(float dt);          // ease the core left -> centre entering wave 11
     void advanceCombo(float dt, const WorldParams& p);
     void advanceLeash(Ball& b, float dt, const WorldParams& p, FrameEvents& ev);   // "Leash": the spin on its rope
-    void advanceSatellite(Ball& b, float dt, const WorldParams& p, FrameEvents& ev);   // "Satellite": orbit the core
+    // The Astronomer's planets (sim/WorldPlanets.cpp).
+    void updatePlanets(float dt, const WorldParams& p, FrameEvents& ev);
+    void planetsCoreBounce(Ball& b, const WorldParams& p, FrameEvents& ev);   // its ball bounced off the core
+    bool planetsCatch(sf::Vector2f pos, float r);                             // a shot runs into one?
+    void atlasBounce(Ball& b);                                                // Atlas: every few bounces, back to the core
+    // Hermes and Odin (sim/WorldGods.cpp).
+    bool hermesFast(const Ball& b, const WorldParams& p) const;
+    bool hermesGolden(const Ball& b, const WorldParams& p) const;
+    bool recastAbility(Ball& b, Ability id, int level, float power, sf::Vector2f from, const WorldParams& p, FrameEvents& ev);
+    void godsTick(Ball& b, float dt, const WorldParams& p, FrameEvents& ev);
+    void godsOnHit(Ball& b, Enemy& e, float dmg, const WorldParams& p, FrameEvents& ev);
+    void hermesBoom(Ball& b, sf::Vector2f at, const WorldParams& p, FrameEvents& ev);
+    void godsWallBounce(Ball& b, const WorldParams& p);
+    void godsCoreBounce(Ball& b, const WorldParams& p, FrameEvents& ev);
+    void godsOnCast(Ball& b, const AbilitySpec& a, const WorldParams& p, FrameEvents& ev);
+    bool odinCastAll(Ball& b, const WorldParams& p, FrameEvents& ev);
+    void godsOnKill(int owner);   // a kill credited to that ball (Enemy::lastBy)
+    // Thanatos and Tiamat (sim/WorldGods2.cpp).
+    void thanatosBlink(Ball& b, int target, const WorldParams& p, FrameEvents& ev);
+    int thanatosPick(const Ball& b) const;
+    void thanatosTick(Ball& b, float dt, const WorldParams& p, FrameEvents& ev);
+    void tiamatTick(Ball& b, float dt, const WorldParams& p, FrameEvents& ev);
+    void tiamatHatch(int owner, sf::Vector2f at);
+    void tiamatFeed();
+    // Loki (sim/WorldLoki.cpp).
+    void lokiSpawn(const Ball& b);
+    void lokiTick(Ball& b, float dt);
+    void updateLoki(float dt, const WorldParams& p, FrameEvents& ev);
+    // Apolo (sim/WorldApolo.cpp).
+    float apoloGift(const Ball& b, int gift) const;
+    float apoloDamageMul(const Ball& b) const;
+    float apoloSpeedMul(const Ball& b) const;
+    float apoloSizeMul(const Ball& b) const;
+    float apoloPreHit(Ball& b);
+    void apoloTwin(const Ball& parent, float life);
+    void updateApolo(float dt, const WorldParams& p, FrameEvents& ev);
+    void launchThrow(Ball& b, sf::Vector2f throwVel, float catchBonus, float heldT);   // a throw, the player's or Artemisa's own
+    // Artemisa (sim/WorldArtemisa.cpp).
+    void artemisaOnThrow(Ball& b, float pull);
+    void artemisaOnGrab(Ball& b);
+    float artemisaPreHit(Ball& b, const Enemy& e);
+    void artemisaTick(Ball& b, float dt, const WorldParams& p, FrameEvents& ev);
+    void updateArtemisa(float dt, const WorldParams& p, FrameEvents& ev);
+    // Ares (sim/WorldAres.cpp).
+    void aresOnKill(Ball& b);
+    const Enemy* aresTarget(sf::Vector2f from, float range, int skip) const;
+    void aresShot(Ball& b, sf::Vector2f from, sf::Vector2f dir, float dmg, const WorldParams& p);   // (sim/WorldClasses.cpp: the Shooter's gun)
+    void aresTick(Ball& b, float dt, const WorldParams& p, FrameEvents& ev);
+    void updateAres(float dt, const WorldParams& p, FrameEvents& ev);
+    // Nergal (sim/WorldNergal.cpp).
+    void nergalInfect(Enemy& e, float hit);
+    void nergalRat(int owner, sf::Vector2f at);
+    void nergalOnHit(Ball& b, Enemy& e, const WorldParams& p);
+    void nergalOnDeath(const Enemy& dead, const WorldParams& p, FrameEvents& ev);
+    void nergalPlague(Enemy& e, int owner, float dmg, const WorldParams& p, FrameEvents& ev);
+    BurstFx nergalReaction(Element other, Enemy& e, float dmg, float rm, const WorldParams& p, FrameEvents& ev);
+    void nergalTick(Ball& b, float dt, const WorldParams& p, FrameEvents& ev);
+    void updateNergal(float dt, const WorldParams& p, FrameEvents& ev);
+    void updateGods2(float dt, const WorldParams& p, FrameEvents& ev);
+    void muninnBlast(Ball& b, const WorldParams& p, FrameEvents& ev);
+    void updateGods(float dt, const WorldParams& p, FrameEvents& ev);
+    bool godRecast_ = false;   // a raven / Draupnir cast in progress (no echoes of echoes)
+    void buildPlanets(const WorldParams& p);
     void fireRail(Ball& b, const WorldParams& p, FrameEvents& ev);                    // "Railgun" beam
     void updateStorm(Ball& b, float dt, const WorldParams& p, FrameEvents& ev);       // "Storm" zaps
     void updateTwins(const WorldParams& p);                                            // "Gemini" twins
@@ -382,6 +470,7 @@ private:
     std::vector<Enemy> enemies_;
     std::vector<Bolt> bolts_;
     std::vector<Obstacle> obstacles_;
+    std::vector<Shot> shots_;   // boss orbs flying at the core
     std::vector<Pool> pools_;                // stone reactions: lava, mud, toxic dust
     std::vector<Wave> waves_;                // water balls' waves
     std::vector<BlackHole> blackHoles_;

@@ -27,9 +27,11 @@ namespace sb {
 template <> struct ClassHooks<BallRole::Striker> : NoClassHooks {
     static void onHit(World& w, Ball& b, Enemy& e, float dmg, bool, const WorldParams& p, FrameEvents&) {
         namespace S = cfg::synergy;
-        if (!b.isAscended(BallRole::Striker) || length(b.vel) <= w.ballCruise(b, p) * S::strikerShockSpeed) return;
-        w.areaDamage(e.pos, S::strikerShockRadius, dmg * S::strikerShockFrac, &e);
-        w.itemFx(CommonWorld::Fx::Sonic, e.pos, S::strikerShockRadius, theme::ballFast, 0.35f, normalized(b.vel, {1.f, 0.f}));
+        const float over = length(b.vel) / (w.ballCruise(b, p) * S::strikerShockSpeed);
+        if (!b.isAscended(BallRole::Striker) || over <= 1.f) return;
+        const float r = S::strikerShockRadius * std::min(over, S::strikerShockMaxScale);   // faster = wider (the hit already scales)
+        w.areaDamage(e.pos, r, dmg * S::strikerShockFrac, &e);
+        w.itemFx(CommonWorld::Fx::Sonic, e.pos, r, theme::ballFast, 0.35f, normalized(b.vel, {1.f, 0.f}));
     }
 };
 
@@ -170,9 +172,10 @@ template <> struct ClassHooks<BallRole::Mage> : NoClassHooks {
 // - their bonuses add up with diminishing returns, to x(1 + rateCap) at most.
 float World::mageCastRate(const Ball& b) const {
     const float bonus = b.mods.cls.mage.focus + b.mods.cls.mage.meditate * b.cls.mage.still +
-                        std::max(0.f, b.mods.cls.common.archmage - 1.f);
+                        std::max(0.f, b.mods.cls.common.archmage - 1.f) +
+                        (b.hasRole(BallRole::Odin) ? cfg::odin::rate : 0.f) + b.mods.cls.odin.valknut;   // Odin's, in the same sum
     const float cap = cfg::ability::rateCap;
-    return 1.f + cap * bonus / (cap + bonus);
+    return 1.f + cap * bonus / (cap + bonus);   // diminishing: x(1 + 2B / (2 + B)), x3 at most
 }
 
 // `count` missiles at the nearest enemies (spread over them, nearest first),
@@ -726,7 +729,7 @@ template <> struct ClassHooks<BallRole::Assassin> : NoClassHooks {
         s.armedT = std::max(0.f, s.armedT - dt);
         if (s.spreeT > 0.f && (s.spreeT -= dt) <= 0.f) s.spree = 0;
         if (!s.pending) return;
-        if (w.classWorld_.assassin.clock - s.pendingAt > cfg::assassin::blinkStale || b.held || b.mods.satellite) {
+        if (w.classWorld_.assassin.clock - s.pendingAt > cfg::assassin::blinkStale || b.held) {
             s.pending = false;   // stale (it was held, or the cooldown ran long): drop it
             return;
         }
@@ -853,6 +856,10 @@ template <> struct ClassHooks<BallRole::Summoner> : NoClassHooks {
     static bool aim(const World& w, int owner, sf::Vector2f from, float range, sf::Vector2f& out) {
         const Ball* o = ownerBall(w, owner);
         if (!o || o->mods.cls.common.guardDog <= 0.f) return target(w, from, range, out);
+        if (const auto f = w.focusPos(); f && dot(*f - from, *f - from) <= range * range) {
+            out = *f;   // the player's target still comes first
+            return true;
+        }
         const Enemy* best = nullptr;
         float bd = 1e18f;
         for (const Enemy& e : w.enemies_) {
@@ -873,7 +880,7 @@ template <> struct ClassHooks<BallRole::Summoner> : NoClassHooks {
         const Enemy* e = w.nearestEnemy(from, range);
         float best = e ? length(e->pos - from) : range;
         if (e) out = e->pos;
-        if (w.boss_.alive && w.boss_.intro <= 0.f && w.boss_.hp > 0.f && length(w.boss_.pos - from) < best) {
+        if (w.boss_.targetable() && length(w.boss_.pos - from) < best) {
             out = w.boss_.pos;
             return true;
         }
@@ -1027,7 +1034,7 @@ template <> struct ClassHooks<BallRole::Summoner> : NoClassHooks {
 
         // Turret: a wall bounce (the heading flipped right next to a wall).
         s.turretCd = std::max(0.f, s.turretCd - dt);
-        if (m.turretFrac > 0.f && !b.held && !b.mods.satellite) {
+        if (m.turretFrac > 0.f && !b.held) {
             const float slop = b.radius + length(b.vel) * dt + 2.f;
             const sf::Vector2f sz = w.size_;
             const bool flipX = b.vel.x * s.prevVel.x < 0.f && (b.pos.x < slop || b.pos.x > sz.x - slop);
@@ -1427,7 +1434,7 @@ template <> struct ClassHooks<BallRole::Jester> : NoClassHooks {
                 case Spark: spark(w, e, dmg * J::sparkFrac, J::sparkRange); break;
                 case RandomElement:   // no owner: it reacts with anything, the ball's own element too
                     if (!kill && e.hp > 0.f)
-                        w.applyElement(e, static_cast<Element>(w.rng_.irange(1, kElementCount - 1)), -1, dmg, p, ev);
+                        w.applyElement(e, static_cast<Element>(w.rng_.irange(1, kNaturalElements - 1)), -1, dmg, p, ev);
                     break;
                 case Normal: break;
             }
@@ -1913,6 +1920,25 @@ void World::commonDragons(float dt, const WorldParams& p, FrameEvents& ev) {
             if (e.id == id && e.hp > 0.f) return &e;
         return nullptr;
     };
+    // A mark is an enemy id, or kBossMark for the boss (2026-10-06: dragons used to ignore it).
+    constexpr int kBossMark = -2;
+    auto markPos = [&](int id, sf::Vector2f& at) -> bool {
+        if (id == kBossMark) {
+            if (!boss_.targetable()) return false;
+            at = boss_.pos;
+            return true;
+        }
+        if (Enemy* e = byId(id)) { at = e->pos; return true; }
+        return false;
+    };
+    auto pickMark = [&](sf::Vector2f from, float range) -> int {   // the player's target, else the nearest enemy or the boss
+        if (const Enemy* f = focusEnemy(); f && length(f->pos - from) - f->radius <= range) return f->id;
+        if (focusIsBoss() && boss_.targetable() && length(boss_.pos - from) - boss_.radius <= range) return kBossMark;
+        Enemy* e = nearest(from, range);
+        const float bd = boss_.targetable() ? length(boss_.pos - from) - boss_.radius : 1e9f;
+        if (bd <= range && (!e || bd < length(e->pos - from) - e->radius)) return kBossMark;
+        return e ? e->id : -1;
+    };
     auto mouth = [&](const CommonWorld::Dragon& d) { return d.pos + d.head * ((d.elder ? 46.f : 10.f) * k * 0.65f); };
     // One bite of a breath: a baby's cone, or the elder's long swath, out of its mouth.
     auto burn = [&](CommonWorld::Dragon& d, const Ball& o, float share) {
@@ -1928,6 +1954,13 @@ void World::commonDragons(float dt, const WorldParams& p, FrameEvents& ev) {
                 const float l = length(to);
                 if (l > reach + e.radius || (l > 1.f && dot(to / l, dir) < cosCone)) continue;
                 H::touch(*this, e, dmg, elem, o.owner, false, p, ev);
+            }
+            if (boss_.targetable()) {   // ...the boss too, if it's in the cone
+                const sf::Vector2f to = boss_.pos - m;
+                const float l = length(to);
+                if (l <= reach + boss_.radius && (l < 1.f || dot(to / l, dir) >= cosCone ||
+                                                  l - boss_.radius < reach * 0.3f))
+                    H::hitBoss(*this, dmg);
             }
             for (auto& g : cw.bugs) {   // ...and lights any bugs it passes over
                 const sf::Vector2f to = g.pos - m;
@@ -1946,13 +1979,11 @@ void World::commonDragons(float dt, const WorldParams& p, FrameEvents& ev) {
             if (along < 0.f || along > L || std::fabs(dot(to, side)) > W * (0.4f + 0.6f * along / L) + e.radius) continue;
             H::touch(*this, e, dmg, elem, o.owner, true, p, ev);
         }
-        if (boss_.alive && boss_.intro <= 0.f) {
+        if (boss_.targetable()) {
             const sf::Vector2f to = boss_.pos - m;
             const float along = dot(to, dir);
-            if (along > 0.f && along < L && std::fabs(dot(to, side)) < W + boss_.radius) {
-                boss_.hp -= dmg * cfg::shooter::bossFrac;
-                boss_.hitFlash = 1.f;
-            }
+            if (along > 0.f && along < L + boss_.radius && std::fabs(dot(to, side)) < W + boss_.radius)
+                H::hitBoss(*this, dmg);
         }
     };
 
@@ -1979,22 +2010,29 @@ void World::commonDragons(float dt, const WorldParams& p, FrameEvents& ev) {
         }
         d.pos += step;
         faceFlight(d, step, d.elder ? 2.5f : 8.f);
-        Enemy* t = byId(d.target);
+        sf::Vector2f tp;
+        bool hasMark = markPos(d.target, tp);
+        auto remark = [&] {   // lost its mark: the next one in reach
+            if (hasMark) return;
+            d.target = pickMark(d.pos, range);
+            hasMark = markPos(d.target, tp);
+        };
         if (d.breathing > 0.f) {   // a breath of fire: the head tracks its mark, the fire bites as it goes
-            if (!t) t = nearest(d.pos, range);
-            if (t) { d.target = t->id; turnHead(d, t->pos, turn * 0.6f); }
+            remark();
+            if (hasMark) turnHead(d, tp, turn * 0.6f);
             d.breathing -= dt;
             d.roar = 1.f;
             if ((d.tickT -= dt) <= 0.f) {
-                d.tickT += C::breathTick;
-                burn(d, *o, C::breathTick / (d.elder ? C::elderBreathTime : C::babyBreathTime));
+                const float tick = d.elder ? C::elderTick : C::breathTick;
+                d.tickT += tick;
+                burn(d, *o, d.elder ? tick / C::elderBreathRef * C::elderSustain : tick / C::babyBreathTime);
             }
             if (d.breathing <= 0.f) d.breathT = d.elder ? c.elderEvery : c.babyEvery;
             continue;
         }
         if (d.charge >= 0.f) {   // drawing breath: the head turns to the mark
-            if (!t) t = nearest(d.pos, range);
-            if (t) { d.target = t->id; turnHead(d, t->pos, turn); }
+            remark();
+            if (hasMark) turnHead(d, tp, turn);
             if ((d.charge += dt) >= (d.elder ? C::elderCharge : C::babyCharge)) {
                 d.charge = -1.f;
                 d.breathing = d.elder ? C::elderBreathTime : C::babyBreathTime;
@@ -2024,12 +2062,12 @@ void World::commonDragons(float dt, const WorldParams& p, FrameEvents& ev) {
         settleHead(d, turn * 0.5f);
         if ((d.breathT -= dt) > 0.f) continue;
         d.breathT = 0.f;   // ready: it starts the moment something is in reach
-        if (Enemy* nt = nearest(d.pos, range)) { d.charge = 0.f; d.target = nt->id; }
+        if (const int mk = pickMark(d.pos, range); mk != -1) { d.charge = 0.f; d.target = mk; }
     }
     if (roared)   // the young answer the elder's roar: they all draw breath at once
         for (auto& d : cw.dragons)
             if (!d.elder && d.charge < 0.f && d.breathing <= 0.f)
-                if (Enemy* nt = nearest(d.pos, C::babyRange * k * 1.5f)) { d.charge = 0.f; d.target = nt->id; }
+                if (const int mk = pickMark(d.pos, C::babyRange * k * 1.5f); mk != -1) { d.charge = 0.f; d.target = mk; }
 
     // The Hive: every ball carrying it hatches a few bugs a second.
     if (cw.hiveT.size() < balls_.size()) cw.hiveT.resize(balls_.size(), 0.f);
@@ -2051,25 +2089,41 @@ void World::commonDragons(float dt, const WorldParams& p, FrameEvents& ev) {
         }
     }
     std::vector<CommonWorld::Bug> split;   // bugs born of a kill this step
-    for (auto& g : cw.bugs) {   // run at the nearest enemy, nibble it
+    for (auto& g : cw.bugs) {   // run at the nearest enemy (or the boss), nibble it
         g.life -= dt;
         g.biteT -= dt;
-        Enemy* t = nearest(g.pos, 1e9f);
-        if (!t) { g.vel *= std::exp(-3.f * dt); g.pos += g.vel * dt; continue; }
-        const sf::Vector2f to = t->pos - g.pos;
+        Enemy* t = const_cast<Enemy*>(focusEnemy());   // the player's target first
+        if (!t) t = nearest(g.pos, 1e9f);
+        // The boss counts too (2026-10-06: it used to be ignored) when it's the target, closer or alone.
+        const bool atBoss = boss_.targetable() && (focusIsBoss() || (!focusEnemy() && (!t || length(boss_.pos - g.pos) - boss_.radius <
+                                                                                             length(t->pos - g.pos) - t->radius)));
+        if (!t && !atBoss) { g.vel *= std::exp(-3.f * dt); g.pos += g.vel * dt; continue; }
+        const sf::Vector2f tpos = atBoss ? boss_.pos : t->pos;
+        const float trad = atBoss ? boss_.radius : t->radius;
+        const sf::Vector2f to = tpos - g.pos;
         const float l = length(to);
         const float jit = (rng_.range(0.f, 1.f) - 0.5f) * 1.2f;   // a scurry, not a beeline
         const sf::Vector2f dir = normalized(to, {1.f, 0.f});
         const sf::Vector2f want = sf::Vector2f{dir.x - dir.y * jit, dir.y + dir.x * jit} * C::hiveSpeed * k;
         g.vel += (want - g.vel) * std::min(1.f, dt * 6.f);
-        if (l > t->radius + 2.f) g.pos += g.vel * dt;
-        if (l > t->radius + 4.f * k || g.biteT > 0.f) continue;
+        if (l > trad + 2.f) g.pos += g.vel * dt;
+        if (l > trad + 4.f * k || g.biteT > 0.f) continue;
         g.biteT = C::hiveBiteEvery;
+        if (atBoss) {   // a bite chips the boss like any summon (a lit one goes up on it)
+            H::hitBoss(*this, g.dmg * (g.lit ? C::hiveLitBlast : 1.f));
+            if (g.lit) {
+                itemFx(CommonWorld::Fx::Blast, g.pos, C::hiveLitRadius * k,
+                       g.elem != 0 ? elementColor(static_cast<Element>(g.elem)) : theme::elemFire, 0.35f);
+                g.life = 0.f;
+            }
+            continue;
+        }
         dmgOwner_ = g.owner;   // kill credit: the Swarm's ball (its bites carry no owner for reactions)
         if (g.lit) {   // lit by a dragon: it goes up
             const float R = C::hiveLitRadius * k;
             for (Enemy& e : enemies_)
                 if (e.hp > 0.f && length(e.pos - g.pos) <= R + e.radius) H::touch(*this, e, g.dmg * C::hiveLitBlast, g.elem, -1, false, p, ev);
+            if (boss_.targetable() && length(boss_.pos - g.pos) <= R + boss_.radius) H::hitBoss(*this, g.dmg * C::hiveLitBlast);
             itemFx(CommonWorld::Fx::Blast, g.pos, R, g.elem != 0 ? elementColor(static_cast<Element>(g.elem)) : theme::elemFire, 0.35f);
             g.life = 0.f;
             dmgOwner_ = -1;
@@ -2102,6 +2156,14 @@ void World::commonRing(Ball& b, const WorldParams& p, sf::Vector2f at, int n) {
         ClassHooks<BallRole::Shooter>::fire(*this, b, {std::cos(a), std::sin(a)}, dmg, p);
         if (bullets.size() > before) bullets.back().pos = at;   // out of the dead enemy, not the ball
     }
+}
+
+// Ares (sim/WorldAres.cpp): a bullet from one of its guns (a cannon, a hoplite) - the Shooter's gun.
+void World::aresShot(Ball& b, sf::Vector2f from, sf::Vector2f dir, float dmg, const WorldParams& p) {
+    auto& bullets = classWorld_.shooter.bullets;
+    const std::size_t before = bullets.size();
+    ClassHooks<BallRole::Shooter>::fire(*this, b, dir, dmg, p);
+    if (bullets.size() > before) bullets.back().pos = from;
 }
 
 // "Gunship" (a legendary): a ball that hits fires one bullet at another enemy,

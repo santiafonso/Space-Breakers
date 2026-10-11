@@ -753,6 +753,550 @@ struct CommonWorld {
 };
 
 // On BallMods (`mods.cls`): what the ball's class items add up to.
+// ==================================================================== Astronomer
+// The Guardian's ascended class (2026-10-06): planets that orbit the core
+// (sim/WorldPlanets.cpp, cfg::planet, drawn in render/ClassRender.cpp).
+enum class PlanetKind { Mercury, Venus, Earth, Mars, Jupiter, Saturn, Neptune, Moon };
+inline constexpr int kPlanetItems = 7;    // Mercury..Neptune are items; the Moon only comes as a bonus
+inline constexpr int kPlanetKinds = 8;
+struct AstronomerMods {
+    int lvl[kPlanetItems] = {};   // each planet item's power (gearPower: 1 / 3 / 5), 0 = none
+    int belt = 0;                 // "Asteroid belt" power, 0 = none
+    int starry = 0;               // "Starry night" power, 0 = none
+    int bonus = 0;                // random weaker planets each fight (an ascended Astronomer: 2)
+    float size = 1.f;             // the class's own perk: planets x this
+    bool any() const {
+        for (int l : lvl)
+            if (l > 0) return true;
+        return belt > 0 || starry > 0 || bonus > 0;
+    }
+};
+struct AstronomerWorld {
+    struct Planet {
+        PlanetKind kind = PlanetKind::Moon;
+        int owner = -1;            // its ball
+        float power = 1.f;         // its item's level (x), a bonus planet's weakness
+        float ang = 0.f;           // round the core
+        sf::Vector2f pos, prev;
+        float r = 0.f;             // drawn / hit radius (px)
+        float hitT = 0.f;          // s before it hits again
+        float actT = 0.f;          // its own timer: Earth's next rocket, Jupiter's next puff, Saturn's ring regrowth
+        float boostT = 0.f;        // Mercury: twice as fast while this runs
+        bool rings = true;         // Saturn: its rings are on (they fly off on a core bounce)
+        int moonsOut = 0;          // Mars: Phobos / Deimos away from it (thrown)
+        float flareT = 0.f;        // Mercury: to its next trail flare
+        bool bonus = false;        // a random one for this fight (Starry night, the ascension)
+    };
+    std::vector<Planet> planets;
+    struct Rock {                  // "Asteroid belt"
+        float ang = 0.f, rad = 0.f, size = 1.f;
+        int owner = -1;
+        float power = 1.f;
+        float hitT = 0.f;
+        float regrow = 0.f;        // > 0: flung, growing back
+        sf::Vector2f pos;
+    };
+    std::vector<Rock> rocks;
+    struct Halo {                  // Saturn's rings, settled round the core for a while: a wall that cuts and shoves out
+        float r = 0.f, life = 0.f, maxLife = 1.f, dmg = 0.f, spin = 0.f;
+        int owner = -1;
+        int planet = -1;           // the Saturn they came from (its rings come home after)
+        std::vector<std::pair<int, float>> cd;   // enemy id -> s before it's cut again
+    };
+    std::vector<Halo> halos;
+    struct Triton {                // Neptune's moon, loosed backwards round the core: it freezes what it meets
+        float ang = 0.f, life = 0.f, maxLife = 1.f, dmg = 0.f, orbit = 0.f, r = 0.f;
+        sf::Vector2f pos;
+        int owner = -1;
+        std::vector<std::pair<int, float>> cd;
+        sf::Vector2f trail[10];
+        int trailN = 0;
+    };
+    std::vector<Triton> tritons;
+    struct Puff {                  // Jupiter's gas: slows and hurts what's inside
+        sf::Vector2f pos;
+        float r = 0.f, life = 0.f, maxLife = 1.f, dmg = 0.f, tickT = 0.f;
+        int owner = -1;
+    };
+    std::vector<Puff> puffs;
+    // What the planets throw - each its own kind, its own flight, its own look.
+    struct Proj {
+        enum Kind { Rocket, Moonlet, Meteor, Star } kind = Rocket;
+        sf::Vector2f pos, vel, from, to;   // (a Meteor / Star: from where to where)
+        float dmg = 0.f, life = 0.f, t = 0.f;
+        int target = -1;           // Enemy::id it steers for (-1: the boss / straight on)
+        int owner = -1;
+        int home = -1;             // a Moonlet: the index of its Mars in `planets` (it flies back)
+        bool back = false;         // a Moonlet on its way home
+        int elem = 0;
+    };
+    std::vector<Proj> projs;
+    struct Storm {                 // Venus's acid storm (rides the planet) / Jupiter's Great Red Spot (drifts to the crowd)
+        bool spot = false;
+        sf::Vector2f pos;
+        float r = 0.f, life = 0.f, maxLife = 1.f, dps = 0.f, tickT = 0.f, spin = 0.f, retarget = 0.f;
+        sf::Vector2f goal;
+        int owner = -1;
+        int planet = -1;           // Venus: the planet it rides
+    };
+    std::vector<Storm> storms;
+    struct Flare {                 // Mercury's trail while it races: it burns
+        sf::Vector2f pos;
+        float life = 0.f, r = 0.f, dps = 0.f;
+        int owner = -1;
+    };
+    std::vector<Flare> flares;
+    struct Boom {                  // a blast where something landed (drawn only)
+        sf::Vector2f pos;
+        float r = 0.f, life = 0.f, maxLife = 1.f;
+        int kind = 0;              // 0 rocket, 1 meteor, 2 star
+    };
+    std::vector<Boom> booms;
+    unsigned sig = 0;              // what the planets were built from (rebuilt when it changes)
+    int builtWave = -1;
+};
+struct AstronomerState {
+    int growth = 0;           // the class: kills this fight - each one a little bigger (cfg::planet::growPer)
+};
+
+// ==================================================================== Hermes
+// The Striker's god (2026-10-06, sim/WorldGods.cpp): speed. "Flying fast" =
+// over cfg::hermes::fastAt x its cruise.
+struct HermesMods {
+    float talaria = 0.f;      // "Talaria": speed x (1 + this) per wall bounce (0 = off)
+    float caduceus = 0.f;     // "Caduceus": fast, a hit also strikes the 2 nearest for this x it (0 = off)
+    float messenger = 0.f;    // "Messenger": s between its runs to the farthest enemy and back (0 = off)...
+    float messengerHit = 0.f; // ...hitting it for this x its hit
+    float petasos = 0.f;      // "Petasos": fast, it passes through and booms for this x its hit (0 = off)
+    float quicksilver = 0.f;  // "Quicksilver": fast, every enemy slower by this (0 = off)
+};
+struct HermesState {
+    float messengerT = 0.f;   // to its next run
+    float lastBoom = -9.f;    // "Petasos": the ball's age at its last sonic boom
+    bool fast = false, golden = false;   // (drawn) flying fast; golden under Petasos
+    int bounces = 0;          // bounces since it last touched the core (each one faster)
+    float peak = 0.f;         // the fastest it has gone since: it never drops below (it only gains speed)
+    float charge = 0.f;       // the message it carries: walls hit and time flown fast, delivered at the core
+};
+struct HermesWorld {
+    struct Streak {           // a Messenger run / a Caduceus strike / a sonic boom (drawn)
+        int kind = 0;         // 0 messenger, 1 caduceus, 2 boom
+        sf::Vector2f a, b;
+        float life = 0.f, maxLife = 1.f, r = 0.f;
+    };
+    std::vector<Streak> fx;
+    float slowT = 0.f;        // "Quicksilver": enemies slowed while this runs...
+    float slow = 0.f;         // ...by this
+};
+
+// ==================================================================== Odin
+// The Mage's god (2026-10-06, sim/WorldGods.cpp): ravens, runes, a spear.
+struct OdinMods {
+    float huginn = 0.f;       // "Huginn": s between its triple casts - every ability 3 times running (0 = off)
+    float muninn = 0.f;       // "Muninn": every cast also blasts the thickest pack for this x its hit (0 = off)
+    float valknut = 0.f;      // "Valknut": + recharge, and the all-cast comes this much sooner (share)
+    float gungnir = 0.f;      // "Gungnir": every few s a spear for this x its hit (0 = off)...
+    float gungnirEvery = 0.f;
+    float draupnir = 0.f;     // "Draupnir": on (only drawn here; its power is in the abilities)
+};
+struct OdinState {
+    float allT = 0.f;         // the class: to its next volley (everything at once)
+    int volleys = 0;          // volleys this fight ("Huginn": every 3rd, three times)
+    float huginnT = 0.f, gungnirT = 0.f;
+    int burst = 0;            // "Huginn": casts of everything still to come...
+    float burstT = 0.f;       // ...the next in this long
+    sf::Vector2f raven[2];    // the ravens (drawn): Huginn, Muninn
+    float ravenFlash[2] = {};
+    float circle = 0.f;       // 1 -> 0: the rune circle under it as it casts everything (drawn)
+    int spells = 0;           // "Gungnir": spells cast since its last throw (one more spear each)
+};
+struct OdinWorld {
+    struct Blast {            // "Muninn": an arcane blast on a pack (drawn; the damage is done)
+        sf::Vector2f pos, from;
+        float r = 0.f, life = 0.f, maxLife = 1.f;
+    };
+    std::vector<Blast> blasts;
+    struct Spear {            // "Gungnir": out to its mark through the line, then home
+        sf::Vector2f from, to, pos;
+        float t = 0.f, dmg = 0.f;
+        float delay = 0.f;    // still in its hand this long (a volley goes one after another)
+        bool back = false;
+        int owner = -1;
+        std::vector<int> hit;
+    };
+    std::vector<Spear> spears;
+    int wave = -1;            // the fight these belong to
+};
+
+// ==================================================================== Thanatos
+// The Assassin's god (2026-10-06, sim/WorldGods2.cpp): it blinks onto an
+// enemy and keeps stabbing it till it dies, then blinks to the next.
+struct ThanatosMods {
+    float shadowStep = 0.f;   // "Shadow step": each blink cuts what's on the way for this x its hit (0 = off)
+    float deathMark = 0.f;    // "Death mark": a stabbed enemy under this share of its health dies (0 = off)
+    int eclipse = 0;          // "Eclipse": every this-many-th blink, a shadow nova (0 = off)...
+    float eclipseFrac = 0.f;
+    int scythe = 0;           // "Reaper's scythe": each blink also strikes this many nearest (0 = off)
+    float finalHour = 0.f;    // "Final hour": s between its blinks through every enemy (0 = off)
+};
+struct ThanatosState {
+    int target = -1;          // the enemy (id) it's stabbing - kBossMark style -2 for the boss
+    float stabT = 0.f;        // to its next stab
+    int souls = 0;            // kills this fight: harder hits
+    int blinks = 0;
+    float hourT = 0.f;        // "Final hour": to the next...
+    int hourLeft = 0;         // ...blinks left in this one
+    float blinkCd = 0.f;      // s before it can blink again (free flight meanwhile)
+    float sinceBlink = 9.f;   // s since its last blink (never closer than cfg::thanatos::blinkMin)
+    bool attached = false;    // (it's on its mark: the sim holds it there)
+    std::vector<int> chain;   // its dagger's way: the marks it has hit / is flying at (last), bouncing on - it stands still meanwhile
+    std::vector<sf::Vector2f> chainPos;
+    int hop = -1;             // then it blinks along them (>= 0: the next one), a stab on each; the last is its mark
+    float hopT = 0.f;
+    float throwT = 0.f, throwDur = 0.f;
+    sf::Vector2f daggerFrom, daggerPos;
+    sf::Vector2f side;        // which side of its mark it's on (the way its dagger came in)
+};
+struct ThanatosWorld {
+    struct Streak {           // a blink (from, to), a stab, a nova (drawn)
+        int kind = 0;         // 0 blink, 1 stab, 2 nova, 3 cut
+        sf::Vector2f a, b;
+        float life = 0.f, maxLife = 1.f, r = 0.f;
+    };
+    std::vector<Streak> fx;
+};
+
+// ==================================================================== Tiamat
+// The Summoner's god (2026-10-06, sim/WorldGods2.cpp): she rides a dragon;
+// her items put dragons in the field, each its own, and lizard armies.
+struct TiamatMods {
+    float frostWyrm = 0.f;    // each dragon: its power (0 = off)
+    float stormDrake = 0.f;
+    float ancientGold = 0.f;
+    float devourer = 0.f;
+    float wyrmling = 0.f;
+    float horde = 0.f;        // "Lizard horde": s between its broods (0 = off)
+    bool brood = false;       // "Brood mother": lizards bite twice as hard and breed on their kills
+    float xp[6] = {};         // each dragon's growth so far this run (BallLoadout::dragonXp), by kind; [5] her mount
+};
+struct TiamatState {
+    float breathT = 0.f;      // the mount: to its next fireball...
+    float skillT = 0.f;       // ...its next move of its own...
+    float clawT = 0.f;        // ...its next rake of the claws...
+    float flameT = 0.f;       // ...its next breath of fire (a cone, between its moves)...
+    float emberT = 0.f;       // ...and the next ember it drops
+    float hordeT = 0.f;
+    int stage = 0;            // the mount's stage last frame (1 hatchling, 2 young, 3 adult)
+};
+struct TiamatWorld {
+    struct Dragon {
+        int kind = 0;         // 0 frost wyrm, 1 storm drake, 2 ancient gold, 3 ravager, 4 wyrmling
+        int owner = -1;
+        float power = 1.f;
+        sf::Vector2f pos, face{1.f, 0.f}, perch, from;
+        float ang = 0.f, actT = 0.f, moveT = 0.f, dive = -1.f;   // (gold: -1 aloft, 0..1 diving)
+        int target = -1;
+        sf::Vector2f trail[14];
+        int trailN = 0;
+        float flash = 0.f;
+        float trailT = 0.f;   // the drake's static: its next tick
+        sf::Vector2f vel, goal;   // roaming the field: where it's headed
+        float spitT = 0.f;    // to the next thing it spits (ice shards, molten gold, ball lightning)
+        int head = 0;         // the three-headed gold: whose turn it is
+        float headT[3] = {};  // ...each head's own clock
+        sf::Vector2f headDir[3];          // ...where each looks (turning on its own)
+        int headTgt[3] = {-1, -1, -1};    // ...the enemy each has picked
+        float headPick[3] = {};           // ...till it picks another
+        std::vector<int> struck;          // the ravager: hit on this run (dive >= 0: running from `from` to `perch`)
+        float xp = 0.f;                   // its growth, all run long: an egg, then hatchling, young, adult (cfg::tiamat::stageXp)
+        int stage = 0;
+        float size = 0.f;                 // its body length now (px, before the arena scale)
+        float goalT = 0.f;                // roaming: till it picks somewhere else
+        float flap = 0.f;                 // its wingbeat (phase), and how long its glide still runs (> 0: wings still)
+        float glide = 0.f;
+        bool toGlide = false;             // ...it'll hold its wings out at the top of this beat
+        int runSide = 1;                  // the ravager's run: which way it veers off first, and whether it's through the pack yet
+        float throughT = -1.f;
+        int chain = 0;                    // ...an adult's second run straight after
+        float burst = 0.f;                // the wyrmling: its pounce after a kill
+    };
+    static constexpr int kMounts = 8;   // (>= cfg::maxBalls)
+    float mountXp[kMounts] = {};        // each Tiamat ball's mount: how grown (by owner), all run
+    std::vector<Dragon> dragons;
+    struct Lizard {
+        sf::Vector2f pos, vel;
+        float life = 0.f, biteT = 0.f, dmg = 0.f, gait = 0.f;
+        int owner = -1;
+    };
+    std::vector<Lizard> lizards;
+    struct Fireball {         // spat from a dragon's mouth: it bursts where it lands
+        sf::Vector2f from, to, pos;
+        float t = 0.f, dur = 0.5f, dmg = 0.f, r = 0.f;
+        int owner = -1;
+        int kind = 0;         // 0 a fireball (arcs), 1 an ice shard (straight, fast), 2 molten gold (arcs, leaves a pool), 3 ball lightning (slow, zaps on its way)
+        float tickT = 0.f;
+    };
+    std::vector<Fireball> fireballs;
+    struct Field {            // a patch on the ground: embers (the mount's wake), frost (the wyrm's), molten gold, the inferno ring
+        int kind = 0;         // 0 embers, 1 frost, 2 molten gold, 3 inferno (rides its ball), 4 a thunderstorm (strikes inside it)
+        sf::Vector2f pos;
+        float r = 0.f, life = 0.f, maxLife = 1.f, dps = 0.f, tickT = 0.f;
+        int owner = -1;
+    };
+    std::vector<Field> fields;
+    struct Fx {               // a breath (cone), a bolt chain, a crash (drawn)
+        int kind = 0;         // 0 fire breath, 1 ice breath, 2 lightning, 3 crash, 4 roar, 5 gust, 6 tail sweep, 7 fireball burst, 8 claws, 9 dive,
+                              // 10 the gold's pulling roar, 11 (unused), 12 (unused), 13 a storm bolt's blast
+        sf::Vector2f a, b;
+        float life = 0.f, maxLife = 1.f, r = 0.f;
+        std::vector<sf::Vector2f> pts;
+    };
+    std::vector<Fx> fx;
+    unsigned sig = 0;
+    int wave = -1;
+};
+
+// ==================================================================== Loki
+// The Jester's god (2026-10-07, sim/WorldLoki.cpp): clones of it fly about
+// playing games of chance - a coin always; its items add dice, a roulette,
+// cards and a pachinko - and what comes up, happens.
+struct LokiMods {
+    float dice = 0.f, roulette = 0.f, cards = 0.f, pachinko = 0.f;   // each game: its payout (0 = it doesn't play it)
+    float high = 0.f;          // "High table": every game x this more, more clones, sooner (0 = off)
+};
+struct LokiState {
+    float cloneT = 0.f;        // to its next clone
+};
+struct LokiWorld {
+    struct Clone {
+        sf::Vector2f pos, vel;
+        float life = 0.f, maxLife = 1.f;
+        int owner = -1;
+        float gameT = 0.f;     // to its next game...
+        int game = -1;         // ...the one it's playing (0 coin, 1 dice, 2 roulette, 3 cards, 4 pachinko; -1 none)
+        float show = 0.f, showMax = 1.f;   // ...still spinning / showing (it pays when this runs out)
+        int a = 0, b = 0;      // ...what came up (coin 1 heads; dice the two; roulette 0 green 1 red 2 black; cards suit, rank)
+    };
+    std::vector<Clone> clones;
+    struct Pin {               // a pachinko's steel ball, falling through the enemies
+        sf::Vector2f pos, vel;
+        float life = 0.f, dmg = 0.f, hitCd = 0.f;
+        int owner = -1;
+    };
+    std::vector<Pin> pins;
+    struct Fx {
+        int kind = 0;          // 0 a bolt from the sky, 1 a fire nova, 2 a pull, 3 a jackpot, 4 a knife, 5 a slash, 6 a stun, 7 a mend, 8 a shard, 9 a clone's puff
+        sf::Vector2f a, b;
+        float life = 0.f, maxLife = 1.f, r = 0.f;
+        int gift = 0;          // whose colour (arrows, arrivals)
+    };
+    std::vector<Fx> fx;
+    int wave = -1;
+};
+
+// ==================================================================== Nergal
+// The Alchemist's god (2026-10-07, sim/WorldNergal.cpp): plague - his hits
+// infect (a rot: poison), the infected die into rats; blood rain, rat tides,
+// locusts, the black death, the harvest.
+struct NergalMods {
+    float rainEvery = 0.f;     // "Blood rain": s between clouds (0 = off)
+    float tideEvery = 0.f;     // "Rat tide": s between tides (0 = off)
+    float locusts = 0.f;       // "Locust swarm": its trail's swarms x this (more, bigger, harder; 0 = plain swarms)
+    float blackDeath = 0.f;    // "Black death": the burst x the hit (0 = off)
+    float horseEvery = 0.f;    // "Pale horse": s between rides (0 = off)
+};
+struct NergalState {
+    float rainT = 0.f, tideT = 0.f, horseT = 0.f, swarmT = 0.f;
+};
+struct NergalWorld {
+    struct Rat {
+        sf::Vector2f pos, vel;
+        float life = 0.f, biteT = 0.f, gait = 0.f;
+        int owner = -1;
+    };
+    std::vector<Rat> rats;
+    struct Rain {              // a blood cloud over a pack, drifting after it (kind 1: a black miasma, the plague meeting water)
+        sf::Vector2f pos;
+        float r = 0.f, life = 0.f, maxLife = 1.f, dps = 0.f, tickT = 0.f;
+        int owner = -1;
+        int kind = 0;
+    };
+    std::vector<Rain> rains;
+    struct Swarm {             // its trail: a swarm of flies (locusts) hunting what's near, chewing and infecting
+        sf::Vector2f pos, vel;
+        float life = 0.f, maxLife = 1.f, r = 0.f, dps = 0.f, tickT = 0.f, seed = 0.f;
+        int owner = -1;
+    };
+    std::vector<Swarm> swarms;
+    struct Rider {             // "Pale horse": galloping across the arena
+        sf::Vector2f from, to, pos;
+        float t = 0.f, dur = 1.f, dmg = 0.f;
+        int owner = -1;
+        std::vector<int> struck;
+    };
+    std::vector<Rider> riders;
+    struct Fx {
+        int kind = 0;          // 0 a burst (black death), 1 (unused), 2 a bite, 3 a black bolt (a.. to b), 4 a grave opening
+        sf::Vector2f a, b;
+        float life = 0.f, maxLife = 1.f, r = 0.f;
+        int gift = 0;          // whose colour (arrows, arrivals)
+    };
+    std::vector<Fx> fx;
+    int wave = -1;
+};
+
+// ==================================================================== Apolo
+// The Support's god (2026-10-07, sim/WorldApolo.cpp): four muses (five with
+// the Sun chariot), one per ball, each lending a gift and marking a weak point;
+// they rotate between the balls - never two gifts on one ball.
+struct ApoloMods {
+    float lyre = 0.f;          // "Lyre": core mended per rotation (0 = off); a lost gift lingers at half
+    float laurel = 0.f;        // "Laurel crown": the gifts + this (0 = off)
+    float bow = 0.f;           // "Silver bow": each arrow x the hit (0 = off)
+    float chariot = 0.f;       // "Sun chariot": the sun's burn x the hit a second (0 = off)
+    float oracle = 0.f;        // "Oracle": the arrival crit (0 = off); rotations twice as fast
+};
+struct ApoloState {            // on every ball: the muse's gift it has now (the sim sets it each frame)
+    int gift = -1;             // 0 strength, 1 speed, 2 twin, 3 giant, 4 the sun (-1 none)
+    float power = 1.f;
+    int glow = -1;             // "Lyre": a lost gift lingering at half...
+    float glowT = 0.f;         // ...this long
+    float foresight = 0.f;     // "Oracle": the next hit x this (0 = none)
+};
+struct ApoloWorld {
+    struct Muse {
+        int gift = 0;
+        sf::Vector2f pos;
+        int ball = -1;         // the ball (owner) she's with (-1: waiting by the core)
+        int mark = -1;         // the enemy (id) she's marked
+        float arrowT = 0.f, sunT = 0.f;
+    };
+    std::vector<Muse> muses;
+    int owner = -1;            // Apolo's ball
+    int rot = 0;
+    float rotT = 0.f;
+    struct Fx {
+        int kind = 0;          // 0 an arrow, 1 a chord at the core, 2 a muse arriving
+        sf::Vector2f a, b;
+        float life = 0.f, maxLife = 1.f, r = 0.f;
+        int gift = 0;          // whose colour (arrows, arrivals)
+    };
+    std::vector<Fx> fx;
+    int wave = -1;
+};
+
+// ==================================================================== Ares
+// The Shooter's god (2026-10-07, sim/WorldAres.cpp): ghost cannons and
+// bloodlust; each item one more weapon - Phobos & Deimos (missile moons),
+// Dragon's teeth (bronze hoplites), War chariot, Wrath of Olympus (a falling
+// red star), Trojan war (a rain of spears down a lane).
+struct AresMods {
+    float moons = 0.f, teeth = 0.f, chariot = 0.f, wrath = 0.f, troy = 0.f;   // each weapon's power (0 = off)
+};
+struct AresState {
+    float fireT = 0.f;
+    int cannon = 0;            // the next to fire
+    float lust = 0.f, lustT = 0.f;   // bloodlust: + fire rate, and how long it's held
+    float moonT[2] = {0.f, 0.5f}, teethT = 0.f, chariotT = 2.f, wrathT = 1.5f, troyT = 4.f;
+    float kick[6] = {};        // each cannon's recoil (drawn)
+    float aim = 0.f;           // where the cannons point (drawn)
+};
+struct AresWorld {
+    struct Missile {           // Phobos & Deimos: homing, a blast, terror
+        sf::Vector2f pos, vel;
+        float dmg = 0.f, life = 0.f;
+        int owner = -1, target = -1, moon = 0;
+    };
+    std::vector<Missile> missiles;
+    struct Hoplite {           // Dragon's teeth: a bronze soldier sprung from the ground
+        sf::Vector2f pos;
+        float life = 0.f, maxLife = 1.f, sprout = 0.f, fireT = 0.f, dmg = 0.f, aim = 0.f;
+        int owner = -1;
+    };
+    std::vector<Hoplite> hoplites;
+    struct Chariot {           // War chariot: edge to edge through the pack, a furrow of fire behind
+        sf::Vector2f from, to, pos;
+        float t = 0.f, dur = 1.f, dmg = 0.f, flameT = 0.f, burn = 0.f;
+        int owner = -1;
+        std::vector<int> struck;
+    };
+    std::vector<Chariot> chariots;
+    struct Flame {             // a burning patch (the chariot's furrow, a crater)
+        sf::Vector2f pos;
+        float r = 0.f, life = 0.f, maxLife = 1.f, dps = 0.f, tickT = 0.f;
+        int owner = -1;
+        bool crater = false;   // a fallen star's (Wrath of Olympus counts these)
+    };
+    std::vector<Flame> flames;
+    struct Star {              // Wrath of Olympus: a closing ring, then the impact
+        sf::Vector2f pos;
+        float t = 0.f, r = 0.f, dmg = 0.f;
+        int owner = -1;
+    };
+    std::vector<Star> stars;
+    struct Lane {              // Trojan war: spears fall one after another along it
+        sf::Vector2f from, to;
+        float t = 0.f, dmg = 0.f;
+        int fired = 0, owner = -1;
+    };
+    std::vector<Lane> lanes;
+    struct Fx {
+        int kind = 0;          // 0 a blast, 1 a muzzle flash, 2 a star's impact, 3 a spear landing, 4 a hoplite sprouting
+        sf::Vector2f a, b;
+        float life = 0.f, maxLife = 1.f, r = 0.f;
+    };
+    std::vector<Fx> fx;
+    int wave = -1;
+};
+
+// ==================================================================== Artemisa
+// The Slinger's god (2026-10-07, sim/WorldArtemisa.cpp): every throw (yours,
+// or her own when left alone) looses a silver arrow and marks a prey; her
+// items all fire on the throw or the catch.
+struct ArtemisaMods {
+    float hounds = 0.f, moon = 0.f, rain = 0.f, stag = 0.f, night = 0.f;   // each one's power (0 = off)
+};
+struct ArtemisaState {
+    float autoT = 0.f;         // to her own throw
+    int prey = -1;             // the enemy (id) her last arrow marked
+    bool armed = false;        // the ball's first hit on its prey is still to come
+    std::vector<sf::Vector2f> hits;   // where this throw has hit (Arrow rain, on the catch)
+    float nightT = 0.f;        // to the next night
+    std::vector<int> route;    // a night throw: the enemies still to run through
+    int routeAt = 0;
+    float routeDmg = 0.f;
+    // a throw / a catch just happened (handled in World::updateArtemisa, which has the params)
+    bool throwPending = false, rainPending = false;
+    float pull = 0.f;          // how hard the pending throw was (1 = full)
+    sf::Vector2f throwFrom, throwDir;
+};
+struct ArtemisaWorld {
+    struct Arrow { sf::Vector2f a, b; float life = 0.f, maxLife = 1.f; };   // drawn: a silver streak down the line
+    std::vector<Arrow> arrows;
+    struct Hound {
+        sf::Vector2f pos, vel;
+        float life = 0.f, dmg = 0.f, gait = 0.f;
+        int owner = -1, target = -1;
+        std::vector<int> struck;
+    };
+    std::vector<Hound> hounds;
+    struct Echo { sf::Vector2f pos, vel; float delay = 0.f; int owner = -1; };   // Crescent moon: a ball still to set off
+    std::vector<Echo> echoes;
+    struct Rain { sf::Vector2f pos; float t = 0.f, land = 0.f, dmg = 0.f; int owner = -1; };
+    std::vector<Rain> rains;
+    struct Stag {
+        sf::Vector2f pos, dir;
+        float life = 0.f, dmg = 0.f;
+        int owner = -1;
+        std::vector<int> struck;
+    };
+    std::vector<Stag> stags;
+    float night = 0.f;         // s of night left (drawn: the arena dims)
+    struct Fx { int kind = 0; sf::Vector2f a, b; float life = 0.f, maxLife = 1.f, r = 0.f; };   // 0 a bite, 1 a rain landing, 2 a night strike
+    std::vector<Fx> fx;
+    int wave = -1;
+};
+
 struct ClassMods {
     StrikerMods striker;
     GuardianMods guardian;
@@ -764,6 +1308,16 @@ struct ClassMods {
     JesterMods jester;
     SlingerMods slinger;
     AlchemistMods alchemist;
+    AstronomerMods astronomer;
+    HermesMods hermes;
+    OdinMods odin;
+    ThanatosMods thanatos;
+    TiamatMods tiamat;
+    LokiMods loki;
+    NergalMods nergal;
+    ApoloMods apolo;
+    AresMods ares;
+    ArtemisaMods artemisa;
     CommonMods common;
     // Classes (RoleMask bits) whose hooks also run for a ball that carries
     // their items without having the class (a single item). A class opts in
@@ -784,6 +1338,16 @@ struct ClassState {
     JesterState jester;
     SlingerState slinger;
     AlchemistState alchemist;
+    AstronomerState astronomer;
+    HermesState hermes;
+    OdinState odin;
+    ThanatosState thanatos;
+    TiamatState tiamat;
+    LokiState loki;
+    NergalState nergal;
+    ApoloState apolo;
+    AresState ares;
+    ArtemisaState artemisa;
     CommonState common;
 };
 
@@ -800,6 +1364,16 @@ struct ClassWorldState {
     JesterWorld jester;
     SlingerWorld slinger;
     AlchemistWorld alchemist;
+    AstronomerWorld astronomer;
+    HermesWorld hermes;
+    OdinWorld odin;
+    ThanatosWorld thanatos;
+    TiamatWorld tiamat;
+    LokiWorld loki;
+    NergalWorld nergal;
+    ApoloWorld apolo;
+    AresWorld ares;
+    ArtemisaWorld artemisa;
     CommonWorld common;
 };
 

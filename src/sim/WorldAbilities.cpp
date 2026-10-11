@@ -40,9 +40,10 @@ void World::updateAbilities(Ball& b, float dt, const WorldParams& p, FrameEvents
     b.abilityFlash = std::max(0.f, b.abilityFlash - dt * 2.5f);
     if (!waveRunning_) return;
     const float rate = mageCastRate(b);   // Mage "Focus"
+    const bool odin = b.hasRole(BallRole::Odin);   // Odin casts in volleys only (sim/WorldGods.cpp)
     for (int i = 0; i < kMaxAbilitySlots; ++i) {
         const AbilitySpec& a = b.abilities[i];
-        if (a.id == Ability::None) continue;
+        if (a.id == Ability::None || odin) continue;
         b.abilityCd[i] -= dt * rate;
         if (b.abilityCd[i] > 0.f) continue;
         // "Cascade": did this cast kill? (count the fallen before and after)
@@ -56,6 +57,7 @@ void World::updateAbilities(Ball& b, float dt, const WorldParams& p, FrameEvents
             b.refunded[i] = 0.f;   // a fresh cooldown, a fresh refund budget
             b.abilityFlash = 1.f;
             mageOnCast(b, i, false, p, ev);   // Mage items / Ancient Mage react to the cast
+            godsOnCast(b, a, p, ev);          // Odin: ravens, runes, Draupnir
             commonOnCast(b, p, ev);           // Spellblade / Aether step / Sync / Chorus / Chronomancy
             if (b.mods.cls.common.cascade && fallen() > before)   // "Cascade": again almost at once
                 b.abilityCd[i] = std::min(b.abilityCd[i], cfg::common::cascadeFloor);
@@ -80,6 +82,8 @@ void World::abilityTick(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
         Enemy* t = nullptr;
         float bd = A::beamRange * as;
         bd *= bd;
+        if (const Enemy* f = focusEnemy(); f && dot(f->pos - b.pos, f->pos - b.pos) < bd)   // the player's target, in reach
+            t = const_cast<Enemy*>(f), bd = -1.f;
         for (Enemy& e : enemies_) {
             if (e.hp <= 0.f || e.orbiter) continue;
             const float d2 = dot(e.pos - b.pos, e.pos - b.pos);
@@ -128,7 +132,7 @@ std::vector<int> World::beckonReady() const {
     if (!waveRunning_) return out;
     for (int i = 0; i < static_cast<int>(balls_.size()); ++i) {
         const Ball& b = balls_[i];
-        if (b.mods.cls.slinger.beckonCd > 0.f && b.cls.slinger.beckonT <= 0.f && !b.held && !b.mods.satellite) out.push_back(i);
+        if (b.mods.cls.slinger.beckonCd > 0.f && b.cls.slinger.beckonT <= 0.f && !b.held) out.push_back(i);
     }
     return out;
 }
@@ -347,7 +351,7 @@ void World::abilityWorldTick(float dt, const WorldParams& p, FrameEvents& ev) {
     auto portalBalls = [&](std::vector<Ball>& bs) {   // "Portal": in one, out the other
         for (Ball& b : bs) {
             b.cls.common.portalCd = std::max(0.f, b.cls.common.portalCd - dt);
-            if (b.held || b.mods.satellite || b.cls.common.portalCd > 0.f || b.cls.common.leashT > 0.f) continue;
+            if (b.held || b.cls.common.portalCd > 0.f || b.cls.common.leashT > 0.f) continue;
             for (const auto& q : cw.portals) {
                 const float R = A::portalRadius * as;
                 const bool inA = length(b.pos - q.a) < R, inB = length(b.pos - q.b) < R;
@@ -403,7 +407,13 @@ bool World::fireAbility(Ball& b, const AbilitySpec& a, const WorldParams& p, Fra
     const float reach = 1.f + (pw - 1.f) * 0.5f;         // ...radius / duration x this
     const bool anyEnemy = !enemies_.empty() || (boss_.alive && boss_.intro <= 0.f);
     auto inArena = [&](sf::Vector2f q) { return q.x >= 0.f && q.y >= 0.f && q.x <= size_.x && q.y <= size_.y; };
-    auto enemyNearCore = [&]() -> Enemy* {   // the live enemy nearest the core, on the field
+    // The enemy the player clicked (2026-10-06): the picky abilities go for it first.
+    Enemy* const foc = [&]() -> Enemy* {
+        const Enemy* f = focusEnemy();
+        return f && !f->orbiter && inArena(f->pos) ? const_cast<Enemy*>(f) : nullptr;
+    }();
+    auto enemyNearCore = [&]() -> Enemy* {   // the player's target, else the live enemy nearest the core, on the field
+        if (foc) return foc;
         Enemy* best = nullptr;
         float bd = 1e18f;
         for (Enemy& e : enemies_) {
@@ -417,7 +427,6 @@ bool World::fireAbility(Ball& b, const AbilitySpec& a, const WorldParams& p, Fra
         case Ability::None: return false;
 
         case Ability::Dash: {   // a burst straight at the nearest enemy
-            if (b.mods.satellite) return false;   // an orbit can't dash
             sf::Vector2f target;
             if (const auto f = focusPos()) target = *f;   // the player's target
             else if (const Enemy* e = nearestEnemy(b.pos, A::dashRange * as)) target = e->pos;
@@ -513,8 +522,9 @@ bool World::fireAbility(Ball& b, const AbilitySpec& a, const WorldParams& p, Fra
             sf::Vector2f from = b.pos;
             float reachNext = A::arcRange * as * reach;   // the first leap, then arcJump
             while (static_cast<int>(hit.size()) < hops) {
-                Enemy* t = nullptr;   // the nearest enemy not hit yet
+                Enemy* t = nullptr;   // the nearest enemy not hit yet (the first leap: the player's target, if it's in reach)
                 float best = reachNext * reachNext;
+                if (hit.empty() && foc && dot(foc->pos - from, foc->pos - from) <= best * 2.25f) best = -1.f, t = foc;
                 for (Enemy& o : enemies_) {
                     if (o.hp <= 0.f || o.orbiter || std::find(hit.begin(), hit.end(), &o) != hit.end()) continue;
                     const float d2 = dot(o.pos - from, o.pos - from);
@@ -543,6 +553,7 @@ bool World::fireAbility(Ball& b, const AbilitySpec& a, const WorldParams& p, Fra
                     if (o.hp > 0.f && !o.orbiter && dot(o.pos - e.pos, o.pos - e.pos) < R * R) ++c;
                 if (c > most) { most = c; at = &e; }
             }
+            if (foc) at = foc;   // the player's target, pack or not
             if (!at) return false;
             const sf::Vector2f c = at->pos;
             const float dmg = ballDamage(b, p) * (A::meteorFrac + A::meteorFracPerLevel * n) * pw;
@@ -688,7 +699,10 @@ bool World::fireAbility(Ball& b, const AbilitySpec& a, const WorldParams& p, Fra
             std::vector<Enemy*> pick;
             for (Enemy& e : enemies_)
                 if (e.hp > 0.f && !e.orbiter && inArena(e.pos)) pick.push_back(&e);
-            std::sort(pick.begin(), pick.end(), [](const Enemy* x, const Enemy* y) { return x->maxHp > y->maxHp; });
+            std::sort(pick.begin(), pick.end(), [foc](const Enemy* x, const Enemy* y) {   // the player's target, then the strongest
+                if ((x == foc) != (y == foc)) return x == foc;
+                return x->maxHp > y->maxHp;
+            });
             if (static_cast<int>(pick.size()) > count) pick.resize(static_cast<std::size_t>(count));
             const bool boss = boss_.alive && boss_.intro <= 0.f;
             if (pick.empty() && !boss) return false;
@@ -719,7 +733,7 @@ bool World::fireAbility(Ball& b, const AbilitySpec& a, const WorldParams& p, Fra
         }
 
         case Ability::Warp: {   // onto the enemy nearest the core, between it and the core, and strike it away
-            if (b.mods.satellite || b.held) return false;
+            if (b.held) return false;
             Enemy* t = enemyNearCore();
             if (!t) return false;
             const sf::Vector2f out = normalized(t->pos - core_.pos, {1.f, 0.f});
@@ -772,7 +786,7 @@ bool World::fireAbility(Ball& b, const AbilitySpec& a, const WorldParams& p, Fra
         }
 
         case Ability::Leash: {   // tied to the core it spins up, then it's let go (World::advanceLeash)
-            if (!anyEnemy || b.mods.satellite || b.held) return false;
+            if (!anyEnemy || b.held) return false;
             CommonState& s = b.cls.common;
             if (s.leashT > 0.f || s.leashFlyT > 0.f) return false;   // one swing at a time (a 2nd Leash waits its turn)
             const sf::Vector2f r = b.pos - core_.pos;
@@ -789,8 +803,17 @@ bool World::fireAbility(Ball& b, const AbilitySpec& a, const WorldParams& p, Fra
         }
 
         case Ability::Swap: {   // trade places with the enemy nearest the core (only if it's closer in than the ball)
-            if (b.mods.satellite || b.held) return false;
+            if (b.held) return false;
             Enemy* t = enemyNearCore();
+            if (t == foc && t && length(t->pos - core_.pos) >= length(b.pos - core_.pos)) {   // the target is further out: the usual pick
+                Enemy* const keep = t;
+                t = nullptr;
+                float bd = 1e18f;
+                for (Enemy& e : enemies_) {
+                    if (&e == keep || e.hp <= 0.f || e.orbiter || !inArena(e.pos)) continue;
+                    if (const float d2 = dot(e.pos - core_.pos, e.pos - core_.pos); d2 < bd) { bd = d2; t = &e; }
+                }
+            }
             if (!t || length(t->pos - core_.pos) >= length(b.pos - core_.pos)) return false;
             const sf::Vector2f was = b.pos;
             b.pos = t->pos;
@@ -841,9 +864,10 @@ bool World::fireAbility(Ball& b, const AbilitySpec& a, const WorldParams& p, Fra
         }
 
         case Ability::Bounty: {   // a price on the strongest head
-            Enemy* best = nullptr;
-            for (Enemy& e : enemies_)
-                if (e.hp > 0.f && !e.orbiter && e.bounty <= 0 && inArena(e.pos) && (!best || e.maxHp > best->maxHp)) best = &e;
+            Enemy* best = foc && foc->bounty <= 0 ? foc : nullptr;   // the player's target, else the strongest
+            if (!best)
+                for (Enemy& e : enemies_)
+                    if (e.hp > 0.f && !e.orbiter && e.bounty <= 0 && inArena(e.pos) && (!best || e.maxHp > best->maxHp)) best = &e;
             if (!best) return false;
             best->bounty = A::bounty + A::bountyPerLevel * static_cast<int>(n);
             ev.bursts.push_back({best->pos, best->radius * 2.5f, theme::puGolden, nullptr});

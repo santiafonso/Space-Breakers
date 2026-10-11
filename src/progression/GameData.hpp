@@ -85,6 +85,15 @@ struct RunState {
     std::vector<Benched> bench;
     RunMods mods;
 
+    // Shrines (2026-10-06): a ball with all 4 items of a class can ascend
+    // there - its class's items go and it picks one of the ascended class's.
+    // From then on the base class's items stop showing up this run and the
+    // ascended class's do (bits by ItemTag). At most cfg::shrine::maxAscended.
+    int ascensions = 0;
+    unsigned poolOut = 0;   // classes whose items no longer roll
+    unsigned poolIn = 0;    // ascended classes whose items now do
+    static unsigned tagBit(ItemTag t) { return 1u << static_cast<unsigned>(t); }
+
     // Path map. mapNode = node you're standing on (-1 = start of the act: any
     // row-1 node is open). mapRow = row of that node (0 at the act start).
     int gold = 0;

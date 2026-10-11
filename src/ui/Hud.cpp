@@ -72,7 +72,7 @@ bool Hud::tooltipAt(sf::Vector2f m, std::string& title, std::string& desc, sf::C
         title = bossWave_ ? std::string(bossName(bossKind_))
                           : (eliteWave_ ? "Elite fight" : "Stage " + std::to_string(stage_) + " of " + std::to_string(stages_));
         if (bossWave_) {
-            desc = std::string(bossDesc(bossKind_)) + ".  The red bar is its health; past the notch it enrages.";
+            desc = std::string(bossDesc(bossKind_)) + ".  The red bar is its health; at each notch it changes how it fights.";
             return true;
         }
         if (eliteWave_) {
@@ -181,8 +181,10 @@ void Hud::draw(sf::RenderWindow& window) const {
         const float x = x0 + aw + gap + sw + gap, y = std::round(cy - barH * 0.5f);
         if (boss) {
             gauge(window, x, y, barW, barH, bossFrac_, theme::coreLow, 0.95f, 10);
-            const float nx = std::round(x + barW * cfg::boss::enrageAt);
-            draw::line(window, {nx, y - 4.f}, {nx, y + barH + 4.f}, 2.f, withAlpha(theme::textHi, 0.6f));
+            for (float at : cfg::boss::stageAt) {   // a notch at each phase change
+                const float nx = std::round(x + barW * at);
+                draw::line(window, {nx, y - 4.f}, {nx, y + barH + 4.f}, 2.f, withAlpha(theme::textHi, 0.6f));
+            }
         } else {
             // A fight: how much of it is left - the bar fills as you clear it.
             const float done = enemiesPeak_ > 0

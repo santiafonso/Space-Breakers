@@ -201,13 +201,6 @@ void WorldRenderer::drawBolt(sf::RenderWindow& window, const Bolt& bo) const {
 
 void WorldRenderer::drawBoss(sf::RenderWindow& window, const Boss& b, sf::Vector2f corePos) const {
     if (!b.alive) return;
-    if (b.dormant) {   // downed, not dead: a dim husk breathing where it fell
-        const float t0 = clockSeconds();
-        const float br = 0.5f + 0.5f * std::sin(t0 * 2.5f);
-        draw::disc(window, b.restPos, b.radius, withAlpha(theme::bgDeep, 0.85f), withAlpha(theme::coreLow, 0.15f), {1.f, 1.f}, 32);
-        draw::ring(window, b.restPos, b.radius * (1.1f + 0.15f * br), 2.f, withAlpha(theme::coreLow, 0.3f + 0.4f * br));
-        return;
-    }
     const float frac = b.maxHp > 0.f ? clampf(b.hp / b.maxHp, 0.f, 1.f) : 0.f;
     const float t = clockSeconds();
 
@@ -277,6 +270,26 @@ void WorldRenderer::drawBoss(sf::RenderWindow& window, const Boss& b, sf::Vector
         draw::ring(window, b.pos, b.radius + 18.f, 1.5f, withAlpha(theme::textHi, 0.35f), b.shieldAng - arc * 0.7f,
                    b.shieldAng + arc * 0.7f, 32);
     }
+    if (b.kind == BossKind::Warden && b.stage >= 1) {   // its weak point: a hot spot on its back
+        const float back = b.shieldAng + kPi;
+        const float pulse = 0.5f + 0.5f * std::sin(t * 6.f);
+        const sf::Vector2f at = b.pos + sf::Vector2f{std::cos(back), std::sin(back)} * (b.radius * 0.82f);
+        draw::glow(window, at, b.radius * 0.55f, theme::ember, 0.25f + 0.2f * pulse);
+        draw::disc(window, at, b.radius * 0.17f, withAlpha(lighten(theme::ember, 0.3f), 0.95f), withAlpha(theme::ember, 0.9f));
+    }
+    if (b.kind == BossKind::Dasher && b.stage >= 1) {
+        if (b.stun > 0.f) {   // crashed: a wobbling ring - hit it now
+            const float w = 0.5f + 0.5f * std::sin(t * 14.f);
+            draw::ring(window, b.pos, b.radius * (1.25f + 0.08f * w), 3.f, withAlpha(theme::ember, 0.85f));
+        } else {              // armoured: a heavy plate outline
+            draw::polygonOutline(window, b.pos, br * 1.12f, sides, rot, 4.f, withAlpha(theme::textHi, 0.55f));
+        }
+    }
+    if (b.guarded || b.retreat > 0.f) {   // its parts stand: a shield bubble around it
+        const float w = 0.5f + 0.5f * std::sin(t * 3.f);
+        draw::ring(window, b.pos, b.radius * 1.35f, 3.f, withAlpha(theme::textHi, 0.45f + 0.2f * w));
+        draw::disc(window, b.pos, b.radius * 1.35f, withAlpha(theme::textHi, 0.04f), withAlpha(theme::textHi, 0.08f), {1.f, 1.f}, 40);
+    }
     for (int k = 0; k < 4; ++k) {
         const float a = -t * 0.9f + static_cast<float>(k) * kPi * 0.5f;
         draw::ring(window, b.pos, b.radius * 0.58f, 3.f, withAlpha(col, 0.7f), a, a + 0.9f, 24);
@@ -295,8 +308,8 @@ void WorldRenderer::drawBoss(sf::RenderWindow& window, const Boss& b, sf::Vector
     hp.setPosition(bar.left, bar.top);
     hp.setFillColor(theme::coreLow);
     window.draw(hp);
-    for (int i = 1; i < 8; ++i) {
-        const float x = bar.left + bw * static_cast<float>(i) / 8.f;
+    for (float at : cfg::boss::stageAt) {   // three segments: its phases
+        const float x = bar.left + bw * at;
         draw::line(window, {x, bar.top}, {x, bar.top + bh}, 1.5f, withAlpha(theme::bg, 0.9f));
     }
     draw::brackets(window, {bar.left - 4.f, bar.top - 4.f, bw + 8.f, bh + 8.f}, 5.f, 1.5f,
@@ -330,6 +343,15 @@ void WorldRenderer::drawEnemy(sf::RenderWindow& window, const Enemy& e, sf::Vect
     const float rimW = e.mark > 0.f ? 3.f : 2.f;
 
     if (e.hitFlash > 0.02f) draw::glow(window, e.pos, r * 1.7f, fill, 0.25f * e.hitFlash);
+    if (e.part) {   // a boss's pillar: an upright diamond, its health as an arc around it
+        const float t = clockSeconds();
+        draw::glow(window, e.pos, r * 2.f, theme::coreLow, 0.12f + 0.06f * std::sin(t * 3.f + static_cast<float>(e.id)));
+        draw::polygon(window, e.pos, r * 1.15f, 4, kPi * 0.5f, inner, outer);
+        draw::polygonOutline(window, e.pos, r * 1.15f, 4, kPi * 0.5f, 2.5f, withAlpha(lighten(theme::coreLow, 0.1f), 0.95f));
+        draw::disc(window, e.pos, r * 0.28f, withAlpha(lighten(theme::coreLow, 0.4f), 0.95f), withAlpha(theme::coreLow, 0.9f));
+        draw::ring(window, e.pos, r * 1.45f, 2.f, withAlpha(theme::coreLow, 0.7f), -kPi * 0.5f, -kPi * 0.5f + 2.f * kPi * frac, 32);
+        return;
+    }
     const float heading = std::atan2(e.vel.y, e.vel.x);
     switch (e.kind) {
         case EnemyKind::Runner:
@@ -371,6 +393,18 @@ void WorldRenderer::drawEnemy(sf::RenderWindow& window, const Enemy& e, sf::Vect
             for (int k = 0; k < 4; ++k) {
                 const float a = spin + static_cast<float>(k) * kPi * 0.5f;
                 draw::ring(window, e.pos, r * (e.snaring ? 1.0f : 1.12f), 3.f, withAlpha(hc, 0.95f), a, a + 0.9f, 10);
+            }
+            break;
+        }
+        case EnemyKind::Caster: {   // a disc with two motes circling it, faster while it beams
+            draw::disc(window, e.pos, r * 0.85f, inner, outer);
+            draw::ring(window, e.pos, r * 0.85f, rimW, rim);
+            const bool beam = e.castT >= cfg::enemy::casterCharge;
+            const float spin = e.age * (beam ? 6.f : 2.f);
+            for (int k = 0; k < 2; ++k) {
+                const float a = spin + static_cast<float>(k) * kPi;
+                draw::disc(window, e.pos + sf::Vector2f{std::cos(a), std::sin(a)} * r * 1.3f, r * 0.2f,
+                           withAlpha(theme::coreLow, 0.95f), withAlpha(theme::coreLow, 0.8f), {1.f, 1.f}, 10);
             }
             break;
         }
@@ -536,8 +570,35 @@ void WorldRenderer::draw(sf::RenderWindow& window, const World& world) const {
     }
     for (const BlackHole& h : world.blackHoles()) drawBlackHole(window, h);
     drawCore(window, world.core());
+    {   // a guarded boss: a faint line to each part still standing
+        const Boss& bs = world.boss();
+        if (bs.alive && bs.guarded)
+            for (const Enemy& e : world.enemies())
+                if (e.part && e.hp > 0.f)
+                    draw::line(window, e.pos, bs.pos, 1.5f, withAlpha(theme::coreLow, 0.18f));
+    }
+    for (const Enemy& e : world.enemies()) {   // a Caster's beam: dotted while it charges, then a pulsing line
+        if (e.kind != EnemyKind::Caster || e.castT <= 0.f || e.hp <= 0.f) continue;
+        const sf::Vector2f c = world.core().pos;
+        if (e.castT < cfg::enemy::casterCharge) {
+            const float k = e.castT / cfg::enemy::casterCharge;
+            for (int i = 1; i < 12; ++i)
+                draw::disc(window, e.pos + (c - e.pos) * (static_cast<float>(i) / 12.f), 2.f,
+                           withAlpha(theme::coreLow, 0.15f + 0.4f * k), withAlpha(theme::coreLow, 0.15f + 0.4f * k), {1.f, 1.f}, 6);
+        } else {
+            const float w = 0.5f + 0.5f * std::sin(clockSeconds() * 18.f);
+            draw::line(window, e.pos, c, 5.f, withAlpha(theme::coreLow, 0.15f + 0.1f * w));
+            draw::line(window, e.pos, c, 1.5f, withAlpha(lighten(theme::coreLow, 0.3f), 0.6f + 0.3f * w));
+        }
+    }
     drawBoss(window, world.boss(), world.core().pos);
     for (const Enemy& e : world.enemies()) drawEnemy(window, e, world.core().pos);
+    for (const Shot& s : world.shots()) {   // boss orbs: a hot core in a glow, a short tail behind
+        const sf::Vector2f back = s.pos - normalized(s.vel, {1.f, 0.f}) * s.radius * 2.2f;
+        draw::line(window, back, s.pos, s.radius * 0.9f, withAlpha(theme::coreLow, 0.35f));
+        draw::glow(window, s.pos, s.radius * 2.6f, theme::coreLow, 0.35f);
+        draw::disc(window, s.pos, s.radius, withAlpha(lighten(theme::coreLow, 0.35f), 0.95f), withAlpha(theme::coreLow, 0.9f), {1.f, 1.f}, 16);
+    }
     for (const Ball& b : world.balls()) {
         if (b.mods.hunterMult <= 0.f || b.preyId < 0) continue;
         for (const Enemy& e : world.enemies())

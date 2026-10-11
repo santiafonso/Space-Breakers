@@ -226,6 +226,11 @@ bool Audio::init() {
     return ok_;
 }
 
+namespace {
+constexpr float kPoolFade = 4.f;   // s a pool's song takes to fade out under the next one
+constexpr float kPoolLead = 6.f;   // ...starting this long before its end
+}  // namespace
+
 void Audio::addMusic(Track t, const std::string& file, float gain, Loop loop) {
     if (!ok_) return;   // no audio device / SPACE_BREAKERS_NO_AUDIO
     if (t == Track::None || t == Track::Count || file.empty() || !std::filesystem::exists(file)) return;
@@ -239,7 +244,42 @@ void Audio::addMusic(Track t, const std::string& file, float gain, Loop loop) {
         m->setVolume(0.f);
         st.voice[static_cast<std::size_t>(v)] = std::move(m);
     }
+    st.length = loop.end > 0.f ? loop.end : st.voice[0]->getDuration().asSeconds();
     music_[static_cast<std::size_t>(t)].push_back(std::move(st));
+}
+
+void Audio::addMenuLayer(const std::string& file, float gain) {
+    if (!ok_ || file.empty() || !std::filesystem::exists(file)) return;
+    auto l = std::make_unique<Layer>();
+    if (!l->buf.loadFromFile(file)) return;
+    l->snd.setBuffer(l->buf);
+    l->snd.setLoop(true);
+    l->snd.setVolume(0.f);
+    l->gain = gain;
+    layers_.push_back(std::move(l));
+}
+
+void Audio::updateLayers(float dt, bool want, float vol) {
+    constexpr float kLayerFade = 4.f;   // s for one layer to ease in / out
+    if (layers_.empty()) return;
+    layersLevel_ = want ? std::min(1.f, layersLevel_ + dt / 2.5f) : std::max(0.f, layersLevel_ - dt / 1.5f);
+    if (layersLevel_ <= 0.f) {   // off: stop them all - the next visit starts from the top, in step
+        for (auto& l : layers_)
+            if (l->snd.getStatus() != sf::Sound::Stopped) l->snd.stop();
+        return;
+    }
+    // All of them play (the silent ones too), started in the same frame, so a
+    // layer that eases in later lands on the beat.
+    if (layers_[0]->snd.getStatus() != sf::Sound::Playing)
+        for (auto& l : layers_) l->snd.play();
+    const float L = layersLevel_ * layersLevel_ * (3.f - 2.f * layersLevel_);
+    for (std::size_t i = 0; i < layers_.size(); ++i) {
+        Layer& l = *layers_[i];
+        const bool on = static_cast<int>(i) < layersOn_;
+        l.level = on ? std::min(1.f, l.level + dt / kLayerFade) : std::max(0.f, l.level - dt / kLayerFade);
+        const float k = l.level * l.level * (3.f - 2.f * l.level);
+        l.snd.setVolume(std::max(0.f, vol * l.gain * L * k));
+    }
 }
 
 void Audio::setEnabled(bool e) {
@@ -261,8 +301,39 @@ void Audio::applySettings(const SoundSettings& s) {
 
 void Audio::setTrack(Track t, int variant) {
     track_ = t;
-    if (const auto& loops = music_[static_cast<std::size_t>(t)]; !loops.empty())
-        pick_[static_cast<std::size_t>(t)] = static_cast<std::size_t>(std::max(variant, 0)) % loops.size();
+    if (const auto& loops = music_[static_cast<std::size_t>(t)]; !loops.empty() && variant >= 0)
+        pick_[static_cast<std::size_t>(t)] = static_cast<std::size_t>(variant) % loops.size();
+}
+
+void Audio::setPool(Track t, const std::vector<int>& variants) {
+    const std::size_t ti = static_cast<std::size_t>(t);
+    if (ti >= kTracks) return;
+    std::vector<std::size_t> pool;
+    for (int v : variants)
+        if (v >= 0 && static_cast<std::size_t>(v) < music_[ti].size()) pool.push_back(static_cast<std::size_t>(v));
+    if (pool == playlist_[ti]) return;
+    const bool first = playlist_[ti].empty();
+    playlist_[ti] = std::move(pool);
+    if (playlist_[ti].empty()) return;
+    if (std::find(playlist_[ti].begin(), playlist_[ti].end(), pick_[ti]) != playlist_[ti].end()) return;
+    if (first) {   // the very first pick: a random one, no hand-over to make
+        pick_[ti] = playlist_[ti][std::uniform_int_distribution<std::size_t>(0, playlist_[ti].size() - 1)(rng_)];
+        return;
+    }
+    rotate(ti);
+}
+
+void Audio::rotate(std::size_t t) {
+    const auto& pool = playlist_[t];
+    std::vector<std::size_t> next;   // anything but the one that just played
+    for (std::size_t v : pool)
+        if (v != pick_[t]) next.push_back(v);
+    if (next.empty()) return;
+    Stream& old = music_[t][pick_[t]];
+    old.fadeOut = kPoolFade;
+    old.rewind = true;   // its next turn starts from the top
+    pick_[t] = next[std::uniform_int_distribution<std::size_t>(0, next.size() - 1)(rng_)];
+    smoothT_ = kPoolFade + 2.f;
 }
 
 void Audio::setFadeIn(Track t, int variant, float seconds) {
@@ -275,7 +346,16 @@ void Audio::update(float dt) {
     // A calm hand-over: the old loop eases out first and the new one only starts
     // rising once the old is mostly gone, so two tempos never clash at full level.
     constexpr float kFadeOut = 1.5f;     // seconds
-    constexpr float kHandOver = 0.25f;   // the new loop waits until the rest are below this
+    // The new loop waits until the rest are below this; a pool's hand-over
+    // (one song of an act to the next) overlaps more - a real crossfade.
+    const float kHandOver = smoothT_ > 0.f ? 0.7f : 0.25f;
+    smoothT_ = std::max(0.f, smoothT_ - dt);
+    // A pool's song had its turn: the next one takes over before it ends.
+    if (const std::size_t tt = static_cast<std::size_t>(track_); tt < kTracks && playlist_[tt].size() > 1 && enabled_) {
+        Stream& cur = music_[tt][pick_[tt]];
+        if (cur.level > 0.f) cur.played += dt;
+        if (cur.length > 0.f && cur.played >= cur.length - kPoolLead) rotate(tt);
+    }
     // Intensity swells into a fight in ~2 s and settles back down in ~3 s.
     const float di = intensityTarget_ - intensity_;
     intensity_ += di > 0.f ? std::min(di, dt / 2.f) : std::max(di, -dt / 3.f);
@@ -284,12 +364,20 @@ void Audio::update(float dt) {
     for (std::size_t t = 0; t < kTracks; ++t)
         for (std::size_t i = 0; i < music_[t].size(); ++i)
             if (t != static_cast<std::size_t>(track_) || i != pick_[t]) others = std::max(others, music_[t][i].level);
+    const bool menu = track_ == Track::Menu || track_ == Track::Web;   // they share the layered song
+    if (!menu) {   // the layered menu song on its way out (only as loud as its loudest layer)
+        float top = 0.f;
+        for (const auto& l : layers_) top = std::max(top, l->level);
+        others = std::max(others, layersLevel_ * top);
+    }
+    updateLayers(dt, enabled_ && menu && others <= kHandOver, vol);
     for (std::size_t t = 0; t < kTracks; ++t) {
         for (std::size_t i = 0; i < music_[t].size(); ++i) {
             Stream& st = music_[t][i];
             const bool want = enabled_ && t == static_cast<std::size_t>(track_) && i == pick_[t];
+            if (want) st.fadeOut = kFadeOut;
             if (want && others <= kHandOver) st.level = std::min(1.f, st.level + dt / st.fadeIn);
-            else if (!want) st.level = std::max(0.f, st.level - dt / kFadeOut);
+            else if (!want) st.level = std::max(0.f, st.level - dt / st.fadeOut);
             const float k = t == static_cast<std::size_t>(Track::Menu) ? 1.f : intensity_;
             updateStream(st, t == static_cast<std::size_t>(Track::Boss), dt, vol * k);
         }
@@ -302,12 +390,13 @@ void Audio::updateStream(Stream& st, bool restart, float dt, float vol) {
     auto isPlaying = [](const sf::Music& m) { return m.getStatus() == sf::Music::Playing; };
 
     if (st.level <= 0.f) {   // silent: park it
+        const bool rw = restart || st.rewind;
         for (auto& v : st.voice) {
             if (!v || !isPlaying(*v)) continue;
-            if (restart) v->stop();
+            if (rw) v->stop();
             else v->pause();   // resume from here
         }
-        if (restart) { st.cur = 0; st.seamT = 1.f; }
+        if (rw) { st.cur = 0; st.seamT = 1.f; st.played = 0.f; st.rewind = false; }
         return;
     }
     // Audible (fading in or out): keep the sounding voices going.

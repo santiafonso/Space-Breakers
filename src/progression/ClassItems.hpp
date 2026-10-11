@@ -483,7 +483,7 @@ inline const ItemDef* commonItemDef(UpgradeKind k) {
          "+2.5% (+0.5% on a boss)", Tier::Legendary, ItemTag::Assassin},
         {K::Hive, "Swarm", "Swarm", "3 tiny bugs of its element hatch every second (up to 30), run at the nearest enemy and bite it, leaving the element - reactions everywhere",
          "+1 bug per hatch, harder bites", Tier::Legendary, ItemTag::Summoner},
-        {K::ElderDragon, "ElderDragon", "Elder dragon", "one huge dragon circles the arena all fight: every 4 s its breath sweeps a wide swath, x4 its hit with its element",
+        {K::ElderDragon, "ElderDragon", "Dragon", "one huge dragon circles the arena all fight, breathing fire most of the time: 4.5 s of a steady wide swath (with its element), then 2.5 s to catch its breath",
          "+0.5x, breathes sooner", Tier::Legendary, ItemTag::Summoner},
         {K::Rigged, "Rigged", "Rigged", "every chance in the run - crits, coins, echoes, Jester rolls - is rolled twice and keeps the better one",
          "+2 luck", Tier::Legendary, ItemTag::Jester},
@@ -503,8 +503,206 @@ inline const ItemDef* commonItemDef(UpgradeKind k) {
     return findItemDef(defs, k);
 }
 
+// ==================================================================== Astronomer
+// The Guardian's ascended class (2026-10-06): few items, all Epic or better.
+// Each planet orbits the core at its own distance (sim/WorldPlanets.cpp),
+// shoves what it touches, breaks shots aimed at the core, and does its thing
+// whenever its ball bounces off the core. Bigger ball, bigger planets.
+inline const ItemDef* astronomerItemDef(UpgradeKind k) {
+    using K = UpgradeKind;
+    static const std::vector<ItemDef> defs = {
+        {K::PlanetMercury, "PlanetMercury", "Mercury", "a small, quick planet close to the core: it laps it fast and hits often. A core bounce: twice as fast for 3 s",
+         "harder hits, faster", Tier::Epic, ItemTag::Astronomer},
+        {K::PlanetVenus, "PlanetVenus", "Venus", "a planet wrapped in acid clouds: what it touches is poisoned. A core bounce: it lets out a cloud of acid where it is",
+         "a stronger acid, a bigger cloud", Tier::Epic, ItemTag::Astronomer},
+        {K::PlanetEarth, "PlanetEarth", "Earth", "every 2.5 s it fires a rocket at an enemy near the core. A core bounce: a salvo of rockets (more, the bigger the ball)",
+         "harder rockets, more often", Tier::Epic, ItemTag::Astronomer},
+        {K::PlanetMars, "PlanetMars", "Mars", "a red planet that hits hard and burns what it touches. A core bounce: it throws its moons, Phobos and Deimos, at the enemies",
+         "harder hits, hotter", Tier::Epic, ItemTag::Astronomer},
+        {K::PlanetJupiter, "PlanetJupiter", "Jupiter", "a giant on the far orbit, leaving a trail of gas that slows and hurts. A core bounce: the Great Red Spot, a storm that pulls enemies in for 3 s",
+         "more gas, a bigger storm", Tier::Epic, ItemTag::Astronomer},
+        {K::PlanetSaturn, "PlanetSaturn", "Saturn", "its rings spin and cut what comes near. A core bounce: the rings leave it and settle round the core for 5 s - a wall that cuts whatever tries to cross and throws it back out, and stops shots",
+         "sharper rings, they grow back sooner", Tier::Epic, ItemTag::Astronomer},
+        {K::PlanetNeptune, "PlanetNeptune", "Neptune", "a cold blue planet on a far orbit: what it touches freezes. A core bounce: it looses Triton, its moon, which circles the core backwards for 6 s freezing solid everything it meets",
+         "colder, a wider ring", Tier::Epic, ItemTag::Astronomer},
+        {K::Satellite, "Satellite", "Asteroid belt", "a ring of rocks circles the core on the outermost orbit, a wall: they hit what crosses them and stop shots. A core bounce: half of them fly at the enemies and the belt fills back in",
+         "more rocks, harder", Tier::Legendary, ItemTag::Astronomer},
+        {K::StarryNight, "StarryNight", "Starry night", "every planet is 30% bigger and stronger, and each fight 3 more planets join at random. A core bounce: a star falls on an enemy for every planet",
+         "brighter stars, bigger planets", Tier::Legendary, ItemTag::Astronomer},
+    };
+    return findItemDef(defs, k);
+}
+
+// ==================================================================== Hermes
+// The Striker's god: few items, each a big one (sim/WorldGods.cpp).
+inline const ItemDef* hermesItemDef(UpgradeKind k) {
+    using K = UpgradeKind;
+    static const std::vector<ItemDef> defs = {
+        {K::Talaria, "Talaria", "Talaria", "winged sandals: every wall bounce makes it 12% faster until it touches the core, and a fling barely fades",
+         "+3% per bounce", Tier::Epic, ItemTag::Hermes},
+        {K::Caduceus, "Caduceus", "Caduceus", "flying fast (over 2x its cruise), every hit also strikes the 2 nearest enemies for 60% of it - twin serpents of light",
+         "+15%", Tier::Epic, ItemTag::Hermes},
+        {K::Messenger, "Messenger", "Messenger", "every 4 s it's there and back in an instant: to the enemy farthest from the core, a 1.5x hit, and back where it was",
+         "more often, harder", Tier::Epic, ItemTag::Hermes},
+        {K::Petasos, "Petasos", "Petasos", "the winged hat: flying fast it turns golden, goes through enemies and leaves sonic booms (50% of its hit around)",
+         "bigger booms", Tier::Legendary, ItemTag::Hermes},
+        {K::Quicksilver, "Quicksilver", "Quicksilver", "flying fast, time bends around it: every enemy moves 30% slower",
+         "+6% slower", Tier::Legendary, ItemTag::Hermes},
+    };
+    return findItemDef(defs, k);
+}
+
+// ==================================================================== Odin
+// The Mage's god: few items, each a big one (sim/WorldGods.cpp).
+inline const ItemDef* odinItemDef(UpgradeKind k) {
+    using K = UpgradeKind;
+    static const std::vector<ItemDef> defs = {
+        {K::Huginn, "Huginn", "Huginn", "a raven (thought): every 3rd volley is cast three times running",
+         "stronger", Tier::Epic, ItemTag::Odin},
+        {K::Muninn, "Muninn", "Muninn", "a raven (memory): every ability it casts also brings down an arcane blast on the thickest pack of enemies (1.2x its hit, wide)",
+         "+30%", Tier::Epic, ItemTag::Odin},
+        {K::Runes, "Valknut", "Valknut", "the knot of the slain: a big recharge bonus (+0.4 into the same sum as the rest - each more helps a little less), so everything comes round sooner",
+         "+10%", Tier::Epic, ItemTag::Odin},
+        {K::Gungnir, "Gungnir", "Gungnir", "every 10 s - sooner the faster its abilities recharge - it hurls the spear at the strongest enemy (the boss first): 10x its hit, through the whole line and back",
+         "sooner, harder", Tier::Legendary, ItemTag::Odin},
+        {K::Draupnir, "Draupnir", "Draupnir", "the ring that multiplies: its abilities are one level higher (more missiles, more bolts, more of all) and 50% stronger and wider",
+         "+25%", Tier::Legendary, ItemTag::Odin},
+    };
+    return findItemDef(defs, k);
+}
+
+// ==================================================================== Thanatos
+inline const ItemDef* thanatosItemDef(UpgradeKind k) {
+    using K = UpgradeKind;
+    static const std::vector<ItemDef> defs = {
+        {K::ShadowStep, "ShadowStep", "Shadow step", "every blink cuts through everything between where it was and where it lands (60% of its hit)",
+         "+15%", Tier::Epic, ItemTag::Thanatos},
+        {K::DeathMark, "DeathMark", "Death mark", "an enemy it stabs under 25% of its health just dies (not a boss) - on to the next at once",
+         "+5% of health", Tier::Epic, ItemTag::Thanatos},
+        {K::Eclipse, "Eclipse", "Eclipse", "every 4th blink lands as a shadow nova: everything around takes 1.5x its hit",
+         "+40%", Tier::Epic, ItemTag::Thanatos},
+        {K::ReaperScythe, "ReaperScythe", "Reaper's scythe", "every blink lands with a sweep of the scythe: the 2 enemies nearest its mark are struck too",
+         "a wider sweep", Tier::Legendary, ItemTag::Thanatos},
+        {K::FinalHour, "FinalHour", "Final hour", "every 15 s its hour comes: it blinks through up to 12 enemies in a breath, a stab each",
+         "sooner", Tier::Legendary, ItemTag::Thanatos},
+    };
+    return findItemDef(defs, k);
+}
+
+// ==================================================================== Tiamat
+inline const ItemDef* tiamatItemDef(UpgradeKind k) {
+    using K = UpgradeKind;
+    static const std::vector<ItemDef> defs = {
+        {K::FrostWyrm, "FrostWyrm", "Frost wyrm", "hatches from an egg and grows all run, slowly, into a long white wyrm circling the core: what its body touches freezes; young, it breathes ice at the enemy closest to the core; adult, longer, its breath leaves frost",
+         "harder, colder", Tier::Epic, ItemTag::Tiamat},
+        {K::StormDrake, "StormDrake", "Storm drake", "hatches from an egg and grows all run, quickly, into a small blue drake on the wing: it zaps the nearest; young, lightning leaps through 4 enemies; adult, it calls a thunderstorm on the thickest pack",
+         "harder bolts", Tier::Epic, ItemTag::Tiamat},
+        {K::LizardHorde, "LizardHorde", "Lizard horde", "every 5 s a brood of 6 lizards pours out of it and runs at the enemies, biting",
+         "broods come sooner", Tier::Epic, ItemTag::Tiamat},
+        {K::AncientGold, "AncientGold", "Ancient gold", "hatches from an egg and grows all run, slowest of all, into a huge golden dragon - a head per stage: a flamethrower, then molten gold, then a roar that drags enemies in",
+         "harder", Tier::Legendary, ItemTag::Tiamat},
+        {K::BroodMother, "BroodMother", "Brood mother", "her lizards bite twice as hard, and every kill of theirs hatches two more (up to 24)",
+         "longer-lived lizards", Tier::Legendary, ItemTag::Tiamat},
+        {K::Devourer, "Devourer", "Ravager", "hatches from an egg and grows all run into a dark dragon that swoops through the thickest pack every 1.8 s; young, its kills on the run hatch lizards; adult, two runs back to back",
+         "charges sooner", Tier::Epic, ItemTag::Tiamat},
+        {K::Wyrmling, "Wyrmling", "Wyrmling", "hatches from an egg and grows all run, fastest of all, into a little dragon biting the weakest enemy; young, it pounces on the next after a kill; adult, its bites splash fire",
+         "harder bites", Tier::Epic, ItemTag::Tiamat},
+    };
+    return findItemDef(defs, k);
+}
+
+// ==================================================================== Loki
+inline const ItemDef* lokiItemDef(UpgradeKind k) {
+    using K = UpgradeKind;
+    static const std::vector<ItemDef> defs = {
+        {K::LokiDice, "LokiDice", "Loaded dice", "its clones also roll two dice: they throw that many knives (2 to 12) at the enemies around, 0.9x its hit each",
+         "harder knives", Tier::Epic, ItemTag::Loki},
+        {K::LokiRoulette, "LokiRoulette", "Roulette", "its clones also spin a roulette: red, a fire nova (2x its hit); black, everything near is dragged in and stunned; green (1 in 10), JACKPOT: a huge blast (8x) and gold",
+         "bigger wins", Tier::Epic, ItemTag::Loki},
+        {K::LokiCards, "LokiCards", "Marked deck", "its clones also draw a card: spades a slash through the line, clubs a stunning blow, diamonds shards at 3 enemies, hearts mend the core - a face card pays double, an ace four times",
+         "harder cards", Tier::Epic, ItemTag::Loki},
+        {K::LokiPachinko, "LokiPachinko", "Pachinko", "its clones also open a pachinko: 14 steel balls rain down from the top of the arena and bounce their way through the enemies below",
+         "more balls, harder", Tier::Legendary, ItemTag::Loki},
+        {K::LokiHighTable, "LokiHighTable", "High table", "the stakes go up: 2 more clones, one every 2 s, and every game pays 50% more (the roulette's green comes twice as often)",
+         "+15% on every game", Tier::Legendary, ItemTag::Loki},
+    };
+    return findItemDef(defs, k);
+}
+
+// ==================================================================== Nergal
+inline const ItemDef* nergalItemDef(UpgradeKind k) {
+    using K = UpgradeKind;
+    static const std::vector<ItemDef> defs = {
+        {K::BloodRain, "BloodRain", "Blood rain", "every 6 s a great red cloud gathers over the thickest pack and rains blood for 4 s: it eats them (50% of its hit a second) and marks them - they take 35% more from everything",
+         "rains sooner", Tier::Epic, ItemTag::Nergal},
+        {K::RatTide, "RatTide", "Rat tide", "every 5 s a tide of 8 rats pours out of it, and every rat bites 50% harder",
+         "tides come sooner", Tier::Epic, ItemTag::Nergal},
+        {K::Locusts, "Locusts", "Locust swarm", "the swarms it leaves behind turn to locusts: twice as many, bigger, biting twice as hard and living longer",
+         "a hungrier swarm", Tier::Epic, ItemTag::Nergal},
+        {K::BlackDeath, "BlackDeath", "Black death", "an infected enemy that dies bursts into a cloud of rot: it hits everything round it (60% of its hit) and infects them",
+         "bigger bursts", Tier::Legendary, ItemTag::Nergal},
+        {K::PaleHorse, "PaleHorse", "Pale horse", "every 10 s a pale rider gallops across the whole arena through the thickest pack: 3x its hit to all it rides through, and the black plague on them",
+         "rides sooner", Tier::Legendary, ItemTag::Nergal},
+    };
+    return findItemDef(defs, k);
+}
+
+// ==================================================================== Apolo
+inline const ItemDef* apoloItemDef(UpgradeKind k) {
+    using K = UpgradeKind;
+    static const std::vector<ItemDef> defs = {
+        {K::Lyre, "Lyre", "Lyre", "every time the muses move on, a chord mends the core a little - and a ball that loses a muse keeps half her gift 3 s more",
+         "a fuller chord", Tier::Epic, ItemTag::Apolo},
+        {K::Laurel, "Laurel", "Laurel crown", "the muses' gifts are 40% stronger",
+         "+15%", Tier::Epic, ItemTag::Apolo},
+        {K::SilverBow, "SilverBow", "Silver bow", "every muse shoots a sun arrow at her weak point every 0.8 s (2x its hit)",
+         "harder arrows", Tier::Epic, ItemTag::Apolo},
+        {K::SunChariot, "SunChariot", "Sun chariot", "a fifth muse rides the sun: her ball becomes a little sun, burning everything round it and setting it alight",
+         "a hotter sun", Tier::Legendary, ItemTag::Apolo},
+        {K::Oracle, "Oracle", "Oracle", "the muses move on twice as fast, and as each one arrives her ball's next hit is a sure crit, x3",
+         "x3.5", Tier::Legendary, ItemTag::Apolo},
+    };
+    return findItemDef(defs, k);
+}
+
+// ==================================================================== Ares
+inline const ItemDef* aresItemDef(UpgradeKind k) {
+    using K = UpgradeKind;
+    static const std::vector<ItemDef> defs = {
+        {K::PhobosDeimos, "PhobosDeimos", "Phobos & Deimos", "his sons, Fear and Terror: two moons, red and black, circle it and fire homing missiles at what comes near (1.5x its hit, a small blast) - whoever they hit is struck with terror and stops a moment",
+         "harder missiles", Tier::Epic, ItemTag::Ares},
+        {K::DragonTeeth, "DragonTeeth", "Dragon's teeth", "every 6 s it sows 3 teeth: bronze hoplites spring from the ground, stand in a phalanx and fire volleys of 3 bullets at the nearest enemies for 8 s",
+         "harder volleys", Tier::Epic, ItemTag::Ares},
+        {K::WarChariot, "WarChariot", "War chariot", "every 7 s a war chariot drawn by fire-breathing horses charges across the arena through the thickest pack (2x its hit), leaving a furrow of fire that burns and sets alight",
+         "a fiercer charge", Tier::Epic, ItemTag::Ares},
+        {K::WrathOlympus, "WrathOlympus", "Wrath of Olympus", "heavy artillery: every 2.5 s a red star falls on the thickest pack - a ring closes on it, then a huge impact (6x its hit) that leaves a burning crater; at most 9 stars and craters at once",
+         "a heavier star", Tier::Legendary, ItemTag::Ares},
+        {K::TrojanWar, "TrojanWar", "Trojan war", "every 10 s the sky opens over the busiest lane: a rain of bronze spears falls from one side of the arena to the other, 14 blasts (2.5x its hit each) - an army at war",
+         "a heavier rain", Tier::Legendary, ItemTag::Ares},
+    };
+    return findItemDef(defs, k);
+}
+
+// ==================================================================== Artemisa
+inline const ItemDef* artemisaItemDef(UpgradeKind k) {
+    using K = UpgradeKind;
+    static const std::vector<ItemDef> defs = {
+        {K::SilverHounds, "SilverHounds", "Silver hounds", "every throw looses two spectral hounds alongside it: they race to her prey, biting everything in their way (1x its hit)",
+         "harder bites", Tier::Epic, ItemTag::Artemisa},
+        {K::CrescentMoon, "CrescentMoon", "Crescent moon", "every throw, two more balls fly out after it on the very same path, a moment apart - copies of it for 3 s",
+         "longer-lived copies", Tier::Epic, ItemTag::Artemisa},
+        {K::ArrowRain, "ArrowRain", "Arrow rain", "catch her (or let her throw herself) and arrows rain on every spot her last throw hit (1.2x its hit each, up to 12)",
+         "a heavier rain", Tier::Epic, ItemTag::Artemisa},
+        {K::GoldenStag, "GoldenStag", "Golden stag", "a throw at full pull (and her own throws) calls a golden-horned stag that charges ahead down the same line to the wall: 3x its hit, and all it touches becomes prey",
+         "a fiercer charge", Tier::Legendary, ItemTag::Artemisa},
+        {K::HuntNight, "HuntNight", "Night of the hunt", "every 15 s night falls for 5 s: the arena dims, every enemy is prey, and a throw sends her at full speed through every enemy on the screen, one after another (1.5x its hit each)",
+         "a longer night", Tier::Legendary, ItemTag::Artemisa},
+    };
+    return findItemDef(defs, k);
+}
+
 inline const ItemDef* classItemDef(UpgradeKind k) {
-    for (const ItemDef* (*f)(UpgradeKind) : {mageItemDef, shooterItemDef, assassinItemDef, summonerItemDef, jesterItemDef,
+    for (const ItemDef* (*f)(UpgradeKind) : {astronomerItemDef, hermesItemDef, odinItemDef, thanatosItemDef, tiamatItemDef, lokiItemDef, nergalItemDef, apoloItemDef, aresItemDef, artemisaItemDef, mageItemDef, shooterItemDef, assassinItemDef, summonerItemDef, jesterItemDef,
                                              slingerItemDef, styleItemDef, alchemistItemDef, commonItemDef})
         if (const ItemDef* d = f(k)) return d;
     return nullptr;

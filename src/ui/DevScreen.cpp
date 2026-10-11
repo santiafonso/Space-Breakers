@@ -40,7 +40,7 @@ constexpr SpawnDef kSpawns[] = {
     {EnemyKind::Grunt, 5, "5 Grunts"},     {EnemyKind::Runner, 5, "5 Runners"},
     {EnemyKind::Tank, 2, "2 Tanks"},       {EnemyKind::Splitter, 3, "3 Splitters"},
     {EnemyKind::Shielded, 3, "3 Shielded"}, {EnemyKind::Blinker, 3, "3 Blinkers"}, {EnemyKind::Snare, 2, "2 Snares"},
-    {EnemyKind::Mender, 2, "2 Menders"},   {EnemyKind::Brute, 1, "1 Brute"},
+    {EnemyKind::Mender, 2, "2 Menders"},   {EnemyKind::Brute, 1, "1 Brute"}, {EnemyKind::Caster, 2, "2 Casters"},
 };
 constexpr int kSpawnCount = static_cast<int>(sizeof(kSpawns) / sizeof(kSpawns[0]));
 
@@ -52,6 +52,7 @@ constexpr OpenDef kOpens[] = {
     {App::DevOpen::BossTreasure, "Boss treasure"}, {App::DevOpen::AbilityPick, "First ability pick"},
     {App::DevOpen::CreedBoss, "Creed choice (boss)"}, {App::DevOpen::CreedStart, "Creed choice (start)"},
     {App::DevOpen::Altar, "Altar (pacts)"},    {App::DevOpen::JumpToBoss, "Jump to boss"},
+    {App::DevOpen::Shrine, "Shrine (ascend)"},
 };
 constexpr int kOpenCount = static_cast<int>(sizeof(kOpens) / sizeof(kOpens[0]));
 
@@ -80,15 +81,15 @@ void DevScreen::rebuild(App& app) {
         buttons_.push_back(bt);
     }
 
-    // ---- three pages (tabs, top right): two of ITEMS (five classes each, one
+    // ---- four pages (tabs, top right): two of ITEMS (five classes each, one
     // column a class, common -> legendary); RUN = balls / types / abilities,
-    // modifiers / relics, creeds and pacts. The right column (actions, spawns,
-    // speed, screens) is on all of them.
+    // modifiers / relics, creeds and pacts; GODS = the gods' items (Atlas...).
+    // The right column (actions, spawns, speed, screens) is on all of them.
     {
-        const char* names[3] = {"Items 1", "Items 2", "Run"};
-        const float widths[3] = {96.f, 96.f, 96.f};
-        float x = s.x - 330.f;
-        for (int pg = 0; pg < 3; ++pg) {
+        const char* names[4] = {"Items 1", "Items 2", "Run", "Gods"};
+        const float widths[4] = {96.f, 96.f, 96.f, 96.f};
+        float x = s.x - 434.f;
+        for (int pg = 0; pg < 4; ++pg) {
             Button bt;
             bt.rect = {x, 58.f, widths[pg], 26.f};
             bt.label = names[pg];
@@ -98,7 +99,8 @@ void DevScreen::rebuild(App& app) {
             bt.tipTitle = names[pg];
             bt.tipDesc = pg == 0 ? "Striker, Guardian, Support, Mage and Shooter items"
                        : pg == 1 ? "Assassin, Summoner, Jester, Slinger and Alchemist items"
-                                 : "balls, types, abilities, modifiers, relics, creeds and pacts";
+                       : pg == 2 ? "balls, types, abilities, modifiers, relics, creeds and pacts"
+                                 : "the gods' items (a ball with one has the god's class) - Shrine: under SCREENS";
             buttons_.push_back(bt);
             x += widths[pg] + 8.f;
         }
@@ -117,11 +119,12 @@ void DevScreen::rebuild(App& app) {
         buttons_.push_back(bt);
     };
 
-    if (gDevPage < 2) {
+    if (gDevPage != 2) {
         // Items go by class: a coloured class heading, then its items in the
         // class colour, common first (the tier is in the tooltip). Five classes
         // a page; a class stays in one column.
-        const int lo = gDevPage == 0 ? 1 : 6, hi = lo + 4;   // ItemTag range on this page
+        const int lo = gDevPage == 0 ? 1 : gDevPage == 1 ? 6 : 11;   // ItemTag range on this page (the gods: all of them)
+        const int hi = gDevPage == 3 ? static_cast<int>(ItemTag::Artemisa) : lo + 4;
         std::vector<UpgradeKind> items;
         for (int i = 0; i < kUpgradeKindCount; ++i) {
             const auto k = static_cast<UpgradeKind>(i);
@@ -337,7 +340,7 @@ void DevScreen::draw(App& app, sf::RenderWindow& w) {
     // What the target ball carries right now.
     if (app.runBallCount() > 0) {
         const BallLoadout& L = app.data().run.balls[static_cast<std::size_t>(app.devBall())];
-        ItemTag roles[2];
+        ItemTag roles[3];
         const int nr = L.roles(roles);
         std::string line = nr == 0 ? "Normal" : "";
         for (int i = 0; i < nr; ++i)

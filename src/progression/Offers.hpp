@@ -31,7 +31,8 @@ namespace sb {
 //  - Relic:    a whole-run passive.
 
 inline constexpr int kChoiceCount = 4;
-inline constexpr int kBallSlots = 4;          // item slots per ball
+inline constexpr int kBallSlots = 6;          // item slots a ball can have: 4, 6 once a Shrine expands it (BallLoadout::itemSlots)
+inline constexpr int kBaseItemSlots = 4;
 inline constexpr int kElementItemCount = 6;
 inline constexpr int kAbilityItemCount = 8;   // AbilityDash..AbilityMissile
 inline constexpr int kModifierCount = 12;     // HeavyImpact..Bouncy
@@ -44,7 +45,7 @@ inline constexpr int kMaxItemLevel = 5;   // elements and abilities
 inline constexpr int kMaxGearLevel = 3;
 inline int gearPower(int lvl) { return 1 + 2 * (std::clamp(lvl, 1, kMaxGearLevel) - 1); }
 
-// A ball's slots, addressed as one list: 0..3 items, then the type slot, then
+// A ball's slots, addressed as one list: 0..5 items (itemSlots of them open), then the type slot, then
 // the ability slots (kMaxAbilitySlots of them, abilitySlotCount() active).
 inline constexpr int kSlotType = kBallSlots;
 inline constexpr int kSlotAbility = kBallSlots + 1;
@@ -135,7 +136,7 @@ inline Tier upgradeTier(UpgradeKind k) {
         case UpgradeKind::Catalyst: case UpgradeKind::ChainReaction:
         case UpgradeKind::GlassCannon: case UpgradeKind::Phoenix: case UpgradeKind::TimeDilation:
             return Tier::Epic;
-        case UpgradeKind::Railgun: case UpgradeKind::Satellite: case UpgradeKind::GravityWell:
+        case UpgradeKind::Railgun: case UpgradeKind::GravityWell:
         case UpgradeKind::Gemini: case UpgradeKind::PrismCore: case UpgradeKind::Seeker:
             return Tier::Legendary;
         default: break;
@@ -167,7 +168,7 @@ inline ItemTag itemTag(UpgradeKind k) {
             return ItemTag::Striker;
         case UpgradeKind::Rampart: case UpgradeKind::Mender:
         case UpgradeKind::Boomerang: case UpgradeKind::Bumper: case UpgradeKind::Glutton:
-        case UpgradeKind::Giant: case UpgradeKind::Satellite:
+        case UpgradeKind::Giant:
             return ItemTag::Guardian;
         case UpgradeKind::Overkill: case UpgradeKind::Shatter: case UpgradeKind::Tesla:
         case UpgradeKind::Bomber: case UpgradeKind::SplitShot:
@@ -187,6 +188,34 @@ inline ItemTag itemTag(UpgradeKind k) {
 inline BallRole tagRole(ItemTag t) { return static_cast<BallRole>(static_cast<int>(t)); }
 inline ItemTag roleTag(BallRole r) { return static_cast<ItemTag>(static_cast<int>(r)); }
 inline ItemTag classTag(int i) { return static_cast<ItemTag>(i + 1); }   // i = 0..kClassCount-1
+
+// Gods (2026-10-06): the class a ball ascends into at a Shrine with all 4
+// items of its class. A god's items are few and Epic or better; one of them is
+// enough for its class. None = that class has no god yet.
+inline ItemTag godOf(ItemTag t) {
+    switch (t) {
+        case ItemTag::Guardian: return ItemTag::Astronomer;   // Atlas
+        case ItemTag::Striker:  return ItemTag::Hermes;
+        case ItemTag::Mage:     return ItemTag::Odin;
+        case ItemTag::Assassin: return ItemTag::Thanatos;
+        case ItemTag::Summoner: return ItemTag::Tiamat;
+        case ItemTag::Jester:   return ItemTag::Loki;
+        case ItemTag::Alchemist: return ItemTag::Nergal;
+        case ItemTag::Support:  return ItemTag::Apolo;
+        case ItemTag::Shooter:  return ItemTag::Ares;
+        case ItemTag::Slinger:  return ItemTag::Artemisa;
+        default:                return ItemTag::None;
+    }
+}
+inline bool isGod(ItemTag t) {
+    return t == ItemTag::Astronomer || t == ItemTag::Hermes || t == ItemTag::Odin || t == ItemTag::Thanatos || t == ItemTag::Tiamat ||
+           t == ItemTag::Loki || t == ItemTag::Nergal || t == ItemTag::Apolo || t == ItemTag::Ares || t == ItemTag::Artemisa;
+}
+inline ItemTag baseOf(ItemTag god) {   // the class a god ascends from
+    for (int i = 1; i <= static_cast<int>(ItemTag::Alchemist); ++i)
+        if (godOf(static_cast<ItemTag>(i)) == god) return static_cast<ItemTag>(i);
+    return ItemTag::None;
+}
 inline const char* itemTagName(ItemTag t) { return t == ItemTag::None ? "" : roleName(tagRole(t)); }
 
 // Element picks map onto element web-node slots 0..5 (fire..electric);
@@ -278,7 +307,6 @@ inline const char* upgradeKindId(UpgradeKind k) {
         case UpgradeKind::Railgun:        return "Railgun";
         case UpgradeKind::Berserk:        return "Berserk";
         case UpgradeKind::Giant:          return "Giant";
-        case UpgradeKind::Satellite:      return "Satellite";
         case UpgradeKind::GravityWell:    return "GravityWell";
         case UpgradeKind::Storm:          return "Storm";
         case UpgradeKind::Gemini:         return "Gemini";
@@ -376,7 +404,6 @@ inline UpgradeInfo upgradeInfo(UpgradeKind k) {
         case UpgradeKind::Railgun:       return {"Railgun", "every wall bounce fires a beam along its new path, hitting all in line"};
         case UpgradeKind::Berserk:       return {"Berserk", "each enemy hit in a row adds +15% damage; touching a wall resets it"};
         case UpgradeKind::Giant:         return {"Giant", "the ball becomes huge and heavy: x1.8 size, x1.3 damage, a bit slower"};
-        case UpgradeKind::Satellite:     return {"Satellite", "the ball stops bouncing and orbits the core, grinding whatever comes close"};
         case UpgradeKind::GravityWell:   return {"Gravity well", "drags every enemy near it toward itself - packs them up for reactions"};
         case UpgradeKind::Storm:         return {"Storm", "a constant storm around the ball zaps every enemy near it"};
         case UpgradeKind::Gemini:        return {"Gemini", "a permanent ghost twin flies with it, copying all its items - and casting its abilities too"};
@@ -472,7 +499,6 @@ inline const char* upgradeLevelDesc(UpgradeKind k) {
         case UpgradeKind::Railgun:       return "a heavier, wider beam";
         case UpgradeKind::Berserk:       return "more damage per hit in a row, higher cap";
         case UpgradeKind::Giant:         return "hits harder still";
-        case UpgradeKind::Satellite:     return "grinds harder";
         case UpgradeKind::GravityWell:   return "a stronger, wider pull";
         case UpgradeKind::Storm:         return "zaps more often and harder";
         case UpgradeKind::Gemini:        return "a 2nd twin at level 3, a 3rd at level 5";
@@ -488,8 +514,12 @@ inline const char* upgradeLevelDesc(UpgradeKind k) {
 // of (so 0, 1 or 2 classes); 4 of one tag is that class's ascended form.
 // Elements and abilities never count toward a class.
 struct BallLoadout {
-    int gear[kBallSlots] = {-1, -1, -1, -1};   // UpgradeKind per item slot, -1 = empty
-    int gearLvl[kBallSlots] = {0, 0, 0, 0};    // item level: 1 once equipped, up to kMaxItemLevel
+    int gear[kBallSlots] = {-1, -1, -1, -1, -1, -1};   // UpgradeKind per item slot, -1 = empty
+    int gearLvl[kBallSlots] = {0, 0, 0, 0, 0, 0};    // item level: 1 once equipped, up to kMaxItemLevel
+    int itemSlots = kBaseItemSlots;            // open item slots: 4, 6 after a Shrine's "Expand"
+    bool shrineUsed = false;                   // it has had its Shrine (ascended or expanded): once a run
+    int ascendedFrom = 0;                      // the ItemTag it ascended from at a Shrine (0 = none)
+    float keptSize = 1.f;                      // the size its ascension took away, given back (Atlas keeps a big Guardian big)
     int type = -1;                             // element pick in the type slot, -1 = none (Plain)
     int typeLvl = 0;
     // An Alchemist's extra elements (element picks, -1 = none), in the order
@@ -499,6 +529,9 @@ struct BallLoadout {
     int ability[kMaxAbilitySlots] = {-1, -1, -1};   // ability picks, -1 = empty
     int abilityLvl[kMaxAbilitySlots] = {0, 0, 0};
     int mods[kModifierCount] = {};             // stacks per modifier (modifierIndex)
+    bool freeMissile = false;                  // a Mage: already got its free Magic missile (App::grantMageMissiles)
+    bool freePoison = false;                   // an ascended Alchemist: already got its free Poison (same place)
+    float dragonXp[6] = {};                    // Tiamat's dragons (frost, drake, gold, ravager, wyrmling) and [5] her mount: how grown, kept all run
 
     // ---- any slot, addressed 0..kLoadoutSlots-1 (see kSlotType / kSlotAbility)
     int kindAt(int s) const {
@@ -539,6 +572,7 @@ struct BallLoadout {
     }
     int elementSlot() const { return type >= 0 ? kSlotType : -1; }
     Element element() const {
+        if (hasRole(ItemTag::Nergal)) return Element::Plague;   // Nergal: the black plague, his own and only
         return type < 0 ? Element::Plain
                         : static_cast<Element>(elementItemSlot(static_cast<UpgradeKind>(type)) + 1);
     }
@@ -549,6 +583,7 @@ struct BallLoadout {
     }
     // Every element it carries right now (the type slot first), up to its cap.
     int elements(Element out[kMaxElements]) const {
+        if (hasRole(ItemTag::Nergal)) { out[0] = Element::Plague; return 1; }
         int n = 0;
         if (type >= 0) out[n++] = element();
         for (int i = 0; i < kMaxElements - 1 && n < elementCap(); ++i)
@@ -569,19 +604,22 @@ struct BallLoadout {
             if (g >= 0 && itemTag(static_cast<UpgradeKind>(g)) == t) ++n;
         return n;
     }
-    bool hasRole(ItemTag t) const { return t != ItemTag::None && tagCount(t) >= 2; }
+    // 2 items of a tag = the class; an ascended class (the Astronomer) needs only 1.
+    bool hasRole(ItemTag t) const { return t != ItemTag::None && tagCount(t) >= (isGod(t) ? 1 : 2); }
     // Its classes, lead first. The lead - the ball's body colour - is the
     // class it has put the most item levels into; on a tie, the one whose item
     // sits higher in the slots (so dragging items in TAB picks the colour).
-    int roles(ItemTag out[2]) const {
+    // Up to 3 (6 slots after Expand: 3 classes of 2 - 2026-10-07; it used to stop at 2).
+    int roles(ItemTag out[3]) const {
         int n = 0;
         for (int g : gear) {
-            if (g < 0 || n >= 2) continue;
+            if (g < 0 || n >= 3) continue;
             const ItemTag t = itemTag(static_cast<UpgradeKind>(g));
-            if (!hasRole(t) || (n == 1 && out[0] == t)) continue;
+            if (!hasRole(t) || std::find(out, out + n, t) != out + n) continue;
             out[n++] = t;
         }
-        if (n == 2 && tagLevels(out[1]) > tagLevels(out[0])) std::swap(out[0], out[1]);
+        for (int i = 1; i < n; ++i)   // most levels first; a tie keeps slot order
+            for (int j = i; j > 0 && tagLevels(out[j]) > tagLevels(out[j - 1]); --j) std::swap(out[j], out[j - 1]);
         return n;
     }
     int tagLevels(ItemTag t) const {   // total item levels of that class's items
@@ -591,20 +629,25 @@ struct BallLoadout {
         return sum;
     }
     RoleMask roleMask() const {
-        ItemTag r[2];
+        ItemTag r[3];
         RoleMask m = 0;
         for (int i = 0, n = roles(r); i < n; ++i) m |= roleBit(tagRole(r[i]));
         return m;
     }
     // The class it has 4 items of, if any.
     ItemTag ascended() const {
-        ItemTag r[2];
+        ItemTag r[3];
         for (int i = 0, n = roles(r); i < n; ++i)
-            if (tagCount(r[i]) >= 4) return r[i];
+            if (!isGod(r[i]) && tagCount(r[i]) >= 4) return r[i];   // (a god already is)
         return ItemTag::None;
     }
+    // The class it could ascend at a Shrine: all 4 of its items, and it has a god.
+    ItemTag ascendTag() const {
+        const ItemTag t = ascended();
+        return godOf(t) != ItemTag::None ? t : ItemTag::None;
+    }
     ItemTag leadTag() const {   // its first class, None without one
-        ItemTag r[2];
+        ItemTag r[3];
         return roles(r) > 0 ? r[0] : ItemTag::None;
     }
 };
@@ -617,6 +660,7 @@ struct BallLoadout {
 // opens again. A new ability goes in an open slot; a copy of a sleeping one
 // still levels it up.
 inline int abilitySlotCount(const BallLoadout& b) {
+    if (b.hasRole(ItemTag::Odin)) return kMaxAbilitySlots;   // the Mage's god: all of them
     const int mage = b.tagCount(ItemTag::Mage);
     return std::min(kMaxAbilitySlots, mage >= 4 ? 3 : mage >= 2 ? 2 : 1);
 }
@@ -640,7 +684,7 @@ inline bool upgradeLevelsUp(UpgradeKind k, const BallLoadout& b) {
 // the type slot. Abilities: an open ability slot.
 inline bool slotAccepts(UpgradeKind k, int s, const BallLoadout& b) {
     switch (upgradeCat(k)) {
-        case UpgradeCat::Item:    return isItemSlot(s);
+        case UpgradeCat::Item:    return isItemSlot(s) && s < b.itemSlots;
         case UpgradeCat::Element: return s == kSlotType;
         case UpgradeCat::Ability: return isAbilitySlot(s) && s - kSlotAbility < abilitySlotCount(b);
         default:                  return false;
@@ -654,9 +698,15 @@ inline bool upgradeFitsBall(UpgradeKind k, const BallLoadout& b) {
     switch (upgradeCat(k)) {
         case UpgradeCat::Modifier: return true;
         case UpgradeCat::Element:
+            if (b.hasRole(ItemTag::Nergal)) return false;   // Nergal: the black plague is his only element
+            return !b.has(k) || b.levelOf(k) < kMaxItemLevel;
         case UpgradeCat::Ability:
             return !b.has(k) || b.levelOf(k) < kMaxItemLevel;
         case UpgradeCat::Item:
+            // A god's items only go on the ball that ascended into that god (2026-10-06).
+            if (isGod(itemTag(k)) && (b.ascendedFrom == 0 || godOf(static_cast<ItemTag>(b.ascendedFrom)) != itemTag(k))) return false;
+            // ...and an ascended ball takes no other items: just its god's (elements and abilities still).
+            if (b.ascendedFrom != 0 && !isGod(itemTag(k))) return false;
             if (b.has(k)) return b.levelOf(k) < kMaxGearLevel;
             if (k == UpgradeKind::Conductor) return b.carriesElement(UpgradeKind::ElemElectric);
             if (k == UpgradeKind::Bedrock) return b.carriesElement(UpgradeKind::ElemStone);
@@ -678,7 +728,7 @@ inline int defaultSlot(UpgradeKind k, const BallLoadout& b) {
                 if (b.ability[i] < 0) return kSlotAbility + i;
             return kSlotAbility;
         default:
-            for (int i = 0; i < kBallSlots; ++i)
+            for (int i = 0; i < b.itemSlots; ++i)
                 if (b.gear[i] < 0) return i;
             return 0;
     }
@@ -985,7 +1035,7 @@ inline const MetaUnlockDef& metaUnlockDef(int u) {
                          2u,  3, B::Alchemist, P,  3, 308.f, 2.f},
         /* Armory    */ {"Armory",    "Epic picks turn up more often (+50% odds per level)",
                          2u,  2, B::Jester,   P, 47,  88.f, 5.f},
-        /* Satellite */ {"Satellite", "the Satellite legendary can appear: a ball that orbits the core",
+        /* Satellite */ {"Asteroid belt", "the Asteroid belt can appear once a ball has ascended into an Astronomer (at a Shrine)",
                          2u,  1, B::Guardian, P, 21, 345.f, 3.f},
         /* Singularity*/{"Singularity","the Gravity well legendary can appear: a ball that drags enemies in",
                          3u,  1, B::Support,  P, 16, 238.f, 4.f},
@@ -1192,6 +1242,7 @@ inline bool classUnlocked(ItemTag t, const int* levels) {
     // Every class, Striker too, waits for its web node (the user's call,
     // 2026-10-03: no starter class). With none bought, elites fall back to
     // other picks (see App::rollPick).
+    if (isGod(t)) return false;   // a god: only through a Shrine (RunState::poolIn)
     const int n = classUnlockNode(t);
     return n < 0 || levels[n] > 0;
 }

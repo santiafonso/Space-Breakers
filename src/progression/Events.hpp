@@ -16,7 +16,8 @@ namespace sb {
 // The second batch (2026-10-05) trades in items, balls and abilities, not just gold.
 enum class EventKind { Drifter, Smuggler, BloodPrice, Tithe, Gamble, Smith,
                        Barter, Mercenary, Gift, Tome, BloodForge, Cocoon,
-                       Rest, Temper };
+                       Rest, Temper,
+                       Ascend, Expand };   // a Shrine's two (2026-10-06)
 inline constexpr int kEventKindCount = 12;
 
 // The gold a deal costs (or, for Blood price, pays) in act `act`.
@@ -37,7 +38,9 @@ inline int eventGold(EventKind k, int act) {
         case EventKind::BloodForge:
         case EventKind::Cocoon:
         case EventKind::Rest:
-        case EventKind::Temper:     return 0;
+        case EventKind::Temper:
+        case EventKind::Ascend:
+        case EventKind::Expand:     return 0;
     }
     return 0;
 }
@@ -47,7 +50,8 @@ inline bool eventPays(EventKind k) { return k == EventKind::BloodPrice; }
 // Free of gold: its price is something else (an item, a ball's time, core HP...).
 inline bool eventFree(EventKind k) {
     return k == EventKind::Barter || k == EventKind::Mercenary || k == EventKind::Gift ||
-           k == EventKind::BloodForge || k == EventKind::Cocoon || k == EventKind::Rest || k == EventKind::Temper;
+           k == EventKind::BloodForge || k == EventKind::Cocoon || k == EventKind::Rest || k == EventKind::Temper ||
+           k == EventKind::Ascend || k == EventKind::Expand;
 }
 
 inline const char* eventName(EventKind k) {
@@ -66,6 +70,8 @@ inline const char* eventName(EventKind k) {
         case EventKind::Cocoon:     return "Strange cocoon";
         case EventKind::Rest:       return "Rest";
         case EventKind::Temper:     return "Forge";
+        case EventKind::Ascend:     return "Ascend";
+        case EventKind::Expand:     return "Expand";
     }
     return "";
 }
@@ -86,6 +92,8 @@ inline const char* eventHint(EventKind k) {
         case EventKind::Cocoon:     return "it twitches";
         case EventKind::Rest:       return "tend to the core";
         case EventKind::Temper:     return "a quiet hour at the anvil";
+        case EventKind::Ascend:     return "a ball with all 4 items of a class becomes its god";
+        case EventKind::Expand:     return "room for a third class";
     }
     return "";
 }
@@ -111,6 +119,8 @@ inline std::string eventGain(EventKind k, int gold) {
         case EventKind::BloodForge: return "a random item levels up";
         case EventKind::Cocoon:     return "in 3 fights: an Epic or Legendary item";
         case EventKind::Rest:       return "the core is repaired to full";
+        case EventKind::Ascend:     return "it ascends into its class's god: pick 1 of 3 of the god's items (Epic or better); they roll from now on";
+        case EventKind::Expand:     return "a ball gets 2 more item slots (6)";
     }
     return "";
 }
@@ -129,6 +139,8 @@ inline std::string eventCost(EventKind k, int gold) {
     if (k == EventKind::BloodForge)
         return "-" + std::to_string(static_cast<int>(E::bloodForgeHpFrac * 100.f + 0.5f)) + "% core max HP";
     if (k == EventKind::Cocoon) return "it takes an item slot meanwhile";
+    if (k == EventKind::Ascend) return "its class's items are gone, and that class's items stop showing up this run";
+    if (k == EventKind::Expand) return "that ball can't ascend at a Shrine anymore";
     return std::to_string(gold) + " gold";
 }
 

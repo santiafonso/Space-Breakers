@@ -24,7 +24,9 @@ enum class ScreenId { Menu, Loadout, Play, Choice, Pause, Stats, HowTo, BossWin,
 // ShopForge / Sell are the shop's paid forge and its "sell an item" counter.
 enum class EquipSource { Choice, Shop, Forge, ShopForge, Sell,
                          Barter,   // "Barter" event: pick an item to give up
-                         Gift };   // an event's free pick: place it (Back leaves it behind)
+                         Gift,     // an event's free pick: place it (Back leaves it behind)
+                         Ascend,   // a Shrine: pick the ball that ascends
+                         Expand }; // a Shrine: pick the ball that gets 2 more item slots
 
 // Where a creed choice comes from: the run start ("Covenant") or the act-1 boss.
 enum class CreedSource { Start, Boss };
@@ -111,6 +113,12 @@ public:
 
     // ---- ball / slot picker (Equip screen) ----
     void beginEquip(EquipSource src, UpgradeKind k, int ref);
+    // Shrines (2026-10-06): one ball, once a run, ascends or expands.
+    bool shrineAscends(const BallLoadout& L) const;   // all 4 Guardian items, its Shrine unused, room for one more god
+    bool shrineExpands(const BallLoadout& L) const;
+    void openShrine();
+    void ascendBall(int ball);
+    int ascendBall_ = -1;   // the ball whose ascension pick is on the table (-1 = none)
     EquipSource equipSource() const { return equipSrc_; }
     UpgradeKind equipKind() const { return equipKind_; }
     bool equipFitsBall(int ball) const;
@@ -216,7 +224,7 @@ public:
     float devTimeScale() const { return devTimeScale_; }
     int devBall() const { return std::min(devBall_, std::max(0, runBallCount() - 1)); }
     void devSetBall(int b) { devBall_ = b; }
-    enum class DevOpen { Shop, Forge, Upgrade, Elite, BossTreasure, Recruit, JumpToBoss, CreedBoss, CreedStart, AbilityPick, PostFight, Altar };
+    enum class DevOpen { Shop, Forge, Upgrade, Elite, BossTreasure, Recruit, JumpToBoss, CreedBoss, CreedStart, AbilityPick, PostFight, Altar, Shrine };
     void devOpen(DevOpen what);
     void devToggleCreed(CreedId id);   // grant it (or drop it, if the run has it)
     void openPause();
@@ -275,6 +283,7 @@ private:
     void postFight();
     void afterFightPick();   // an Elite's pick, else the map
     bool openAbilityChoice();                                 // the run's first ability (false = nothing to pick)
+    void grantAlchemistPoison();                              // an ascended Alchemist with no element gets Poison
     void grantMageMissiles();                                 // a Mage ball gets Magic missile in a free slot
     // Creeds.
     void foldCreeds(WorldParams& p) const;  // the run's creeds into the sim params
@@ -314,6 +323,7 @@ private:
     // Dev "photo mode" (SB_SNAPSHOT=<dir>): stage every screen, save a PNG of
     // each and quit - a way to look at the UI without playing.
     int runSnapshots(const std::string& dir);
+    int runBalance(int waves);   // SB_BALANCE: each class at its best against its god (dev)
     void snapFrame(const std::string& file);
     std::string capturePath_;   // non-empty: render() saves this frame here
     bool snapMouseOn_ = false;  // photo mode: uiMouse() reports snapMouse_ (a drag in the TAB peek)
@@ -399,6 +409,10 @@ private:
     void openRestStop();      // a Rest stop: repair the core or forge an item
     void restRepair();
     float endlessNextT_ = -1.f;   // dev endless: s to the next wave (-1 = a wave is on)
+public:
+    bool endlessWide = true;      // dev endless: the wide arena (acts 2+; the default) or act 1's
+    void endlessWave();           // dev endless: start data_.run.wave in the arena chosen
+private:
     MetaState endlessMeta_;       // ...the real progress, put back untouched when it ends
     std::vector<UpgradeKind> giftQueue_;   // event picks still to place, one Equip screen each
     void nextGift();          // place the next queued gift, or back to the map

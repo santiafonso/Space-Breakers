@@ -61,6 +61,16 @@ float World::roleContact(const Ball& b, const Enemy& e) {
     if (b.hasRole(BallRole::Shooter)) k *= R::shooterContactMul;
     if (b.hasRole(BallRole::Summoner)) k *= R::summonerContactMul;
     if (b.hasRole(BallRole::Alchemist)) k *= R::alchemistContactMul;
+    if (b.hasRole(BallRole::Astronomer)) k *= cfg::planet::contactMul;
+    if (b.hasRole(BallRole::Odin)) k *= cfg::odin::contactMul;
+    if (b.hasRole(BallRole::Hermes)) k *= cfg::hermes::contactMul;
+    if (b.hasRole(BallRole::Thanatos)) k *= cfg::thanatos::stabMul;   // always from behind
+    if (b.hasRole(BallRole::Tiamat)) k *= cfg::tiamat::contactMul;
+    if (b.hasRole(BallRole::Loki)) k *= cfg::loki::contactMul;
+    if (b.hasRole(BallRole::Nergal)) k *= cfg::nergal::contactMul;
+    if (b.hasRole(BallRole::Apolo)) k *= cfg::apolo::contactMul;
+    if (b.hasRole(BallRole::Ares)) k *= cfg::ares::contactMul;
+    if (b.hasRole(BallRole::Artemisa)) k *= cfg::artemisa::contactMul;
     if (b.hasRole(BallRole::Assassin)) {
         const sf::Vector2f back = normalized(e.pos - core_.pos, {1.f, 0.f});
         if (dot(normalized(b.pos - e.pos, {0.f, 0.f}), back) >= R::assassinBackCos) k *= R::assassinBackMul;
@@ -104,11 +114,18 @@ float World::ballCruise(const Ball& b, const WorldParams& p) const {
            (b.cls.common.rouletteWin == 1 || b.cls.common.rouletteWin == 2 ? 1.f + b.mods.cls.common.roulette : 1.f) *   // "Roulette": black (or green)
            (1.f + b.mods.cls.common.showtime * static_cast<float>(b.cls.common.showStacks)) *   // "Showtime"
            (classWorld_.common.tailT > 0.f ? classWorld_.common.tailMul : 1.f) *                 // "Tailwind" (ability)
-           (classWorld_.common.rainT > 0.f ? cfg::common::rainHaste : 1.f);                     // "Primal" water: rain
+           (classWorld_.common.rainT > 0.f ? cfg::common::rainHaste : 1.f) *                    // "Primal" water: rain
+           (b.hasRole(BallRole::Hermes) ? 1.f + std::min(cfg::hermes::momentumMax,
+                                                         cfg::hermes::momentumPer * static_cast<float>(b.cls.hermes.bounces))
+                                        : 1.f) *                                                 // Hermes: momentum
+           apoloSpeedMul(b);                                                                     // Apolo's Speed muse
 }
 
 float World::ballMaxSpeed(const Ball& b, const WorldParams& p) const {
-    return std::min(cruiseBase(p) * cfg::ball::maxSpeedCruiseMul * b.mods.maxSpeedMult * p.creed.speedCeilMul,
+    const float hermes = b.hasRole(BallRole::Hermes)   // Hermes: its momentum lifts the ceiling too
+        ? 1.f + std::min(cfg::hermes::momentumMax, cfg::hermes::momentumPer * static_cast<float>(b.cls.hermes.bounces)) * 0.5f
+        : 1.f;
+    return std::min(cruiseBase(p) * cfg::ball::maxSpeedCruiseMul * b.mods.maxSpeedMult * p.creed.speedCeilMul * hermes * apoloSpeedMul(b),
                     cfg::ball::hardSpeedCap * arenaScale());
 }
 
@@ -119,6 +136,9 @@ float World::ballRadius(const Ball& b, const WorldParams& p) const {
                  (b.hasRole(BallRole::Guardian) ? cfg::role::guardianRadiusMul : 1.f) *
                  (1.f + cfg::changer::gluttonRadius * static_cast<float>(b.gluttonStacks));
     mult = std::min(mult, cfg::changer::maxRadiusMult) * (1.f + b.cls.common.titan);   // "Titan" grows past the cap
+    if (b.hasRole(BallRole::Astronomer))   // Atlas: every kill this fight, a little bigger (past the cap too)
+        mult *= 1.f + cfg::planet::growPer * static_cast<float>(std::min(b.cls.astronomer.growth, cfg::planet::growMax));
+    mult *= apoloSizeMul(b);   // Apolo's Giant muse
     return cfg::ball::radius * mult * b.scale * (1.f + (arenaScale() - 1.f) * cfg::boss::ballRadiusArenaFrac);
 }
 
@@ -236,11 +256,26 @@ void World::devKillAll() {
         if (!e.orbiter) e.hp = 0.f;   // swept (as kills) on the next step
 }
 
+void World::devHurtBoss(float frac) {
+    if (!bossWave_ || !boss_.alive) return;
+    for (Enemy& e : enemies_)
+        if (e.part) e.hp = 0.f;   // its parts fall first
+    boss_.guarded = false;
+    boss_.retreat = 0.f;
+    boss_.hp = boss_.hpSeen = boss_.maxHp * frac;
+}
+
 void World::devWinWave() {
     toSpawn_ = 0;
     enemies_.clear();
     bolts_.clear();
-    if (bossWave_ && boss_.alive) boss_.hp = 0.f;  // updateBoss clears it -> waveCleared
+    shots_.clear();
+    if (bossWave_ && boss_.alive) {   // updateBoss clears it -> waveCleared
+        boss_.stage = 2;
+        boss_.guarded = false;
+        boss_.retreat = 0.f;
+        boss_.hp = boss_.hpSeen = 0.f;
+    }
 }
 
 void World::startRun(const WorldParams& p, const std::vector<BallSpec>& balls,
@@ -252,6 +287,7 @@ void World::startRun(const WorldParams& p, const std::vector<BallSpec>& balls,
     ballKills_.clear();
     lastCoreHitBy_ = -1;
     bolts_.clear();
+    shots_.clear();
     obstacles_.clear();
     pools_.clear();
     waves_.clear();
@@ -363,6 +399,7 @@ void World::beginWave(int wave, bool elite) {
     spawnTimer_ = cfg::wave::introDelay;
     waveRunning_ = true;
     bolts_.clear();
+    shots_.clear();
 }
 
 // The pulled-back arena, sized to the base view's aspect ratio so the zoomed-out
@@ -424,6 +461,7 @@ void World::startBossWave(int wave, const WorldParams& p) {
     spawnTimer_ = 2.0f;   // a beat before the first add
     enemies_.clear();
     bolts_.clear();
+    shots_.clear();
     coreSlideT_ = 0.f;
     size_ = wideArenaSize();
     core_.pos = size_ * 0.5f;
@@ -451,6 +489,8 @@ void World::startBossWave(int wave, const WorldParams& p) {
                  rng_.range(size_.y * 0.3f, size_.y * 0.7f)};
     boss_.shieldAng = std::atan2(core_.pos.y - boss_.pos.y, core_.pos.x - boss_.pos.x);   // starts facing the core
     boss_.dashDir = normalized(core_.pos - boss_.pos, {-1.f, 0.f});
+    boss_.home = boss_.pos;
+    boss_.hpSeen = boss_.hp;
 
     carryBalls(p);
 }
@@ -475,6 +515,7 @@ void World::startChargerWave(int wave, const WorldParams& p) {
     spawnTimer_ = 1.0f;
     enemies_.clear();
     bolts_.clear();
+    shots_.clear();
     coreSlideT_ = 0.f;
 
     // Wider arena, core shoved to the far left.
@@ -489,6 +530,8 @@ void World::startChargerWave(int wave, const WorldParams& p) {
     boss_.vel = {-cfg::boss::speed, 0.f};
     boss_.timer = cfg::boss::shockEvery;   // to its first shockwave
     boss_.shockR = cfg::boss::shockRadius * arenaScale();
+    boss_.home = boss_.pos;
+    boss_.hpSeen = boss_.hp;
 
     carryBalls(p);
 }
@@ -509,6 +552,7 @@ void World::startFinalBossWave(const WorldParams& p) {
     spawnTimer_ = cfg::finalBoss::addInterval;   // first edge add after a short beat
     enemies_.clear();
     bolts_.clear();
+    shots_.clear();
     coreSlideT_ = 0.f;
 
     size_ = wideArenaSize();
@@ -530,6 +574,8 @@ void World::startFinalBossWave(const WorldParams& p) {
     boss_.pos = {-boss_.radius, core_.pos.y};   // just off the left edge
     boss_.intro = cfg::finalBoss::introTime;
     boss_.shieldTimer = cfg::finalBoss::shieldRespawn;
+    boss_.homeDist = boss_.dist;
+    boss_.hpSeen = boss_.hp;
 
     for (int i = 0; i < cfg::finalBoss::shieldCount; ++i)
         spawnOrbiter(static_cast<float>(i) / cfg::finalBoss::shieldCount * 2.f * kPi);
@@ -563,6 +609,7 @@ EnemyKind World::rollEnemyKind() {
         {EnemyKind::Blinker,  w >= E::blinkerWave ? E::wBlinker : 0},
         {EnemyKind::Mender,   w >= E::menderWave ? E::wMender : 0},
         {EnemyKind::Snare,    w >= E::snareWave ? E::wSnare : 0},
+        {EnemyKind::Caster,   w >= E::casterWave ? E::wCaster : 0},
     };
     int total = 0;
     for (const Wt& t : table) total += t.w;
@@ -598,6 +645,7 @@ void World::setEnemyKind(Enemy& e, EnemyKind k, float hp, float speed) {
             break;
         case EnemyKind::Mender:   hpMul = E::menderHp; spMul = E::menderSpeed; rMul = E::menderRadius; break;
         case EnemyKind::Snare:    hpMul = E::snareHp; spMul = E::snareSpeed; rMul = E::snareRadius; break;
+        case EnemyKind::Caster:   hpMul = E::casterHp; spMul = E::casterSpeed; rMul = E::casterRadius; break;
         case EnemyKind::Brute:
             hpMul = E::bruteHp; spMul = E::bruteSpeed; rMul = E::bruteRadius;
             e.knockTaken = E::bruteKnock;
@@ -666,11 +714,11 @@ void World::spawnEnemy(std::optional<EnemyKind> force) {
 // A Snare that holds nothing catches a real ball that hits it - unless that
 // would leave you no free ball.
 bool World::trySnare(Ball& b, Enemy& e) {
-    if (e.kind != EnemyKind::Snare || e.snaring || e.hp <= 0.f || b.ghost || b.mods.satellite) return false;
+    if (e.kind != EnemyKind::Snare || e.snaring || e.hp <= 0.f || b.ghost) return false;
     if (&b < balls_.data() || &b >= balls_.data() + balls_.size()) return false;   // only the real balls
     int free = 0;
     for (const Ball& o : balls_)
-        if (o.snaredBy < 0 && !o.mods.satellite) ++free;
+        if (o.snaredBy < 0) ++free;
     if (free < 2) return false;
     e.snaring = true;
     b.snaredBy = e.id;
@@ -735,7 +783,7 @@ bool World::grabAt(sf::Vector2f point, float catchRadius) {
     int best = -1;
     float bestDist = catchRadius;
     for (std::size_t i = 0; i < balls_.size(); ++i) {
-        if (balls_[i].mods.satellite || balls_[i].snaredBy >= 0) continue;   // orbiting / held by a Snare
+        if (balls_[i].snaredBy >= 0) continue;   // held by a Snare
         if (balls_[i].regrabT > 0.f) continue;   // just thrown: let it fly a moment
         const float d = length(balls_[i].pos - point) / balls_[i].mods.reach;   // "Reach": grabbed from further
         if (d < bestDist) {
@@ -763,6 +811,7 @@ bool World::grabAt(sf::Vector2f point, float catchRadius) {
     pactOnGrab(b);
     classOnGrab(b);
     commonOnGrab(b);
+    artemisaOnGrab(b);   // "Arrow rain"
     b.cls.common.leashT = b.cls.common.leashFlyT = 0.f;   // "Leash": your hand cuts the rope
     b.held = true;
     b.vel = {0.f, 0.f};
@@ -788,12 +837,21 @@ void World::releaseHeld(sf::Vector2f throwVel) {
     b.held = false;
     b.regrabT = cfg::app::regrabDelay;   // no grabbing it straight back: the throw keeps its line a moment
     heldGrabOffset_ = {0.f, 0.f};
+    launchThrow(b, throwVel, heldCatch_, heldT_);
+    heldCatch_ = 0.f;
+    grabbed_ = Grabbed::None;
+    heldIndex_ = -1;
+}
+
+// A throw: the player's (releaseHeld) or Artemisa's own - everything a throw sets off.
+void World::launchThrow(Ball& b, sf::Vector2f throwVel, float catchBonus, float heldT) {
+    if (b.hasRole(BallRole::Artemisa)) throwVel *= cfg::artemisa::throwMul;     // the huntress: made for the throw
     if (b.hasRole(BallRole::Striker)) throwVel *= cfg::role::strikerFlingMult;   // built to be flung
     if (b.hasRole(BallRole::Slinger)) throwVel *= cfg::role::slingerThrowMul;   // made for your hand
     if (b.mods.cometFling > 0.f) throwVel *= b.mods.cometFling;                 // "Comet"
     if (b.mods.cls.slinger.coil > 0.f) throwVel *= b.mods.cls.slinger.coil;     // "Coil"
     if (b.mods.cls.common.windUp > 0.f)                                         // "Wind-up": held a while
-        throwVel *= 1.f + b.mods.cls.common.windUp * clampf(heldT_ / cfg::common::windUpTime, 0.f, 1.f);
+        throwVel *= 1.f + b.mods.cls.common.windUp * clampf(heldT / cfg::common::windUpTime, 0.f, 1.f);
     b.homing = false;
     const float s = length(throwVel);
     if (s < cfg::ball::minThrowSpeed) b.vel = rng_.direction() * cfg::ball::nudgeSpeed;
@@ -801,14 +859,15 @@ void World::releaseHeld(sf::Vector2f throwVel) {
         b.vel = throwVel * (cfg::ball::hardSpeedCap * arenaScale() / s);
     else b.vel = throwVel;
     if (s >= cfg::ball::minThrowSpeed) {
-        if (heldCatch_ > 0.f) {   // a real throw carries the catch reward
-            b.catchBonus = heldCatch_;
+        if (catchBonus > 0.f) {   // a real throw carries the catch reward
+            b.catchBonus = catchBonus;
             b.catchT = cfg::combat::catchWindow;
         }
         classOnThrow(b);  // Slinger: armed first hit, Afterburner
         commonOnThrow(b, s / (cfg::app::slingMaxSpeed * arenaScale()));   // Long pull, Covering fire
+        artemisaOnThrow(b, s / (cfg::app::slingMaxSpeed * arenaScale()));  // the huntress: her arrow, her prey, her items
         if (b.mods.cls.common.steadyBonus > 0.f) {   // "Steady hand": aimed a while, the first hit lands harder
-            b.catchBonus += b.mods.cls.common.steadyBonus * clampf(heldT_ / cfg::common::steadyFull, 0.f, 1.f);
+            b.catchBonus += b.mods.cls.common.steadyBonus * clampf(heldT / cfg::common::steadyFull, 0.f, 1.f);
             b.catchT = cfg::combat::catchWindow;
         }
         if (b.mods.heavyThrow > 0.f) {   // "Heavy throw": rides on the throw's first hit, like the catch reward
@@ -821,9 +880,6 @@ void World::releaseHeld(sf::Vector2f throwVel) {
         }
         pactOnThrow(b);   // Quick Hands clock, Hot Potato charge, Mirror ghost
     }
-    heldCatch_ = 0.f;
-    grabbed_ = Grabbed::None;
-    heldIndex_ = -1;
 }
 
 // Click an enemy / the boss: it becomes the target (again: no target).
@@ -876,7 +932,7 @@ bool World::volley(float speed) {
     bool any = false;
     for (std::size_t i = 0; i < balls_.size(); ++i) {
         Ball& b = balls_[i];
-        if (b.held || b.mods.satellite || b.snaredBy >= 0) continue;
+        if (b.held || b.snaredBy >= 0) continue;
         const std::optional<sf::Vector2f> target = nearestTarget(b.pos);
         if (!target) continue;
         grabbed_ = Grabbed::Ball;
@@ -931,7 +987,7 @@ std::optional<sf::Vector2f> World::nearestTarget(sf::Vector2f from) const {
         const float d2 = dot(e.pos - from, e.pos - from);
         if (d2 < bestD2) { bestD2 = d2; best = e.pos; }
     }
-    if (boss_.alive && boss_.hp > 0.f && dot(boss_.pos - from, boss_.pos - from) < bestD2) best = boss_.pos;
+    if (boss_.targetable() && dot(boss_.pos - from, boss_.pos - from) < bestD2) best = boss_.pos;
     return best;
 }
 
@@ -959,7 +1015,7 @@ void World::updateAutoFling(float dt, const WorldParams& p, FrameEvents& ev) {
     for (std::size_t i = 0; i < balls_.size(); ++i) {
         if (grabbed_ == Grabbed::Ball && static_cast<int>(i) == heldIndex_) continue;
         Ball& b = balls_[i];
-        if (b.mods.satellite || b.snaredBy >= 0) continue;
+        if (b.snaredBy >= 0) continue;
         const float ratio = length(b.vel) / std::max(1.f, ballCruise(b, p));
         if (ratio < slowest) { slowest = ratio; pick = &b; }
     }
@@ -1068,8 +1124,8 @@ void World::aimBounce(Ball& b, sf::Vector2f normal, const Enemy* skip, bool forc
 
 // ---------------------------------------------------------------- game-changers
 
-// "Satellite": no bouncing - the ball rides a fixed orbit around the core at
-// cruise speed and grinds whatever comes near (each enemy on a short cooldown).
+// Where something circling the core (the Warden's spirits) should ride: out
+// toward the enemy closest to the core, within reason.
 float World::orbitTarget(float usual, float minR) const {
     const float maxR = usual * cfg::changer::orbitMax;
     float best = 1e9f;
@@ -1077,72 +1133,6 @@ float World::orbitTarget(float usual, float minR) const {
         if (e.hp > 0.f && !e.orbiter) best = std::min(best, length(e.pos - core_.pos));
     if (boss_.alive && boss_.intro <= 0.f) best = std::min(best, length(boss_.pos - core_.pos));
     return best <= maxR ? std::max(best, minR) : usual;
-}
-
-void World::advanceSatellite(Ball& b, float dt, const WorldParams& p, FrameEvents& ev) {
-    // It swings its orbit out / in to meet whatever comes closest to the core.
-    // Not a rail (2026-10-06): the core pulls it like gravity toward a radius
-    // that breathes in and out, with a soft spring and little damping, so it
-    // drifts round in wobbly loops and only now and then brushes the edges.
-    namespace G = cfg::changer;
-    const float usual = G::satelliteRadius * arenaScale() + core_.radius;
-    const float minR = core_.radius + b.radius + 12.f;
-    if (b.orbitR <= 0.f) b.orbitR = usual;
-    const float want = orbitTarget(usual, minR);
-    b.orbitR += (want - b.orbitR) * (1.f - std::exp(-G::orbitEase * dt));
-    const float phase = static_cast<float>(b.owner) * 1.7f + static_cast<float>(b.twinIdx) * 2.3f;
-    const float room = std::min({core_.pos.x, size_.x - core_.pos.x, core_.pos.y, size_.y - core_.pos.y}) -
-                       b.radius * 3.f;   // its loops stay off the walls (a swing out may still brush one)
-    const float Rt = clampf(b.orbitR * (1.f + G::satelliteBreathe * std::sin(b.age * G::satelliteBreatheRate + phase)),
-                            minR, std::max(minR, room));
-    const float sp = ballCruise(b, p) * G::satelliteSpeed;
-    constexpr int kSub = 4;
-    const float h = dt / static_cast<float>(kSub);
-    for (int k = 0; k < kSub; ++k) {
-        const sf::Vector2f r = b.pos - core_.pos;
-        const float d = std::max(1.f, length(r));
-        const sf::Vector2f rh = r / d;
-        const sf::Vector2f tn{-rh.y, rh.x};
-        float vr = dot(b.vel, rh);
-        float vt = dot(b.vel, tn);
-        if (std::fabs(vt) < 1e-3f) vt = sp;
-        // gravity that holds the loop (vt^2 / d), plus a soft pull toward the breathing radius
-        vr += (-vt * vt / d - G::satelliteSpring * (d - Rt) - G::satelliteDamp * vr) * h;
-        vt += ((vt < 0.f ? -sp : sp) - vt) * (1.f - std::exp(-G::satelliteTurnEase * h));   // keeps its pace, softly
-        b.vel = rh * vr + tn * vt;
-        b.pos += b.vel * h;
-        // the core and the walls: a soft brush, not a bounce
-        if (const sf::Vector2f r2 = b.pos - core_.pos; length(r2) < minR) {
-            const sf::Vector2f n = normalized(r2, rh);
-            b.pos = core_.pos + n * minR;
-            if (const float in = dot(b.vel, n); in < 0.f) b.vel -= n * (in * 1.5f);
-        }
-        if (b.pos.x < b.radius) { b.pos.x = b.radius; b.vel.x = std::fabs(b.vel.x) * 0.6f; }
-        if (b.pos.x > size_.x - b.radius) { b.pos.x = size_.x - b.radius; b.vel.x = -std::fabs(b.vel.x) * 0.6f; }
-        if (b.pos.y < b.radius) { b.pos.y = b.radius; b.vel.y = std::fabs(b.vel.y) * 0.6f; }
-        if (b.pos.y > size_.y - b.radius) { b.pos.y = size_.y - b.radius; b.vel.y = -std::fabs(b.vel.y) * 0.6f; }
-    }
-    b.orbitAng = std::atan2(b.pos.y - core_.pos.y, b.pos.x - core_.pos.x);   // (Gemini twins start round from here)
-    for (Enemy& e : enemies_) {
-        if (e.hp <= 0.f || e.pierceCd > 0.f) continue;
-        const sf::Vector2f d = b.pos - e.pos;
-        if (length(d) > b.radius + e.radius) continue;
-        e.pierceCd = cfg::changer::pierceCooldown;
-        const sf::Vector2f n = normalized(d, {1.f, 0.f});
-        strike(b, e, n, p, ev);
-        BounceFx fx;
-        fx.pos = e.pos + n * e.radius;
-        fx.normal = n;
-        fx.speed = sp / arenaScale();
-        fx.color = b.color;
-        ev.bounces.push_back(fx);
-    }
-    if (boss_.alive && length(b.pos - boss_.pos) < b.radius + boss_.radius)
-        ballHitsBoss(b, 3.f, p, ev, false);   // an orbit grinds, it shouldn't melt a boss
-    emitElement(b, dt, p, ev);
-    b.color = ballTint(b, sp, p);
-    b.squash *= std::exp(-cfg::ball::squashDecay * dt);
-    updateTrail(b);
 }
 
 // "Leash" (2026-10-06): tied to the core it turns ever faster - leashSpinFrom
@@ -1282,12 +1272,7 @@ void World::updateTwins(const WorldParams& p) {
                 t.abilityCd[i] = b.abilityCd[i] + abilityCooldown(b.abilities[i].id, b.abilities[i].level) * 0.5f;
             t.trail.clear();
             t.waterTrail.clear();
-            t.orbitAng = b.orbitAng + turn;
             const float c = std::cos(turn), sn = std::sin(turn);
-            if (b.mods.satellite) {   // a satellite's twin starts its own place round the core
-                const sf::Vector2f r = b.pos - core_.pos;
-                t.pos = core_.pos + sf::Vector2f{r.x * c - r.y * sn, r.x * sn + r.y * c};
-            }
             t.vel = {b.vel.x * c - b.vel.y * sn, b.vel.x * sn + b.vel.y * c};
             if (length(t.vel) < 1e-3f) t.vel = rng_.direction() * cruiseBase(p);
             pendingGhosts_.push_back(t);
@@ -1465,7 +1450,7 @@ void World::areaDamage(sf::Vector2f at, float radius, float dmg, const Enemy* sk
 // own: emitElement.)
 void World::touchElement(Enemy& e, Element el, float pot, const BallMods& m, const WorldParams& p) {
     const float last = 1.f + m.cls.common.volatileMul;   // "Volatile": it lasts longer
-    if (el == Element::Poison) {
+    if (el == Element::Poison || el == Element::Plague) {   // (the black plague rots like poison)
         e.poison = cfg::element::poisonDuration * last;
         e.poisonDps = std::min(e.poisonDps + cfg::element::poisonDpsPerHit * pot,
                                cfg::element::poisonDpsMax * pot);
@@ -1497,6 +1482,8 @@ bool World::strike(Ball& b, Enemy& e, sf::Vector2f normal, const WorldParams& p,
     dmg *= classPreHit(b, e, p);    // Slinger: the thrown first hit, Execution throw, Double down
     dmg *= stylePreHit(b, e, p, ev);   // a Beacon / Pass charge
     dmg *= commonPreHit(b, e, p);      // the commons: Reagent, Spotter, First blood...
+    dmg *= apoloPreHit(b);             // "Oracle": a muse just arrived - a sure crit
+    dmg *= artemisaPreHit(b, e);       // Artemisa: her prey (and where the throw hit, for Arrow rain)
     dmg *= roleContact(b, e);          // the classes' own feel on a contact hit
     const bool coinHeads = b.cls.jester.coinMul > 1.f;   // (Hot streak / Confetti count it as doubled)
     const bool afflicted = e.poison > 0.f || e.frozen > 0.f || e.burn > 0.f;
@@ -1599,6 +1586,8 @@ bool World::strike(Ball& b, Enemy& e, sf::Vector2f normal, const WorldParams& p,
     b.cls.common.doubled = crit || coinHeads || b.cls.common.forcedDouble;   // (a Jester double sets it in classOnHit)
     b.cls.common.forcedDouble = false;                    // ("Lucky seven")
     classOnHit(b, e, dmg, kill, p, ev);                   // its classes (mark, stagger, ascended forms...)
+    godsOnHit(b, e, dmg, p, ev);                          // Hermes "Caduceus"
+    nergalOnHit(b, e, p);                                 // Nergal: it infects
     commonOnHit(b, e, dmg, kill, p, ev);                  // the commons
     if (m.spin > 0.f && chance(m.spin, p)) ++comboStreak_;   // "Spin": an extra combo step
     styleOnHit(b, e, p);                                  // "Blur" marks
@@ -1640,12 +1629,12 @@ void World::onKill(Ball& b, Enemy& e, float dmg, const WorldParams& p, FrameEven
 Element World::hitElement(const Ball& b, const WorldParams& p) {
     if (b.cls.common.transT > 0.f) return static_cast<Element>(b.cls.common.transElem);   // "Transmute"
     if (p.creed.alchemy && rng_.range(0.f, 1.f) < cfg::creed::alchemyChance) {   // "Alchemy" creed: a random extra element
-        Element e = static_cast<Element>(rng_.irange(1, kElementCount - 1));
-        if (e == b.element) e = static_cast<Element>(static_cast<int>(e) % (kElementCount - 1) + 1);
+        Element e = static_cast<Element>(rng_.irange(1, kNaturalElements - 1));
+        if (e == b.element) e = static_cast<Element>(static_cast<int>(e) % (kNaturalElements - 1) + 1);
         return e;
     }
     if (b.element != Element::Plain || !p.prismCore) return b.element;
-    return static_cast<Element>(rng_.irange(1, kElementCount - 1));   // "Prism core": any element at all
+    return static_cast<Element>(rng_.irange(1, kNaturalElements - 1));   // "Prism core": any element at all
 }
 
 void World::applyElement(Enemy& e, Element el, int owner, float hitDmg, const WorldParams& p, FrameEvents& ev) {
@@ -1692,7 +1681,9 @@ void World::triggerReaction(Element x, Element y, Enemy& e, float hitDmg, const 
     BurstFx fx;
     fx.pos = at;
 
-    if (has(Element::Fire) && has(Element::Ice)) {            // Burst: the ice explodes
+    if (has(Element::Plague)) {   // Nergal's black plague meets another element: each its own way (sim/WorldNergal.cpp)
+        fx = nergalReaction(x == Element::Plague ? y : x, e, hitDmg * mul, rm, p, ev);
+    } else if (has(Element::Fire) && has(Element::Ice)) {            // Burst: the ice explodes
         fx = {at, S::burstRadius * rm, theme::elemIce, "BURST"};
         for (Enemy& o : enemies_) {
             if (o.hp <= 0.f || length(o.pos - at) > fx.radius + o.radius) continue;
@@ -1904,14 +1895,20 @@ float World::ballDamage(const Ball& b, const WorldParams& p) const {
         const float over = speed / std::max(1.f, ballCruise(b, p)) - 1.f;
         if (over > 0.f) dmg *= 1.f + cfg::role::strikerSpeedDamage * over;
     }
+    if (b.hasRole(BallRole::Thanatos))   // souls gathered this fight
+        dmg *= 1.f + cfg::thanatos::soulPer * static_cast<float>(std::min(b.cls.thanatos.souls, cfg::thanatos::soulMax));
+    if (b.hasRole(BallRole::Hermes)) {   // the Striker's god: even more so
+        const float over = speed / std::max(1.f, ballCruise(b, p)) - 1.f;
+        if (over > 0.f) dmg *= 1.f + cfg::hermes::speedDamage * over;
+    }
     if (b.hasRole(BallRole::Support)) dmg *= cfg::role::supportDamageMul;
     if (b.hasRole(BallRole::Guardian)) dmg *= cfg::role::guardianDamageMul;
     dmg *= classDamageMul(b, p);   // the newer classes' own multipliers
     dmg *= commonDamageMul(b);     // Pack leader, Sentinel, others' Anthem
+    dmg *= apoloDamageMul(b);      // Apolo's Strength and Giant muses
     if (b.overclockT > 0.f) dmg *= b.overclockMul;   // "Overclock" ability
     if (effect_ && effect_->kind == PowerUp::Overdrive)
         dmg *= 1.f + (cfg::powerup::overdriveDamageMul - 1.f) * effStrength(p);   // fades under "Afterglow"
-    if (b.mods.satellite) dmg *= b.mods.satelliteDamage;   // "Satellite" grinds
     if (b.mods.piercing) dmg *= b.mods.pierceMult;         // "Piercing" levels
     dmg *= 1.f + b.mods.gluttonDamage * static_cast<float>(b.gluttonStacks);   // "Glutton"
     if (b.element == Element::Fire)   // fire is a heavier hit (the burn comes on contact, see touchElement)
@@ -2010,13 +2007,17 @@ void World::regulateSpeed(Ball& b, float dt, const WorldParams& p) {
         b.vel = rng_.direction() * cruiseS;
         return;
     }
-    const float up = 1.f - std::exp(-cfg::ball::regainRate * dt);
+    const float up = 1.f - std::exp(-(b.hasRole(BallRole::Hermes) ? cfg::hermes::regain : cfg::ball::regainRate) * dt);   // Hermes: no dead stops
     const float decayRate = cfg::ball::decayRate * b.mods.flingDecay * p.creed.flingHold *   // "Hot Hands" creed
                             (b.hasRole(BallRole::Striker) ? cfg::role::strikerFlingDecay : 1.f);
     const float down = b.cls.common.leashFlyT > 0.f ? 0.f   // "Leash": let go, it keeps its speed a while
                                                     : 1.f - std::exp(-decayRate * dt);
     const float k = (sp < cruiseS) ? up : down;
-    const float ns = std::min(lerpf(sp, cruiseS, k), vMax);
+    float ns = std::min(lerpf(sp, cruiseS, k), vMax);
+    if (b.hasRole(BallRole::Hermes) && !b.ghost) {   // Hermes only ever gains speed (till it delivers its message)
+        b.cls.hermes.peak = std::min(std::max(b.cls.hermes.peak, sp), vMax);
+        ns = std::max(ns, b.cls.hermes.peak);
+    }
     b.vel *= ns / sp;
 }
 
@@ -2037,15 +2038,30 @@ void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
     if (!b.ghost || b.twin || b.mods.cls.common.projection)   // copies don't fire abilities (Gemini twins and "Projection" do)
         updateAbilities(b, dt, p, ev);
     classTick(b, dt, p, ev);
+    godsTick(b, dt, p, ev);    // Hermes, Odin (sim/WorldGods.cpp)
     styleTick(b, dt, p, ev);   // the older classes' speed items
     commonTick(b, dt, p, ev);  // the commons' timers
+    thanatosTick(b, dt, p, ev);   // Thanatos: on its mark, stabbing (sim/WorldGods2.cpp)
+    tiamatTick(b, dt, p, ev);     // Tiamat: the mount's breath, lizard broods
+    lokiTick(b, dt);              // Loki: its clones (sim/WorldLoki.cpp)
+    nergalTick(b, dt, p, ev);     // Nergal: rat tides, blood rain, locusts, the harvest (sim/WorldNergal.cpp)
+    aresTick(b, dt, p, ev);       // Ares: the cannons and every weapon's timer (sim/WorldAres.cpp)
+    artemisaTick(b, dt, p, ev);   // Artemisa: her own throw, the night, a night run (sim/WorldArtemisa.cpp)
     if (b.mods.stormFrac > 0.f) updateStorm(b, dt, p, ev);
-    if (b.mods.satellite) {
-        advanceSatellite(b, dt, p, ev);
-        return;
-    }
     if (b.cls.common.leashT > 0.f) {   // "Leash": on its rope, spinning up
         advanceLeash(b, dt, p, ev);
+        return;
+    }
+    if (!b.cls.artemisa.route.empty()) {   // a night run: Artemisa places herself (artemisaTick)
+        b.squash *= std::exp(-cfg::ball::squashDecay * dt);
+        b.color = ballTint(b, length(b.vel), p);
+        updateTrail(b);
+        return;
+    }
+    if (b.cls.thanatos.attached) {   // Thanatos holds on to its mark (thanatosTick placed it)
+        b.squash *= std::exp(-cfg::ball::squashDecay * dt);
+        b.color = ballTint(b, length(b.vel), p);
+        updateTrail(b);
         return;
     }
     if (b.cls.common.leashFlyT > 0.f) b.cls.common.leashFlyT = std::max(0.f, b.cls.common.leashFlyT - dt);
@@ -2094,6 +2110,8 @@ void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
             creedWallBump(b, c.point, p, ev);   // "Pinball" creed
             classOnWallBounce(b, c.normal, p, ev);
             commonWallBounce(b, p);   // "Seep"
+            atlasBounce(b);   // Atlas: back to the core every few
+            godsWallBounce(b, p);   // Hermes: "Talaria"
             pactWallBump(b);   // "Anchor Walls" pact
             pushFx(c);
         }
@@ -2104,6 +2122,8 @@ void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
             afterBounce(b, c.normal, false);
             aimBounce(b, c.normal, nullptr, p.magneticCore);   // "Magnetic core": every ball aims
             boostSpeed(b, p.coreBounceBoost * b.mods.bouncy, p);   // "Spring core" relic, "Bouncy"
+            if (!b.ghost) planetsCoreBounce(b, p, ev);   // the Astronomer's planets go off
+            godsCoreBounce(b, p, ev);   // Hermes: delivers its message; "Talaria" settles
             if (b.mods.menderHeal > 0.f && !b.ghost)   // "Mender": the core patches itself up
                 core_.hp = std::min(core_.maxHp, core_.hp + b.mods.menderHeal);
             if (b.mods.boomerangHit > 0.f) {   // "Boomerang": home - charge up and fly at the threat
@@ -2118,7 +2138,8 @@ void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
             commonCoreBounce(b, p, ev);   // "Heavy landing"
             pushFx(c);
         }
-        const bool passThrough = b.mods.piercing || styleBlurring(b, p) || b.cls.common.perfect;   // "Piercing" / "Blur" / "Perfect release"
+        const bool golden = hermesGolden(b, p);   // Hermes "Petasos": fast, it goes through
+        const bool passThrough = b.mods.piercing || styleBlurring(b, p) || b.cls.common.perfect || golden;   // "Piercing" / "Blur" / "Perfect release"
         if (passThrough) {   // "Piercing": no bounce - every enemy on the path takes the hit
             for (Enemy& e : enemies_) {
                 if (e.hp <= 0.f || e.pierceCd > 0.f) continue;
@@ -2129,6 +2150,7 @@ void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
                 e.pierceCd = cfg::changer::pierceCooldown;
                 if (!b.hasRole(BallRole::Guardian) && shieldBlocks(e, b.pos, core_.pos)) continue;
                 strike(b, e, n, p, ev);
+                if (golden) hermesBoom(b, e.pos, p, ev);
                 pushFx({true, n, e.pos + n * e.radius});
             }
         }
@@ -2163,6 +2185,7 @@ void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
             afterBounce(b, c.normal, true);
             aimBounce(b, c.normal, &e);
             seekNext(b, e, c.normal, p);   // "Seeker": off this one, straight at the next
+            atlasBounce(b);                // Atlas: back to the core every few
             if (b.mods.cls.common.lightspeed > 0.f &&   // "Lightspeed": that fast, a hit doesn't slow it
                 length(v0) > ballCruise(b, p) * cfg::common::lightspeedAt)
                 b.vel = normalized(b.vel, v0) * length(v0);
@@ -2205,7 +2228,6 @@ void World::resolveBallPairs(FrameEvents& ev, const WorldParams& p) {
             if (grabbed_ == Grabbed::Ball && static_cast<int>(j) == heldIndex_) continue;
             Ball& a = balls_[i];
             Ball& b = balls_[j];
-            if (a.mods.satellite || b.mods.satellite) continue;   // orbits are fixed paths
             if (a.cls.common.leashT > 0.f || b.cls.common.leashT > 0.f) continue;   // ...and so is a Leash swing
             if (!collision::resolveBallPair(a, b)) continue;
 
@@ -2374,6 +2396,16 @@ void World::updateEnemies(float dt, const WorldParams& p, FrameEvents& ev) {
         // They only block balls (hits still damage them) and never touch the
         // core; only the boss reaching the core loses. Once the boss dies they
         // drop orbiter and become ordinary core-seekers (handled below).
+        // A boss's part stands where it was raised: pushes, pulls and swaps
+        // are undone; it never walks and never reaches the core.
+        if (e.part) {
+            e.pos = e.home;
+            e.vel = {0.f, 0.f};
+            e.frozen = e.stagger = 0.f;
+            e.hitFlash *= std::exp(-6.f * dt);
+            ++it;
+            continue;
+        }
         if (e.orbiter && boss_.alive) {
             const float a = boss_.ringAng + e.orbitPhase;
             const sf::Vector2f slot =
@@ -2440,7 +2472,10 @@ void World::updateEnemies(float dt, const WorldParams& p, FrameEvents& ev) {
                     dir = normalized(dir * in + side * (1.f - in) * 1.6f, dir);
                 }
             }
-            const sf::Vector2f steer = dir * e.speed * (e.plagueT > 0.f ? cfg::common::plagueSpeed : 1.f);   // "Black plague": mad and fast
+            sf::Vector2f steer = dir * e.speed * (e.plagueT > 0.f ? cfg::common::plagueSpeed : 1.f);   // "Black plague": mad and fast
+            if (e.kind == EnemyKind::Caster && e.plagueT <= 0.f &&
+                dl <= cfg::enemy::casterRange * std::min(size_.x, size_.y))
+                steer = {0.f, 0.f};   // a Caster never closes in: it holds at range and beams
 
             // SLOW MOTION drags every enemy; the "Slow field" item drags only
             // those close to the core. Both just scale this enemy's time step.
@@ -2492,11 +2527,8 @@ void World::updateEnemies(float dt, const WorldParams& p, FrameEvents& ev) {
             continue;
         }
         if (dist <= core_.radius + e.radius) {
-            if (!invuln_) {
-                if (aegisChargesLeft_ > 0) --aegisChargesLeft_;   // "Aegis" soaks the hit
-                else core_.hp -= e.coreDamage * p.creed.coreDamageMul *   // "Bloodlust" creed's cost
-                                 (hard_ ? cfg::hard::coreDamageMul : 1.f);
-            }
+            if (!invuln_ && aegisChargesLeft_ > 0) --aegisChargesLeft_;   // "Aegis" soaks the hit
+            else coreLoses(e.coreDamage, p, ev);
             core_.hitFlash = 1.f;
             coreHitThisWave_ = true;   // "Interest" is off for this wave now
             ev.coreHit = true;
@@ -2504,20 +2536,6 @@ void World::updateEnemies(float dt, const WorldParams& p, FrameEvents& ev) {
 
             it = enemies_.erase(it);
             creedCoreHit(p, ev);   // "Fortress" blast / "Bloodlust" wipe
-
-            if (core_.hp <= 0.f && phoenixLeft_ > 0) {   // "Phoenix": back from the ashes, once an act
-                --phoenixLeft_;
-                core_.hp = core_.maxHp * cfg::changer::phoenixHeal;
-                ev.phoenix = true;
-            }
-            if (core_.hp <= 0.f && endless_) {   // dev endless: no end - it just fills up again
-                core_.hp = core_.maxHp;
-                core_.hitFlash = 1.f;
-            }
-            if (core_.hp <= 0.f) {
-                core_.hp = 0.f;
-                runOver_ = true;
-            }
         } else {
             ++it;
         }
@@ -2570,9 +2588,12 @@ void World::sweepDeadEnemies(FrameEvents& ev, const WorldParams& p) {
             }
             commonOnDeath(*it, ev);   // "Fission"
             ev.kills.push_back(it->pos);
+            nergalOnDeath(*it, p, ev);   // the infected die into rats (sim/WorldNergal.cpp)
+            tiamatFeed();   // every death feeds Tiamat's dragons and her mount (sim/WorldGods2.cpp)
             if (it->lastBy >= 0) {   // kill credit, for the run's end card
                 if (static_cast<int>(ballKills_.size()) <= it->lastBy) ballKills_.resize(static_cast<std::size_t>(it->lastBy) + 1, 0);
                 ++ballKills_[static_cast<std::size_t>(it->lastBy)];
+                godsOnKill(it->lastBy);   // the gods' passives: Odin's cooldowns, Atlas's growth
             }
             it = enemies_.erase(it);
         } else {
@@ -2582,42 +2603,252 @@ void World::sweepDeadEnemies(FrameEvents& ev, const WorldParams& p) {
     for (Enemy& s : shards) enemies_.push_back(s);
 }
 
+// The core loses hp - an arrival, a shot, a beam ("Bloodlust" creed and hard
+// mode scale it); then "Phoenix", the dev endless mode, or the run ends.
+void World::coreLoses(float hp, const WorldParams& p, FrameEvents& ev) {
+    if (invuln_) return;
+    core_.hp -= hp * p.creed.coreDamageMul * (hard_ ? cfg::hard::coreDamageMul : 1.f);
+    coreHitThisWave_ = true;
+    if (core_.hp <= 0.f && phoenixLeft_ > 0) {   // "Phoenix": back from the ashes, once an act
+        --phoenixLeft_;
+        core_.hp = core_.maxHp * cfg::changer::phoenixHeal;
+        ev.phoenix = true;
+    }
+    if (core_.hp <= 0.f && endless_) {   // dev endless: no end - it just fills up again
+        core_.hp = core_.maxHp;
+        core_.hitFlash = 1.f;
+    }
+    if (core_.hp <= 0.f) {
+        core_.hp = 0.f;
+        runOver_ = true;
+    }
+}
+
+// Casters at range, not frozen or staggered, charge and then drain the core.
+void World::updateCasters(float dt, const WorldParams& p, FrameEvents& ev) {
+    namespace E = cfg::enemy;
+    const float range = E::casterRange * std::min(size_.x, size_.y) + 12.f;
+    for (Enemy& e : enemies_) {
+        if (e.kind != EnemyKind::Caster || e.hp <= 0.f) continue;
+        const bool able = e.frozen <= 0.f && e.stagger <= 0.f && e.plagueT <= 0.f &&
+                          length(e.pos - core_.pos) <= range;
+        if (!able) { e.castT = 0.f; continue; }
+        e.castT += dt;
+        if (e.castT < E::casterCharge || runOver_) continue;
+        coreLoses(E::casterDrain * dt, p, ev);
+        core_.hitFlash = std::max(core_.hitFlash, 0.25f);
+        lastCoreHitBy_ = static_cast<int>(EnemyKind::Caster);
+    }
+}
+
+void World::fireShots(sf::Vector2f from, int n, float spread) {
+    namespace B = cfg::boss;
+    const float base = std::atan2(core_.pos.y - from.y, core_.pos.x - from.x);
+    for (int i = 0; i < n; ++i) {
+        const float a = base + (n > 1 ? (static_cast<float>(i) / static_cast<float>(n - 1) - 0.5f) * spread : 0.f);
+        Shot s;
+        s.pos = from;
+        s.vel = sf::Vector2f{std::cos(a), std::sin(a)} * B::shotSpeed * arenaScale();
+        shots_.push_back(s);
+    }
+}
+
+// Orbs fly on; a ball (or a copy) that touches one breaks it; one that
+// reaches the core hurts it ("Aegis" soaks it like an arrival).
+void World::updateShots(float dt, const WorldParams& p, FrameEvents& ev) {
+    for (auto it = shots_.begin(); it != shots_.end();) {
+        Shot& s = *it;
+        s.pos += s.vel * dt;
+        s.life -= dt;
+        bool gone = s.life <= 0.f;
+        for (const std::vector<Ball>* set : {&balls_, &ghosts_}) {
+            for (const Ball& b : *set) {
+                if (!gone && length(b.pos - s.pos) < b.radius + s.radius) {
+                    gone = true;
+                    ev.bursts.push_back({s.pos, s.radius * 3.f, theme::textHi, nullptr});
+                }
+            }
+        }
+        if (!gone && planetsCatch(s.pos, s.radius)) {   // a planet (or a rock of the belt) in the way
+            gone = true;
+            ev.bursts.push_back({s.pos, s.radius * 3.f, theme::classAstronomer, nullptr});
+        }
+        if (!gone && length(core_.pos - s.pos) <= core_.radius + s.radius) {
+            gone = true;
+            if (!invuln_ && aegisChargesLeft_ > 0) --aegisChargesLeft_;
+            else coreLoses(cfg::boss::shotDamage, p, ev);
+            core_.hitFlash = 1.f;
+            ev.coreHit = true;
+            lastCoreHitBy_ = kCoreHitByShot;
+        }
+        if (gone) it = shots_.erase(it);
+        else ++it;
+    }
+}
+
+// What reaches the boss right now: nothing while its parts stand or it pulls
+// back; the Dasher's armour after its first phase (soft only while stunned);
+// the Warden's body after its first phase (its back hits harder, ballHitsBoss).
+float World::bossTakenMul() const {
+    namespace B = cfg::boss;
+    if (boss_.guarded || boss_.retreat > 0.f) return 0.f;
+    if (boss_.stage >= 1 && boss_.kind == BossKind::Dasher) return boss_.stun > 0.f ? B::dasherStunMul : B::dasherArmor;
+    if (boss_.stage >= 1 && boss_.kind == BossKind::Warden) return B::wardenBodyMul;
+    return 1.f;
+}
+
+// Every hit on the boss lands straight on its HP (balls, bullets, summons,
+// abilities); here, once a step, what got through is scaled.
+void World::settleBossDamage() {
+    if (boss_.hp < boss_.hpSeen) boss_.hp = boss_.hpSeen - (boss_.hpSeen - boss_.hp) * bossTakenMul();
+}
+
+void World::enterBossStage(int stage, FrameEvents& ev) {
+    namespace B = cfg::boss;
+    boss_.stage = stage;
+    boss_.stun = 0.f;
+    boss_.hitFlash = 1.f;
+    ev.bossPhase = stage;
+    if (stage >= 2) {
+        boss_.enraged = true;
+        ev.bossEnraged = true;
+    }
+    // The walkers pull back to where they came in (the Orbital winds back
+    // out); the Dasher just keeps going, armoured.
+    if (boss_.kind != BossKind::Dasher) {
+        boss_.retreat = B::retreatTime;
+        boss_.retreatFrom = boss_.pos;
+        boss_.fromDist = boss_.dist;
+        boss_.vel = {0.f, 0.f};
+    } else {
+        boss_.phase = 0;
+        boss_.timer = B::dasherRest;
+    }
+    switch (boss_.kind) {
+        case BossKind::Charger: raiseParts(B::chargerParts[stage - 1]); break;
+        case BossKind::Hive:    raiseParts(B::hiveParts[stage - 1]); break;
+        case BossKind::Orbital: raiseParts(B::orbitalParts[stage - 1]); boss_.launchT = B::orbitalLaunchEvery; break;
+        case BossKind::Warden:  boss_.flipT = B::wardenFlipMax; boss_.shotT = 2.f; break;
+        default: break;
+    }
+    ev.bursts.push_back({boss_.pos, boss_.radius * 3.5f, theme::coreLow, nullptr});
+}
+
+// Parts stand spread over the arena, well off the core and the boss's way
+// in, and apart from each other.
+void World::raiseParts(int n) {
+    namespace B = cfg::boss;
+    const float side = std::min(size_.x, size_.y);
+    const float margin = B::partRadius + 60.f;
+    std::vector<sf::Vector2f> placed;
+    for (int i = 0; i < n; ++i) {
+        sf::Vector2f best{size_.x * 0.5f, size_.y * 0.5f};
+        float bestScore = -1e9f;
+        for (int t = 0; t < 40; ++t) {
+            const sf::Vector2f q{rng_.range(margin, size_.x - margin), rng_.range(margin, size_.y - margin)};
+            const float dCore = length(q - core_.pos);
+            if (dCore < side * B::partMinCoreDist) continue;
+            float nearest = length(q - boss_.home) - boss_.radius;
+            for (const sf::Vector2f& o : placed) nearest = std::min(nearest, length(q - o));
+            if (nearest > bestScore) { bestScore = nearest; best = q; }
+        }
+        placed.push_back(best);
+        Enemy e;
+        e.id = nextEnemyId_++;
+        e.part = true;
+        e.home = e.pos = best;
+        e.radius = B::partRadius;
+        e.maxHp = e.hp = bossHp(B::partHp, wave_);
+        e.speed = 0.f;
+        e.knockTaken = 0.f;
+        e.coreDamage = 0.f;
+        e.partT = B::nestEvery * rng_.range(0.4f, 1.f);
+        enemies_.push_back(e);
+    }
+    boss_.guarded = n > 0;
+}
+
+// The parts at work (a Hive's nests spit runners) and the guard dropping
+// once the last one falls.
+void World::updateBossParts(float dt, FrameEvents& ev) {
+    namespace B = cfg::boss;
+    int live = 0;
+    std::vector<sf::Vector2f> spits;
+    for (Enemy& e : enemies_) {
+        if (!e.part || e.hp <= 0.f) continue;
+        ++live;
+        if ((e.partT -= dt * boss_.pace()) > 0.f) continue;
+        if (boss_.kind == BossKind::Hive) {   // a nest spits a runner
+            e.partT = B::nestEvery;
+            spits.push_back(e.pos);
+        } else {                              // a pillar / anchor fires at the core
+            e.partT = B::partShotEvery;
+            fireShots(e.pos, 1, 0.f);
+        }
+    }
+    for (const sf::Vector2f& at : spits) {
+        if (static_cast<int>(enemies_.size()) >= B::hiveCap) break;
+        spawnEnemy(EnemyKind::Runner);
+        Enemy& r = enemies_.back();
+        r.maxHp = r.hp = r.hp * B::addHpMul;
+        const sf::Vector2f d = normalized(core_.pos - at, {-1.f, 0.f});
+        r.pos = at + d * (B::partRadius + r.radius + 2.f);
+        r.vel = d * r.speed * 1.4f;
+    }
+    if (boss_.guarded && live == 0) {
+        boss_.guarded = false;
+        boss_.hitFlash = 1.f;
+        ev.bossExposed = true;
+        ev.bursts.push_back({boss_.pos, boss_.radius * 2.5f, theme::textHi, nullptr});
+    }
+}
+
+// The pull-back at a phase change: an eased slide home (the Orbital winds
+// back out along its spiral). True while it runs.
+bool World::retreatBoss(float dt) {
+    if (boss_.retreat <= 0.f) return false;
+    boss_.retreat = std::max(0.f, boss_.retreat - dt);
+    float k = 1.f - boss_.retreat / cfg::boss::retreatTime;
+    k = k * k * (3.f - 2.f * k);
+    const sf::Vector2f prev = boss_.pos;
+    if (boss_.kind == BossKind::Orbital) {
+        boss_.ang += cfg::finalBoss::spiralOmega * dt;
+        boss_.dist = boss_.fromDist + (boss_.homeDist - boss_.fromDist) * k;
+        boss_.pos = core_.pos + sf::Vector2f{std::cos(boss_.ang), std::sin(boss_.ang)} * boss_.dist;
+    } else {
+        boss_.pos = boss_.retreatFrom + (boss_.home - boss_.retreatFrom) * k;
+    }
+    boss_.vel = (boss_.pos - prev) / std::max(dt, 1e-4f);
+    return true;
+}
+
 void World::updateBoss(float dt, const WorldParams& p, FrameEvents& ev) {
     if (!bossWave_ || !boss_.alive) return;
+    namespace B = cfg::boss;
 
-    if (boss_.dormant) {   // downed, waiting out its wave: once the field is clear it rises again
-        int left = 0;
-        for (const Enemy& e : enemies_) left += e.hp > 0.f ? 1 : 0;
-        if (left > 0) return;
-        boss_.dormant = false;
-        boss_.pos = boss_.restPos;
-        boss_.intro = 0.f;
-        boss_.hp = boss_.maxHp * cfg::boss::reviveHp;
-        boss_.enraged = true;
-        boss_.hitFlash = 1.f;
-        boss_.hitCd = 1.f;
-        ev.bossEnraged = true;
-        ev.bursts.push_back({boss_.pos, boss_.radius * 4.f, theme::coreLow, "IT RISES"});
-        return;
-    }
-
+    settleBossDamage();
     boss_.hitCd = std::max(0.f, boss_.hitCd - dt);
     boss_.hitFlash *= std::exp(-6.f * dt);
 
-    // Phase two and the Brutes it calls in, as its HP drops.
+    // A phase threshold stops the damage there and starts the next phase.
+    while (boss_.stage < 2 && boss_.hp < boss_.maxHp * B::stageAt[boss_.stage]) {
+        boss_.hp = boss_.maxHp * B::stageAt[boss_.stage];
+        enterBossStage(boss_.stage + 1, ev);
+    }
+    boss_.hpSeen = boss_.hp;
+    updateBossParts(dt, ev);
+
+    // The Brutes it calls in, as its HP drops.
     const float frac = boss_.maxHp > 0.f ? boss_.hp / boss_.maxHp : 0.f;
     if (boss_.hp > 0.f) {
-        while (boss_.summons < 2 && frac < cfg::boss::summonAt[boss_.summons]) {
+        while (boss_.summons < 2 && frac < B::summonAt[boss_.summons]) {
             ++boss_.summons;
             spawnEnemy(EnemyKind::Brute);
             ev.bossSummon = true;
         }
-        if (!boss_.enraged && frac < cfg::boss::enrageAt) {
-            boss_.enraged = true;
-            ev.bossEnraged = true;
-        }
     }
     const float pace = boss_.pace();
+    const float slow = p.timeDilation ? cfg::changer::timeDilation : 1.f;
 
     if (boss_.kind == BossKind::Orbital) {
         boss_.ringAng += cfg::finalBoss::shieldOmega * dt * pace;
@@ -2633,7 +2864,7 @@ void World::updateBoss(float dt, const WorldParams& p, FrameEvents& ev) {
             const sf::Vector2f prev = boss_.pos;
             boss_.pos = entry + (spiralStart - entry) * k;
             boss_.vel = (boss_.pos - prev) / std::max(dt, 1e-4f);
-        } else {
+        } else if (!retreatBoss(dt)) {
             boss_.ang += cfg::finalBoss::spiralOmega * dt * pace;
             boss_.dist = std::max(0.f, boss_.dist - cfg::finalBoss::spiralShrink * dt * pace);
             const sf::Vector2f prev = boss_.pos;
@@ -2642,49 +2873,53 @@ void World::updateBoss(float dt, const WorldParams& p, FrameEvents& ev) {
             boss_.vel = (boss_.pos - prev) / std::max(dt, 1e-4f);
         }
 
-        // Keep the shield ring stocked, one orbiter at a time.
+        // Keep the shield ring stocked, one orbiter at a time (twice as fast
+        // while its anchors stand).
         int live = 0;
         for (const Enemy& e : enemies_)
             if (e.orbiter) ++live;
         if (live >= cfg::finalBoss::shieldCount) {
             boss_.shieldTimer = cfg::finalBoss::shieldRespawn;
         } else {
-            boss_.shieldTimer -= dt;
+            boss_.shieldTimer -= dt * (boss_.guarded ? 2.f : 1.f);
             if (boss_.shieldTimer <= 0.f) {
                 spawnOrbiter(rng_.range(0.f, 2.f * kPi));
                 boss_.shieldTimer = cfg::finalBoss::shieldRespawn;
             }
         }
+        // Last phase: now and then one orbiter breaks off and rushes the core.
+        if (boss_.stage >= 2 && boss_.retreat <= 0.f && (boss_.launchT -= dt) <= 0.f) {
+            boss_.launchT = B::orbitalLaunchEvery;
+            for (Enemy& e : enemies_) {
+                if (!e.orbiter || e.hp <= 0.f) continue;
+                e.orbiter = false;
+                e.speed = cfg::finalBoss::addSpeed * 1.3f;
+                e.vel = normalized(core_.pos - e.pos, {1.f, 0.f}) * e.speed * 1.5f;
+                ev.bursts.push_back({e.pos, e.radius * 2.5f, theme::coreLow, nullptr});
+                break;
+            }
+        }
+    } else if (retreatBoss(dt)) {
+        // pulling back: nothing else this step
     } else if (boss_.kind == BossKind::Hive) {
-        updateHive(dt * pace * (p.timeDilation ? cfg::changer::timeDilation : 1.f));
+        updateHive(dt * pace * slow);
     } else if (boss_.kind == BossKind::Warden) {
         updateWarden(dt * pace, p);
+        if (boss_.stage >= 1 && (boss_.shotT -= dt * pace) <= 0.f) {   // a fan of orbs at the core
+            boss_.shotT = B::wardenShotEvery;
+            fireShots(boss_.pos, B::wardenShots[boss_.stage - 1], 0.9f);
+        }
     } else if (boss_.kind == BossKind::Dasher) {
-        updateDasher(dt * pace, p);
+        updateDasher(dt * pace, p, ev);
     } else {
-        boss_.pos += boss_.vel * dt * pace * (p.timeDilation ? cfg::changer::timeDilation : 1.f);   // Charger: dead straight
+        boss_.vel = {-B::speed, 0.f};   // Charger: dead straight at the core
+        boss_.pos += boss_.vel * dt * pace * slow;
         if ((boss_.timer -= dt * pace) <= 0.f) {
-            boss_.timer = cfg::boss::shockEvery;
+            boss_.timer = B::shockEvery;
             chargerShock(ev);
         }
     }
 
-    if (boss_.hp <= 0.f && !boss_.revived &&   // the act 1-3 bosses: a second phase
-        (boss_.kind == BossKind::Charger || boss_.kind == BossKind::Hive || boss_.kind == BossKind::Warden)) {
-        boss_.revived = true;
-        boss_.dormant = true;
-        boss_.restPos = boss_.pos;
-        boss_.hp = 1.f;
-        boss_.pos = {-5000.f, -5000.f};   // out of every ball's and ability's reach
-        boss_.intro = 1e9f;
-        boss_.vel = {0.f, 0.f};
-        ev.bursts.push_back({boss_.restPos, boss_.radius * 3.f, theme::coreLow, "NOT YET"});
-        const int act = std::max(1, (wave_ - 1) / cfg::run::bossWave + 1);
-        const int adds = cfg::boss::reviveAdds + 3 * (act - 1);
-        static const EnemyKind kinds[] = {EnemyKind::Grunt, EnemyKind::Runner, EnemyKind::Grunt, EnemyKind::Tank};
-        for (int i = 0; i < adds; ++i) spawnEnemy(kinds[i % 4]);
-        return;
-    }
     if (boss_.hp <= 0.f) {
         boss_.alive = false;
         boss_.hitFlash = 0.f;
@@ -2716,6 +2951,10 @@ void World::updateBoss(float dt, const WorldParams& p, FrameEvents& ev) {
 // runners bursts out of it toward the core (held back while the field is full).
 void World::updateHive(float dt) {
     namespace B = cfg::boss;
+    if (boss_.guarded) {   // its nests do the work; it sits back at the edge
+        boss_.vel = {0.f, 0.f};
+        return;
+    }
     boss_.ang += B::hiveWobble * dt;   // sway phase
     const sf::Vector2f to = normalized(core_.pos - boss_.pos, {-1.f, 0.f});
     const sf::Vector2f side{-to.y, to.x};
@@ -2728,8 +2967,9 @@ void World::updateHive(float dt) {
     boss_.timer = B::hiveBurstEvery;
     if (static_cast<int>(enemies_.size()) >= B::hiveCap) return;
     const float base = std::atan2(to.y, to.x);
-    for (int i = 0; i < B::hiveBurstCount; ++i) {
-        const float a = base + (static_cast<float>(i) / static_cast<float>(B::hiveBurstCount - 1) - 0.5f) * 1.8f;
+    const int count = B::hiveBurstCount + (boss_.enraged ? 2 : 0);
+    for (int i = 0; i < count; ++i) {
+        const float a = base + (static_cast<float>(i) / static_cast<float>(count - 1) - 0.5f) * 1.8f;
         const sf::Vector2f d{std::cos(a), std::sin(a)};
         spawnEnemy(EnemyKind::Runner);
         Enemy& e = enemies_.back();
@@ -2745,7 +2985,16 @@ void World::updateHive(float dt) {
 void World::updateWarden(float dt, const WorldParams& p) {
     namespace B = cfg::boss;
     const float k = p.timeDilation ? cfg::changer::timeDilation : 1.f;
-    boss_.shieldAng += B::wardenShieldSpin * dt * k;
+    if (boss_.stage >= 2 && (boss_.flipT -= dt * k) <= 0.f) {   // last phase: the spin turns back now and then
+        boss_.spin = -boss_.spin;
+        boss_.flipT = rng_.range(B::wardenFlipMin, B::wardenFlipMax);
+    }
+    boss_.shieldAng += B::wardenShieldSpin * boss_.spin * dt * k;
+    if (boss_.stun > 0.f) {   // staggered by a hit on its back
+        boss_.stun = std::max(0.f, boss_.stun - dt * k);
+        boss_.vel = {0.f, 0.f};
+        return;
+    }
     boss_.timer -= dt * k;
     if (boss_.timer <= 0.f) {
         boss_.phase = 1 - boss_.phase;
@@ -2766,37 +3015,73 @@ bool World::wardenBlocks(sf::Vector2f from) const {
 // dashes cut across the map to a point near the core - bouncing off walls,
 // chained close together - and every 3rd one goes for the core itself. Ball
 // hits knock it back (ballHitsBoss).
-void World::updateDasher(float dt, const WorldParams& p) {
+void World::updateDasher(float dt, const WorldParams& p, FrameEvents& ev) {
     namespace B = cfg::boss;
     const float k = p.timeDilation ? cfg::changer::timeDilation : 1.f;
+    if (boss_.stun > 0.f) {   // slammed a wall: lies there, soft, until it shakes it off
+        boss_.stun = std::max(0.f, boss_.stun - dt * k);
+        boss_.vel = {0.f, 0.f};
+        return;
+    }
     boss_.timer -= dt * k;
     const sf::Vector2f to = normalized(core_.pos - boss_.pos, {-1.f, 0.f});
     const bool atCore = boss_.dashes % 3 == 2;
+    const bool slam = boss_.stage >= 1 && !atCore;   // after its first phase it runs to a wall and crashes
     switch (boss_.phase) {
         case 0:   // stalk
             boss_.vel = to * B::dasherStalk;
             if (boss_.timer <= 0.f) { boss_.phase = 1; boss_.timer = atCore ? B::dasherAim : B::dasherRoamAim; }
             break;
-        case 1: {   // aim: stand still; the line locks on - the core, or a point across the map
+        case 1: {   // aim: stand still; the line locks on - the core, a point across the map, or a wall
             boss_.vel = {0.f, 0.f};
             if (atCore) {
                 boss_.dashDir = to;
                 boss_.dashLen = B::dasherDashSpeed * B::dasherDash;
-            } else if (boss_.timer > (atCore ? B::dasherAim : B::dasherRoamAim) - dt * k * 1.5f) {   // pick it once
-                const float side = std::min(size_.x, size_.y);
-                const float a = rng_.range(0.f, 2.f * kPi), r = rng_.range(0.28f, 0.45f) * side;
-                sf::Vector2f target = core_.pos + sf::Vector2f{std::cos(a), std::sin(a)} * r;
-                target = {clampf(target.x, boss_.radius, size_.x - boss_.radius), clampf(target.y, boss_.radius, size_.y - boss_.radius)};
-                boss_.dashDir = normalized(target - boss_.pos, to);
-                boss_.dashLen = clampf(length(target - boss_.pos), 160.f, 720.f);
+            } else if (boss_.timer > B::dasherRoamAim - dt * k * 1.5f) {   // pick it once
+                if (slam) {
+                    // A straight run to the arena's edge that keeps clear of the core.
+                    const float clear = core_.radius + boss_.radius + B::dasherCoreClear;
+                    sf::Vector2f dir = normalized(boss_.pos - core_.pos, {1.f, 0.f});
+                    for (int t = 0; t < 16; ++t) {
+                        const float a = rng_.range(0.f, 2.f * kPi);
+                        const sf::Vector2f d{std::cos(a), std::sin(a)};
+                        const float along = dot(core_.pos - boss_.pos, d);
+                        const float off = length(core_.pos - (boss_.pos + d * std::max(0.f, along)));
+                        if (along <= 0.f || off > clear) { dir = d; break; }
+                    }
+                    boss_.dashDir = dir;
+                    // its length, to the wall: the ray out of the arena box
+                    float len = 1e9f;
+                    if (dir.x > 1e-4f) len = std::min(len, (size_.x - boss_.radius - boss_.pos.x) / dir.x);
+                    if (dir.x < -1e-4f) len = std::min(len, (boss_.radius - boss_.pos.x) / dir.x);
+                    if (dir.y > 1e-4f) len = std::min(len, (size_.y - boss_.radius - boss_.pos.y) / dir.y);
+                    if (dir.y < -1e-4f) len = std::min(len, (boss_.radius - boss_.pos.y) / dir.y);
+                    boss_.dashLen = std::max(0.f, len);
+                } else {
+                    // A point across the map near the core - on a line that
+                    // doesn't run through the core itself.
+                    const float side = std::min(size_.x, size_.y);
+                    const float clear = core_.radius + boss_.radius + B::dasherCoreClear;
+                    sf::Vector2f target = boss_.pos;
+                    for (int t = 0; t < 16; ++t) {
+                        const float a = rng_.range(0.f, 2.f * kPi), r = rng_.range(0.3f, 0.45f) * side;
+                        target = core_.pos + sf::Vector2f{std::cos(a), std::sin(a)} * r;
+                        target = {clampf(target.x, boss_.radius, size_.x - boss_.radius), clampf(target.y, boss_.radius, size_.y - boss_.radius)};
+                        const sf::Vector2f seg = target - boss_.pos;
+                        const float u = clampf(dot(core_.pos - boss_.pos, seg) / std::max(1.f, dot(seg, seg)), 0.f, 1.f);
+                        if (length(core_.pos - (boss_.pos + seg * u)) > clear) break;
+                    }
+                    boss_.dashDir = normalized(target - boss_.pos, to);
+                    boss_.dashLen = clampf(length(target - boss_.pos), 160.f, 720.f);
+                }
             }
             if (boss_.timer <= 0.f) {
                 boss_.phase = 2;
-                boss_.timer = boss_.dashLen / (atCore ? B::dasherDashSpeed : B::dasherRoamSpeed);
+                boss_.timer = slam ? B::dasherSlamDash : boss_.dashLen / (atCore ? B::dasherDashSpeed : B::dasherRoamSpeed);
             }
             break;
         }
-        default:  // dash - off the walls if it meets one
+        default:  // dash - off the walls if it meets one (or, slamming, into it)
             boss_.vel = boss_.dashDir * (atCore ? B::dasherDashSpeed : B::dasherRoamSpeed);
             if (boss_.timer <= 0.f) {
                 ++boss_.dashes;
@@ -2807,24 +3092,60 @@ void World::updateDasher(float dt, const WorldParams& p) {
             break;
     }
     boss_.pos += boss_.vel * dt * k;
-    if (boss_.pos.x < boss_.radius || boss_.pos.x > size_.x - boss_.radius) boss_.dashDir.x = -boss_.dashDir.x;
-    if (boss_.pos.y < boss_.radius || boss_.pos.y > size_.y - boss_.radius) boss_.dashDir.y = -boss_.dashDir.y;
+    const bool outX = boss_.pos.x < boss_.radius || boss_.pos.x > size_.x - boss_.radius;
+    const bool outY = boss_.pos.y < boss_.radius || boss_.pos.y > size_.y - boss_.radius;
     boss_.pos.x = clampf(boss_.pos.x, boss_.radius, size_.x - boss_.radius);
     boss_.pos.y = clampf(boss_.pos.y, boss_.radius, size_.y - boss_.radius);
+    if (slam && boss_.phase == 2 && (outX || outY)) {   // crash
+        ++boss_.dashes;
+        boss_.phase = 0;
+        boss_.timer = B::dasherRest;
+        boss_.stun = B::dasherStun[std::min(boss_.stage, 2) - 1];
+        boss_.vel = {0.f, 0.f};
+        ev.bossShock = true;
+        ev.bursts.push_back({boss_.pos, boss_.radius * 2.5f, theme::ember, nullptr});
+        fireShots(boss_.pos, B::dasherCrashShots, 0.7f);
+        return;
+    }
+    if (outX) boss_.dashDir.x = -boss_.dashDir.x;
+    if (outY) boss_.dashDir.y = -boss_.dashDir.y;
 }
 
 void World::ballHitsBoss(Ball& b, float cdMul, const WorldParams& p, FrameEvents& ev, bool speedGate) {
     if (boss_.intro > 0.f || boss_.hitCd > 0.f) return;
     if (speedGate && length(b.vel) < ballBaseCruise(b, p) * cfg::boss::minHitCruiseFrac) return;
     if (wardenBlocks(b.pos)) { ev.shieldBlock = true; return; }
-    boss_.hp -= ballDamage(b, p) * (1.f + b.mods.cls.common.bully);   // "Bully": bosses are bigger
+    if (boss_.guarded || boss_.retreat > 0.f) { ev.shieldBlock = true; return; }   // its parts still stand
+    namespace B = cfg::boss;
+    // The Warden's back, after its first phase: the weak point. Hits there
+    // land x wardenWeakMul (over its body's wardenBodyMul, which
+    // settleBossDamage puts on everything), stagger it and shove it back.
+    float mul = 1.f, knock = 0.f;
+    if (boss_.kind == BossKind::Warden && boss_.stage >= 1) {
+        const sf::Vector2f back{-std::cos(boss_.shieldAng), -std::sin(boss_.shieldAng)};
+        if (dot(back, normalized(b.pos - boss_.pos, {0.f, 0.f})) > std::cos(B::wardenWeakArc)) {
+            mul = B::wardenWeakMul / B::wardenBodyMul;
+            knock = B::wardenWeakKnock;
+            boss_.stun = B::wardenStagger;
+            ev.bursts.push_back({boss_.pos + back * boss_.radius, boss_.radius * 0.8f, theme::ember, nullptr});
+        }
+    }
+    boss_.hp -= ballDamage(b, p) * (1.f + b.mods.cls.common.bully) * mul;   // "Bully": bosses are bigger
     if (classWorld_.common.contractBoss && b.mods.cls.common.contractBoss > 0.f)   // "Contract" on the boss
         boss_.hp -= boss_.maxHp * b.mods.cls.common.contractBoss;
     boss_.hitFlash = 1.f;
-    boss_.hitCd = cfg::boss::hitCooldown * cdMul;
+    boss_.hitCd = B::hitCooldown * cdMul;
     ev.bossHit = true;
-    if (boss_.kind == BossKind::Dasher) {   // knocked back along the line from the core
-        boss_.pos += normalized(boss_.pos - core_.pos, {1.f, 0.f}) * cfg::boss::dasherKnock;
+    // Every clean hit pushes it back from the core: a tug of war the balls win
+    // when they're strong enough.
+    switch (boss_.kind) {
+        case BossKind::Dasher:  knock = B::dasherKnock; break;
+        case BossKind::Charger: knock = B::chargerKnock; break;
+        case BossKind::Hive:    knock = B::hiveKnock; break;
+        default: break;
+    }
+    if (knock > 0.f) {
+        boss_.pos += normalized(boss_.pos - core_.pos, {1.f, 0.f}) * knock;
         boss_.pos.x = clampf(boss_.pos.x, boss_.radius, size_.x - boss_.radius);
         boss_.pos.y = clampf(boss_.pos.y, boss_.radius, size_.y - boss_.radius);
     }
@@ -2838,7 +3159,6 @@ void World::chargerShock(FrameEvents& ev) {
     for (std::vector<Ball>* set : {&balls_, &ghosts_})
         for (std::size_t i = 0; i < set->size(); ++i) {
             Ball& b = (*set)[i];
-            if (b.mods.satellite) continue;
             if (set == &balls_ && grabbed_ == Grabbed::Ball && static_cast<int>(i) == heldIndex_) continue;
             const sf::Vector2f d = b.pos - boss_.pos;
             const float dl = length(d);
@@ -2865,7 +3185,7 @@ void World::updateLaunch(float dt, const WorldParams& p, FrameEvents& ev) {
 
     std::vector<Ball*> whirl;
     for (std::size_t i = 0; i < balls_.size(); ++i)
-        if (!balls_[i].mods.satellite) whirl.push_back(&balls_[i]);
+        whirl.push_back(&balls_[i]);
     const float n = static_cast<float>(std::max<std::size_t>(1, whirl.size()));
     // One ring for all, sized by the biggest ball: wide enough to clear the
     // core, and for every ball to fit around it side by side. Near a wall
@@ -2922,9 +3242,7 @@ void World::updateWaveSpawner(float dt, FrameEvents& ev) {
         // also runs its shield ring in updateBoss, which isn't counted here).
         // The wave ends only once the boss is down and every enemy it left
         // behind is cleared.
-        if (boss_.alive && boss_.dormant) {
-            // downed: its own wave is out there; no trickle until it rises (updateBoss)
-        } else if (boss_.alive) {
+        if (boss_.alive) {
             spawnTimer_ -= dt;
             if (spawnTimer_ <= 0.f) {
                 if (boss_.kind == BossKind::Hive) {
@@ -3095,13 +3413,21 @@ FrameEvents World::step(float dt, const WorldParams& p) {
             b.squash *= std::exp(-cfg::ball::squashDecay * dt);
             if (b.snaredBy >= 0) continue;
         }
-        if (launchT_ > 0.f && !b.mods.satellite) {   // whirling (updateLaunch): let the last bounce's squash settle
+        if (launchT_ > 0.f) {   // whirling (updateLaunch): let the last bounce's squash settle
             b.squash *= std::exp(-cfg::ball::squashDecay * dt);
             continue;
         }
         advanceBall(b, dt, p, ev);
     }
     updateLaunch(dt, p, ev);
+    updatePlanets(dt, p, ev);   // the Astronomer's planets (sim/WorldPlanets.cpp)
+    updateGods(dt, p, ev);      // Odin's runes and spear, Hermes's traces (sim/WorldGods.cpp)
+    updateGods2(dt, p, ev);     // Thanatos's traces, Tiamat's dragons and lizards (sim/WorldGods2.cpp)
+    updateLoki(dt, p, ev);      // Loki's clones at their games (sim/WorldLoki.cpp)
+    updateNergal(dt, p, ev);    // Nergal's rats and blood clouds (sim/WorldNergal.cpp)
+    updateApolo(dt, p, ev);
+    updateAres(dt, p, ev);
+    updateArtemisa(dt, p, ev);  // Artemisa's arrows, hounds, echoes, rains, stag, night (sim/WorldArtemisa.cpp)      // Ares's missiles, hoplites, chariots, stars, spears (sim/WorldAres.cpp)     // Apolo's muses and their gifts (sim/WorldApolo.cpp)
     updateTwins(p);
     for (Ball& g : ghosts_) {   // "Split shot" copies fly and hit like the real thing, then fade
         advanceBall(g, dt, p, ev);
@@ -3124,6 +3450,8 @@ FrameEvents World::step(float dt, const WorldParams& p) {
     updateObstacles(dt);
     updatePools(dt);
     updateEnemies(dt, p, ev);
+    updateCasters(dt, p, ev);
+    updateShots(dt, p, ev);
     updateCoreZap(dt, p, ev);   // "Living Core" creed
     sweepDeadEnemies(ev, p);
     updateBoss(dt, p, ev);

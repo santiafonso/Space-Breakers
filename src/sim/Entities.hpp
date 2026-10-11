@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <array>
 #include <deque>
 #include <vector>
 
@@ -29,8 +30,11 @@ float powerUpDuration(PowerUp p);
 
 // Order matches the unlock chain; (value - 1) indexes WorldParams::elemMult and
 // the element web-node slots (Plain aside).
-enum class Element { Plain, Fire, Poison, Water, Ice, Stone, Electric };
-inline constexpr int kElementCount = 7;
+// Plague (2026-10-07) is Nergal's own: never rolled, never picked - only his
+// ball carries it, and it reacts with every other element its own way.
+enum class Element { Plain, Fire, Poison, Water, Ice, Stone, Electric, Plague };
+inline constexpr int kElementCount = 8;
+inline constexpr int kNaturalElements = 7;   // Plain..Electric: the ones that roll
 
 const char* elementName(Element e);
 sf::Color elementColor(Element e);
@@ -44,9 +48,14 @@ sf::Color elementColor(Element e);
 // Guardian: big, shoves, staggers, aims its bounces; Support: marks enemies +
 // a stronger element (see cfg::role). The other five are built per class in
 // sim/Classes.hpp + sim/WorldClasses.cpp.
-enum class BallRole { Normal, Striker, Guardian, Support, Mage, Shooter, Assassin, Summoner, Jester, Slinger, Alchemist };
-inline constexpr int kBallRoleCount = 11;
-inline constexpr int kClassCount = 10;   // every role but Normal
+// Astronomer (2026-10-06): the Guardian's ascended class - only through a
+// Shrine, never on the web; one of its items is enough for the class.
+// The gods (ascended classes) follow the base ones: Astronomer (Atlas, the
+// Guardian's), Hermes (the Striker's), Odin (the Mage's).
+enum class BallRole { Normal, Striker, Guardian, Support, Mage, Shooter, Assassin, Summoner, Jester, Slinger, Alchemist,
+                      Astronomer, Hermes, Odin, Thanatos, Tiamat, Loki, Nergal, Apolo, Ares, Artemisa };
+inline constexpr int kBallRoleCount = 21;
+inline constexpr int kClassCount = 20;   // every role but Normal
 inline constexpr int kMaxElements = 3;   // elements one ball can carry (the Alchemist: 2, its ascended form 3)
 
 // A set of classes, one bit per BallRole (Normal has no bit).
@@ -156,8 +165,6 @@ struct BallMods {
     float railWidth = 0.f;
     float berserkPerHit = 0.f; // Berserk (0 = off)
     int berserkMax = 0;
-    bool satellite = false;
-    float satelliteDamage = 1.f;
     float gravityMult = 0.f;   // Gravity well: pull x this (0 = off)
     float stormFrac = 0.f;     // Storm (0 = off)
     float stormInterval = 0.f;
@@ -192,6 +199,7 @@ struct Ball {
     RoleMask legend = 0;     // classes it wears the cosmetic of (all 4 items of the class)
     BallRole primary = BallRole::Normal;   // its first class (see leadRole)
     float classPulse = 0.f;  // 1 -> 0: it just gained a class, a flare in its class colour
+    int atlasBounces = 0;    // Atlas: bounces since it last went for the core (cfg::planet::homeEvery)
     float elemPulse = 0.f;   // 1 -> 0: it just took an element, rings in the element's colour
     bool pulseAscend = false;   // ...and that gain was the ascended form (a bigger flare)
     Element element = Element::Plain;   // the element of its next hit (an Alchemist's turns over hit by hit)
@@ -225,8 +233,6 @@ struct Ball {
     int twinIdx = 0;         // which of its parent's twins
     int berserkStacks = 0;   // "Berserk": hits in a row since the last wall
     float stormT = 0.f;      // "Storm": time to the next zap
-    float orbitAng = 0.f;    // "Satellite": angle around the core...
-    float orbitR = 0.f;      // ...and its current radius (0 = not set yet)
     float age = 0.f;         // seconds since it appeared (spawn pop-in)
     int preyId = -1;         // "Hunter": the enemy it's locked on (Enemy::id)
     bool homing = false;     // "Boomerang": flying home to the core
@@ -268,7 +274,7 @@ sf::Color ballHue(const Ball& b);
 
 // Grunt = the plain walker. The rest each want a different answer (cfg::enemy).
 // Brute is the miniboss: elite fights bring one (cfg::enemy).
-enum class EnemyKind { Grunt, Runner, Tank, Splitter, Shard, Shielded, Blinker, Mender, Brute, Snare };
+enum class EnemyKind { Grunt, Runner, Tank, Splitter, Shard, Shielded, Blinker, Mender, Brute, Snare, Caster };
 
 // How an enemy walks to the core: straight, zig-zagging across its line, or
 // circling the core as it closes in (World::rollGait).
@@ -307,6 +313,10 @@ struct Enemy {
     float age = 0.f;                 // seconds alive (drives the spawn pop-in)
     float stagger = 0.f;    // seconds left staggered by a Guardian (drifts, doesn't advance)
     bool orbiter = false;   // wave-20 shield: orbits the boss instead of seeking the core
+    bool part = false;      // a boss's pillar / nest / anchor: stands at home, shields the boss while it lives
+    sf::Vector2f home;      // ...where it stands (pushes are undone every frame)
+    float partT = 0.f;      // ...to its next runner (nest) or shot (pillar, anchor)
+    float castT = 0.f;      // Caster: s at range (its beam bites past cfg::enemy::casterCharge)
     float orbitPhase = 0.f; // its slot angle on the ring
     float blinkT = 0.f;     // Blinker: seconds to its next jump
     float blinkFx = 0.f;    // Blinker: 1 right after a jump, fades (the render's flicker)
@@ -340,6 +350,15 @@ struct Bolt {
     float life = cfg::element::boltLife;
     float maxLife = cfg::element::boltLife;
     bool beam = false;   // a Railgun beam: straight and thick instead of a jagged arc
+};
+
+// A slow orb a boss fires at the core: a ball that touches it breaks it;
+// if it lands, the core loses cfg::boss::shotDamage.
+struct Shot {
+    sf::Vector2f pos;
+    sf::Vector2f vel;
+    float radius = cfg::boss::shotRadius;
+    float life = cfg::boss::shotLife;
 };
 
 // Rubble: enemies are pushed out of it and take chip damage. (Stone used to
@@ -415,6 +434,7 @@ struct Core {
 enum class BossKind { Charger, Hive, Warden, Dasher, Orbital };
 const char* bossName(BossKind k);
 const char* bossDesc(BossKind k);
+const char* bossPhaseCall(BossKind k, int stage);   // the big call at a phase change (stage 1 or 2)
 inline BossKind bossOfAct(int act) {   // act 1..cfg::run::acts
     static const BossKind kinds[] = {BossKind::Charger, BossKind::Hive, BossKind::Warden, BossKind::Dasher,
                                      BossKind::Orbital};
@@ -440,15 +460,27 @@ struct Boss {
     int phase = 0;            // Warden: 0 walk / 1 plant; Dasher: 0 stalk / 1 aim / 2 dash
     float shieldAng = 0.f;    // Warden: centre of its shield arc
     sf::Vector2f dashDir{-1.f, 0.f};   // Dasher: the line it's aiming / dashing along
-    bool enraged = false;     // below cfg::boss::enrageAt: faster everything
+    bool enraged = false;     // its last phase: faster everything
     int summons = 0;          // Brutes it has called in (cfg::boss::summonAt)
     float shockR = 0.f;       // Charger: its shockwave's reach (world units; the render's warning ring)
     int dashes = 0;           // Dasher: dashes so far (every 3rd goes for the core)...
     float dashLen = 0.f;      // ...this one's length (the drawn line)
-    bool dormant = false;     // a second-phase boss, downed once: out of reach while its wave runs...
-    bool revived = false;     // ...and it already came back once
-    sf::Vector2f restPos;     // ...where it lies meanwhile
+    // Phases (cfg::boss::stageAt): 0, 1, 2 as its health runs down.
+    int stage = 0;
+    bool guarded = false;     // its parts (pillars / nests / anchors) stand: it takes no damage
+    float hpSeen = 0.f;       // its HP after the last update: what got through since is scaled (World::settleBossDamage)
+    sf::Vector2f home;        // where it came in - it pulls back there at a phase change...
+    sf::Vector2f retreatFrom; // ...from here...
+    float retreat = 0.f;      // ...for this many more seconds (it does nothing else meanwhile)
+    float stun = 0.f;         // Dasher: s left stunned after slamming a wall; Warden: s left staggered
+    float flipT = 0.f;        // Warden, last phase: to the next turn of its shield's spin
+    float spin = 1.f;         // Warden: which way the shield turns
+    float homeDist = 0.f, fromDist = 0.f;   // Orbital: the spiral's start, and where its pull-back began
+    float shotT = 0.f;        // Warden: to its next fan of shots
+    float launchT = 0.f;      // Orbital, last phase: to the next orbiter it lets loose at the core
     float pace() const { return enraged ? cfg::boss::enragePace : 1.f; }
+    // Something the auto-aim (and summons, bullets) should go for.
+    bool targetable() const { return alive && hp > 0.f && intro <= 0.f && !guarded && retreat <= 0.f; }
 };
 
 struct Pickup {
@@ -495,7 +527,9 @@ struct FrameEvents {
     PowerUp pickupKind = PowerUp::Points2x;
     bool coreHit = false;
     bool shieldBlock = false;             // a hit bounced off a Shielded enemy's shield
-    bool bossEnraged = false;             // the boss just entered its second phase
+    bool bossEnraged = false;             // the boss just entered its last phase
+    int bossPhase = 0;                    // the boss just entered this phase (1 or 2; 0 = none)
+    bool bossExposed = false;             // the boss's last part fell: it can be hurt again
     bool bossSummon = false;              // the boss just called in a Brute
     bool bossShock = false;               // the Charger's shockwave went off
     bool launched = false;                // the fight-opening whirl just let the balls fly
@@ -503,6 +537,9 @@ struct FrameEvents {
     int midasGold = 0;                    // extra gold from kills by Midas balls
     std::vector<std::pair<sf::Vector2f, int>> bounties;   // "Bounty" heads collected: where, and the gold
     float kick = 0.f;                     // an ability asks for a camera jolt this strong
+    float hermesDelivered = 0.f;          // Hermes reached the core: the message's charge (0 = none)
+    std::vector<std::pair<sf::Vector2f, const char*>> callouts;   // a name over the field (a god's move): where, what
+    sf::Vector2f hermesAt;                // ...where
     bool phoenix = false;                 // the Phoenix relic just saved the core
     bool bossHit = false;                 // a ball landed on the miniboss this step
     bool waveCleared = false;
@@ -530,7 +567,7 @@ struct WorldParams {
     bool prismCore = false;       // Prism core (relic): elementless balls leave a random element
     bool timeDilation = false;    // Time dilation (relic): enemies move slower
     bool overcharge = false;      // Overcharge (relic): higher combo cap
-    float elemMult[kElementCount] = {1.f, 1.f, 1.f, 1.f, 1.f, 1.f, 1.f};  // per-element potency (web levels)
+    float elemMult[kElementCount] = {1.f, 1.f, 1.f, 1.f, 1.f, 1.f, 1.f, 1.f};  // per-element potency (web levels)
     int  emberLevel = 0;          // Ember web node: fire hits apply a burn DoT
 
     // Meta web (Fase A).

@@ -127,11 +127,14 @@ inline constexpr int kPanelPartMods = 21;
 int panelPartAt(sf::Vector2f c, sf::Vector2f mouse, const BallLoadout& L);
 // Hover text for that part. False when there's nothing to say.
 bool loadoutTooltip(const BallLoadout& L, int part, std::string& title, std::string& desc);
+// A Tiamat dragon's item: how grown its dragon is (0..1 of adult) and its stage's name; -1 for other parts.
+float loadoutGrowth(const BallLoadout& L, int part, std::string& stage);
 
 // A small hover box by the pointer: a title and a short wrapped description,
 // kept on screen.
 void drawTooltip(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f mouse, sf::Vector2f screen,
-                 const std::string& title, const std::string& desc, sf::Color titleColor = theme::textHi);
+                 const std::string& title, const std::string& desc, sf::Color titleColor = theme::textHi,
+                 float meter = -1.f, const std::string& meterLabel = "");   // meter >= 0: a growth bar under it (Tiamat's dragons)
 // `placing` = the UpgradeKind being equipped (-1 none): the slots that take it light up.
 void drawLoadoutPanel(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f c,
                       const BallLoadout& L, float alpha, float hover, int hoverSlot, bool dim, int placing = -1);

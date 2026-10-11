@@ -462,8 +462,101 @@ bool foldCommon(UpgradeKind k, int level, BallMods& m) {
 
 }  // namespace
 
+// ==================================================================== Astronomer
+// Its planets (sim/WorldPlanets.cpp): each item just says which planet and how strong.
+bool foldAstronomer(UpgradeKind k, int level, BallMods& m) {
+    AstronomerMods& a = m.cls.astronomer;
+    switch (k) {
+        case UpgradeKind::PlanetMercury: a.lvl[static_cast<int>(PlanetKind::Mercury)] = level; return true;
+        case UpgradeKind::PlanetVenus:   a.lvl[static_cast<int>(PlanetKind::Venus)] = level; return true;
+        case UpgradeKind::PlanetEarth:   a.lvl[static_cast<int>(PlanetKind::Earth)] = level; return true;
+        case UpgradeKind::PlanetMars:    a.lvl[static_cast<int>(PlanetKind::Mars)] = level; return true;
+        case UpgradeKind::PlanetJupiter: a.lvl[static_cast<int>(PlanetKind::Jupiter)] = level; return true;
+        case UpgradeKind::PlanetSaturn:  a.lvl[static_cast<int>(PlanetKind::Saturn)] = level; return true;
+        case UpgradeKind::PlanetNeptune: a.lvl[static_cast<int>(PlanetKind::Neptune)] = level; return true;
+        case UpgradeKind::StarryNight:   a.starry = level; return true;
+        default: return false;
+    }
+}
+
+// ==================================================================== Hermes / Odin
+bool foldGods(UpgradeKind k, int level, BallMods& m) {
+    namespace H = cfg::hermes;
+    namespace O = cfg::odin;
+    const float n = static_cast<float>(level - 1);
+    HermesMods& h = m.cls.hermes;
+    OdinMods& o = m.cls.odin;
+    switch (k) {
+        case UpgradeKind::Talaria:
+            h.talaria = H::talaria + H::talariaPerLevel * n;
+            m.flingDecay *= H::talariaDecay;
+            return true;
+        case UpgradeKind::Caduceus:    h.caduceus = H::caduceus + H::caduceusPerLevel * n; return true;
+        case UpgradeKind::Messenger:
+            h.messenger = std::max(1.5f, H::messengerEvery + H::messengerPerLevel * n);
+            h.messengerHit = H::messengerHit + H::messengerHitPerLevel * n;
+            return true;
+        case UpgradeKind::Petasos:     h.petasos = H::petasos + H::petasosPerLevel * n; return true;
+        case UpgradeKind::Quicksilver: h.quicksilver = H::quicksilver + H::quicksilverPerLevel * n; return true;
+        case UpgradeKind::ShadowStep:  m.cls.thanatos.shadowStep = cfg::thanatos::shadowStep + cfg::thanatos::shadowStepPerLevel * n; return true;
+        case UpgradeKind::DeathMark:   m.cls.thanatos.deathMark = cfg::thanatos::deathMark + cfg::thanatos::deathMarkPerLevel * n; return true;
+        case UpgradeKind::Eclipse:
+            m.cls.thanatos.eclipse = cfg::thanatos::eclipseEvery;
+            m.cls.thanatos.eclipseFrac = cfg::thanatos::eclipse + cfg::thanatos::eclipsePerLevel * n;
+            return true;
+        case UpgradeKind::ReaperScythe: m.cls.thanatos.scythe = cfg::thanatos::scythe + (level >= 5 ? 1 : 0); return true;
+        case UpgradeKind::FinalHour:
+            m.cls.thanatos.finalHour = std::max(5.f, cfg::thanatos::finalHour + cfg::thanatos::finalHourPerLevel * n);
+            return true;
+        case UpgradeKind::FrostWyrm:   m.cls.tiamat.frostWyrm = 1.f + cfg::tiamat::dragonPerLevel * n; return true;
+        case UpgradeKind::StormDrake:  m.cls.tiamat.stormDrake = 1.f + cfg::tiamat::dragonPerLevel * n; return true;
+        case UpgradeKind::AncientGold: m.cls.tiamat.ancientGold = 1.f + cfg::tiamat::dragonPerLevel * n; return true;
+        case UpgradeKind::LizardHorde: m.cls.tiamat.horde = std::max(2.f, cfg::tiamat::hordeEvery + cfg::tiamat::hordeEveryPerLevel * n); return true;
+        case UpgradeKind::BroodMother: m.cls.tiamat.brood = true; return true;
+        case UpgradeKind::Devourer:    m.cls.tiamat.devourer = 1.f + cfg::tiamat::dragonPerLevel * n; return true;
+        case UpgradeKind::Wyrmling:    m.cls.tiamat.wyrmling = 1.f + cfg::tiamat::dragonPerLevel * n; return true;
+        case UpgradeKind::LokiDice:      m.cls.loki.dice = 1.f + cfg::loki::perLevel * n; return true;
+        case UpgradeKind::LokiRoulette:  m.cls.loki.roulette = 1.f + cfg::loki::perLevel * n; return true;
+        case UpgradeKind::LokiCards:     m.cls.loki.cards = 1.f + cfg::loki::perLevel * n; return true;
+        case UpgradeKind::LokiPachinko:  m.cls.loki.pachinko = 1.f + cfg::loki::perLevel * n; return true;
+        case UpgradeKind::SilverHounds: m.cls.artemisa.hounds = 1.f + cfg::artemisa::perLevel * n; return true;
+        case UpgradeKind::CrescentMoon: m.cls.artemisa.moon = 1.f + cfg::artemisa::perLevel * n; return true;
+        case UpgradeKind::ArrowRain:    m.cls.artemisa.rain = 1.f + cfg::artemisa::perLevel * n; return true;
+        case UpgradeKind::GoldenStag:   m.cls.artemisa.stag = 1.f + cfg::artemisa::perLevel * n; return true;
+        case UpgradeKind::HuntNight:    m.cls.artemisa.night = 1.f + cfg::artemisa::perLevel * n; return true;
+        case UpgradeKind::PhobosDeimos: m.cls.ares.moons = 1.f + cfg::ares::perLevel * n; return true;
+        case UpgradeKind::DragonTeeth:  m.cls.ares.teeth = 1.f + cfg::ares::perLevel * n; return true;
+        case UpgradeKind::WarChariot:   m.cls.ares.chariot = 1.f + cfg::ares::perLevel * n; return true;
+        case UpgradeKind::WrathOlympus: m.cls.ares.wrath = 1.f + cfg::ares::perLevel * n; return true;
+        case UpgradeKind::TrojanWar:    m.cls.ares.troy = 1.f + cfg::ares::perLevel * n; return true;
+        case UpgradeKind::Lyre:       m.cls.apolo.lyre = cfg::apolo::lyreHeal + cfg::apolo::lyrePerLevel * n; return true;
+        case UpgradeKind::Laurel:     m.cls.apolo.laurel = cfg::apolo::laurel + cfg::apolo::laurelPerLevel * n; return true;
+        case UpgradeKind::SilverBow:  m.cls.apolo.bow = cfg::apolo::bowFrac + cfg::apolo::bowPerLevel * n; return true;
+        case UpgradeKind::SunChariot: m.cls.apolo.chariot = cfg::apolo::sunFrac + cfg::apolo::sunPerLevel * n; return true;
+        case UpgradeKind::Oracle:     m.cls.apolo.oracle = cfg::apolo::oracle + cfg::apolo::oraclePerLevel * n; return true;
+        case UpgradeKind::BloodRain:  m.cls.nergal.rainEvery = std::max(2.5f, cfg::nergal::rainEvery + cfg::nergal::rainPerLevel * n); return true;
+        case UpgradeKind::RatTide:    m.cls.nergal.tideEvery = std::max(2.f, cfg::nergal::tideEvery + cfg::nergal::tidePerLevel * n); return true;
+        case UpgradeKind::Locusts:    m.cls.nergal.locusts = cfg::nergal::locustMul + cfg::nergal::locustPerLevel * n; return true;
+        case UpgradeKind::BlackDeath: m.cls.nergal.blackDeath = cfg::nergal::deathFrac + cfg::nergal::deathPerLevel * n; return true;
+        case UpgradeKind::PaleHorse:  m.cls.nergal.horseEvery = std::max(4.f, cfg::nergal::horseEvery + cfg::nergal::horsePerLevel * n); return true;
+        case UpgradeKind::LokiHighTable: m.cls.loki.high = cfg::loki::highMul + cfg::loki::highPerLevel * n; return true;
+        case UpgradeKind::Huginn:      o.huginn = std::max(2.f, O::huginn + O::huginnPerLevel * n); return true;
+        case UpgradeKind::Muninn:      o.muninn = O::muninn + O::muninnPerLevel * n; return true;
+        case UpgradeKind::Runes:       o.valknut = O::valknut + O::valknutPerLevel * n; return true;   // "Valknut" (the old Runes slot)
+        case UpgradeKind::Gungnir:
+            o.gungnir = O::gungnir + O::gungnirPerLevel * n;
+            o.gungnirEvery = std::max(2.f, O::gungnirEvery + O::gungnirEveryPerLevel * n);
+            return true;
+        case UpgradeKind::Draupnir:
+            m.cls.mage.power *= O::draupnirPower + O::draupnirPowerPerLevel * n;
+            o.draupnir = 1.f;   // (drawn: the gold ring round it)
+            return true;
+        default: return false;
+    }
+}
+
 bool foldClassItem(UpgradeKind k, int level, BallMods& m) {
-    return foldMage(k, level, m) || foldShooter(k, level, m) || foldAssassin(k, level, m) ||
+    return foldAstronomer(k, level, m) || foldGods(k, level, m) || foldMage(k, level, m) || foldShooter(k, level, m) || foldAssassin(k, level, m) ||
            foldSummoner(k, level, m) || foldJester(k, level, m) || foldSlinger(k, level, m) || foldStyle(k, level, m) ||
            foldAlchemist(k, level, m) || foldCommon(k, level, m);
 }

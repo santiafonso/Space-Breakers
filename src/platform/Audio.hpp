@@ -5,6 +5,7 @@
 #include <array>
 #include <cstddef>
 #include <memory>
+#include <random>
 #include <string>
 #include <vector>
 
@@ -41,8 +42,20 @@ public:
     // The player's mix: volumes and a style per category (takes effect at once).
     void applySettings(const SoundSettings& s);
 
-    // Idempotent: cross to the track's loop number `variant` (wraps around).
-    void setTrack(Track t, int variant = 0);
+    // Idempotent: cross to the track's loop number `variant` (wraps around);
+    // -1 keeps whichever of its loops is playing (its pool's pick).
+    void setTrack(Track t, int variant = -1);
+    // The loops that take turns on a track (2026-10-06): each plays through
+    // once, then a different one from the pool, at random, crossfades in from
+    // its start. Idempotent; a new pool that leaves out the current loop
+    // crosses to one of its own. Empty = no rotation.
+    void setPool(Track t, const std::vector<int>& variants);
+    // The menu's layered song (2026-10-07): stems of one loop, all the same
+    // length, started together so they stay in step. The first `n` sound (each
+    // eases in over a few seconds), the rest wait at silence - the menu starts
+    // silent and fills in as the skill web grows. Plays as the Menu and Web tracks.
+    void addMenuLayer(const std::string& file, float gain = 1.f);
+    void setMenuLayers(int n) { layersOn_ = n; }
     Track track() const { return track_; }
     void update(float dt);    // per frame: the music crossfade
     // How hard the run / boss music plays, 0..1, eased toward: soft on the map
@@ -140,12 +153,30 @@ private:
         float level = 0.f;   // 0..1 track crossfade position
         float gain = 1.f;    // loudness match
         float fadeIn = 2.5f; // seconds from silence to full
+        float fadeOut = 1.5f;   // seconds from full to silence (longer for a pool's hand-over)
+        float length = 0.f;     // seconds of one pass (to its loop end)
+        float played = 0.f;     // seconds of it heard since it last started from the top
+        bool rewind = false;    // back to its start once silent (it had its turn)
     };
     // Park / run its voices, cross the loop point, set volumes. `restart`: rewind when parked.
     void updateStream(Stream& st, bool restart, float dt, float vol);
     static constexpr std::size_t kTracks = static_cast<std::size_t>(Track::Count);
     std::array<std::vector<Stream>, kTracks> music_;
     std::array<std::size_t, kTracks> pick_{};   // which of a track's loops plays
+    std::array<std::vector<std::size_t>, kTracks> playlist_;   // setPool
+    void rotate(std::size_t t);   // the pool's next loop, crossfading
+    float smoothT_ = 0.f;         // s left of a pool hand-over (the two overlap more)
+    struct Layer {
+        sf::SoundBuffer buf;
+        sf::Sound snd;
+        float gain = 1.f;
+        float level = 0.f;   // 0..1, eased toward on (i < layersOn_) / off
+    };
+    std::vector<std::unique_ptr<Layer>> layers_;   // unique_ptr: snd points at buf
+    int layersOn_ = 0;
+    float layersLevel_ = 0.f;   // the whole song's track fade, 0..1
+    void updateLayers(float dt, bool want, float vol);
+    std::mt19937 rng_{std::random_device{}()};
     Track track_ = Track::None;
     float intensity_ = 0.f, intensityTarget_ = 1.f;
 };

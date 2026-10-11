@@ -2,6 +2,7 @@
 
 #include "render/ClassRender.hpp"
 #include "render/Draw.hpp"
+#include "core/ConfigClasses.hpp"
 
 #include <algorithm>
 #include <array>
@@ -225,6 +226,13 @@ sf::FloatRect slotRect(sf::Vector2f c, int slot, const BallLoadout& L) {
     const float wd = kPanelW - 24.f;
     const float top = c.y - kPanelH * 0.5f;
     if (isItemSlot(slot)) {
+        if (slot >= L.itemSlots) return {};
+        if (L.itemSlots > kBaseItemSlots) {   // expanded (6): two columns of three in the same space
+            const float step = kSlotStep * static_cast<float>(kBaseItemSlots - 1) / 2.f;
+            const float cw = (wd - 6.f) * 0.5f;
+            const float cy = top + kPanelItemsTop + static_cast<float>(slot / 2) * step;
+            return {c.x - wd * 0.5f + static_cast<float>(slot % 2) * (cw + 6.f), cy - kSlotH * 0.5f, cw, kSlotH};
+        }
         const float cy = top + kPanelItemsTop + static_cast<float>(slot) * kSlotStep;
         return {c.x - wd * 0.5f, cy - kSlotH * 0.5f, wd, kSlotH};
     }
@@ -283,7 +291,13 @@ std::string modifierLine(const BallLoadout& L, const sf::Font* font, unsigned si
     return line;
 }
 
-sf::Color tagColor(ItemTag t) { return roleColor(tagRole(t)); }   // ItemTag::None -> Normal: grey
+// A class's items are a touch muted; a god's items (the same hue) shine
+// brighter - that's how an ascended item reads at a glance (2026-10-06).
+sf::Color tagColor(ItemTag t) {
+    const sf::Color c = roleColor(tagRole(t));   // ItemTag::None -> Normal: grey
+    if (t == ItemTag::None) return c;
+    return isGod(t) ? lerpColor(c, sf::Color::White, 0.3f) : lerpColor(c, sf::Color(110, 114, 128), 0.3f);
+}
 
 // Rarity is a brightness ramp, not a hue - dim grey up to white, and only a
 // Legendary turns pale gold - so it can never be mistaken for a class colour.
@@ -456,7 +470,7 @@ void drawClassCardMark(sf::RenderWindow& w, const sf::Font& font, sf::FloatRect 
     for (const BallLoadout& L : balls) {
         if (!upgradeFitsBall(k, L) || upgradeLevelsUp(k, L)) continue;
         bool free = false;
-        for (int i = 0; i < kBallSlots; ++i) free = free || L.gear[i] < 0;
+        for (int i = 0; i < L.itemSlots; ++i) free = free || L.gear[i] < 0;
         if (!free) continue;
         const int n = L.tagCount(t);
         if (n == 3) best = 2;
@@ -502,7 +516,7 @@ void drawLoadoutPanel(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f c,
     // the element as a muted rim, class marks, ascended halo, highlight.
     const Element el = L.element();
     const sf::Color ec = el == Element::Plain ? theme::textLo : elementColor(el);
-    ItemTag roles[2];
+    ItemTag roles[3];
     const int nRoles = L.roles(roles);
     const ItemTag asc = L.ascended();
     const float r = L.hasRole(ItemTag::Guardian) ? 16.f : 13.f;
@@ -569,25 +583,31 @@ void drawLoadoutPanel(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f c,
         const int kind = L.kindAt(s);
         const float cy = sr.top + sr.height * 0.5f;
         const float lit = hot ? 1.f : (takes ? 0.6f : 0.f);
-        const unsigned size = sr.width > 90.f ? theme::fsSmall : 11u;
+        const unsigned size = sr.width > 120.f ? theme::fsSmall : sr.width > 90.f ? 12u : 11u;
 
         if (s == kSlotType) {   // the type: a hexagon of the element's colour, its name under it
             const sf::Vector2f pc{sr.left + sr.width * 0.5f, cy};
             const float r = sr.width * 0.5f;
             constexpr float kHexRot = kPi / 6.f;   // flat top
             if (takes) draw::polygonOutline(w, pc, r + 5.f, 6, kHexRot, 1.5f, withAlpha(theme::accent, 0.7f * sa));
-            if (kind < 0) {
+            const bool plague = L.element() == Element::Plague;   // Nergal's own: always there, black
+            if (kind < 0 && !plague) {
                 draw::polygonOutline(w, pc, r, 6, kHexRot, 1.5f, withAlpha(theme::textDim, (0.45f + 0.4f * lit) * sa));
                 return;
             }
             const sf::Color ecol = elementColor(L.element());
-            draw::polygon(w, pc, r, 6, kHexRot, withAlpha(lerpColor(ecol, theme::bgDeep, 0.35f), 0.95f * sa),
-                          withAlpha(lerpColor(ecol, theme::bgDeep, 0.6f), 0.95f * sa));
-            draw::polygonOutline(w, pc, r, 6, kHexRot, 2.f,
-                                 withAlpha(lerpColor(ecol, sf::Color::White, 0.2f), (0.9f + 0.1f * lit) * sa));
+            if (plague) {   // solid black, a bruise-violet edge so it reads on the dark panel
+                draw::polygon(w, pc, r, 6, kHexRot, withAlpha(ecol, sa), withAlpha(ecol, sa));
+                draw::polygonOutline(w, pc, r, 6, kHexRot, 2.f, withAlpha(theme::plagueEdge, (0.9f + 0.1f * lit) * sa));
+            } else {
+                draw::polygon(w, pc, r, 6, kHexRot, withAlpha(lerpColor(ecol, theme::bgDeep, 0.35f), 0.95f * sa),
+                              withAlpha(lerpColor(ecol, theme::bgDeep, 0.6f), 0.95f * sa));
+                draw::polygonOutline(w, pc, r, 6, kHexRot, 2.f,
+                                     withAlpha(lerpColor(ecol, sf::Color::White, 0.2f), (0.9f + 0.1f * lit) * sa));
+            }
             if (L.levelAt(s) > 1)
                 drawCentered(w, font, std::to_string(L.levelAt(s)), 12, {pc.x, pc.y - 1.f}, withAlpha(theme::textHi, sa));
-            sf::Text nm = makeText(font, elementName(L.element()), 12, withAlpha(ecol, sa));
+            sf::Text nm = makeText(font, elementName(L.element()), 12, withAlpha(plague ? theme::plagueEdge : ecol, sa));
             centerOrigin(nm);
             nm.setPosition(std::round(pc.x), std::round(pc.y + r + 12.f));
             w.draw(nm);
@@ -640,20 +660,32 @@ void drawLoadoutPanel(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f c,
         draw::box(w, sr, 0.f, withAlpha(lerpColor(cc, theme::bgDeep, 0.62f - 0.1f * lit), 0.95f * sa),
                   withAlpha(lerpColor(cc, theme::bgDeep, 0.78f), 0.95f * sa), withAlpha(cc, (0.35f + 0.4f * lit) * sa), 1.f);
         draw::box(w, {sr.left, sr.top, 5.f, sr.height}, 0.f, withAlpha(cc, sa), withAlpha(cc, sa));   // the class spine
+        if (isGod(itemTag(k))) {   // a god's item: a bright edge and a sheen sweeping across it
+            static sf::Clock godClock;
+            const float tt = godClock.getElapsedTime().asSeconds();
+            draw::box(w, sr, 0.f, sf::Color::Transparent, sf::Color::Transparent, withAlpha(cc, 0.9f * sa), 1.5f);
+            const float u = std::fmod(tt * 0.6f + sr.left * 0.003f, 1.6f) - 0.3f;   // a pass, then a rest
+            if (u >= 0.f && u <= 1.f) {
+                const float x = sr.left + sr.width * u;
+                draw::line(w, {x - 6.f, sr.top + sr.height}, {x + 6.f, sr.top}, 3.f, withAlpha(sf::Color::White, 0.35f * sa));
+            }
+        }
         // rarity: pips at the right end, the brightness ramp
         const int rank = static_cast<int>(upgradeTier(k));
         const sf::Color tcol = tierColor(upgradeTier(k));
-        float px = sr.left + sr.width - 7.f;
+        const bool narrow = sr.width < 120.f;   // an expanded ball's two columns: a tighter rarity mark
+        float px = sr.left + sr.width - (narrow ? 5.f : 7.f);
         for (int p = 0; p <= rank; ++p) {
-            draw::polygon(w, {px, cy}, 2.6f, 4, 0.f, withAlpha(tcol, sa), withAlpha(tcol, sa));
-            px -= 6.f;
+            draw::polygon(w, {px, narrow ? sr.top + 6.f : cy}, narrow ? 2.f : 2.6f, 4, 0.f, withAlpha(tcol, sa), withAlpha(tcol, sa));
+            px -= narrow ? 4.5f : 6.f;
         }
+        if (narrow) px = sr.left + sr.width - 3.f;   // (the pips sit in the corner: the name gets the width)
         std::string t = upgradeInfo(k).title;
         if (L.levelAt(s) > 1) t += (sr.width > 90.f ? "  Lv" : " ") + std::to_string(L.levelAt(s));
         const float textL = sr.left + 5.f, textR = px + 2.f;   // between the spine and the pips
         drawCentered(w, font, t, size, {(textL + textR) * 0.5f, cy - 1.f}, withAlpha(theme::textHi, sa));
     };
-    for (int i = 0; i < kBallSlots; ++i) slotBox(i, "empty", false);
+    for (int i = 0; i < L.itemSlots; ++i) slotBox(i, "empty", false);
     slotBox(kSlotType, "type", false);
     const int open = abilitySlotCount(L);
     for (int i = 0; i < abilityBoxes(L); ++i) slotBox(kSlotAbility + i, "ability", i >= open);
@@ -678,10 +710,16 @@ int panelPartAt(sf::Vector2f c, sf::Vector2f mouse, const BallLoadout& L) {
 bool loadoutTooltip(const BallLoadout& L, int part, std::string& title, std::string& desc) {
     if (part >= 0 && part < kLoadoutSlots) {
         const int kind = L.kindAt(part);
+        if (part == kSlotType && L.element() == Element::Plague) {   // Nergal's own element
+            title = "Black plague";
+            desc = "Nergal's own element, and his only - no other element goes on him. It reacts with every element your other balls bring, "
+                   "each its own way: fire a pyre, ice cold death, poison pestilence, electric fever, water a miasma, stone a mass grave.";
+            return true;
+        }
         if (kind < 0) {
             if (isItemSlot(part)) {
                 title = "Empty item slot";
-                desc = "Items go here, 4 per ball.\n\n2 items of a tag: gets that class.\n4 items of a tag: ascends.";
+                desc = "Items go here, 4 per ball (6 once a Shrine expands it).\n\n2 items of a tag: gets that class.\n4 items of a tag: its full form - and a Shrine can ascend it.";
             } else if (part == kSlotType) {
                 title = "Type slot";
                 desc = "the ball's element goes here - one per ball (an Alchemist holds 2: click the small one to make it the first); a new one swaps it. It doesn't count toward a class.";
@@ -718,7 +756,7 @@ bool loadoutTooltip(const BallLoadout& L, int part, std::string& title, std::str
         return true;
     }
     if (part == kPanelPartBall) {
-        ItemTag roles[2];
+        ItemTag roles[3];
         const int n = L.roles(roles);
         const ItemTag asc = L.ascended();
         title.clear();
@@ -772,13 +810,40 @@ bool loadoutTooltip(const BallLoadout& L, int part, std::string& title, std::str
     return false;
 }
 
+// A Tiamat dragon's item: how grown its dragon is.
+float loadoutGrowth(const BallLoadout& L, int part, std::string& stage) {
+    namespace T = cfg::tiamat;
+    if (part == kPanelPartBall && L.ascended() == ItemTag::Tiamat) {   // her mount: always ridden, a hatchling at first
+        const float xp = L.dragonXp[5];
+        stage = std::string("Mount: ") + (xp >= T::stageXp[2] ? "Adult - fully grown" : xp >= T::stageXp[1] ? "Young" : "Hatchling");
+        return std::clamp(xp / T::stageXp[2], 0.f, 1.f);
+    }
+    if (!isItemSlot(part)) return -1.f;
+    int kind = -1;
+    switch (static_cast<UpgradeKind>(L.gear[part])) {
+        case UpgradeKind::FrostWyrm: kind = 0; break;
+        case UpgradeKind::StormDrake: kind = 1; break;
+        case UpgradeKind::AncientGold: kind = 2; break;
+        case UpgradeKind::Devourer: kind = 3; break;
+        case UpgradeKind::Wyrmling: kind = 4; break;
+        default: return -1.f;
+    }
+    const float xp = L.dragonXp[kind];
+    const char* names[4] = {"Egg", "Hatchling", "Young", "Adult - fully grown"};
+    int st = 0;
+    while (st < 3 && xp >= T::stageXp[st]) ++st;
+    stage = names[st];
+    return std::clamp(xp / T::stageXp[2], 0.f, 1.f);
+}
+
 void drawTooltip(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f mouse, sf::Vector2f screen,
-                 const std::string& title, const std::string& desc, sf::Color titleColor) {
+                 const std::string& title, const std::string& desc, sf::Color titleColor, float meter, const std::string& meterLabel) {
     const float wd = 270.f, pad = 10.f, lineH = 17.f;
     const std::vector<std::string> lines = wrapText(font, desc, theme::fsSmall, wd - 2.f * pad);
     float textH = 0.f;   // an empty line is a half-height gap between paragraphs
     for (const std::string& l : lines) textH += l.empty() ? lineH * 0.5f : lineH;
-    const float ht = pad * 2.f + 20.f + textH;
+    const float meterH = meter >= 0.f ? 30.f : 0.f;
+    const float ht = pad * 2.f + 20.f + textH + meterH;
     float x = mouse.x + 16.f, y = mouse.y + 18.f;
     if (x + wd > screen.x - 4.f) x = mouse.x - wd - 12.f;
     if (y + ht > screen.y - 4.f) y = mouse.y - ht - 10.f;
@@ -800,6 +865,19 @@ void drawTooltip(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f mouse, 
         d.setPosition(std::round(x + pad), std::round(ly));
         w.draw(d);
         ly += lineH;
+    }
+    if (meter >= 0.f) {   // growth: its stage, and a bar to adult with a notch at each stage
+        ly += 4.f;
+        sf::Text m = makeText(font, meterLabel, theme::fsSmall, meter >= 1.f ? titleColor : theme::textHi);
+        m.setPosition(std::round(x + pad), std::round(ly));
+        w.draw(m);
+        const float bx = x + pad, by = ly + 19.f, bw = wd - 2.f * pad;
+        draw::box(w, {bx, by, bw, 4.f}, 2.f, withAlpha(theme::textDim, 0.35f), withAlpha(theme::textDim, 0.35f));
+        if (meter > 0.f) draw::box(w, {bx, by, bw * meter, 4.f}, 2.f, titleColor, titleColor);
+        for (int i = 0; i < 2; ++i) {
+            const float nx = bx + bw * cfg::tiamat::stageXp[i] / cfg::tiamat::stageXp[2];
+            draw::box(w, {std::round(nx), by - 2.f, 1.f, 8.f}, 0.f, theme::textLo, theme::textLo);
+        }
     }
 }
 

@@ -22,6 +22,14 @@ bool App::eventApplies(EventKind k) const {
     const RunState& r = data_.run;
     switch (k) {
         case EventKind::Drifter: return runBallCount() + static_cast<int>(r.bench.size()) < ballCap();
+        case EventKind::Ascend:
+            for (const BallLoadout& L : r.balls)
+                if (shrineAscends(L)) return true;
+            return false;
+        case EventKind::Expand:
+            for (const BallLoadout& L : r.balls)
+                if (shrineExpands(L)) return true;
+            return false;
         case EventKind::Smith:
         case EventKind::Temper:
             for (const BallLoadout& L : r.balls)
@@ -202,6 +210,8 @@ void App::takeEventDeal(int idx) {
             audio_.purchase();
             if (!openForgePicker()) openMap();
             break;
+        case EventKind::Ascend: beginEquip(EquipSource::Ascend, UpgradeKind::Satellite, -1); break;
+        case EventKind::Expand: beginEquip(EquipSource::Expand, UpgradeKind::Satellite, -1); break;
     }
     save();
 }
@@ -255,6 +265,9 @@ int App::randomItemOfTier(Tier t, const BallLoadout* fits) {
 // balls away with the Recruiter count down too and come back.
 void App::afterFight() {
     RunState& r = data_.run;
+    for (int i = 0; i < static_cast<int>(r.balls.size()); ++i)   // Tiamat's dragons keep what they grew (before the bench moves balls about)
+        for (int kind = 0; kind < 6; ++kind)
+            r.balls[static_cast<std::size_t>(i)].dragonXp[kind] = std::max(r.balls[static_cast<std::size_t>(i)].dragonXp[kind], world_.tiamatXp(i, kind));
     const sf::Vector2f mid{size().x * 0.5f, size().y * 0.3f};
     bool changed = false;
     for (BallLoadout& L : r.balls)

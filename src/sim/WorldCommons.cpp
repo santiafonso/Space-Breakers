@@ -555,6 +555,7 @@ void World::commonEnemyDrag(Enemy& e, float& edt, float dt) {
     if (classWorld_.common.stopT > 0.f) edt = 0.f;                                  // "Time stop"
     if (e.shrinkT > 0.f) edt *= cfg::ability::shrinkSlow;                           // "Shrink" (ability)
     if (classWorld_.common.rainT > 0.f) edt *= cfg::common::rainSlow;               // "Primal" water: rain
+    if (classWorld_.hermes.slowT > 0.f) edt *= 1.f - classWorld_.hermes.slow;   // Hermes "Quicksilver"
     if (e.braceT > 0.f) {
         e.braceT -= dt;
         edt *= 1.f - e.braceSlow;
@@ -817,7 +818,7 @@ void World::commonOnGrab(Ball& b) {
     Ball* o = nullptr;
     float bd = 1e18f;
     for (Ball& x : balls_) {
-        if (&x == &b || x.held || x.mods.satellite) continue;
+        if (&x == &b || x.held) continue;
         const float d2 = dot(x.pos - b.pos, x.pos - b.pos);
         if (d2 < bd) { bd = d2; o = &x; }
     }
@@ -845,7 +846,7 @@ void World::commonOnThrow(Ball& b, float pullFrac) {
     if (c.formation > 0.f && length(b.vel) > 1.f) {   // "Formation": the others follow
         const sf::Vector2f v = b.vel * c.formation;
         for (Ball& o : balls_)
-            if (&o != &b && !o.held && !o.mods.satellite && o.snaredBy < 0) o.vel = v;
+            if (&o != &b && !o.held && o.snaredBy < 0) o.vel = v;
     }
     for (Ball& o : balls_)   // other balls' "Covering fire" (on their next tick)
         if (&o != &b && o.mods.cls.common.cover > 0) o.cls.common.coverPending = true;
@@ -983,7 +984,8 @@ void World::primalTick(Ball& b, float dt, const WorldParams& p, FrameEvents& ev)
     const CommonMods& c = b.mods.cls.common;
     const float k = arenaScale();
     const float hit = ballDamage(b, p) * c.primal;
-    auto nearestTo = [&](sf::Vector2f from) -> Enemy* {
+    auto nearestTo = [&](sf::Vector2f from) -> Enemy* {   // the player's target first
+        if (const Enemy* f = focusEnemy()) return const_cast<Enemy*>(f);
         Enemy* t = nullptr;
         float bd = 1e18f;
         for (Enemy& e : enemies_) {

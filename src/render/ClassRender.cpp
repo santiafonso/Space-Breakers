@@ -232,6 +232,97 @@ void markAlchemist(sf::RenderTarget& t, sf::Vector2f p, float r, float, float a)
     draw::polygonOutline(t, p, r * 0.34f, 3, -kPi / 2.f, 1.5f, white(0.75f * a));
 }
 
+void markAstronomer(sf::RenderTarget& t, sf::Vector2f p, float r, float, float a) {   // a star in a tilted orbit
+    const float clk = classClock();
+    draw::polygon(t, p, r * 0.22f, 4, clk * 0.6f, white(0.85f * a), white(0.6f * a));
+    for (int i = 0; i < 16; ++i) {   // the orbit: a flattened dotted ellipse
+        const float an = static_cast<float>(i) / 16.f * 2.f * kPi;
+        const sf::Vector2f e{std::cos(an) * r * 0.55f, std::sin(an) * r * 0.22f};
+        const sf::Vector2f q{e.x * 0.94f - e.y * 0.34f, e.x * 0.34f + e.y * 0.94f};
+        draw::disc(t, p + q, 0.9f, white(0.5f * a), white(0.f), {1.f, 1.f}, 4);
+    }
+    const float an = clk * 1.5f;
+    const sf::Vector2f e{std::cos(an) * r * 0.55f, std::sin(an) * r * 0.22f};
+    draw::disc(t, p + sf::Vector2f{e.x * 0.94f - e.y * 0.34f, e.x * 0.34f + e.y * 0.94f}, r * 0.09f, white(0.9f * a),
+               white(0.f), {1.f, 1.f}, 8);   // its planet
+}
+
+void markHermes(sf::RenderTarget& t, sf::Vector2f p, float r, float heading, float a) {   // two little wings
+    const sf::Vector2f d{std::cos(heading), std::sin(heading)}, sd{-d.y, d.x};
+    for (int s = -1; s <= 1; s += 2)
+        for (int f = 0; f < 3; ++f) {   // three feathers a wing, swept back
+            const sf::Vector2f root = p + sd * (static_cast<float>(s) * r * 0.25f);
+            const sf::Vector2f tip = root + sd * (static_cast<float>(s) * r * (0.45f - 0.08f * static_cast<float>(f))) -
+                                     d * (r * (0.1f + 0.15f * static_cast<float>(f)));
+            draw::line(t, root, tip, 1.5f, white(0.8f * a));
+        }
+}
+
+void markOdin(sf::RenderTarget& t, sf::Vector2f p, float r, float, float a) {   // one eye, and a rune under it
+    draw::disc(t, p + sf::Vector2f{-r * 0.18f, -r * 0.12f}, r * 0.11f, white(0.9f * a), white(0.f), {1.f, 1.f}, 8);
+    draw::line(t, p + sf::Vector2f{r * 0.06f, -r * 0.24f}, p + sf::Vector2f{r * 0.3f, 0.f}, 1.5f, white(0.7f * a));   // the patch
+    draw::line(t, p + sf::Vector2f{0.f, r * 0.05f}, p + sf::Vector2f{0.f, r * 0.38f}, 1.3f, white(0.7f * a));          // a rune: ᚠ
+    draw::line(t, p + sf::Vector2f{0.f, r * 0.12f}, p + sf::Vector2f{r * 0.16f, r * 0.04f}, 1.3f, white(0.7f * a));
+    draw::line(t, p + sf::Vector2f{0.f, r * 0.22f}, p + sf::Vector2f{r * 0.16f, r * 0.14f}, 1.3f, white(0.7f * a));
+}
+
+void markThanatos(sf::RenderTarget& t, sf::Vector2f p, float r, float, float a) {   // a little scythe
+    const sf::Vector2f top = p + sf::Vector2f{-r * 0.15f, -r * 0.35f};
+    draw::line(t, top, p + sf::Vector2f{r * 0.15f, r * 0.4f}, 1.5f, white(0.8f * a));
+    draw::ring(t, top + sf::Vector2f{r * 0.22f, 0.f}, r * 0.22f, 1.5f, white(0.8f * a), kPi, kPi * 1.9f, 10);
+}
+
+void markLoki(sf::RenderTarget& t, sf::Vector2f p, float r, float, float a) {   // two little horns
+    for (float s : {-1.f, 1.f})
+        draw::ring(t, p + sf::Vector2f{s * r * 0.32f, r * 0.1f}, r * 0.3f, 1.5f, white(0.85f * a), s < 0.f ? kPi : -kPi * 0.6f,
+                   s < 0.f ? kPi * 1.6f : 0.f, 8);
+}
+
+void markNergal(sf::RenderTarget& t, sf::Vector2f p, float r, float, float a) {   // a little skull
+    draw::disc(t, p - sf::Vector2f{0.f, r * 0.08f}, r * 0.3f, white(0.85f * a), white(0.6f * a), {1.f, 1.f}, 12);
+    for (float s : {-1.f, 1.f})
+        draw::disc(t, p + sf::Vector2f{s * r * 0.12f, -r * 0.1f}, r * 0.08f, sf::Color(20, 20, 20, static_cast<sf::Uint8>(230 * a)),
+                   sf::Color(20, 20, 20, 0), {1.f, 1.f}, 6);
+    draw::line(t, p + sf::Vector2f{-r * 0.12f, r * 0.22f}, p + sf::Vector2f{r * 0.12f, r * 0.22f}, 1.5f, white(0.8f * a));
+}
+
+void markApolo(sf::RenderTarget& t, sf::Vector2f p, float r, float, float a) {   // a little sun
+    draw::disc(t, p, r * 0.18f, white(0.9f * a), white(0.6f * a), {1.f, 1.f}, 10);
+    for (int i = 0; i < 8; ++i) {
+        const float an = static_cast<float>(i) * kPi / 4.f;
+        draw::line(t, p + sf::Vector2f{std::cos(an), std::sin(an)} * (r * 0.26f), p + sf::Vector2f{std::cos(an), std::sin(an)} * (r * 0.4f), 1.3f, white(0.8f * a));
+    }
+}
+
+void markAres(sf::RenderTarget& t, sf::Vector2f p, float r, float, float a) {   // two crossed swords
+    for (int i = 0; i < 2; ++i) {
+        const float an = kPi * (i ? 0.25f : 0.75f);
+        const sf::Vector2f d{std::cos(an), std::sin(an)}, sd{-d.y, d.x};
+        draw::line(t, p - d * (r * 0.38f), p + d * (r * 0.38f), 1.6f, white(0.9f * a));
+        draw::line(t, p - d * (r * 0.22f) - sd * (r * 0.1f), p - d * (r * 0.22f) + sd * (r * 0.1f), 1.4f, white(0.8f * a));
+    }
+}
+
+// A crescent moon: a disc with a darker one bitten out of it (shared by Artemisa's mark and her prey).
+void crescent(sf::RenderTarget& t, sf::Vector2f p, float R, sf::Color c, sf::Color bite, float a) {
+    draw::disc(t, p, R, withAlpha(c, a), withAlpha(c, 0.8f * a), {1.f, 1.f}, 16);
+    draw::disc(t, p + sf::Vector2f{R * 0.45f, -R * 0.2f}, R * 0.85f, withAlpha(bite, a), withAlpha(bite, a), {1.f, 1.f}, 16);
+}
+
+void markArtemisa(sf::RenderTarget& t, sf::Vector2f p, float r, float, float a) {   // a crescent moon
+    draw::glow(t, p, r * 0.45f, sf::Color(220, 230, 255), 0.25f * a);
+    const sf::Color moon(235, 240, 255);
+    draw::disc(t, p, r * 0.3f, white(0.9f * a), white(0.75f * a), {1.f, 1.f}, 14);
+    (void)moon;
+    draw::disc(t, p + sf::Vector2f{r * 0.14f, -r * 0.07f}, r * 0.25f, sf::Color(60, 140, 190, static_cast<sf::Uint8>(255 * a)),
+               sf::Color(60, 140, 190, static_cast<sf::Uint8>(255 * a)), {1.f, 1.f}, 14);
+}
+
+void markTiamat(sf::RenderTarget& t, sf::Vector2f p, float r, float, float a) {   // a dragon's eye
+    draw::disc(t, p, r * 0.3f, white(0.85f * a), white(0.5f * a), {1.6f, 0.8f}, 14);
+    draw::disc(t, p, r * 0.1f, sf::Color(20, 20, 20, static_cast<sf::Uint8>(255 * a)), sf::Color(20, 20, 20, 0), {0.5f, 1.4f}, 8);
+}
+
 // ==================================================================== speed items
 // Anchor / Beacon: a faint aura that fills in as the ball slows. Wake: a
 // dotted trail. Leyline: small runes waiting for the next cast.
@@ -1243,6 +1334,134 @@ void fillShape(sf::RenderTarget& t, std::initializer_list<sf::Vector2f> pts, sf:
     t.draw(sh);
 }
 
+}  // namespace (drawDragonForm is shared: render/ClassRender.hpp)
+
+// The Elder dragon's look, in other shapes (2026-10-06): Tiamat's dragons are
+// each their own kind of dragon. form: 0 the classic (two wings), 1 a wyvern
+// (its wings are its arms, two legs, a barbed tail), 2 four wings (two pairs
+// beating out of step), 3 a serpent dragon (no wings: a long body winding
+// along `trail`, whiskers, little legs). S = body length, phase drives the
+// beat / the sway.
+void drawDragonForm(sf::RenderTarget& t, int form, sf::Vector2f pos, sf::Vector2f face, sf::Vector2f headDir, float S, float phase,
+                    sf::Color c, float glowA, const sf::Vector2f* trail, int trailN, float k, int heads,
+                    const sf::Vector2f* headDirs) {
+    const sf::Vector2f f = face, side{-f.y, f.x};
+    const sf::Color body = lerpColor(c, sf::Color::Black, 0.25f);
+    const sf::Color edge = lerpColor(c, sf::Color::White, 0.35f);
+    const float flap = std::sin(phase) * 0.5f + 0.5f;
+    if (glowA > 0.f) draw::glow(t, pos, S * 1.8f, c, glowA);
+    sf::Vector2f hf = headDir, hside{-hf.y, hf.x};   // (a hydra turns them per head)
+    auto head = [&](sf::Vector2f neck, float len, bool whiskers) {
+        const sf::Vector2f h = neck + hf * (S * len);
+        draw::line(t, neck, h, S * 0.13f, withAlpha(body, 1.f));
+        fillShape(t, {h + hf * (S * 0.24f), h + hside * (S * 0.11f), h - hf * (S * 0.06f), h - hside * (S * 0.11f)}, withAlpha(edge, 1.f));
+        for (float sd : {-1.f, 1.f}) {
+            draw::disc(t, h + hf * (S * 0.06f) + hside * (sd * S * 0.05f), std::max(1.f, S * 0.035f), sf::Color::White, sf::Color::White,
+                       {1.f, 1.f}, 6);
+            if (whiskers)   // a serpent dragon's long whiskers, trailing back and waving
+                draw::line(t, h + hf * (S * 0.18f) + hside * (sd * S * 0.06f),
+                           h - hf * (S * 0.25f) + hside * (sd * S * (0.3f + 0.08f * std::sin(phase * 1.5f))), std::max(1.f, S * 0.02f),
+                           withAlpha(edge, 0.8f));
+            else   // horns swept back
+                draw::line(t, h + hside * (sd * S * 0.08f), h - hf * (S * 0.18f) + hside * (sd * S * 0.14f), std::max(1.f, S * 0.03f),
+                           withAlpha(edge, 0.9f));
+        }
+    };
+    auto wing = [&](sf::Vector2f root, float sd, float span, float fl, float alpha) {
+        // A bat's wing: an arm out to the tip, finger bones fanning back, the
+        // membrane between them scalloped along its trailing edge.
+        const sf::Vector2f elbow = root + side * (sd * S * span * (0.55f + 0.25f * fl)) + f * (S * 0.15f);
+        const sf::Vector2f tip = root + side * (sd * S * span * (0.95f + 0.35f * fl)) - f * (S * (0.35f - 0.25f * fl));
+        const sf::Vector2f back = root - f * (S * 0.4f) + side * (sd * S * 0.05f);
+        const sf::Vector2f f1 = elbow + (tip - elbow) * 0.35f - f * (S * 0.38f) + side * (sd * S * 0.05f);   // finger tips
+        const sf::Vector2f f2 = elbow - f * (S * 0.45f) - side * (sd * S * span * 0.12f);
+        const sf::Vector2f mid = root + (elbow - root) * 0.5f;
+        auto scallop = [&](sf::Vector2f a, sf::Vector2f b) { return (a + b) * 0.5f + (elbow - (a + b) * 0.5f) * 0.28f; };
+        fillShape(t, {elbow, tip, scallop(tip, f1), f1}, withAlpha(body, alpha));
+        fillShape(t, {elbow, f1, scallop(f1, f2), f2}, withAlpha(body, alpha * 0.92f));
+        fillShape(t, {root, elbow, f2, scallop(f2, back), back}, withAlpha(body, alpha * 0.85f));
+        draw::line(t, root, elbow, std::max(1.f, S * 0.05f), withAlpha(edge, 0.9f));
+        draw::line(t, elbow, tip, std::max(1.f, S * 0.04f), withAlpha(edge, 0.9f));
+        draw::line(t, elbow, f1, std::max(1.f, S * 0.025f), withAlpha(edge, 0.7f));
+        draw::line(t, elbow, f2, std::max(1.f, S * 0.025f), withAlpha(edge, 0.7f));
+        (void)mid;
+        return elbow;
+    };
+    if (form == 3) {   // a serpent dragon: a long winding body along its path, no wings
+        const int n = trailN >= 2 ? trailN : 10;
+        for (int i = 1; i < n; ++i) {
+            const float v = static_cast<float>(i) / static_cast<float>(n - 1);
+            const bool real = trail && i < trailN;   // (a short trail: the rest straight behind)
+            const sf::Vector2f a0 = real ? trail[i - 1] : pos - f * (S * 0.2f * static_cast<float>(i - 1));
+            const sf::Vector2f a1 = real ? trail[i] : pos - f * (S * 0.2f * static_cast<float>(i));
+            const sf::Vector2f sway = side * (std::sin(phase + v * 6.f) * S * 0.06f);
+            draw::line(t, a0 + sway, a1 + sway, S * 0.3f * (1.f - 0.7f * v), withAlpha(body, 0.95f));
+            draw::line(t, a0 + sway, a1 + sway, S * 0.12f * (1.f - 0.7f * v), withAlpha(edge, 0.5f));   // a pale belly line
+            if (i % 3 == 0)   // a ridge of spines, and little legs now and then
+                draw::line(t, a1 + sway, a1 + sway + side * (S * 0.12f) - f * (S * 0.05f), std::max(1.f, S * 0.025f), withAlpha(edge, 0.8f));
+        }
+        head(pos, 0.12f, true);
+        return;
+    }
+    // tail: tapering segments that sway (a wyvern's is longer, with a barb)
+    const float tailLen = form == 1 ? 1.3f : 1.f;
+    sf::Vector2f prev = pos - f * (S * 0.45f);
+    for (int i = 1; i <= 6; ++i) {
+        const float v = static_cast<float>(i) / 6.f;
+        const sf::Vector2f q = pos - f * (S * (0.45f + tailLen * v)) + side * (std::sin(phase * 0.6f + v * 3.5f) * S * 0.18f * v);
+        draw::line(t, prev, q, S * 0.16f * (1.f - 0.8f * v), withAlpha(body, 0.95f));
+        prev = q;
+    }
+    if (form == 1)   // the barb
+        fillShape(t, {prev - f * (S * 0.22f), prev + side * (S * 0.12f), prev - side * (S * 0.12f)}, withAlpha(edge, 0.95f));
+    else
+        fillShape(t, {prev, prev - f * (S * 0.15f) + side * (S * 0.1f), prev - f * (S * 0.15f) - side * (S * 0.1f)}, withAlpha(edge, 0.9f));
+    if (form == 2) {   // four wings: a smaller pair behind, beating out of step
+        const float fl2 = std::sin(phase + 1.6f) * 0.5f + 0.5f;
+        for (float sd : {-1.f, 1.f}) wing(pos - f * (S * 0.3f) + side * (sd * S * 0.07f), sd, 0.7f, fl2, 0.65f);
+    }
+    for (float sd : {-1.f, 1.f}) {
+        const sf::Vector2f root = pos + f * (S * 0.05f) + side * (sd * S * 0.08f);
+        const sf::Vector2f elbow = wing(root, sd, 1.f, flap, 0.78f);
+        if (form == 1)   // a wyvern's wing is its arm: a claw at the elbow
+            fillShape(t, {elbow, elbow + f * (S * 0.1f) + side * (sd * S * 0.04f), elbow + f * (S * 0.04f) - side * (sd * S * 0.05f)},
+                      withAlpha(edge, 0.95f));
+    }
+    if (form == 1)   // ...and it stands on two legs, tucked under
+        for (float sd : {-1.f, 1.f}) {
+            const sf::Vector2f hip = pos - f * (S * 0.3f) + side * (sd * S * 0.1f);
+            const sf::Vector2f foot = hip - f * (S * 0.2f) + side * (sd * S * 0.18f);
+            draw::line(t, hip, foot, std::max(1.f, S * 0.06f), withAlpha(body, 1.f));
+            for (int c2 = -1; c2 <= 1; ++c2)
+                draw::line(t, foot, foot - f * (S * 0.07f) + side * (static_cast<float>(c2) * S * 0.04f), std::max(1.f, S * 0.025f),
+                           withAlpha(edge, 0.9f));
+        }
+    fillShape(t, {pos + f * (S * 0.3f), pos + side * (S * 0.14f), pos - f * (S * 0.5f), pos - side * (S * 0.14f)}, withAlpha(body, 1.f));
+    if (heads <= 1) {
+        head(pos + f * (S * 0.25f), 0.3f, false);
+    } else {   // several heads on long necks, each bending its own way (a hydra's)
+        const sf::Vector2f keep = hf, base = pos + f * (S * 0.22f);
+        for (int i = 0; i < heads; ++i) {
+            sf::Vector2f nd;
+            if (headDirs) {
+                nd = headDirs[i];
+            } else {
+                const float an = (static_cast<float>(i) - static_cast<float>(heads - 1) * 0.5f) * 0.6f + std::sin(phase * 0.5f + static_cast<float>(i)) * 0.08f;
+                nd = {keep.x * std::cos(an) - keep.y * std::sin(an), keep.x * std::sin(an) + keep.y * std::cos(an)};
+            }
+            const sf::Vector2f bend = base + normalized(f + nd, nd) * (S * 0.4f);   // out of the body first, then toward where it looks
+            draw::line(t, base, bend, S * 0.13f, withAlpha(body, 1.f));
+            draw::disc(t, bend, S * 0.065f, withAlpha(body, 1.f), withAlpha(body, 1.f), {1.f, 1.f}, 10);
+            hf = nd;
+            hside = sf::Vector2f{-nd.y, nd.x};
+            head(bend, 0.38f, false);
+        }
+        hf = keep;
+    }
+}
+
+namespace {
+
 void drawDragon(sf::RenderTarget& t, const CommonWorld::Dragon& d, sf::Color c, float k) {
     const float S = (d.elder ? 46.f : 10.f) * k;   // body length
     const sf::Vector2f f = d.face, side{-f.y, f.x};
@@ -1664,6 +1883,8 @@ void drawLegendCosmetics(sf::RenderTarget& t, RoleMask legend, sf::Vector2f p, f
                           crown + sf::Vector2f{sd * r * 1.05f, -r * 0.6f}}, C(200, 40, 40));
 }
 
+void drawGodLook(sf::RenderTarget& t, RoleMask roles, sf::Vector2f p, float r, float heading, float a);   // (below)
+
 void drawBallIdentity(sf::RenderTarget& t, const BallLook& look, sf::Vector2f pos, float r, float heading,
                       float alpha, bool held) {
     // Layers, inside out, each told apart by shape and place (not only hue -
@@ -1678,6 +1899,28 @@ void drawBallIdentity(sf::RenderTarget& t, const BallLook& look, sf::Vector2f po
         draw::ring(t, pos, r - band - 0.4f, 1.f, withAlpha(theme::bgDeep, 0.35f * alpha));   // seam against the body
     }
     draw::ring(t, pos, r, 1.5f, withAlpha(sf::Color::White, (held ? 0.85f : 0.22f) * alpha));
+    if (look.second != BallRole::Normal) {   // third class = a tilted ring orbiting it in that colour (like Atlas's)
+        BallRole third = BallRole::Normal;
+        for (int i = 0; i < kClassCount && third == BallRole::Normal; ++i) {
+            const BallRole c = classAt(i);
+            if ((look.roles & roleBit(c)) != 0 && c != look.lead && c != look.second) third = c;
+        }
+        if (third != BallRole::Normal) {   // a small orbit of dots, tilted, turning - and a little moon on it
+            const sf::Color tc = lerpColor(roleColor(third), sf::Color::White, 0.15f);
+            const float spin = classClock() * 0.9f, tilt = -0.6f;
+            auto at = [&](float an) {
+                const sf::Vector2f e{std::cos(an) * r * 1.55f, std::sin(an) * r * 0.45f};
+                return pos + sf::Vector2f{e.x * std::cos(tilt) - e.y * std::sin(tilt), e.x * std::sin(tilt) + e.y * std::cos(tilt)};
+            };
+            for (int i = 0; i < 24; ++i) {
+                const float an = static_cast<float>(i) / 24.f * 2.f * kPi + spin;
+                draw::disc(t, at(an), i % 4 == 0 ? 1.9f : 1.4f, withAlpha(tc, alpha), withAlpha(tc, 0.3f * alpha), {1.f, 1.f}, 6);
+            }
+            const sf::Vector2f moon = at(spin * 1.6f);
+            draw::glow(t, moon, std::max(5.f, r * 0.4f), tc, 0.35f * alpha);
+            draw::disc(t, moon, std::max(2.6f, r * 0.18f), withAlpha(lerpColor(tc, sf::Color::White, 0.3f), alpha), withAlpha(tc, alpha), {1.f, 1.f}, 12);
+        }
+    }
     if (look.element != Element::Plain) {
         const sf::Color ec = lerpColor(elementColor(look.element), sf::Color::White, 0.12f);
         const float er = r + 4.f;
@@ -1709,6 +1952,128 @@ void drawBallIdentity(sf::RenderTarget& t, const BallLook& look, sf::Vector2f po
         break;   // a ball ascends in one class at most
     }
     if (look.legend != 0) drawLegendCosmetics(t, look.legend, pos, r, heading, alpha);
+    drawGodLook(t, look.roles, pos, r, heading, alpha);
+}
+
+// A god's ball must look like one (2026-10-06): a divine halo over it in the
+// god's colour, and each god its own big mark.
+void drawGodLook(sf::RenderTarget& t, RoleMask roles, sf::Vector2f p, float r, float heading, float a) {
+    const BallRole gods[] = {BallRole::Astronomer, BallRole::Hermes, BallRole::Odin, BallRole::Thanatos, BallRole::Tiamat, BallRole::Loki, BallRole::Nergal, BallRole::Apolo, BallRole::Ares, BallRole::Artemisa};
+    const float clk = classClock();
+    for (BallRole g : gods) {
+        if ((roles & roleBit(g)) == 0) continue;
+        const sf::Color c = roleColor(g);
+        draw::glow(t, p, r * 2.4f, c, 0.22f * a);
+        {   // the halo: a flattened ring floating over it, with rays
+            const sf::Vector2f h = p + sf::Vector2f{0.f, -r * 1.35f};
+            for (int i = 0; i < 28; ++i) {
+                const float an = static_cast<float>(i) / 28.f * 2.f * kPi + clk * 0.8f;
+                draw::disc(t, h + sf::Vector2f{std::cos(an) * r * 0.7f, std::sin(an) * r * 0.2f}, 1.4f,
+                           withAlpha(lerpColor(c, sf::Color::White, 0.4f), 0.9f * a), withAlpha(c, 0.f), {1.f, 1.f}, 4);
+            }
+            draw::glow(t, h, r * 0.6f, c, 0.3f * a);
+        }
+        const sf::Vector2f d{std::cos(heading), std::sin(heading)}, sd{-d.y, d.x};
+        switch (g) {
+            case BallRole::Astronomer:   // an armillary: two tilted rings turning round it, stars on them
+                for (int ring = 0; ring < 2; ++ring)
+                    for (int i = 0; i < 30; ++i) {
+                        const float an = static_cast<float>(i) / 30.f * 2.f * kPi + clk * (ring ? -0.6f : 0.9f);
+                        const sf::Vector2f e{std::cos(an) * r * 1.55f, std::sin(an) * r * 0.45f};
+                        const float tilt = ring ? 0.7f : -0.7f;
+                        const sf::Vector2f q{e.x * std::cos(tilt) - e.y * std::sin(tilt), e.x * std::sin(tilt) + e.y * std::cos(tilt)};
+                        draw::disc(t, p + q, i % 6 == 0 ? 2.f : 1.f, withAlpha(c, 0.85f * a), withAlpha(c, 0.f), {1.f, 1.f}, 4);
+                    }
+                break;
+            case BallRole::Hermes:   // big golden wings, beating
+                for (int s = -1; s <= 1; s += 2)
+                    for (int f = 0; f < 5; ++f) {
+                        const float flap = std::sin(clk * 10.f) * 0.25f;
+                        const sf::Vector2f root = p + sd * (static_cast<float>(s) * r * 0.6f) - d * (r * 0.1f);
+                        const float len = r * (1.5f - 0.18f * static_cast<float>(f));
+                        const float sweep = 0.35f + 0.22f * static_cast<float>(f) + flap;
+                        const sf::Vector2f dir = sd * (static_cast<float>(s) * std::cos(sweep)) - d * std::sin(sweep);
+                        draw::line(t, root, root + dir * len, 2.5f - 0.3f * static_cast<float>(f), withAlpha(c, 0.9f * a));
+                    }
+                break;
+            case BallRole::Odin: {   // a ring of runes round it, turning
+                draw::ring(t, p, r * 1.6f, 1.2f, withAlpha(c, 0.6f * a));
+                for (int i = 0; i < 8; ++i) {
+                    const float an = clk * 0.5f + static_cast<float>(i) * kPi / 4.f;
+                    const sf::Vector2f q = p + sf::Vector2f{std::cos(an), std::sin(an)} * (r * 1.6f);
+                    draw::line(t, q - sf::Vector2f{0.f, r * 0.18f}, q + sf::Vector2f{0.f, r * 0.18f}, 1.5f, withAlpha(c, 0.9f * a));
+                    draw::line(t, q - sf::Vector2f{0.f, r * 0.08f}, q + sf::Vector2f{r * 0.12f, -r * 0.16f}, 1.5f, withAlpha(c, 0.9f * a));
+                }
+                break;
+            }
+            case BallRole::Thanatos: {   // a hood of shadow over it, and the scythe behind
+                draw::ring(t, p, r * 1.15f, r * 0.35f, sf::Color(20, 10, 30, static_cast<sf::Uint8>(200 * a)), kPi * 1.05f, kPi * 1.95f, 20);
+                const sf::Vector2f haft0 = p - d * (r * 1.2f) + sd * (r * 0.9f), haft1 = p - d * (r * 1.2f) - sd * (r * 1.3f);
+                draw::line(t, haft0, haft1, 2.f, withAlpha(sf::Color(120, 100, 90), 0.9f * a));
+                draw::ring(t, haft0 + d * (r * 0.6f), r * 0.65f, 2.5f, withAlpha(c, 0.9f * a), std::atan2(-d.y, -d.x) - 0.2f,
+                           std::atan2(-d.y, -d.x) + 1.6f, 14);
+                break;
+            }
+            case BallRole::Tiamat: break;   // (her mount is drawn under the ball: worldGods2)
+            case BallRole::Apolo:   // a crown of sun rays, turning
+                for (int i = 0; i < 12; ++i) {
+                    const float an = static_cast<float>(i) * kPi / 6.f + clk * 0.4f;
+                    const float len = r * (i % 2 ? 0.45f : 0.7f);
+                    draw::line(t, p + sf::Vector2f{std::cos(an), std::sin(an)} * (r * 1.15f), p + sf::Vector2f{std::cos(an), std::sin(an)} * (r * 1.15f + len),
+                               2.f, withAlpha(sf::Color(255, 220, 120), 0.85f * a));
+                }
+                break;
+            case BallRole::Artemisa: {   // a silver bow slung behind it, and a little crescent moon over it
+                const sf::Color silver(220, 228, 245);
+                const float tilt = -0.6f;
+                const sf::Vector2f bd{std::cos(tilt), std::sin(tilt)}, bs{-bd.y, bd.x};
+                sf::Vector2f prev;
+                for (int i = 0; i <= 16; ++i) {   // the bow: an arc
+                    const float u = static_cast<float>(i) / 16.f * 2.f - 1.f;
+                    const sf::Vector2f q = p - bs * (r * 0.55f) + bd * (u * r * 1.5f) - bs * (r * 0.5f * (1.f - u * u));
+                    if (i > 0) draw::line(t, prev, q, 2.f, withAlpha(silver, 0.9f * a));
+                    prev = q;
+                }
+                draw::line(t, p - bs * (r * 0.55f) - bd * (r * 1.5f), p - bs * (r * 0.55f) + bd * (r * 1.5f), 0.8f, withAlpha(silver, 0.6f * a));   // its string
+                const sf::Vector2f mp = p + sf::Vector2f{0.f, -r * 1.45f + std::sin(clk * 2.f) * r * 0.06f};
+                draw::glow(t, mp, r * 0.5f, silver, 0.35f * a);
+                crescent(t, mp, r * 0.28f, silver, sf::Color(14, 18, 34), a);
+                break;
+            }
+            case BallRole::Ares: {   // a Spartan's crest: a red plume arching over it, front to back
+                const sf::Color plume(220, 50, 40);
+                for (int i = 0; i < 14; ++i) {
+                    const float u = static_cast<float>(i) / 13.f;
+                    const float an = kPi * (1.1f + 0.8f * u);   // over the top
+                    const sf::Vector2f q = p + sf::Vector2f{std::cos(an) * r * 1.05f, std::sin(an) * r * 1.25f};
+                    const float sway = std::sin(clk * 6.f + u * 4.f) * r * 0.05f;
+                    draw::line(t, q, q + sf::Vector2f{sway, -r * (0.25f + 0.2f * std::sin(u * kPi))}, 2.2f, withAlpha(plume, 0.9f * a));
+                }
+                break;
+            }
+            case BallRole::Nergal:   // a sickly shroud, and flies buzzing round it
+                draw::glow(t, p, r * 2.f, sf::Color(70, 110, 40), 0.3f * a);
+                for (int i = 0; i < 5; ++i) {
+                    const float an = clk * (3.f + static_cast<float>(i) * 0.7f) + static_cast<float>(i) * 1.3f;
+                    const sf::Vector2f q = p + sf::Vector2f{std::cos(an) * r * (1.3f + 0.2f * std::sin(clk * 5.f + static_cast<float>(i))),
+                                                            std::sin(an * 1.3f) * r * 1.1f};
+                    draw::disc(t, q, 1.6f, sf::Color(30, 30, 25, static_cast<sf::Uint8>(230 * a)), sf::Color(30, 30, 25, 0), {1.f, 1.f}, 5);
+                }
+                break;
+            case BallRole::Loki:   // a horned helm: two long golden horns curling up off it
+                for (float s : {-1.f, 1.f}) {
+                    sf::Vector2f q = p + sf::Vector2f{s * r * 0.55f, -r * 0.6f};
+                    for (int i = 0; i < 6; ++i) {
+                        const float v = static_cast<float>(i) / 5.f;
+                        const sf::Vector2f nq = q + sf::Vector2f{s * r * (0.32f - 0.3f * v), -r * (0.18f + 0.12f * v)};
+                        draw::line(t, q, nq, std::max(1.f, r * 0.22f * (1.f - 0.75f * v)), withAlpha(sf::Color(235, 200, 90), 0.95f * a));
+                        q = nq;
+                    }
+                }
+                break;
+            default: break;
+        }
+    }
 }
 
 void drawClassPulse(sf::RenderTarget& t, BallRole lead, bool ascended, sf::Vector2f pos, float r, float k) {
@@ -1749,10 +2114,1236 @@ void drawClassMark(sf::RenderTarget& t, BallRole role, sf::Vector2f pos, float r
         case BallRole::Jester:   markJester(t, pos, r, heading, alpha); break;
         case BallRole::Slinger:  markSlinger(t, pos, r, heading, alpha); break;
         case BallRole::Alchemist: markAlchemist(t, pos, r, heading, alpha); break;
+        case BallRole::Astronomer: markAstronomer(t, pos, r, heading, alpha); break;
+        case BallRole::Hermes: markHermes(t, pos, r, heading, alpha); break;
+        case BallRole::Odin: markOdin(t, pos, r, heading, alpha); break;
+        case BallRole::Thanatos: markThanatos(t, pos, r, heading, alpha); break;
+        case BallRole::Tiamat: markTiamat(t, pos, r, heading, alpha); break;
+        case BallRole::Loki: markLoki(t, pos, r, heading, alpha); break;
+        case BallRole::Nergal: markNergal(t, pos, r, heading, alpha); break;
+        case BallRole::Apolo: markApolo(t, pos, r, heading, alpha); break;
+        case BallRole::Ares: markAres(t, pos, r, heading, alpha); break;
+        case BallRole::Artemisa: markArtemisa(t, pos, r, heading, alpha); break;
+    }
+}
+
+// ==================================================================== Astronomer
+// Its planets (2026-10-06): each kind its own look, a faint orbit, the belt's
+// rocks, Saturn's flung rings and Jupiter's gas.
+void worldPlanets(sf::RenderTarget& t, const World& world) {
+    const AstronomerWorld& aw = world.classWorld().astronomer;
+    if (aw.planets.empty() && aw.rocks.empty()) return;
+    const float k = world.arenaScale();
+    const float clk = classClock();
+    for (const auto& f : aw.puffs) {   // Jupiter's gas
+        const float a = clampf(f.life / f.maxLife, 0.f, 1.f);
+        draw::glow(t, f.pos, f.r * 1.3f, sf::Color(214, 170, 120), 0.22f * a);
+    }
+    for (const auto& h : aw.halos) {   // Saturn's rings round the core: two tilted bands of gold dust, turning
+        const sf::Vector2f c = world.core().pos;
+        const float a = clampf(h.life / 0.5f, 0.f, 1.f) * clampf((h.maxLife - h.life) / 0.4f, 0.f, 1.f);
+        for (int band = 0; band < 2; ++band) {
+            const float R = h.r * (1.f + 0.07f * static_cast<float>(band));
+            for (int i = 0; i < 90; ++i) {
+                const float an = h.spin * (band ? -0.7f : 1.f) + static_cast<float>(i) / 90.f * 2.f * kPi;
+                draw::disc(t, c + sf::Vector2f{std::cos(an), std::sin(an)} * R, (1.2f + 0.8f * hash01(static_cast<float>(i + band * 90))) * k,
+                           sf::Color(240, 220, 160, static_cast<sf::Uint8>(200 * a)), sf::Color(240, 220, 160, 0), {1.f, 1.f}, 4);
+            }
+        }
+        draw::ring(t, c, h.r, 6.f * k, sf::Color(232, 206, 140, static_cast<sf::Uint8>(40 * a)));
+    }
+    for (const auto& tr : aw.tritons) {   // Triton: a pale icy moon trailing frost
+        const float a = clampf(tr.life / 0.5f, 0.f, 1.f);
+        for (int i = 1; i < tr.trailN; ++i)
+            draw::line(t, tr.trail[i - 1], tr.trail[i], tr.r * (1.4f - 0.12f * static_cast<float>(i)),
+                       sf::Color(180, 220, 255, static_cast<sf::Uint8>(120 * a * (1.f - static_cast<float>(i) / 10.f))));
+        draw::glow(t, tr.pos, tr.r * 3.f, sf::Color(150, 200, 255), 0.5f * a);
+        draw::disc(t, tr.pos, tr.r, sf::Color(225, 240, 255, static_cast<sf::Uint8>(255 * a)), sf::Color(140, 180, 230, static_cast<sf::Uint8>(255 * a)),
+                   {1.f, 1.f}, 14);
+    }
+    for (const auto& f : aw.flares) {   // Mercury's burning trail: embers
+        const float a = clampf(f.life / cfg::planet::flareLife, 0.f, 1.f);
+        draw::glow(t, f.pos, f.r * (0.8f + 0.6f * (1.f - a)), sf::Color(255, 170, 70), 0.3f * a);
+    }
+    for (const auto& st : aw.storms) {
+        const float a = clampf(st.life / 0.5f, 0.f, 1.f) * clampf((st.maxLife - st.life) / 0.3f, 0.f, 1.f);
+        if (st.spot) {   // the Great Red Spot: a flattened red spiral, turning
+            draw::glow(t, st.pos, st.r, sf::Color(200, 80, 60), 0.22f * a);
+            for (int arm = 0; arm < 3; ++arm)
+                for (int i = 0; i < 26; ++i) {
+                    const float u = static_cast<float>(i) / 25.f;
+                    const float an = st.spin + static_cast<float>(arm) * 2.094f + u * 4.f;
+                    const sf::Vector2f q{std::cos(an) * st.r * u, std::sin(an) * st.r * u * 0.6f};
+                    draw::disc(t, st.pos + q, (1.5f + 3.f * (1.f - u)) * k,
+                               sf::Color(230, 120, 90, static_cast<sf::Uint8>(200 * a * (1.f - 0.6f * u))),
+                               sf::Color(230, 120, 90, 0), {1.f, 1.f}, 6);
+                }
+        } else {   // Venus's acid storm: sulphur-green wisps swirling round the planet
+            draw::glow(t, st.pos, st.r, sf::Color(200, 220, 90), 0.18f * a);
+            for (int i = 0; i < 10; ++i) {
+                const float an = st.spin * (i % 2 ? 1.f : -0.7f) + static_cast<float>(i) * 0.63f;
+                const float rr = st.r * (0.45f + 0.5f * hash01(static_cast<float>(i) * 3.7f));
+                const sf::Vector2f q{std::cos(an) * rr, std::sin(an) * rr};
+                draw::line(t, st.pos + q, st.pos + q + sf::Vector2f{-q.y, q.x} * 0.25f, 3.f * k,
+                           sf::Color(215, 230, 110, static_cast<sf::Uint8>(150 * a)));
+            }
+        }
+    }
+    for (const auto& q : aw.projs) {
+        using Proj = AstronomerWorld::Proj;
+        switch (q.kind) {
+            case Proj::Rocket: {   // a little rocket with a flame
+                const sf::Vector2f d = normalized(q.vel, {1.f, 0.f}), sd{-d.y, d.x};
+                draw::line(t, q.pos - d * (14.f * k), q.pos - d * (5.f * k), 4.f * k, sf::Color(255, 160, 60, 200));   // flame
+                draw::glow(t, q.pos - d * (8.f * k), 7.f * k, sf::Color(255, 180, 80), 0.5f);
+                draw::line(t, q.pos - d * (5.f * k), q.pos + d * (5.f * k), 4.f * k, sf::Color(230, 235, 245));        // body
+                draw::line(t, q.pos - d * (5.f * k) + sd * (3.f * k), q.pos - d * (5.f * k) - sd * (3.f * k), 1.5f * k,
+                           sf::Color(220, 80, 70));   // fins
+                break;
+            }
+            case Proj::Moonlet:   // Phobos / Deimos: lumpy red-grey rocks
+                draw::polygon(t, q.pos, 4.5f * k, 6, q.t * 6.f, sf::Color(170, 130, 115), sf::Color(110, 80, 70));
+                draw::glow(t, q.pos, 9.f * k, sf::Color(255, 120, 70), 0.25f);
+                break;
+            case Proj::Meteor: {   // a rock with a fiery tail
+                const sf::Vector2f d = normalized(q.to - q.from, {0.f, 1.f});
+                draw::line(t, q.pos - d * (26.f * k), q.pos, 5.f * k, sf::Color(255, 140, 60, 140));
+                draw::polygon(t, q.pos, 6.f * k, 5, q.t * 9.f, sf::Color(160, 140, 115), sf::Color(100, 85, 70));
+                break;
+            }
+            case Proj::Star: {   // a falling star: a long bright streak and a twinkle
+                const sf::Vector2f d = normalized(q.to - q.from, {0.f, 1.f});
+                draw::line(t, q.pos - d * (60.f * k), q.pos, 2.f * k, sf::Color(255, 240, 190, 120));
+                draw::glow(t, q.pos, 12.f * k, sf::Color(255, 236, 170), 0.8f);
+                draw::polygon(t, q.pos, 5.f * k, 4, q.t * 8.f, sf::Color::White, sf::Color(255, 236, 170));
+                break;
+            }
+        }
+    }
+    for (const auto& bm : aw.booms) {   // where they landed - each its own blast
+        const float u = 1.f - clampf(bm.life / bm.maxLife, 0.f, 1.f);
+        const float a = 1.f - u;
+        if (bm.kind == 0) {   // rocket: an orange fireball and its ring
+            draw::glow(t, bm.pos, bm.r * (0.6f + 0.6f * u), sf::Color(255, 150, 60), 0.6f * a);
+            draw::ring(t, bm.pos, bm.r * (0.4f + 0.8f * u), 2.f * k, sf::Color(255, 210, 140, static_cast<sf::Uint8>(200 * a)));
+        } else if (bm.kind == 1) {   // meteor: a crater of dust and sparks
+            draw::ring(t, bm.pos, bm.r * (0.5f + 0.7f * u), 4.f * k, sf::Color(170, 140, 110, static_cast<sf::Uint8>(160 * a)));
+            draw::glow(t, bm.pos, bm.r * 0.7f, sf::Color(255, 140, 60), 0.4f * a);
+        } else {   // star: rays of light
+            for (int i = 0; i < 8; ++i) {
+                const float an = static_cast<float>(i) * kPi / 4.f;
+                const sf::Vector2f d{std::cos(an), std::sin(an)};
+                draw::line(t, bm.pos + d * (bm.r * 0.2f), bm.pos + d * (bm.r * (0.6f + 0.8f * u)), 2.f * k,
+                           sf::Color(255, 240, 190, static_cast<sf::Uint8>(220 * a)));
+            }
+            draw::glow(t, bm.pos, bm.r, sf::Color(255, 236, 170), 0.5f * a);
+        }
+    }
+    // the orbits, barely there
+    std::vector<int> seen;
+    for (const auto& pl : aw.planets) {
+        const int ki = static_cast<int>(pl.kind);
+        if (std::find(seen.begin(), seen.end(), ki) != seen.end()) continue;
+        seen.push_back(ki);
+        for (int i = 0; i < 64; ++i) {
+            const sf::Vector2f q = world.planetOrbit(cfg::planet::orbit[ki], static_cast<float>(i) / 64.f * 2.f * kPi);
+            draw::disc(t, q, 0.9f * k, white(0.07f), white(0.f), {1.f, 1.f}, 4);
+        }
+    }
+    for (const auto& r : aw.rocks) {   // the belt
+        if (r.regrow > 0.f) continue;
+        const float rr = 6.f * k * r.size;
+        draw::polygon(t, r.pos, rr, 5 + static_cast<int>(r.size * 3.f) % 3, r.ang * 3.f + r.size * 7.f,
+                      sf::Color(150, 138, 120), sf::Color(95, 86, 74));
+    }
+    for (const auto& pl : aw.planets) {
+        const float r = pl.r;
+        const sf::Vector2f p = pl.pos;
+        const float a = pl.bonus ? 0.75f : 1.f;
+        auto body = [&](sf::Color c, sf::Color edge) {
+            draw::glow(t, p, r * 2.f, c, 0.18f * a);
+            draw::disc(t, p, r, withAlpha(c, a), withAlpha(edge, a), {1.f, 1.f}, 24);
+            draw::disc(t, p + sf::Vector2f{-r * 0.3f, -r * 0.3f}, r * 0.45f, withAlpha(sf::Color::White, 0.18f * a),
+                       withAlpha(sf::Color::White, 0.f), {1.f, 1.f}, 12);   // a highlight
+        };
+        switch (pl.kind) {
+            case PlanetKind::Mercury:
+                body(sf::Color(182, 176, 168), sf::Color(110, 104, 98));
+                if (pl.boostT > 0.f) draw::line(t, pl.prev - (p - pl.prev) * 3.f, p, r * 1.2f, sf::Color(220, 220, 230, 90));
+                break;
+            case PlanetKind::Moon:
+                body(sf::Color(214, 214, 220), sf::Color(140, 140, 150));
+                draw::disc(t, p + sf::Vector2f{r * 0.3f, r * 0.2f}, r * 0.3f, sf::Color(160, 160, 170, 150), sf::Color(160, 160, 170, 0), {1.f, 1.f}, 8);
+                break;
+            case PlanetKind::Venus:
+                draw::glow(t, p, r * 2.6f, sf::Color(240, 210, 120), 0.3f * a);   // its haze
+                body(sf::Color(240, 214, 150), sf::Color(190, 150, 80));
+                break;
+            case PlanetKind::Earth:
+                body(sf::Color(76, 140, 230), sf::Color(30, 70, 150));
+                for (int i = 0; i < 3; ++i) {   // continents drifting by
+                    const float an = clk * 0.6f + static_cast<float>(i) * 2.1f;
+                    const sf::Vector2f q{std::cos(an) * r * 0.45f, std::sin(an * 1.3f) * r * 0.35f};
+                    draw::disc(t, p + q, r * 0.32f, sf::Color(96, 176, 92, static_cast<sf::Uint8>(220 * a)),
+                               sf::Color(70, 140, 70, 0), {1.f, 1.f}, 10);
+                }
+                draw::ring(t, p, r * 1.08f, 1.2f * k, sf::Color(170, 210, 255, static_cast<sf::Uint8>(110 * a)));   // the air
+                break;
+            case PlanetKind::Mars: {
+                body(sf::Color(214, 96, 62), sf::Color(130, 46, 30));
+                draw::disc(t, p + sf::Vector2f{r * 0.25f, r * 0.15f}, r * 0.35f, sf::Color(150, 60, 40, 160), sf::Color(150, 60, 40, 0), {1.f, 1.f}, 10);
+                for (int i = pl.moonsOut; i < 2; ++i) {   // Phobos and Deimos, at home
+                    const float an = clk * (2.4f - 0.8f * static_cast<float>(i)) + static_cast<float>(i) * kPi;
+                    draw::polygon(t, p + sf::Vector2f{std::cos(an), std::sin(an) * 0.6f} * (r * (1.7f + 0.4f * static_cast<float>(i))),
+                                  3.f * k, 6, an, sf::Color(170, 130, 115), sf::Color(110, 80, 70));
+                }
+                break;
+            }
+            case PlanetKind::Jupiter:
+                body(sf::Color(222, 190, 150), sf::Color(150, 110, 80));
+                for (int i = -2; i <= 2; ++i) {   // its bands
+                    const float y = static_cast<float>(i) * r * 0.32f;
+                    const float hw = std::sqrt(std::max(0.f, r * r - y * y)) * 0.92f;
+                    draw::line(t, p + sf::Vector2f{-hw, y}, p + sf::Vector2f{hw, y}, r * 0.12f,
+                               i % 2 == 0 ? sf::Color(180, 130, 90, 140) : sf::Color(240, 220, 190, 110));
+                }
+                draw::disc(t, p + sf::Vector2f{r * 0.35f, r * 0.3f}, r * 0.2f, sf::Color(200, 90, 70, 220), sf::Color(200, 90, 70, 60),
+                           {1.4f, 1.f}, 10);   // the Great Red Spot
+                break;
+            case PlanetKind::Saturn: {
+                body(sf::Color(232, 206, 146), sf::Color(170, 140, 80));
+                if (pl.rings) {   // tilted rings: flattened dotted ellipses, turning
+                    for (int ring = 0; ring < 2; ++ring) {
+                        const float R = r * (1.55f + 0.3f * static_cast<float>(ring));
+                        for (int i = 0; i < 40; ++i) {
+                            const float an = static_cast<float>(i) / 40.f * 2.f * kPi + clk * 0.8f;
+                            const sf::Vector2f e{std::cos(an) * R, std::sin(an) * R * 0.32f};
+                            const sf::Vector2f q{e.x * 0.94f - e.y * 0.34f, e.x * 0.34f + e.y * 0.94f};
+                            if (e.y < 0.f && length(q) < r) continue;   // behind the planet
+                            draw::disc(t, p + q, 1.3f * k, sf::Color(240, 222, 170, static_cast<sf::Uint8>(200 * a)),
+                                       sf::Color(240, 222, 170, 0), {1.f, 1.f}, 4);
+                        }
+                    }
+                }
+                break;
+            }
+            case PlanetKind::Neptune:
+                draw::glow(t, p, r * 2.4f, sf::Color(90, 140, 255), 0.25f * a);
+                body(sf::Color(80, 122, 236), sf::Color(36, 60, 160));
+                break;
+        }
+        if (pl.hitT > 0.2f) draw::ring(t, p, r * 1.5f, 1.5f * k, sf::Color(255, 255, 255, 90));   // just hit something
+    }
+}
+
+// ==================================================================== Hermes / Odin
+void worldGods(sf::RenderTarget& t, const World& world) {
+    const float k = world.arenaScale();
+    const float clk = classClock();
+    const HermesWorld& hw = world.classWorld().hermes;
+    const OdinWorld& ow = world.classWorld().odin;
+    const sf::Color gold = theme::classHermes, rune = theme::classOdin;
+    for (const auto& f : hw.fx) {
+        const float a = clampf(f.life / f.maxLife, 0.f, 1.f);
+        if (f.kind == 0) {   // Messenger: a golden streak there, and afterimages along it
+            draw::line(t, f.a, f.b, 3.f * k, withAlpha(gold, 0.6f * a));
+            for (int i = 1; i <= 4; ++i)
+                draw::glow(t, f.a + (f.b - f.a) * (static_cast<float>(i) / 5.f), 10.f * k, gold, 0.35f * a);
+        } else if (f.kind == 1) {   // Caduceus: two serpents of light winding round each other
+            const sf::Vector2f d = f.b - f.a, sd = normalized(sf::Vector2f{-d.y, d.x}, {0.f, 1.f});
+            for (int s = 0; s < 2; ++s) {
+                sf::Vector2f prev = f.a;
+                for (int i = 1; i <= 16; ++i) {
+                    const float u = static_cast<float>(i) / 16.f;
+                    const float w = std::sin(u * 3.f * kPi + static_cast<float>(s) * kPi) * 9.f * k * std::sin(u * kPi);
+                    const sf::Vector2f q = f.a + d * u + sd * w;
+                    draw::line(t, prev, q, 2.f * k, withAlpha(s ? gold : sf::Color(140, 230, 150), 0.85f * a));
+                    prev = q;
+                }
+            }
+        } else if (f.kind == 3) {   // the message delivered: a golden wave over the whole arena
+            const float u = 1.f - a;
+            draw::ring(t, f.a, f.r * u, 6.f * k, withAlpha(gold, 0.7f * a));
+            draw::ring(t, f.a, f.r * u * 0.92f, 2.f * k, white(0.5f * a));
+            draw::glow(t, f.a, f.r * 0.25f * (1.f - u), gold, 0.5f * a);
+        } else {   // a sonic boom: a thin white ring and a pale shock
+            const float u = 1.f - a;
+            draw::ring(t, f.a, f.r * (0.3f + 0.7f * u), 2.f * k, white(0.7f * a));
+            draw::glow(t, f.a, f.r * 0.6f, gold, 0.25f * a);
+        }
+    }
+    for (const Ball& b : world.balls()) {
+        if (b.hasRole(BallRole::Hermes) && b.cls.hermes.bounces > 0) {   // the message it carries: a halo that's full when it's due
+            const float c = clampf(static_cast<float>(b.cls.hermes.bounces) / static_cast<float>(cfg::hermes::deliverAfter), 0.f, 1.f);
+            draw::ring(t, b.pos, b.radius + (4.f + 10.f * c) * k, (1.f + 2.f * c) * k, withAlpha(gold, 0.3f + 0.5f * c));
+            draw::glow(t, b.pos, b.radius * (1.5f + 2.f * c), gold, 0.15f + 0.3f * c);
+        }
+        if (b.cls.hermes.golden) {   // Petasos: golden, wings of light
+            draw::glow(t, b.pos, b.radius * 3.f, gold, 0.5f);
+            draw::ring(t, b.pos, b.radius + 3.f * k, 2.f * k, withAlpha(gold, 0.9f));
+        }
+        if (b.cls.hermes.fast && b.mods.cls.hermes.quicksilver > 0.f) {   // Quicksilver: ripples of silver
+            for (int i = 0; i < 3; ++i) {
+                const float u = std::fmod(clk * 1.2f + static_cast<float>(i) / 3.f, 1.f);
+                draw::ring(t, b.pos, b.radius * (1.5f + 4.f * u), 1.5f * k, sf::Color(220, 225, 240, static_cast<sf::Uint8>(120 * (1.f - u))));
+            }
+        }
+        const OdinMods& om = b.mods.cls.odin;
+        if (b.cls.odin.circle > 0.f) {   // the all-father casts everything: a rune circle flares under it
+            const float c = b.cls.odin.circle, R = b.radius * (2.2f + 1.5f * (1.f - c));
+            draw::glow(t, b.pos, R * 1.3f, rune, 0.35f * c);
+            draw::ring(t, b.pos, R, 2.f * k, withAlpha(rune, 0.8f * c));
+            draw::ring(t, b.pos, R * 0.8f, 1.f * k, withAlpha(rune, 0.6f * c));
+            for (int tri = 0; tri < 2; ++tri)
+                draw::polygonOutline(t, b.pos, R * 0.76f, 3, clk * 0.8f + static_cast<float>(tri) * kPi, 1.5f * k, withAlpha(rune, 0.7f * c));
+        }
+        if (om.draupnir > 0.f) {   // Draupnir: a heavy gold ring turning round it, tilted...
+            const sf::Color gold(255, 205, 90), deep(190, 130, 40);
+            const auto ringAt = [&](sf::Vector2f c, float R, float tilt, float spin, float th, float a) {
+                const sf::Vector2f ax{std::cos(spin), std::sin(spin)}, ay{-ax.y, ax.x};
+                constexpr int kSeg = 20;
+                for (int s = 0; s < kSeg; ++s) {
+                    const float a0 = static_cast<float>(s) * 2.f * kPi / kSeg, a1 = static_cast<float>(s + 1) * 2.f * kPi / kSeg;
+                    const sf::Vector2f p0 = c + ax * (std::cos(a0) * R) + ay * (std::sin(a0) * R * tilt);
+                    const sf::Vector2f p1 = c + ax * (std::cos(a1) * R) + ay * (std::sin(a1) * R * tilt);
+                    const bool front = std::sin(a0) > 0.f;   // the near half bright, the far half in shadow
+                    draw::line(t, p0, p1, th, withAlpha(front ? gold : deep, a * (front ? 0.95f : 0.6f)));
+                }
+            };
+            const float spin = clk * 0.6f;
+            draw::glow(t, b.pos, b.radius * 2.2f, gold, 0.18f);
+            ringAt(b.pos, b.radius * 1.65f, 0.38f + 0.08f * std::sin(clk * 1.3f), spin, 3.f * k, 1.f);
+            const float gl = 0.5f + 0.5f * std::sin(clk * 2.f);   // a glint running round it
+            draw::glow(t, b.pos + sf::Vector2f{std::cos(spin), std::sin(spin)} * (b.radius * 1.65f), 7.f * k, sf::Color(255, 245, 210), 0.5f * gl);
+            if (const float c = b.cls.odin.circle; c > 0.f) {   // ...and every volley it drops eight rings like itself, flung out
+                const float u = 1.f - c;
+                for (int i = 0; i < 8; ++i) {
+                    const float an = static_cast<float>(i) * kPi * 0.25f + spin;
+                    const sf::Vector2f q = b.pos + sf::Vector2f{std::cos(an), std::sin(an)} * (b.radius * (1.6f + 4.5f * u));
+                    ringAt(q, b.radius * (0.55f + 0.2f * u), 0.4f, an + clk * 3.f, 2.f * k, c);
+                    draw::glow(t, q, 9.f * k, gold, 0.35f * c);
+                }
+            }
+        }
+        for (int i = 0; i < 2; ++i) {   // the ravens: Huginn (dark), Muninn (pale)
+            if ((i == 0 && om.huginn <= 0.f) || (i == 1 && om.muninn <= 0.f)) continue;
+            const sf::Vector2f q = b.cls.odin.raven[i];
+            const float flap = std::sin(clk * 14.f + static_cast<float>(i) * 2.f) * 0.5f;
+            const sf::Color body = i == 0 ? sf::Color(40, 44, 60) : sf::Color(200, 205, 220);
+            const float s = 7.f * k;
+            draw::line(t, q, q + sf::Vector2f{-s, -s * (0.4f + flap)}, 2.f * k, body);
+            draw::line(t, q, q + sf::Vector2f{s, -s * (0.4f + flap)}, 2.f * k, body);
+            draw::disc(t, q, 2.2f * k, body, body, {1.f, 1.f}, 6);
+            if (b.cls.odin.ravenFlash[i] > 0.f) draw::glow(t, q, 16.f * k, rune, 0.6f * b.cls.odin.ravenFlash[i]);
+        }
+    }
+    for (const auto& bl : ow.blasts) {   // Muninn: a bolt from the raven, an arcane burst on the pack
+        const float a = clampf(bl.life / bl.maxLife, 0.f, 1.f), u = 1.f - a;
+        draw::line(t, bl.from, bl.pos, 2.f * k, withAlpha(rune, 0.6f * a));
+        draw::glow(t, bl.pos, bl.r * (0.6f + 0.5f * u), rune, 0.45f * a);
+        draw::ring(t, bl.pos, bl.r * (0.3f + 0.7f * u), 3.f * k, withAlpha(sf::Color(200, 240, 255), 0.8f * a));
+        draw::polygonOutline(t, bl.pos, bl.r * 0.6f, 6, u * 2.f, 1.5f * k, withAlpha(rune, 0.7f * a));
+    }
+    for (const auto& s : ow.spears) {   // Gungnir: a streak of light, a dark shaft lit with runes, a leaf blade of gold
+        if (s.delay > 0.f) continue;   // (still in its hand)
+        const sf::Vector2f d = normalized(s.back ? s.from - s.to : s.to - s.from, {1.f, 0.f}), sd{-d.y, d.x};
+        const sf::Color gold(255, 214, 110), white(255, 248, 225), ash(70, 58, 52);
+        const sf::Vector2f tip = s.pos;
+        // its path behind it: a tapering streak (only as long as it has flown)
+        const float flown = length(s.pos - (s.back ? s.to : s.from));
+        const float streak = std::min(flown, 220.f * k);
+        constexpr int kSeg = 8;
+        for (int i = 0; i < kSeg; ++i) {
+            const float u0 = static_cast<float>(i) / kSeg, u1 = static_cast<float>(i + 1) / kSeg;
+            const float a = 1.f - u0;
+            draw::line(t, tip - d * (streak * u0), tip - d * (streak * u1), (6.f * a + 1.f) * k, withAlpha(gold, 0.35f * a * a));
+        }
+        draw::line(t, tip - d * (streak * 0.6f), tip, 1.5f * k, withAlpha(white, 0.5f));
+        // the shaft: dark ash, three runes glowing along it
+        const sf::Vector2f neck = tip - d * (20.f * k), butt = tip - d * (95.f * k);
+        draw::line(t, butt, neck, 3.5f * k, ash);
+        draw::line(t, butt, neck, 1.2f * k, withAlpha(sf::Color(130, 110, 95), 0.8f));
+        for (int i = 0; i < 3; ++i) {
+            const sf::Vector2f q = neck - d * ((18.f + 20.f * static_cast<float>(i)) * k);
+            draw::glow(t, q, 7.f * k, rune, 0.55f);
+            draw::line(t, q - sd * (3.f * k) - d * (2.f * k), q + sd * (3.f * k) + d * (2.f * k), 1.5f * k, withAlpha(sf::Color(200, 240, 255), 0.9f));
+        }
+        // the crossguard and the blade: a long gold leaf with a white edge down the middle
+        draw::line(t, neck - sd * (7.f * k), neck + sd * (7.f * k), 3.f * k, gold);
+        const sf::Vector2f mid = neck + d * (7.f * k);
+        fillShape(t, {neck, mid + sd * (5.5f * k), tip + d * (6.f * k), mid - sd * (5.5f * k)}, gold);
+        draw::line(t, neck, tip + d * (4.f * k), 1.2f * k, white);
+        draw::glow(t, tip, 26.f * k, gold, 0.5f);
+        draw::glow(t, tip, 10.f * k, white, 0.6f);
+    }
+}
+
+void worldGods2(sf::RenderTarget& t, const World& world) {
+    const float k = world.arenaScale();
+    const float clk = classClock();
+    const sf::Color violet = theme::classThanatos, fire = theme::classTiamat;
+    for (const auto& f : world.classWorld().thanatos.fx) {
+        const float a = clampf(f.life / f.maxLife, 0.f, 1.f);
+        switch (f.kind) {
+            case 0:   // a blink: a shadow streak and three fading afterimages
+                draw::line(t, f.a, f.b, 4.f * k, sf::Color(40, 20, 60, static_cast<sf::Uint8>(160 * a)));
+                for (int i = 1; i <= 3; ++i)
+                    draw::disc(t, f.a + (f.b - f.a) * (static_cast<float>(i) / 4.f), f.r * 0.8f, withAlpha(violet, 0.3f * a),
+                               withAlpha(violet, 0.f), {1.f, 1.f}, 12);
+                break;
+            case 1: {   // a stab: a quick bright slash on the mark
+                const sf::Vector2f dir = normalized(f.b - f.a, {1.f, 0.f}), sd{-dir.y, dir.x};
+                const sf::Vector2f c = f.b - dir * (f.r * 0.3f);
+                draw::line(t, c - sd * (f.r * 0.9f) - dir * (f.r * 0.3f), c + sd * (f.r * 0.9f) + dir * (f.r * 0.3f), 2.5f * k,
+                           sf::Color(255, 220, 255, static_cast<sf::Uint8>(230 * a)));
+                break;
+            }
+            case 2:   // a nova / an execution: a violet ring and a dark core
+                draw::ring(t, f.a, f.r * (1.f - 0.5f * a), 3.f * k, withAlpha(violet, 0.8f * a));
+                draw::glow(t, f.a, f.r * 0.8f, sf::Color(60, 20, 90), 0.5f * a);
+                break;
+            default:   // a cut: a thin pale line along the way
+                draw::line(t, f.a, f.b, 1.5f * k, sf::Color(230, 200, 255, static_cast<sf::Uint8>(200 * a)));
+                break;
+        }
+    }
+    for (const Ball& b : world.balls()) {   // Thanatos's dagger: in flight, bouncing; the marks it hit, till it blinks through them
+        if (!b.hasRole(BallRole::Thanatos) || b.cls.thanatos.chain.empty()) continue;
+        const ThanatosState& st = b.cls.thanatos;
+        const int n = static_cast<int>(st.chainPos.size());
+        const int hit = st.hop >= 0 ? n : n - 1;   // (in flight: the last one isn't hit yet)
+        for (int i = std::max(0, st.hop); i < hit; ++i) {
+            const sf::Vector2f q = st.chainPos[static_cast<std::size_t>(i)];
+            draw::ring(t, q, 11.f * k, 2.f * k, withAlpha(violet, 0.8f));
+            draw::glow(t, q, 16.f * k, violet, 0.35f);
+            if (i + 1 < hit) draw::line(t, q, st.chainPos[static_cast<std::size_t>(i + 1)], 1.f * k, withAlpha(violet, 0.3f));
+        }
+        if (st.hop >= 0) continue;
+        const sf::Vector2f dir = normalized(st.daggerPos - st.daggerFrom, {1.f, 0.f}), sd{-dir.y, dir.x};
+        const sf::Vector2f tip = st.daggerPos;
+        draw::line(t, st.daggerFrom + (tip - st.daggerFrom) * 0.4f, tip, 1.5f * k, withAlpha(violet, 0.35f));   // its wake
+        fillShape(t, {tip, tip - dir * (9.f * k) + sd * (2.5f * k), tip - dir * (9.f * k) - sd * (2.5f * k)}, sf::Color(235, 220, 255));   // blade
+        draw::line(t, tip - dir * (9.f * k) + sd * (4.f * k), tip - dir * (9.f * k) - sd * (4.f * k), 1.5f * k, violet);   // guard
+        draw::line(t, tip - dir * (9.f * k), tip - dir * (14.f * k), 2.f * k, sf::Color(60, 30, 80));                       // grip
+    }
+    const TiamatWorld& tw = world.classWorld().tiamat;
+    for (const auto& f : tw.fx) {
+        const float a = clampf(f.life / f.maxLife, 0.f, 1.f);
+        if (f.kind == 0 || f.kind == 1) {   // a breath: a cone of billows, fire or ice
+            const sf::Color c = f.kind == 0 ? sf::Color(255, 150, 60) : sf::Color(170, 220, 255);
+            const sf::Vector2f dir = normalized(f.b - f.a, {1.f, 0.f}), sd{-dir.y, dir.x};
+            for (int i = 0; i < 14; ++i) {
+                const float u = std::fmod(static_cast<float>(i) / 14.f + (1.f - a) * 0.8f, 1.f);
+                const sf::Vector2f q = f.a + dir * (f.r * u) + sd * ((hash01(static_cast<float>(i) * 3.1f) - 0.5f) * f.r * 0.6f * u);
+                draw::glow(t, q, (6.f + 16.f * u) * k, c, 0.5f * a * (1.f - 0.5f * u));
+            }
+        } else if (f.kind == 2) {   // lightning: a jagged chain
+            for (std::size_t i = 1; i < f.pts.size(); ++i) {
+                const sf::Vector2f a0 = f.pts[i - 1], a1 = f.pts[i];
+                const sf::Vector2f mid = (a0 + a1) * 0.5f + sf::Vector2f{-(a1 - a0).y, (a1 - a0).x} * (0.15f * (hash01(static_cast<float>(i)) - 0.5f));
+                draw::line(t, a0, mid, 2.5f * k, sf::Color(170, 210, 255, static_cast<sf::Uint8>(230 * a)));
+                draw::line(t, mid, a1, 2.5f * k, sf::Color(170, 210, 255, static_cast<sf::Uint8>(230 * a)));
+                draw::glow(t, a1, 12.f * k, sf::Color(150, 200, 255), 0.5f * a);
+            }
+        } else if (f.kind == 8) {   // claws: three raking slashes on what's close
+            const sf::Vector2f d = normalized(f.b - f.a, {1.f, 0.f}), sd{-d.y, d.x};
+            for (int i = -1; i <= 1; ++i) {
+                const sf::Vector2f c = f.b + sd * (static_cast<float>(i) * f.r * 0.35f);
+                draw::line(t, c - d * (f.r * 0.7f) + sd * (f.r * 0.3f), c + d * (f.r * 0.5f) - sd * (f.r * 0.3f), 2.f * k,
+                           sf::Color(255, 220, 200, static_cast<sf::Uint8>(220 * a)));
+            }
+        } else if (f.kind == 9) {   // the dive: a streak of fire down to the crash
+            draw::line(t, f.a, f.b, 10.f * k * a, sf::Color(255, 150, 70, static_cast<sf::Uint8>(160 * a)));
+            draw::ring(t, f.b, f.r * (1.f - 0.5f * a), 5.f * k, sf::Color(255, 200, 120, static_cast<sf::Uint8>(220 * a)));
+            draw::glow(t, f.b, f.r, sf::Color(255, 140, 60), 0.5f * a);
+        } else if (f.kind == 10) {   // the gold's right head roars: rings closing in on it
+            const float u = 1.f - a;
+            for (int i = 0; i < 3; ++i)
+                draw::ring(t, f.b, f.r * std::max(0.05f, 1.f - u - 0.15f * static_cast<float>(i)), 2.5f * k,
+                           sf::Color(255, 220, 140, static_cast<sf::Uint8>(150 * a)));
+        } else if (f.kind == 11) {   // the ravager's run: a dark swath fading along its way
+            draw::line(t, f.a, f.b, f.r * 1.4f * a, sf::Color(150, 70, 170, static_cast<sf::Uint8>(90 * a)));
+            draw::line(t, f.a, f.b, 2.f * k, sf::Color(230, 200, 250, static_cast<sf::Uint8>(160 * a)));
+        } else if (f.kind == 13) {   // a storm bolt's blast: a white flash, a blue ring rolling out
+            const float u = 1.f - a;
+            draw::glow(t, f.a, f.r * (0.6f + 0.4f * u), sf::Color(170, 200, 255), 0.6f * a);
+            draw::ring(t, f.a, f.r * (0.3f + 0.7f * u), 3.f * k, sf::Color(210, 230, 255, static_cast<sf::Uint8>(220 * a)));
+        } else if (f.kind == 4) {   // roar: rings of sound rolling out
+            const float u = 1.f - a;
+            for (int i = 0; i < 3; ++i)
+                draw::ring(t, f.a, f.r * std::min(1.f, u + 0.15f * static_cast<float>(i)), 3.f * k,
+                           sf::Color(255, 200, 150, static_cast<sf::Uint8>(150 * a)));
+        } else if (f.kind == 5) {   // wing gust: curved strokes of wind sweeping out
+            const float u = 1.f - a;
+            for (int i = 0; i < 10; ++i) {
+                const float an = static_cast<float>(i) / 10.f * 2.f * kPi + u;
+                draw::ring(t, f.a, f.r * (0.3f + 0.7f * u), 2.f * k, sf::Color(220, 240, 230, static_cast<sf::Uint8>(170 * a)), an, an + 0.35f, 8);
+            }
+        } else if (f.kind == 6) {   // tail sweep: one hard arc spinning round
+            const float u = 1.f - a;
+            const float an = u * 2.f * kPi;
+            draw::ring(t, f.a, f.r, 7.f * k, sf::Color(255, 170, 110, static_cast<sf::Uint8>(200 * a)), an, an + 2.4f, 24);
+        } else if (f.kind == 7) {   // a fireball's burst
+            const float u = 1.f - a;
+            draw::glow(t, f.a, f.r * (0.5f + 0.6f * u), sf::Color(255, 140, 60), 0.6f * a);
+            draw::ring(t, f.a, f.r * (0.3f + 0.7f * u), 3.f * k, sf::Color(255, 210, 140, static_cast<sf::Uint8>(220 * a)));
+        } else {   // the golden dragon's crash
+            const float u = 1.f - a;
+            draw::ring(t, f.a, f.r * (0.3f + 0.7f * u), 5.f * k, sf::Color(255, 210, 110, static_cast<sf::Uint8>(220 * a)));
+            draw::glow(t, f.a, f.r * 0.9f, sf::Color(255, 190, 90), 0.5f * a);
+        }
+    }
+    for (const auto& f : tw.fields) {   // patches on the ground
+        const float a = clampf(f.life / 0.5f, 0.f, 1.f) * clampf((f.maxLife - f.life) / 0.25f, 0.f, 1.f);
+        switch (f.kind) {
+            case 0:   // embers: a flickering orange smoulder
+                draw::glow(t, f.pos, f.r * (1.f + 0.2f * std::sin(clk * 9.f + f.pos.x)), sf::Color(255, 120, 40), 0.35f * a);
+                draw::disc(t, f.pos, 2.f * k, sf::Color(255, 210, 120, static_cast<sf::Uint8>(220 * a)), sf::Color(255, 140, 60, 0), {1.f, 1.f}, 6);
+                break;
+            case 1:   // frost: a pale patch, a few crystals
+                draw::glow(t, f.pos, f.r, sf::Color(170, 220, 255), 0.25f * a);
+                for (int i = 0; i < 3; ++i) {
+                    const float an = static_cast<float>(i) * 2.1f + f.pos.x * 0.1f;
+                    draw::polygon(t, f.pos + sf::Vector2f{std::cos(an), std::sin(an)} * (f.r * 0.45f), 3.f * k, 4, an,
+                                  sf::Color(230, 245, 255, static_cast<sf::Uint8>(200 * a)), sf::Color(160, 210, 255, static_cast<sf::Uint8>(150 * a)));
+                }
+                break;
+            case 2:   // molten gold: a bright pool, bubbling
+                draw::glow(t, f.pos, f.r, sf::Color(255, 190, 70), 0.45f * a);
+                draw::disc(t, f.pos, f.r * 0.55f, sf::Color(255, 230, 140, static_cast<sf::Uint8>(170 * a)), sf::Color(255, 160, 50, 0), {1.3f, 1.f}, 20);
+                break;
+            case 4:   // a thunderstorm: a dark rolling cloud with flickers inside
+                for (int i = 0; i < 7; ++i) {
+                    const float an = static_cast<float>(i) * 0.9f + clk * 0.4f;
+                    draw::glow(t, f.pos + sf::Vector2f{std::cos(an) * f.r * 0.55f, std::sin(an) * f.r * 0.25f - f.r * 0.2f}, f.r * 0.5f,
+                               sf::Color(60, 70, 100), 0.35f * a);
+                }
+                if (std::sin(clk * 23.f + f.pos.x) > 0.85f) draw::glow(t, f.pos, f.r * 0.8f, sf::Color(170, 200, 255), 0.3f * a);
+                break;
+            default:   // the inferno: a ring of fire round its ball
+                for (int i = 0; i < 24; ++i) {
+                    const float an = static_cast<float>(i) / 24.f * 2.f * kPi + clk * 2.f;
+                    const float fl = 0.7f + 0.3f * std::sin(clk * 12.f + static_cast<float>(i));
+                    draw::glow(t, f.pos + sf::Vector2f{std::cos(an), std::sin(an)} * f.r, 14.f * k * fl, sf::Color(255, 130, 50), 0.55f * a);
+                }
+                draw::ring(t, f.pos, f.r, 3.f * k, sf::Color(255, 190, 90, static_cast<sf::Uint8>(200 * a)));
+                break;
+        }
+    }
+    for (const auto& f : tw.fireballs) {   // what the dragons spit
+        const sf::Vector2f back = normalized(f.from - f.to, {0.f, 1.f});
+        if (f.kind == 1) {   // an ice shard: a pale diamond with a cold streak
+            draw::line(t, f.pos, f.pos + back * (26.f * k), 2.5f * k, sf::Color(190, 230, 255, 150));
+            draw::polygon(t, f.pos, 6.f * k, 4, std::atan2(back.y, back.x), sf::Color(235, 248, 255), sf::Color(150, 200, 255));
+            draw::glow(t, f.pos, 12.f * k, sf::Color(170, 220, 255), 0.5f);
+        } else if (f.kind == 3) {   // ball lightning: a crackling blue orb
+            draw::glow(t, f.pos, 22.f * k, sf::Color(130, 180, 255), 0.7f);
+            draw::disc(t, f.pos, 7.f * k, sf::Color(230, 245, 255), sf::Color(120, 170, 255), {1.f, 1.f}, 12);
+            for (int i = 0; i < 4; ++i) {
+                const float an = clk * 13.f + static_cast<float>(i) * 1.57f;
+                draw::line(t, f.pos, f.pos + sf::Vector2f{std::cos(an), std::sin(an)} * (14.f * k), 1.5f * k, sf::Color(200, 230, 255, 200));
+            }
+        } else if (f.kind == 2) {   // molten gold: a heavy bright glob dripping
+            draw::glow(t, f.pos, 20.f * k, sf::Color(255, 200, 80), 0.7f);
+            draw::disc(t, f.pos, 8.f * k, sf::Color(255, 245, 190), sf::Color(240, 170, 50), {1.f, 1.f}, 14);
+            draw::line(t, f.pos, f.pos + back * (18.f * k), 5.f * k, sf::Color(255, 190, 70, 150));
+        } else {   // a fireball, arcing
+            draw::glow(t, f.pos, 16.f * k, sf::Color(255, 150, 60), 0.7f);
+            draw::disc(t, f.pos, 6.f * k, sf::Color(255, 240, 200), sf::Color(255, 140, 50), {1.f, 1.f}, 12);
+            draw::line(t, f.pos, f.pos + back * (22.f * k), 4.f * k, sf::Color(255, 160, 70, 140));
+        }
+    }
+    const sf::Color dragonCol[5] = {sf::Color(200, 230, 255), sf::Color(90, 150, 255), sf::Color(240, 190, 90), sf::Color(150, 70, 170),
+                                    sf::Color(255, 150, 210)};
+    for (const auto& d : tw.dragons) {   // each its own kind of dragon, after the Elder's look - grown as far as it has
+        const sf::Color c = dragonCol[d.kind];
+        if (d.stage == 0) {   // still an egg: it rocks, harder as it nears hatching, and cracks
+            const float u = clampf(d.xp / cfg::tiamat::stageXp[0], 0.f, 1.f);
+            const float r = (5.f + cfg::tiamat::adultSize[d.kind] * 0.12f) * k;
+            const sf::Vector2f at = d.pos + sf::Vector2f{std::sin(clk * (6.f + 10.f * u)) * u * 2.f * k, 0.f};
+            draw::glow(t, at, r * 2.2f, c, 0.15f + 0.25f * u);
+            draw::disc(t, at, r, lerpColor(c, sf::Color::White, 0.55f), c, {0.78f, 1.f}, 16);
+            if (u > 0.5f)
+                draw::line(t, at + sf::Vector2f{-r * 0.5f, -r * 0.1f}, at + sf::Vector2f{r * 0.1f, r * 0.2f}, std::max(1.f, 1.2f * k), withAlpha(c, u));
+            continue;
+        }
+        const float S = d.size * k;
+        const float ph = d.kind == 0 ? clk * 6.f + static_cast<float>(d.owner) : d.flap;   // the winged: their own wingbeat (sim: beats, then glides)
+        if (d.kind != 0 && d.kind != 3)   // on the wing: a faint wake where it has been
+            for (int i = 1; i < d.trailN; ++i)
+                draw::line(t, d.trail[i - 1], d.trail[i], std::max(1.f, S * 0.05f),
+                           withAlpha(c, 0.22f * (1.f - static_cast<float>(i) / static_cast<float>(d.trailN))));
+        const float glowA = 0.15f + 0.4f * d.flash;
+        if (d.kind == 0) {   // the frost wyrm: a serpent dragon, pale ice, winding along its coil (longer as it grows)
+            drawDragonForm(t, 3, d.pos, d.face, d.face, S, ph, c, glowA, d.trail, std::min(d.trailN, cfg::tiamat::wyrmBody[d.stage]), k);
+        } else if (d.kind == 1) {   // the storm drake: a wyvern, storm blue, sparks crackling round it
+            drawDragonForm(t, 1, d.pos, d.face, d.face, S, ph, c, glowA, nullptr, 0, k);
+            for (int i = 0; i < d.stage; ++i) {
+                const float an = clk * 7.f + static_cast<float>(i) * 2.1f;
+                const sf::Vector2f q = d.pos + sf::Vector2f{std::cos(an), std::sin(an)} * (S * 0.9f);
+                draw::line(t, q, q + sf::Vector2f{std::cos(an * 3.f), std::sin(an * 3.f)} * (S * 0.2f), 1.5f * k, sf::Color(200, 230, 255));
+            }
+        } else if (d.kind == 2) {   // ancient gold: four wings, huge, a head for each stage
+            drawDragonForm(t, 2, d.pos, d.face, d.headDir[0], S, ph, c, glowA, nullptr, 0, k, d.stage, d.stage > 1 ? d.headDir : nullptr);
+        } else if (d.kind == 3) {   // the ravager: a dark dragon; on a run, wings folded fast and a streak behind it
+            drawDragonForm(t, 0, d.pos, d.face, d.face, S, d.dive >= 0.f ? -kPi * 0.5f : ph, c, 0.12f + 0.3f * d.flash, nullptr, 0, k);   // on a run: wings swept back
+        } else {   // the wyrmling: small and quick
+            drawDragonForm(t, 0, d.pos, d.face, d.face, S, ph, c, glowA, nullptr, 0, k);
+        }
+    }
+    for (const Ball& b : world.balls()) {   // Tiamat's mount, under her (the ball is drawn on top, riding it)
+        if (!b.hasRole(BallRole::Tiamat)) continue;
+        const sf::Vector2f d = normalized(b.vel, {1.f, 0.f});
+        const float mxp = b.owner >= 0 && b.owner < TiamatWorld::kMounts ? tw.mountXp[b.owner] : 0.f;   // it grows all run (sim: tiamatTick)
+        const float grown = cfg::tiamat::mountSize + (1.f - cfg::tiamat::mountSize) * clampf(mxp / cfg::tiamat::stageXp[2], 0.f, 1.f);
+        drawDragonForm(t, 0, b.pos - d * (b.radius * 0.2f), d, d, b.radius * 3.4f * grown, clk * 4.f, roleColor(BallRole::Tiamat), 0.12f, nullptr, 0, k);
+    }
+    for (const auto& l : tw.lizards) {   // little lizards scuttling: a body, a tail, four legs paddling
+        const sf::Vector2f dir = normalized(l.vel, {1.f, 0.f}), sd{-dir.y, dir.x};
+        const sf::Color c(120, 190, 90, static_cast<sf::Uint8>(255 * clampf(l.life / 0.5f, 0.f, 1.f)));
+        draw::line(t, l.pos - dir * (7.f * k), l.pos + dir * (5.f * k), 4.f * k, c);
+        draw::line(t, l.pos - dir * (7.f * k), l.pos - dir * (13.f * k) + sd * (std::sin(l.gait) * 3.f * k), 2.f * k, c);
+        for (int s = -1; s <= 1; s += 2)
+            for (int f = 0; f < 2; ++f) {
+                const float swing = std::sin(l.gait + static_cast<float>(f) * kPi) * static_cast<float>(s);
+                const sf::Vector2f at = l.pos + dir * ((f ? -3.f : 3.f) * k);
+                draw::line(t, at, at + sd * (static_cast<float>(s) * 5.f * k) + dir * (swing * 3.f * k), 1.3f * k, c);
+            }
+        draw::disc(t, l.pos + dir * (6.f * k), 2.f * k, sf::Color(255, 220, 90), sf::Color(255, 220, 90, 0), {1.f, 1.f}, 6);
+    }
+    (void)fire;
+}
+
+// Loki's clones at their games, its pachinko's steel balls, what the games paid.
+void worldLoki(sf::RenderTarget& t, const World& world) {
+    const LokiWorld& lw = world.classWorld().loki;
+    if (lw.clones.empty() && lw.pins.empty() && lw.fx.empty()) return;
+    const float k = world.arenaScale();
+    const float clk = classClock();
+    const sf::Color c = theme::classLoki, gold(240, 200, 90);
+    for (const auto& f : lw.fx) {
+        const float a = clampf(f.life / f.maxLife, 0.f, 1.f), u = 1.f - a;
+        switch (f.kind) {
+            case 0: {   // a bolt from the sky
+                const sf::Vector2f mid = f.a + (f.b - f.a) * 0.5f + sf::Vector2f{18.f * k, 0.f};
+                draw::line(t, f.a, mid, 3.f * k, sf::Color(255, 240, 170, static_cast<sf::Uint8>(230 * a)));
+                draw::line(t, mid, f.b, 3.f * k, sf::Color(255, 240, 170, static_cast<sf::Uint8>(230 * a)));
+                draw::glow(t, f.b, f.r, gold, 0.6f * a);
+                break;
+            }
+            case 1:   // red: a fire nova
+                draw::ring(t, f.a, f.r * (0.3f + 0.7f * u), 4.f * k, sf::Color(255, 90, 70, static_cast<sf::Uint8>(220 * a)));
+                draw::glow(t, f.a, f.r * 0.8f, sf::Color(255, 80, 50), 0.4f * a);
+                break;
+            case 2:   // black: a dark swirl pulling in
+                for (int i = 0; i < 3; ++i)
+                    draw::ring(t, f.a, f.r * std::max(0.05f, a - 0.2f * static_cast<float>(i)), 2.f * k, sf::Color(30, 20, 40, static_cast<sf::Uint8>(200 * a)));
+                break;
+            case 3:   // the jackpot: a burst of gold
+                draw::glow(t, f.a, f.r, gold, 0.7f * a);
+                draw::ring(t, f.a, f.r * (0.2f + 0.8f * u), 6.f * k, sf::Color(255, 230, 140, static_cast<sf::Uint8>(240 * a)));
+                for (int i = 0; i < 12; ++i) {
+                    const float an = static_cast<float>(i) * kPi / 6.f;
+                    draw::disc(t, f.a + sf::Vector2f{std::cos(an), std::sin(an)} * (f.r * u), 4.f * k, gold, withAlpha(gold, 0.f), {1.f, 1.f}, 8);
+                }
+                break;
+            case 4: {   // a knife, flying
+                const sf::Vector2f q = f.a + (f.b - f.a) * std::min(1.f, u * 1.6f), d = normalized(f.b - f.a, {1.f, 0.f});
+                draw::line(t, q - d * (10.f * k), q, 2.f * k, sf::Color(230, 230, 240, static_cast<sf::Uint8>(255 * a)));
+                break;
+            }
+            case 5:   // spades: a slash down the line
+                draw::line(t, f.a, f.b, f.r * a, sf::Color(40, 40, 50, static_cast<sf::Uint8>(160 * a)));
+                draw::line(t, f.a, f.b, 2.f * k, sf::Color(240, 240, 255, static_cast<sf::Uint8>(230 * a)));
+                break;
+            case 6:   // clubs: a blow
+                draw::ring(t, f.a, f.r * (0.4f + 0.6f * u), 5.f * k, sf::Color(200, 210, 230, static_cast<sf::Uint8>(200 * a)));
+                break;
+            case 7: {   // hearts: a red glow flying to the core
+                const sf::Vector2f q = f.a + (f.b - f.a) * u;
+                draw::glow(t, q, 16.f * k, sf::Color(255, 90, 110), 0.7f * a);
+                break;
+            }
+            case 8:   // diamonds: a shard
+                draw::line(t, f.a + (f.b - f.a) * (u * 0.7f), f.a + (f.b - f.a) * std::min(1.f, u * 1.4f), 2.5f * k,
+                           sf::Color(150, 220, 255, static_cast<sf::Uint8>(240 * a)));
+                break;
+            default:   // a clone splits off: a puff
+                draw::ring(t, f.a, f.r * (1.f + u), 2.f * k, withAlpha(c, 0.6f * a));
+                break;
+        }
+    }
+    for (const auto& q : lw.pins) {   // steel balls
+        draw::disc(t, q.pos, 4.5f * k, sf::Color(235, 240, 250), sf::Color(140, 150, 170), {1.f, 1.f}, 10);
+    }
+    for (const auto& cl : lw.clones) {
+        const float a = clampf(cl.life / 0.5f, 0.f, 1.f) * clampf((cl.maxLife - cl.life) / 0.25f, 0.f, 1.f);
+        float r = 14.f * k;
+        for (const Ball& b : world.balls())
+            if (b.owner == cl.owner) r = b.radius;   // as big as it is
+        // the clone: a see-through copy of it, its horns on, flickering a little (an illusion)
+        const float fl = 0.85f + 0.15f * std::sin(clk * 9.f + cl.pos.x * 0.05f);
+        draw::glow(t, cl.pos, r * 2.2f, c, 0.3f * a);
+        draw::disc(t, cl.pos, r, withAlpha(lerpColor(c, sf::Color::White, 0.25f), 0.7f * a * fl), withAlpha(c, 0.45f * a * fl), {1.f, 1.f}, 20);
+        for (float s : {-1.f, 1.f}) {
+            sf::Vector2f q = cl.pos + sf::Vector2f{s * r * 0.55f, -r * 0.6f};
+            for (int i = 0; i < 4; ++i) {
+                const float v = static_cast<float>(i) / 3.f;
+                const sf::Vector2f nq = q + sf::Vector2f{s * r * (0.3f - 0.3f * v), -r * (0.2f + 0.12f * v)};
+                draw::line(t, q, nq, std::max(1.f, r * 0.2f * (1.f - 0.7f * v)), withAlpha(gold, 0.85f * a));
+                q = nq;
+            }
+        }
+        if (cl.game < 0) continue;
+        // its game, over its head: spinning, then what came up
+        const float spin = clampf(cl.show / cl.showMax, 0.f, 1.f);
+        const bool done = spin < 0.3f;
+        const float s = 13.f * k;
+        const sf::Vector2f g = cl.pos + sf::Vector2f{0.f, -r - s * 2.2f};
+        draw::disc(t, g, s * 1.6f, withAlpha(sf::Color(15, 12, 25), 0.75f * a), withAlpha(sf::Color(15, 12, 25), 0.f), {1.f, 1.f}, 18);   // (a dark backdrop: it reads)
+        switch (cl.game) {
+            case 0: {   // a coin, flipping
+                const float w = done ? 1.f : std::fabs(std::cos(clk * 22.f));
+                const sf::Color fc = done ? (cl.a ? gold : sf::Color(180, 180, 190)) : gold;
+                draw::disc(t, g, s, withAlpha(fc, a), withAlpha(lerpColor(fc, sf::Color::Black, 0.3f), a), {std::max(0.1f, w), 1.f}, 16);
+                break;
+            }
+            case 1:   // two dice, tumbling
+                for (int i = 0; i < 2; ++i) {
+                    const sf::Vector2f dc = g + sf::Vector2f{(i ? 1.f : -1.f) * s * 0.75f, 0.f};
+                    const float rot = done ? 0.f : clk * 14.f + static_cast<float>(i);
+                    draw::polygon(t, dc, s * 0.85f, 4, rot + kPi * 0.25f, withAlpha(sf::Color(245, 245, 245), a), withAlpha(sf::Color(200, 200, 200), a));
+                    const int pips = done ? (i ? cl.b : cl.a) : 1 + static_cast<int>(clk * 20.f + static_cast<float>(i) * 3.f) % 6;
+                    for (int q = 0; q < pips; ++q) {
+                        const float an = static_cast<float>(q) / static_cast<float>(pips) * 2.f * kPi;
+                        const sf::Vector2f pp = pips == 1 ? dc : dc + sf::Vector2f{std::cos(an), std::sin(an)} * (s * 0.35f);
+                        draw::disc(t, pp, 1.3f * k, withAlpha(sf::Color(30, 30, 30), a), withAlpha(sf::Color(30, 30, 30), a), {1.f, 1.f}, 6);
+                    }
+                }
+                break;
+            case 2: {   // a roulette wheel, spinning; the pocket it lands in lights up
+                const float rot = done ? 0.f : clk * 12.f;
+                for (int i = 0; i < 10; ++i) {
+                    const float a0 = rot + static_cast<float>(i) * kPi / 5.f;
+                    const sf::Color pc = i == 0 ? sf::Color(60, 170, 80) : i % 2 ? sf::Color(200, 40, 40) : sf::Color(25, 25, 30);
+                    draw::ring(t, g, s * 0.8f, s * 0.45f, withAlpha(pc, a), a0, a0 + kPi / 5.f, 4);
+                }
+                draw::ring(t, g, s * 1.05f, 1.5f * k, withAlpha(gold, a));
+                if (done) {
+                    const sf::Color rc = cl.a == 0 ? sf::Color(60, 220, 100) : cl.a == 1 ? sf::Color(255, 70, 60) : sf::Color(120, 90, 160);
+                    draw::glow(t, g, s * 2.2f, rc, 0.7f * a);
+                }
+                break;
+            }
+            case 3: {   // a card, turning over
+                const float w = done ? 1.f : std::fabs(std::cos(clk * 10.f));
+                const float cw = s * 0.75f * std::max(0.1f, w), ch = s * 1.05f;
+                const bool face = done;
+                const sf::Color back(110, 60, 150), paper(250, 248, 240);
+                fillShape(t, {g + sf::Vector2f{-cw, -ch}, g + sf::Vector2f{cw, -ch}, g + sf::Vector2f{cw, ch}, g + sf::Vector2f{-cw, ch}},
+                          withAlpha(face ? paper : back, a));
+                if (face) {
+                    if (cl.b == 1 || cl.b >= 11)   // a face card / an ace: a gold edge
+                        for (int e = 0; e < 4; ++e) {
+                            const sf::Vector2f p0 = g + sf::Vector2f{e == 1 || e == 2 ? cw : -cw, e >= 2 ? ch : -ch};
+                            const sf::Vector2f p1 = g + sf::Vector2f{e == 0 || e == 1 ? cw : -cw, e == 0 || e == 3 ? -ch : ch};
+                            draw::line(t, p0, p1, 1.5f * k, withAlpha(gold, a));
+                        }
+                    const sf::Color sc = cl.a == 2 || cl.a == 3 ? sf::Color(210, 40, 50) : sf::Color(25, 25, 30);
+                    const float q = s * 0.3f;
+                    if (cl.a == 2) {   // diamond
+                        draw::polygon(t, g, q * 1.2f, 4, 0.f, withAlpha(sc, a), withAlpha(sc, a));
+                    } else if (cl.a == 3) {   // heart
+                        draw::disc(t, g + sf::Vector2f{-q * 0.5f, -q * 0.3f}, q * 0.6f, withAlpha(sc, a), withAlpha(sc, a), {1.f, 1.f}, 10);
+                        draw::disc(t, g + sf::Vector2f{q * 0.5f, -q * 0.3f}, q * 0.6f, withAlpha(sc, a), withAlpha(sc, a), {1.f, 1.f}, 10);
+                        fillShape(t, {g + sf::Vector2f{-q * 1.05f, -q * 0.1f}, g + sf::Vector2f{q * 1.05f, -q * 0.1f}, g + sf::Vector2f{0.f, q * 1.1f}}, withAlpha(sc, a));
+                    } else if (cl.a == 0) {   // spade
+                        draw::disc(t, g + sf::Vector2f{-q * 0.5f, q * 0.2f}, q * 0.6f, withAlpha(sc, a), withAlpha(sc, a), {1.f, 1.f}, 10);
+                        draw::disc(t, g + sf::Vector2f{q * 0.5f, q * 0.2f}, q * 0.6f, withAlpha(sc, a), withAlpha(sc, a), {1.f, 1.f}, 10);
+                        fillShape(t, {g + sf::Vector2f{-q * 1.05f, q * 0.1f}, g + sf::Vector2f{q * 1.05f, q * 0.1f}, g + sf::Vector2f{0.f, -q * 1.1f}}, withAlpha(sc, a));
+                        draw::line(t, g, g + sf::Vector2f{0.f, q * 1.1f}, 1.5f * k, withAlpha(sc, a));
+                    } else {   // club
+                        for (int i = 0; i < 3; ++i) {
+                            const float an = -kPi * 0.5f + static_cast<float>(i) * 2.f * kPi / 3.f;
+                            draw::disc(t, g + sf::Vector2f{std::cos(an), std::sin(an)} * (q * 0.55f), q * 0.5f, withAlpha(sc, a), withAlpha(sc, a), {1.f, 1.f}, 10);
+                        }
+                        draw::line(t, g, g + sf::Vector2f{0.f, q * 1.1f}, 1.5f * k, withAlpha(sc, a));
+                    }
+                }
+                break;
+            }
+            default: {   // a pachinko board: pegs, a steel ball dropping through
+                fillShape(t, {g + sf::Vector2f{-s, -s * 1.2f}, g + sf::Vector2f{s, -s * 1.2f}, g + sf::Vector2f{s, s * 1.2f}, g + sf::Vector2f{-s, s * 1.2f}},
+                          withAlpha(sf::Color(40, 30, 60), 0.85f * a));
+                for (int row = 0; row < 3; ++row)
+                    for (int col = 0; col < 3; ++col)
+                        draw::disc(t, g + sf::Vector2f{(static_cast<float>(col) - 1.f + (row % 2 ? 0.5f : 0.f)) * s * 0.6f, (static_cast<float>(row) - 1.f) * s * 0.7f},
+                                   1.2f * k, withAlpha(gold, a), withAlpha(gold, a), {1.f, 1.f}, 6);
+                const float fall = 1.f - spin;
+                draw::disc(t, g + sf::Vector2f{std::sin(fall * 17.f) * s * 0.5f, (fall * 2.f - 1.f) * s}, 2.f * k, withAlpha(sf::Color(235, 240, 250), a),
+                           withAlpha(sf::Color(140, 150, 170), a), {1.f, 1.f}, 8);
+                break;
+            }
+        }
+    }
+}
+
+// Nergal's plague: blood clouds and miasmas, swarms, rats, the pale rider, bursts.
+void worldNergal(sf::RenderTarget& t, const World& world) {
+    const NergalWorld& nw = world.classWorld().nergal;
+    const float k = world.arenaScale();
+    const float clk = classClock();
+    for (const Enemy& e : world.enemies()) {   // the black plague on them: they turn black, a bruise-violet rim
+        if (e.hp <= 0.f || e.elem != Element::Plague || e.elemT <= 0.f) continue;
+        const float a = clampf(e.elemT / 0.4f, 0.f, 1.f);
+        draw::disc(t, e.pos, e.radius * 1.04f, withAlpha(theme::elemPlague, 0.88f * a), withAlpha(theme::elemPlague, 0.7f * a), {1.f, 1.f}, 20);
+        draw::ring(t, e.pos, e.radius * 1.04f, 1.5f * k, withAlpha(theme::plagueEdge, 0.55f * a));
+    }
+    for (const auto& r : nw.rains) {
+        const float a = clampf(r.life / 0.5f, 0.f, 1.f) * clampf((r.maxLife - r.life) / 0.3f, 0.f, 1.f);
+        if (r.kind == 1) {   // a miasma: black smoke, rolling low
+            for (int i = 0; i < 7; ++i) {
+                const float an = static_cast<float>(i) * 0.9f + clk * 0.5f;
+                draw::glow(t, r.pos + sf::Vector2f{std::cos(an), std::sin(an)} * (r.r * 0.4f), r.r * 0.5f, sf::Color(20, 14, 26), 0.55f * a);
+            }
+            draw::ring(t, r.pos, r.r, 1.5f * k, withAlpha(theme::elemPlague, 0.5f * a));
+            continue;
+        }
+        // a great dark red cloud, blood streaking down out of it
+        for (int i = 0; i < 9; ++i) {
+            const float an = static_cast<float>(i) * 0.7f + clk * 0.25f;
+            draw::glow(t, r.pos + sf::Vector2f{std::cos(an) * r.r * 0.55f, std::sin(an) * r.r * 0.25f - r.r * 0.3f}, r.r * 0.42f, sf::Color(90, 15, 20), 0.4f * a);
+        }
+        for (int i = 0; i < 26; ++i) {   // the rain: streaks falling, each on its own beat, scattered
+            const float fi = static_cast<float>(i);
+            const float x = (std::fmod(fi * 0.6180339f, 1.f) - 0.5f) * 1.7f * r.r;
+            const float fall = std::fmod(clk * 2.2f + std::fmod(fi * 0.7548777f * 3.1f, 1.f), 1.f);
+            const sf::Vector2f top = r.pos + sf::Vector2f{x, -r.r * 0.3f + fall * r.r * 0.95f};
+            draw::line(t, top, top + sf::Vector2f{-2.f * k, 11.f * k}, 1.5f * k, sf::Color(200, 30, 40, static_cast<sf::Uint8>(200 * a)));
+        }
+    }
+    for (const auto& s : nw.swarms) {   // a swarm: specks darting about in a loose cloud
+        const float a = clampf(s.life / 0.5f, 0.f, 1.f);
+        const int n = 10 + static_cast<int>(s.r / k * 0.2f);
+        for (int i = 0; i < n; ++i) {
+            const float fi = static_cast<float>(i) + s.seed;
+            const float an = clk * (3.f + std::fmod(fi * 0.37f, 2.f)) + fi * 2.4f;
+            const float rr = s.r * (0.25f + 0.65f * std::fabs(std::sin(clk * 1.7f + fi)));
+            const sf::Vector2f q = s.pos + sf::Vector2f{std::cos(an), std::sin(an * 1.13f)} * rr;
+            draw::line(t, q, q + sf::Vector2f{std::cos(an + 1.6f), std::sin(an + 1.6f)} * (3.f * k), 1.8f * k,
+                       sf::Color(110, 120, 70, static_cast<sf::Uint8>(235 * a)));
+        }
+    }
+    for (const auto& r : nw.rats) {   // a rat: a grey-brown body, a pink tail swishing, ears, a scurry
+        const sf::Vector2f dir = normalized(r.vel, {1.f, 0.f}), sd{-dir.y, dir.x};
+        const float a = clampf(r.life / 0.5f, 0.f, 1.f);
+        const sf::Color body(110, 95, 85, static_cast<sf::Uint8>(255 * a));
+        draw::line(t, r.pos - dir * (6.f * k), r.pos - dir * (15.f * k) + sd * (std::sin(r.gait) * 4.f * k), 1.2f * k,
+                   sf::Color(220, 150, 150, static_cast<sf::Uint8>(220 * a)));
+        draw::disc(t, r.pos, 5.5f * k, body, body, {1.5f, 0.9f}, 12);
+        draw::disc(t, r.pos + dir * (5.f * k), 3.f * k, body, body, {1.f, 1.f}, 8);
+        for (float s : {-1.f, 1.f})
+            draw::disc(t, r.pos + dir * (3.5f * k) + sd * (s * 2.8f * k), 1.6f * k, sf::Color(200, 140, 140, static_cast<sf::Uint8>(255 * a)),
+                       sf::Color(200, 140, 140, 0), {1.f, 1.f}, 6);
+        draw::disc(t, r.pos + dir * (7.f * k), 1.f * k, sf::Color(255, 60, 60, static_cast<sf::Uint8>(255 * a)), sf::Color(255, 60, 60, 0), {1.f, 1.f}, 4);
+    }
+    for (const auto& r : nw.riders) {   // the pale rider: a ghost horse at full gallop, a pale wake behind
+        const sf::Vector2f d = normalized(r.to - r.from, {1.f, 0.f}), sd{-d.y, d.x};
+        const sf::Color pale(200, 220, 200);
+        draw::line(t, r.pos - d * (140.f * k), r.pos, 30.f * k, sf::Color(170, 200, 170, 40));
+        draw::glow(t, r.pos, 50.f * k, pale, 0.45f);
+        const float gal = std::sin(clk * 30.f);
+        fillShape(t, {r.pos + d * (18.f * k), r.pos + sd * (8.f * k) - d * (4.f * k), r.pos - d * (20.f * k) + sd * (6.f * k),
+                      r.pos - d * (20.f * k) - sd * (6.f * k), r.pos - sd * (8.f * k) - d * (4.f * k)}, withAlpha(pale, 0.85f));   // body
+        draw::line(t, r.pos + d * (16.f * k), r.pos + d * (30.f * k) + sd * (5.f * k), 5.f * k, withAlpha(pale, 0.9f));    // neck, head
+        for (int l = 0; l < 4; ++l) {   // legs at the gallop
+            const float side = l % 2 ? 1.f : -1.f, front = l < 2 ? 1.f : -1.f;
+            const sf::Vector2f hip = r.pos + d * (front * 12.f * k) + sd * (side * 6.f * k);
+            draw::line(t, hip, hip + sd * (side * 10.f * k) + d * ((gal * front) * 10.f * k), 2.f * k, withAlpha(pale, 0.8f));
+        }
+        draw::disc(t, r.pos - d * (2.f * k), 5.f * k, sf::Color(30, 25, 35), sf::Color(30, 25, 35), {1.f, 1.f}, 10);   // the rider, dark
+    }
+    for (const auto& f : nw.fx) {
+        const float a = clampf(f.life / f.maxLife, 0.f, 1.f), u = 1.f - a;
+        if (f.kind == 0) {   // the black death: a sickly cloud bursting
+            draw::glow(t, f.a, f.r * 0.8f, sf::Color(40, 70, 20), 0.6f * a);
+            draw::ring(t, f.a, f.r * (0.3f + 0.7f * u), 3.f * k, sf::Color(150, 200, 60, static_cast<sf::Uint8>(200 * a)));
+        } else if (f.kind == 3) {   // fever: black lightning
+            const sf::Vector2f mid = (f.a + f.b) * 0.5f + sf::Vector2f{(f.b - f.a).y, -(f.b - f.a).x} * 0.15f;
+            draw::line(t, f.a, mid, 3.f * k, sf::Color(30, 20, 40, static_cast<sf::Uint8>(240 * a)));
+            draw::line(t, mid, f.b, 3.f * k, sf::Color(30, 20, 40, static_cast<sf::Uint8>(240 * a)));
+            draw::line(t, f.a, mid, 1.f * k, sf::Color(190, 160, 230, static_cast<sf::Uint8>(200 * a)));
+            draw::line(t, mid, f.b, 1.f * k, sf::Color(190, 160, 230, static_cast<sf::Uint8>(200 * a)));
+        } else if (f.kind == 4) {   // a mass grave: the ground cracks open, dark
+            draw::disc(t, f.a, f.r * (0.4f + 0.6f * u), sf::Color(20, 15, 15, static_cast<sf::Uint8>(170 * a)), sf::Color(20, 15, 15, 0), {1.f, 1.f}, 20);
+            for (int i = 0; i < 6; ++i) {
+                const float an = static_cast<float>(i) * kPi / 3.f;
+                draw::line(t, f.a, f.a + sf::Vector2f{std::cos(an), std::sin(an)} * (f.r * u), 2.f * k, sf::Color(90, 70, 60, static_cast<sf::Uint8>(200 * a)));
+            }
+        }
+    }
+}
+
+// Apolo's muses: each in her own colour at her ball's side, the ball ringed in it; her weak point,
+// arrows and arrival in it too. Gold is Apolo's (chords at the core).
+void worldApolo(sf::RenderTarget& t, const World& world) {
+    const ApoloWorld& aw = world.classWorld().apolo;
+    if (aw.muses.empty() && aw.fx.empty()) return;
+    const float k = world.arenaScale();
+    const float clk = classClock();
+    const sf::Color gold(255, 214, 110);
+    // Strength red, Speed cyan, Twin violet, Giant green, Sun orange
+    const sf::Color giftCol[5] = {sf::Color(255, 80, 70), sf::Color(90, 220, 255), sf::Color(190, 120, 255), sf::Color(110, 230, 110), sf::Color(255, 160, 40)};
+    for (const Ball& b : world.balls()) {   // a ball with a gift: her colour round it
+        const int g = b.cls.apolo.gift;
+        if (g < 0) continue;
+        const sf::Color c = giftCol[g];
+        draw::glow(t, b.pos, b.radius * 2.f, c, 0.3f);
+        draw::ring(t, b.pos, b.radius * 1.35f, 2.f * k, withAlpha(c, 0.7f));
+        if (g == 4)   // the sun: a burning halo, wide
+            for (int i = 0; i < 16; ++i) {
+                const float an = static_cast<float>(i) * kPi / 8.f + clk * 1.2f;
+                const float fl = 0.7f + 0.3f * std::sin(clk * 9.f + static_cast<float>(i));
+                draw::glow(t, b.pos + sf::Vector2f{std::cos(an), std::sin(an)} * (cfg::apolo::sunR * k * 0.8f), 14.f * k * fl, c, 0.4f);
+            }
+    }
+    for (const auto& mu : aw.muses) {   // a muse: a small figure robed in her colour, a gold head
+        const sf::Color c = giftCol[mu.gift];
+        draw::glow(t, mu.pos, 16.f * k, c, 0.45f);
+        fillShape(t, {mu.pos + sf::Vector2f{0.f, -6.f * k}, mu.pos + sf::Vector2f{5.f * k, 7.f * k}, mu.pos + sf::Vector2f{-5.f * k, 7.f * k}},
+                  withAlpha(c, 0.9f));   // her robe
+        draw::disc(t, mu.pos + sf::Vector2f{0.f, -8.f * k}, 3.f * k, withAlpha(sf::Color(255, 240, 200), 0.95f), withAlpha(gold, 0.9f), {1.f, 1.f}, 10);
+        draw::disc(t, mu.pos + sf::Vector2f{0.f, -15.f * k}, 2.2f * k, withAlpha(c, 0.95f), withAlpha(c, 0.f), {1.f, 1.f}, 8);   // her gift's spark
+    }
+    for (const auto& mu : aw.muses) {   // her weak point: a crosshair in her colour
+        if (mu.mark < 0) continue;
+        const sf::Color c = giftCol[mu.gift];
+        for (const Enemy& e : world.enemies()) {
+            if (e.id != mu.mark || e.hp <= 0.f) continue;
+            const float R = e.radius + 6.f * k;
+            draw::ring(t, e.pos, R, 1.5f * k, withAlpha(c, 0.85f));
+            for (int i = 0; i < 4; ++i) {
+                const float an = static_cast<float>(i) * kPi * 0.5f + clk;
+                draw::line(t, e.pos + sf::Vector2f{std::cos(an), std::sin(an)} * (R - 3.f * k), e.pos + sf::Vector2f{std::cos(an), std::sin(an)} * (R + 5.f * k),
+                           2.f * k, withAlpha(c, 0.95f));
+            }
+        }
+    }
+    for (const auto& f : aw.fx) {
+        const float a = clampf(f.life / f.maxLife, 0.f, 1.f), u = 1.f - a;
+        const sf::Color c = giftCol[std::clamp(f.gift, 0, 4)];
+        if (f.kind == 0) {   // a sun arrow
+            const sf::Vector2f q = f.a + (f.b - f.a) * std::min(1.f, u * 1.8f), d = normalized(f.b - f.a, {1.f, 0.f});
+            draw::line(t, q - d * (14.f * k), q, 2.f * k, withAlpha(c, a));
+            draw::glow(t, q, 6.f * k, c, 0.6f * a);
+        } else if (f.kind == 1) {   // a chord: golden rings off the core
+            for (int i = 0; i < 3; ++i)
+                draw::ring(t, f.a, f.r * std::max(0.05f, u - 0.15f * static_cast<float>(i)) + 20.f * k, 2.f * k, withAlpha(gold, 0.6f * a));
+        } else {   // a muse arriving: a streak of her colour from where she was
+            draw::line(t, f.a + (f.b - f.a) * (u * 0.7f), f.a + (f.b - f.a) * std::min(1.f, u * 1.3f), 3.f * k, withAlpha(c, 0.7f * a));
+        }
+    }
+}
+
+// Ares: ghost cannons round its ball, bloodlust, two moons; missiles, hoplites, chariots, fire, a falling star, a rain of spears.
+void worldAres(sf::RenderTarget& t, const World& world) {
+    namespace A = cfg::ares;
+    const AresWorld& aw = world.classWorld().ares;
+    const float k = world.arenaScale();
+    const float clk = classClock();
+    const sf::Color bronze(205, 150, 80), blood(220, 40, 30), fire(255, 140, 40), ember(255, 210, 120);
+    // fire on the ground first (under everything)
+    for (const auto& f : aw.flames) {
+        const float a = clampf(f.life / f.maxLife, 0.f, 1.f) * std::min(1.f, (f.maxLife - f.life) * 6.f + 0.3f);
+        const float fl = 0.8f + 0.2f * std::sin(clk * 13.f + f.pos.x * 0.07f);
+        draw::glow(t, f.pos, f.r * 1.3f * fl, fire, 0.35f * a);
+        draw::glow(t, f.pos + sf::Vector2f{0.f, -f.r * 0.2f}, f.r * 0.6f * fl, ember, 0.35f * a);
+    }
+    for (const Ball& b : world.balls()) {
+        if (!b.hasRole(BallRole::Ares) || b.ghost) continue;
+        const AresState& st = b.cls.ares;
+        if (st.lust > 0.f) {   // bloodlust: it burns red
+            draw::glow(t, b.pos, b.radius * (2.f + 1.5f * st.lust), blood, 0.25f + 0.35f * st.lust);
+            if (st.lust > 0.6f)
+                for (int i = 0; i < 6; ++i) {
+                    const float an = clk * 4.f + static_cast<float>(i) * kPi / 3.f;
+                    draw::glow(t, b.pos + sf::Vector2f{std::cos(an), std::sin(an)} * (b.radius * 1.1f), b.radius * 0.5f, fire, 0.4f * st.lust);
+                }
+        }
+        const sf::Vector2f ad{std::cos(st.aim), std::sin(st.aim)}, as{-ad.y, ad.x};
+        for (int c = 0; c < A::cannons; ++c) {   // the ghost cannons: bronze barrels, aimed, kicking back as they fire
+            const float an = static_cast<float>(c) * 2.f * kPi / A::cannons + b.age * 0.8f;
+            const sf::Vector2f at = b.pos + sf::Vector2f{std::cos(an), std::sin(an)} * (b.radius + 18.f * k) - ad * (st.kick[c] * 4.f * k);
+            draw::glow(t, at, 10.f * k, bronze, 0.25f);
+            draw::line(t, at - ad * (5.f * k), at + ad * (9.f * k), 5.f * k, withAlpha(bronze, 0.75f));
+            draw::line(t, at - ad * (5.f * k), at + ad * (9.f * k), 1.5f * k, withAlpha(ember, 0.5f));
+            draw::disc(t, at - ad * (5.f * k), 3.5f * k, withAlpha(bronze, 0.8f), withAlpha(bronze, 0.3f), {1.f, 1.f}, 8);
+            if (st.kick[c] > 0.5f || st.lust > 0.6f)   // a muzzle flash (and, in its fury, fire at every mouth)
+                draw::glow(t, at + ad * (11.f * k), (6.f + 4.f * st.kick[c]) * k, st.lust > 0.6f ? fire : ember, 0.7f * std::max(st.kick[c], st.lust * 0.6f));
+        }
+        (void)as;
+        if (b.mods.cls.ares.moons > 0.f)   // Phobos (red) and Deimos (black, red-rimmed)
+            for (int i = 0; i < 2; ++i) {
+                const float an = b.age * 1.6f + static_cast<float>(i) * kPi;
+                const sf::Vector2f q = b.pos + sf::Vector2f{std::cos(an), std::sin(an)} * (b.radius + 46.f * k);
+                const float R = (i ? 6.f : 7.5f) * k;
+                draw::glow(t, q, R * 2.5f, blood, 0.3f);
+                draw::disc(t, q, R, i ? sf::Color(30, 22, 24) : sf::Color(200, 70, 50), i ? sf::Color(120, 30, 30) : sf::Color(120, 40, 30), {1.f, 1.f}, 14);
+                draw::ring(t, q, R, 1.2f * k, withAlpha(i ? blood : ember, 0.7f));
+            }
+    }
+    for (const auto& m : aw.missiles) {   // a missile: a smoke trail, a flame, a red or black body
+        const sf::Vector2f d = normalized(m.vel, {1.f, 0.f});
+        for (int i = 1; i <= 6; ++i) {
+            const float u = static_cast<float>(i) / 6.f;
+            draw::disc(t, m.pos - d * (u * 34.f * k), (2.f + 3.f * u) * k, sf::Color(150, 140, 140, static_cast<sf::Uint8>(110 * (1.f - u))),
+                       sf::Color(150, 140, 140, 0), {1.f, 1.f}, 8);
+        }
+        draw::glow(t, m.pos - d * (6.f * k), 7.f * k, fire, 0.7f);
+        draw::line(t, m.pos - d * (6.f * k), m.pos + d * (5.f * k), 3.5f * k, m.moon ? sf::Color(40, 30, 32) : sf::Color(210, 70, 50));
+        draw::disc(t, m.pos + d * (5.f * k), 1.8f * k, blood, blood, {1.f, 1.f}, 6);
+    }
+    for (const auto& h : aw.hoplites) {   // a hoplite: rising from the ground, a round shield, a spear at the enemy, a red crest
+        const float grow = 1.f - clampf(h.sprout / A::sprout, 0.f, 1.f);
+        const float a = std::min(1.f, h.life / 0.5f) * (0.4f + 0.6f * grow);
+        const float s = (0.4f + 0.6f * grow) * k;
+        const sf::Vector2f d{std::cos(h.aim), std::sin(h.aim)}, sd{-d.y, d.x};
+        draw::glow(t, h.pos, 16.f * s, bronze, 0.25f * a);
+        draw::line(t, h.pos - d * (8.f * s), h.pos + d * (20.f * s), 1.8f * k, withAlpha(sf::Color(160, 120, 70), a));   // the spear
+        draw::disc(t, h.pos + d * (20.f * s), 2.f * k, withAlpha(ember, a), withAlpha(ember, 0.f), {1.f, 1.f}, 6);
+        draw::disc(t, h.pos, 6.f * s, withAlpha(bronze, a), withAlpha(sf::Color(130, 90, 45), a), {1.f, 1.f}, 12);   // the body
+        draw::line(t, h.pos - d * (4.f * s), h.pos + d * (4.f * s), 2.2f * k, withAlpha(blood, a));                    // the crest
+        const sf::Vector2f sh = h.pos + sd * (7.f * s) + d * (3.f * s);   // the shield
+        draw::disc(t, sh, 6.5f * s, withAlpha(sf::Color(220, 170, 90), a), withAlpha(sf::Color(150, 100, 50), a), {1.f, 1.f}, 14);
+        draw::ring(t, sh, 6.5f * s, 1.2f * k, withAlpha(sf::Color(110, 70, 35), a));
+        draw::disc(t, sh, 1.8f * s, withAlpha(blood, a), withAlpha(blood, a), {1.f, 1.f}, 6);
+    }
+    for (const auto& ch : aw.chariots) {   // the war chariot: two fire-breathing horses ahead, the car behind, flames everywhere
+        const sf::Vector2f d = normalized(ch.to - ch.from, {1.f, 0.f}), sd{-d.y, d.x};
+        draw::glow(t, ch.pos, 70.f * k, fire, 0.35f);
+        for (int i = 0; i < 2; ++i) {
+            const sf::Vector2f hp = ch.pos + d * (30.f * k) + sd * ((i ? 1.f : -1.f) * 12.f * k);
+            const float gallop = std::sin(clk * 18.f + static_cast<float>(i) * 1.7f);
+            draw::line(t, hp - d * (8.f * k), hp + d * (8.f * k), 10.f * k, sf::Color(70, 30, 20));   // its body
+            draw::disc(t, hp + d * (13.f * k) + sd * (gallop * 1.5f * k), 4.5f * k, sf::Color(80, 35, 22), sf::Color(50, 20, 12), {1.4f, 1.f}, 10);
+            for (int j = 0; j < 4; ++j) {   // its mane and its breath: fire
+                const float u = static_cast<float>(j) / 4.f;
+                draw::glow(t, hp + d * ((18.f + 14.f * u) * k) + sd * (std::sin(clk * 20.f + static_cast<float>(j)) * 4.f * k), (6.f + 5.f * u) * k,
+                           j % 2 ? fire : ember, 0.6f * (1.f - u * 0.5f));
+            }
+            draw::glow(t, hp - d * (2.f * k), 6.f * k, fire, 0.5f);
+        }
+        const sf::Vector2f car = ch.pos - d * (6.f * k);
+        draw::line(t, car, ch.pos + d * (22.f * k), 2.f * k, bronze);   // the pole
+        draw::line(t, car - sd * (11.f * k), car + sd * (11.f * k), 12.f * k, sf::Color(170, 120, 60));   // the car
+        draw::line(t, car - sd * (11.f * k) + d * (5.f * k), car + sd * (11.f * k) + d * (5.f * k), 2.5f * k, sf::Color(230, 180, 100));
+        for (int i = 0; i < 2; ++i) {   // the wheels, spinning
+            const sf::Vector2f w = car + sd * ((i ? 1.f : -1.f) * 14.f * k);
+            draw::ring(t, w, 6.f * k, 1.8f * k, bronze);
+            const float sp = clk * 20.f;
+            draw::line(t, w + sf::Vector2f{std::cos(sp), std::sin(sp)} * (6.f * k), w - sf::Vector2f{std::cos(sp), std::sin(sp)} * (6.f * k), 1.f * k, bronze);
+        }
+        draw::disc(t, car - d * (2.f * k), 4.f * k, blood, blood, {1.f, 1.f}, 8);   // the charioteer's crest
+    }
+    for (const auto& s : aw.stars) {   // Wrath of Olympus: a red ring closing, the star falling into it
+        const float u = clampf(s.t / A::wrathWarn, 0.f, 1.f);
+        draw::ring(t, s.pos, s.r, 2.f * k, withAlpha(blood, 0.35f + 0.3f * u));
+        draw::ring(t, s.pos, s.r * (1.f - 0.85f * u), 3.f * k, withAlpha(blood, 0.5f + 0.5f * u));
+        draw::glow(t, s.pos, s.r * 0.8f, blood, 0.15f + 0.25f * u);
+        const sf::Vector2f from = s.pos + sf::Vector2f{-260.f * k, -620.f * k};
+        const sf::Vector2f q = from + (s.pos - from) * (u * u);
+        const sf::Vector2f d = normalized(s.pos - from, {0.f, 1.f});
+        for (int i = 0; i < 8; ++i) {
+            const float v = static_cast<float>(i) / 8.f;
+            draw::line(t, q - d * (v * 120.f * k), q - d * ((v + 0.125f) * 120.f * k), (8.f * (1.f - v) + 1.f) * k, withAlpha(i < 2 ? ember : blood, 0.7f * (1.f - v)));
+        }
+        draw::glow(t, q, 30.f * k, blood, 0.7f);
+        draw::glow(t, q, 12.f * k, sf::Color(255, 240, 220), 0.9f);
+    }
+    for (const auto& ln : aw.lanes) {   // Trojan war: the next spears falling down the lane, their shadows under them
+        const sf::Vector2f side = normalized(ln.to - ln.from, {1.f, 0.f});
+        const float step = A::troyTime / static_cast<float>(A::troySpears);
+        for (int i = ln.fired; i < std::min(A::troySpears, ln.fired + 4); ++i) {
+            const float land = step * static_cast<float>(i);   // when it lands
+            const float u = clampf(1.f - (land - ln.t) / (step * 4.f), 0.f, 1.f);   // 0 high up, 1 down
+            const sf::Vector2f at = ln.from + (ln.to - ln.from) * ((static_cast<float>(i) + 0.5f) / static_cast<float>(A::troySpears));
+            draw::disc(t, at, (4.f + 10.f * u) * k, sf::Color(0, 0, 0, static_cast<sf::Uint8>(90 * u)), sf::Color(0, 0, 0, 0), {1.6f, 0.7f}, 12);
+            const sf::Vector2f tip = at + sf::Vector2f{-side.y * 0.f, -(1.f - u) * 300.f * k} + side * (-(1.f - u) * 60.f * k);
+            const sf::Vector2f dd = normalized(at - (at + sf::Vector2f{0.f, -300.f * k} - side * (60.f * k)), {0.f, 1.f});
+            draw::line(t, tip - dd * (46.f * k), tip, 2.f * k, withAlpha(sf::Color(150, 110, 65), 0.9f * u + 0.1f));
+            draw::line(t, tip - dd * (9.f * k), tip, 3.5f * k, withAlpha(bronze, u * 0.9f + 0.1f));
+        }
+    }
+    for (const auto& f : aw.fx) {
+        const float a = clampf(f.life / f.maxLife, 0.f, 1.f), u = 1.f - a;
+        switch (f.kind) {
+            case 0:   // a missile's blast
+                draw::glow(t, f.a, f.r * (0.6f + 0.6f * u), fire, 0.6f * a);
+                draw::ring(t, f.a, f.r * (0.3f + 0.8f * u), 2.5f * k, withAlpha(ember, 0.8f * a));
+                break;
+            case 1:   // a volley's flash
+                draw::glow(t, f.a, f.r * 1.4f, ember, 0.8f * a);
+                break;
+            case 2:   // the star strikes: a white flash, a red shockwave, a dark crater
+                draw::glow(t, f.a, f.r * (1.f + 0.6f * u), sf::Color(255, 240, 220), 0.8f * a * a);
+                draw::ring(t, f.a, f.r * (0.4f + 1.1f * u), 6.f * k * a + 1.f, withAlpha(blood, 0.9f * a));
+                draw::ring(t, f.a, f.r * (0.2f + 0.7f * u), 3.f * k, withAlpha(ember, 0.7f * a));
+                draw::disc(t, f.a, f.r * 0.45f, sf::Color(30, 15, 10, static_cast<sf::Uint8>(150 * a)), sf::Color(30, 15, 10, 0), {1.f, 1.f}, 20);
+                break;
+            case 3:   // a spear lands: a blast of dust and fire, the spear standing in it
+                draw::glow(t, f.a, f.r * (0.6f + 0.5f * u), fire, 0.5f * a);
+                draw::ring(t, f.a, f.r * (0.3f + 0.7f * u), 2.f * k, withAlpha(ember, 0.7f * a));
+                draw::line(t, f.a, f.a + sf::Vector2f{-10.f * k, -34.f * k}, 2.f * k, withAlpha(sf::Color(150, 110, 65), a));
+                break;
+            default:   // a tooth sown: the ground breaks open
+                draw::ring(t, f.a, f.r * (0.4f + 0.8f * u), 2.f * k, withAlpha(bronze, 0.7f * a));
+                draw::glow(t, f.a, f.r, bronze, 0.4f * a);
+                break;
+        }
+    }
+}
+
+// Artemisa: the night (the arena dims; her ball and her prey shine), silver arrows, hounds, a golden stag, arrow rain.
+void worldArtemisa(sf::RenderTarget& t, const World& world) {
+    namespace A = cfg::artemisa;
+    const ArtemisaWorld& aw = world.classWorld().artemisa;
+    const float k = world.arenaScale();
+    const float clk = classClock();
+    const sf::Color silver(225, 232, 250), moon(200, 220, 255), gold(255, 210, 110), night(8, 10, 26);
+    bool any = false;
+    for (const Ball& b : world.balls()) any = any || b.hasRole(BallRole::Artemisa);
+    if (!any && aw.arrows.empty() && aw.hounds.empty() && aw.stags.empty() && aw.rains.empty() && aw.fx.empty()) return;
+    if (aw.night > 0.f) {   // night: the arena dims a little (the balls are drawn over it, so they stand out)
+        const float a = std::min(1.f, aw.night / 0.6f) * std::min(1.f, (A::nightTime - aw.night) / 0.6f + 0.2f);
+        sf::RectangleShape dim(world.viewSize());
+        dim.setFillColor(withAlpha(night, 0.45f * clampf(a, 0.f, 1.f)));
+        t.draw(dim);
+    }
+    for (const Ball& b : world.balls()) {
+        if (!b.hasRole(BallRole::Artemisa) || b.ghost) continue;
+        if (aw.night > 0.f) draw::glow(t, b.pos, b.radius * 4.f, moon, 0.45f);   // she shines in the dark
+        const ArtemisaState& st = b.cls.artemisa;
+        if (!st.route.empty()) {   // a night run: the way ahead, enemy to enemy
+            sf::Vector2f at = b.pos;
+            for (std::size_t i = static_cast<std::size_t>(st.routeAt); i < st.route.size(); ++i)
+                for (const Enemy& e : world.enemies())
+                    if (e.id == st.route[i] && e.hp > 0.f) {
+                        draw::line(t, at, e.pos, 1.5f * k, withAlpha(silver, 0.35f));
+                        at = e.pos;
+                    }
+        }
+        for (const Enemy& e : world.enemies())   // her prey: a crescent over it
+            if (e.id == st.prey && e.hp > 0.f && e.mark > 0.f) {
+                const sf::Vector2f q = e.pos + sf::Vector2f{0.f, -e.radius - 12.f * k};
+                draw::glow(t, q, 14.f * k, moon, 0.5f);
+                crescent(t, q, 6.f * k, silver, sf::Color(20, 24, 44), 1.f);
+            }
+    }
+    if (aw.night > 0.f)   // ...and at night every enemy is prey: a small crescent on each
+        for (const Enemy& e : world.enemies()) {
+            if (e.hp <= 0.f || e.orbiter) continue;
+            const sf::Vector2f q = e.pos + sf::Vector2f{0.f, -e.radius - 9.f * k};
+            crescent(t, q, 4.f * k, silver, sf::Color(20, 24, 44), 0.85f);
+        }
+    for (const auto& ar : aw.arrows) {   // the silver arrow: a streak racing down the line, a faint wake behind
+        const float a = clampf(ar.life / ar.maxLife, 0.f, 1.f), u = 1.f - a;
+        const sf::Vector2f d = normalized(ar.b - ar.a, {1.f, 0.f});
+        const float L = length(ar.b - ar.a);
+        const sf::Vector2f head = ar.a + d * (L * std::min(1.f, u * 2.5f));
+        draw::line(t, ar.a, head, 1.2f * k, withAlpha(silver, 0.35f * a));
+        draw::line(t, head - d * (60.f * k), head, 2.5f * k, withAlpha(silver, 0.9f * a));
+        draw::glow(t, head, 10.f * k, moon, 0.6f * a);
+    }
+    for (const auto& h : aw.hounds) {   // a hound: a spectral silver dog at full stretch
+        const float a = std::min(1.f, h.life / 0.4f);
+        const sf::Vector2f d = normalized(h.vel, {1.f, 0.f}), sd{-d.y, d.x};
+        const float s = k;
+        draw::glow(t, h.pos, 20.f * s, moon, 0.3f * a);
+        for (int i = 1; i <= 3; ++i)   // a ghostly wake
+            draw::disc(t, h.pos - d * (static_cast<float>(i) * 9.f * s), (5.f - static_cast<float>(i)) * s, withAlpha(moon, 0.25f * a), withAlpha(moon, 0.f), {1.f, 1.f}, 8);
+        draw::line(t, h.pos - d * (9.f * s), h.pos + d * (6.f * s), 7.f * s, withAlpha(silver, 0.85f * a));   // body
+        draw::disc(t, h.pos + d * (10.f * s), 4.f * s, withAlpha(silver, 0.9f * a), withAlpha(silver, 0.6f * a), {1.f, 1.f}, 10);   // head
+        draw::line(t, h.pos + d * (11.f * s), h.pos + d * (16.f * s), 2.5f * s, withAlpha(silver, 0.9f * a));                     // snout
+        draw::line(t, h.pos + d * (9.f * s) + sd * (2.f * s), h.pos + d * (7.f * s) + sd * (6.f * s), 1.8f * s, withAlpha(silver, 0.9f * a));   // an ear
+        const float g = std::sin(h.gait);
+        for (int leg = 0; leg < 2; ++leg) {   // the legs, galloping
+            const sf::Vector2f hip = h.pos + d * ((leg ? 5.f : -7.f) * s);
+            const float sw = (leg ? g : -g) * 5.f * s;
+            draw::line(t, hip, hip + sd * (6.f * s) + d * sw, 1.6f * s, withAlpha(silver, 0.8f * a));
+            draw::line(t, hip, hip - sd * (6.f * s) - d * sw, 1.6f * s, withAlpha(silver, 0.8f * a));
+        }
+        draw::line(t, h.pos - d * (9.f * s), h.pos - d * (16.f * s) + sd * (std::sin(h.gait * 0.7f) * 3.f * s), 1.6f * s, withAlpha(silver, 0.7f * a));   // tail
+    }
+    for (const auto& s : aw.stags) {   // the golden stag: a trail of light, a golden body, great antlers
+        const sf::Vector2f d = s.dir, sd{-d.y, d.x};
+        for (int i = 1; i <= 8; ++i) {
+            const float u = static_cast<float>(i) / 8.f;
+            draw::glow(t, s.pos - d * (u * 160.f * k), (18.f - 12.f * u) * k, gold, 0.4f * (1.f - u));
+        }
+        draw::glow(t, s.pos, 40.f * k, gold, 0.45f);
+        draw::line(t, s.pos - d * (16.f * k), s.pos + d * (10.f * k), 13.f * k, sf::Color(230, 180, 80));   // body
+        const sf::Vector2f head = s.pos + d * (20.f * k);
+        draw::line(t, s.pos + d * (8.f * k), head, 5.f * k, sf::Color(235, 190, 90));                          // neck
+        draw::disc(t, head, 5.5f * k, sf::Color(245, 205, 110), sf::Color(220, 170, 70), {1.f, 1.f}, 12);
+        for (int side = -1; side <= 1; side += 2) {   // antlers: a beam and its tines
+            const sf::Vector2f base = head + sd * (static_cast<float>(side) * 3.f * k);
+            const sf::Vector2f tip = base + sd * (static_cast<float>(side) * 18.f * k) - d * (6.f * k);
+            draw::line(t, base, tip, 2.2f * k, sf::Color(255, 225, 140));
+            for (int j = 1; j <= 2; ++j) {
+                const sf::Vector2f q = base + (tip - base) * (0.35f * static_cast<float>(j));
+                draw::line(t, q, q + d * (8.f * k) + sd * (static_cast<float>(side) * 3.f * k), 1.6f * k, sf::Color(255, 225, 140));
+            }
+        }
+        const float g = std::sin(clk * 22.f);
+        for (int leg = 0; leg < 2; ++leg) {
+            const sf::Vector2f hip = s.pos + d * ((leg ? 6.f : -12.f) * k);
+            draw::line(t, hip, hip + sd * (10.f * k) + d * ((leg ? g : -g) * 7.f * k), 2.f * k, sf::Color(220, 170, 70));
+            draw::line(t, hip, hip - sd * (10.f * k) - d * ((leg ? g : -g) * 7.f * k), 2.f * k, sf::Color(220, 170, 70));
+        }
+    }
+    for (const auto& r : aw.rains) {   // arrow rain: a volley falling, its shadow gathering under it
+        const float u = clampf(1.f - (r.land - r.t) / A::rainFall, 0.f, 1.f);
+        if (r.t < r.land - A::rainFall) continue;
+        draw::disc(t, r.pos, A::rainR * k * (0.4f + 0.5f * u), sf::Color(0, 0, 0, static_cast<sf::Uint8>(70 * u)), sf::Color(0, 0, 0, 0), {1.f, 0.6f}, 16);
+        for (int i = 0; i < 6; ++i) {
+            const float ox = (hash01(static_cast<float>(i) * 2.3f + r.pos.x) - 0.5f) * A::rainR * k * 1.4f;
+            const float oy = (hash01(static_cast<float>(i) * 4.1f + r.pos.y) - 0.5f) * A::rainR * k * 0.8f;
+            const sf::Vector2f land = r.pos + sf::Vector2f{ox, oy};
+            const sf::Vector2f tip = land - sf::Vector2f{-60.f * k, 240.f * k} * (1.f - u);
+            draw::line(t, tip - sf::Vector2f{-9.f, 36.f} * k * 0.7f, tip, 1.6f * k, withAlpha(silver, 0.9f));
+        }
+    }
+    for (const auto& f : aw.fx) {
+        const float a = clampf(f.life / f.maxLife, 0.f, 1.f), u = 1.f - a;
+        if (f.kind == 0) {   // a bite: three silver slashes
+            const sf::Vector2f d = normalized(f.b - f.a, {1.f, 0.f}), sd{-d.y, d.x};
+            for (int i = -1; i <= 1; ++i)
+                draw::line(t, f.b + sd * (static_cast<float>(i) * 4.f * k) - d * (f.r * 0.6f), f.b + sd * (static_cast<float>(i) * 4.f * k) + d * (f.r * 0.6f),
+                           1.8f * k, withAlpha(silver, 0.9f * a));
+        } else if (f.kind == 1) {   // a volley lands: a ring, and arrows standing in the ground
+            draw::ring(t, f.a, f.r * (0.4f + 0.7f * u), 2.f * k, withAlpha(silver, 0.7f * a));
+            draw::glow(t, f.a, f.r * 0.7f, moon, 0.35f * a);
+            for (int i = 0; i < 5; ++i) {
+                const sf::Vector2f q = f.a + sf::Vector2f{(hash01(static_cast<float>(i) * 1.9f + f.a.x) - 0.5f) * f.r, (hash01(static_cast<float>(i) * 3.7f + f.a.y) - 0.5f) * f.r * 0.6f};
+                draw::line(t, q, q + sf::Vector2f{6.f, -16.f} * k, 1.5f * k, withAlpha(silver, a));
+            }
+        } else {   // a night strike: a silver cross where she ran through
+            draw::line(t, f.a - sf::Vector2f{f.r, f.r}, f.a + sf::Vector2f{f.r, f.r}, 2.5f * k, withAlpha(silver, a));
+            draw::line(t, f.a - sf::Vector2f{f.r, -f.r}, f.a + sf::Vector2f{f.r, -f.r}, 2.5f * k, withAlpha(silver, a));
+            draw::glow(t, f.a, f.r * 1.4f, moon, 0.6f * a);
+        }
     }
 }
 
 void drawClassWorld(sf::RenderTarget& t, const World& world) {
+    worldPlanets(t, world);
+    worldGods(t, world);
+    worldGods2(t, world);
+    worldLoki(t, world);
+    worldNergal(t, world);
+    worldApolo(t, world);
+    worldAres(t, world);
+    worldArtemisa(t, world);
     worldMage(t, world);
     worldShooter(t, world);
     worldAssassin(t, world);

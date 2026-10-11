@@ -77,7 +77,7 @@ enum class UpgradeKind {
     Railgun,           // every wall bounce fires a beam along its path    [Striker]
     Berserk,           // each hit without touching a wall hits harder     [Striker]
     Giant,             // huge, slower, heavier                            [Guardian]
-    Satellite,         // orbits the core instead of bouncing around       [Guardian]
+    Satellite,         // "Asteroid belt" (was Satellite, then Moons; slot kept for saves) [Astronomer]
     GravityWell,       // drags nearby enemies toward itself               [Support]
     Storm,             // zaps everything around it, all the time          [Support]
     Gemini,            // permanent ghost twins with the same items        [Support]
@@ -317,8 +317,73 @@ enum class UpgradeKind {
     // ---- items added after the abilities (2026-10-05) ----
     BlackPlague,       // enemies it hits may catch a plague: they go mad and spread it [Alchemist]
     Roulette,          // a little roulette spins over it: red damage, black speed, green both [Jester]
+    // ---- the Astronomer (2026-10-06): the Guardian's ascended class, its planets ----
+    PlanetMercury,     // close and very fast                                 [Astronomer]
+    PlanetVenus,       // acid clouds                                         [Astronomer]
+    PlanetEarth,       // fires rockets                                       [Astronomer]
+    PlanetMars,        // hits hard and burns; Phobos and Deimos              [Astronomer]
+    PlanetJupiter,     // a giant: a gas trail, the Great Red Spot            [Astronomer]
+    PlanetSaturn,      // rings that cut, flung out                           [Astronomer]
+    PlanetNeptune,     // ice: freezes, a frost ring                          [Astronomer]
+    StarryNight,       // planets bigger, 3 random ones a fight, falling stars [Astronomer]
+    // ---- Hermes (2026-10-06): the Striker's god ----
+    Talaria,           // every wall bounce faster, a fling barely fades      [Hermes]
+    Caduceus,          // flying fast, a hit strikes the 2 nearest too         [Hermes]
+    Messenger,         // every 4 s: there and back, to the farthest enemy     [Hermes]
+    Petasos,           // flying fast: golden, through enemies, sonic booms    [Hermes]
+    Quicksilver,       // flying fast: every enemy slower                      [Hermes]
+    // ---- Odin (2026-10-06): the Mage's god ----
+    Huginn,            // a raven recasts its last ability                     [Odin]
+    Muninn,            // a raven: each cast also casts one it remembers       [Odin]
+    Runes,             // casts leave rune traps                               [Odin]
+    Gungnir,           // a spear through the line to the strongest, and back  [Odin]
+    Draupnir,          // every 3rd cast twice; abilities +1 level             [Odin]
+    // ---- Thanatos (2026-10-06): the Assassin's god - always blinking ----
+    ShadowStep,        // each blink cuts what's on the way                   [Thanatos]
+    DeathMark,         // blinks execute the weak                             [Thanatos]
+    Eclipse,           // every 4th blink, a shadow nova                       [Thanatos]
+    ReaperScythe,      // each blink sweeps the 2 nearest too                  [Thanatos]
+    FinalHour,         // every so often, through every enemy in a breath     [Thanatos]
+    // ---- Tiamat (2026-10-06): the Summoner's god - dragons and lizards ----
+    FrostWyrm,         // a white wyrm round the core, breathing ice          [Tiamat]
+    StormDrake,        // a drake perched in the field, chain lightning       [Tiamat]
+    LizardHorde,       // lizards pour out every few s                        [Tiamat]
+    AncientGold,       // a huge gold dragon crashes onto the strongest       [Tiamat]
+    BroodMother,       // lizards bite harder and breed on their kills        [Tiamat]
+    Devourer,          // the Ravager: charges through the thickest pack      [Tiamat]
+    Wyrmling,          // a little dragon whose closed trail explodes          [Tiamat]
+    // ---- Loki (2026-10-07): the Jester's god - clones playing games of chance ----
+    LokiDice,          // the clones roll dice: that many knives               [Loki]
+    LokiRoulette,      // ...spin a roulette: red, black, green               [Loki]
+    LokiCards,         // ...draw a card: its suit and rank                    [Loki]
+    LokiPachinko,      // ...open a pachinko: steel balls rain down           [Loki]
+    LokiHighTable,     // more clones, sooner, every game pays more           [Loki]
+    // ---- Nergal (2026-10-07): the Alchemist's god - plague and pestilence ----
+    BloodRain,         // a cloud rains blood on the thickest pack            [Nergal]
+    RatTide,           // a tide of rats pours out now and then               [Nergal]
+    Locusts,           // its trail of swarms: twice as many, hungrier        [Nergal]
+    BlackDeath,        // the infected burst when they die                    [Nergal]
+    PaleHorse,         // a pale rider gallops across, spreading the plague   [Nergal]
+    // ---- Apolo (2026-10-07): the Support's god - four muses, buffs that rotate ----
+    Lyre,              // each rotation heals; a lost buff lingers at half    [Apolo]
+    Laurel,            // the muses' buffs 40% stronger                       [Apolo]
+    SilverBow,         // each muse shoots sun arrows at its weak point       [Apolo]
+    SunChariot,        // a fifth muse: its ball becomes a little sun         [Apolo]
+    Oracle,            // rotations twice as fast; a crit x3 on arrival       [Apolo]
+    // ---- Ares (2026-10-07): the Shooter's god - every item one more weapon ----
+    PhobosDeimos,      // two moons (Fear, Terror) fire homing missiles       [Ares]
+    DragonTeeth,       // sown teeth sprout bronze hoplites that fire volleys [Ares]
+    WarChariot,        // a chariot of fire-breathing horses charges across   [Ares]
+    WrathOlympus,      // a red star falls on the thickest pack               [Ares]
+    TrojanWar,         // a rain of bronze spears down the busiest lane       [Ares]
+    // ---- Artemisa (2026-10-07): the Slinger's god - the hunt; all on the throw ----
+    SilverHounds,      // every throw looses two hounds at the prey           [Artemisa]
+    CrescentMoon,      // every throw: two balls follow its path              [Artemisa]
+    ArrowRain,         // a catch: arrows rain wherever the throw hit         [Artemisa]
+    GoldenStag,        // a full-pull throw: a golden stag charges ahead      [Artemisa]
+    HuntNight,         // night falls: all are prey; a throw runs them all through [Artemisa]
 };
-inline constexpr int kUpgradeKindCount = static_cast<int>(UpgradeKind::Roulette) + 1;
+inline constexpr int kUpgradeKindCount = static_cast<int>(UpgradeKind::HuntNight) + 1;
 inline constexpr int kMaxUpgradeKinds = 384;   // capacity of UpgradeCtx::locked
 static_assert(kUpgradeKindCount <= kMaxUpgradeKinds, "raise kMaxUpgradeKinds");
 
@@ -330,7 +395,8 @@ inline constexpr int kTierCount = 5;
 
 // ---- item tags: a ball's classes come from them -----------------------------
 // Same order as BallRole (sim/Entities.hpp), None = Normal.
-enum class ItemTag { None, Striker, Guardian, Support, Mage, Shooter, Assassin, Summoner, Jester, Slinger, Alchemist };
+enum class ItemTag { None, Striker, Guardian, Support, Mage, Shooter, Assassin, Summoner, Jester, Slinger, Alchemist, Astronomer,
+                     Hermes, Odin, Thanatos, Tiamat, Loki, Nergal, Apolo, Ares, Artemisa };
 
 // Everything the UI and the roll need to know about one class item. The five
 // newer classes describe their items with these (ClassItems.hpp); the older

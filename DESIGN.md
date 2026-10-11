@@ -729,8 +729,8 @@ Interest · Prospector · Stockpile · Magnet · Afterglow · Charged · Ember.
     llega a la **maestría** (efecto nuevo). Las cartas ROLE desaparecen; el
     nodo Recluta ofrece pelota nueva + un item de cada etiqueta.
     - Maestría Striker: los golpes por encima del crucero sueltan una onda
-      expansiva. Guardian: al rebotar en el núcleo suelta un pulso que empuja
-      y aturde. Support: la marca se contagia a los enemigos cercanos.
+      expansiva (más grande cuanto más rápido, hasta 2.5x el radio).
+      Guardian: al rebotar en el núcleo suelta un pulso que empuja y aturde. Support: la marca se contagia a los enemigos cercanos.
   - **Reacciones entre pelotas.** Un enemigo guarda el último elemento que le
     aplicó una pelota. Si **otra** pelota con **otro** elemento lo golpea, se
     dispara una reacción (y consume el estado):
@@ -2668,23 +2668,494 @@ de las pelotas: Q, el anillo de E y F.
   Summoner +15% invocaciones, +5% recarga; Jester +8% crit, +5% golpe doble;
   Slinger agarre más lejos, +15% primer golpe tirado; Alchemist +15%
   elemento, +5% recarga. Se ven en el tooltip de la pelota.
-- **Leash (rehecho):** atada al núcleo gira 4 s, de 0.5 a 4 vueltas por
-  segundo (sube en 3 s con curva, el último segundo a fondo; ~9 vueltas),
+- **Leash (rehecho):** atada al núcleo gira 3 s, de 0.5 a 4 vueltas por
+  segundo (sube en 2 s con curva, el último segundo a fondo; ~6 vueltas),
   siguiendo su camino como el Satellite (`World::advanceLeash`): pega a todo lo
   que barre, sin choques con otras pelotas ni paredes (la cuerda cabe en la
   arena). Al final se suelta por la tangente a 0.85x el tope duro de velocidad
   y la mantiene 2.5 s (+0.5 por nivel) rebotando por todos lados; primer golpe
   +50%. Combina con Striker (daño por velocidad) y Assassin. Una sola a la vez:
   un 2do Leash espera a que termine el vuelo; agarrarla corta la cuerda.
-- **Satellite:** ya no es un círculo rígido: el núcleo la atrae como gravedad
-  hacia un radio que respira (±18%), con resorte blando y poca amortiguación,
-  así gira en lazos que van y vienen y rara vez roza las paredes
-  (`cfg::changer::satellite*`).
+- **Magic missile gratis del Mage, una vez por pelota** (`BallLoadout::freeMissile`,
+  guardado en la run): antes, si se lo pasabas o combinabas con otra pelota,
+  el Mage recibía otro en la próxima sincronización, sin fin.
+- **Alchemist ascendido sin elementos gana Poison** (en el slot de tipo, nivel
+  1), una vez por pelota (`BallLoadout::freePoison`, `App::grantAlchemistPoison`).
+- **Swarm ataca al jefe:** los bichos van al jefe si está más cerca que el
+  enemigo más cercano (o si está solo) y lo muerden como cualquier invocación
+  (`cfg::summoner::bossFrac`); los encendidos por un dragón explotan en él.
+- **Dragones atacan al jefe:** el bebé y el anciano eligen al jefe como blanco
+  si está más cerca que el enemigo más cercano (o si está solo), giran la
+  cabeza hacia él y lo queman (bebé: su cono; anciano: su franja) a
+  `cfg::summoner::bossFrac`. Nada de daño si el jefe está protegido.
+- **Jefes sin repetir:** los actos 1-4 ya salían de un orden mezclado sin
+  repetidos (el 5 es siempre el Orbital); al cargar una run, un orden
+  inválido vuelve al fijo.
+- **Música en pools (2026-10-06):** cada acto tiene 3 temas que se turnan al
+  azar (`Audio::setPool`): cada uno suena entero y, 6 s antes de terminar,
+  otro del pool (nunca el mismo) entra desde el principio con un fundido
+  cruzado de ~4 s. Acto 1: map, fight2, fight3; 2: fight2, fight4, fight3; 3:
+  fight3, fight4, fight5; 4: fight4, fight5, fight2; 5: fight5, fight4,
+  fight3. Menú y web se turnan con "It's not Undertale 2" (calm.mp3, CC0).
+  Nuevo: "Soul Ripper" de Alexandr Zhelanov (fight5.ogg, CC-BY 4.0, en
+  CREDITS). El jefe sigue con sus dos movimientos.
+- **Satellite -> Moons (legendario del Guardian, mismo lugar en la web y en
+  el guardado):** la pelota se mueve normal y sus 3 lunas (4 al nivel máximo)
+  orbitan el NÚCLEO en elipses inclinadas que giran y respiran, siguiendo su
+  lugar con un resorte blando (un golpe o un rebote las saca y vuelven). Su
+  tamaño es el 45% del de la pelota: un Guardian más grande (Giant, Big ball),
+  lunas más grandes. Cada luna empuja y aturde lo que toca (45% del golpe de la
+  pelota +12% por nivel, con su elemento; al jefe la mitad) y rompe los
+  disparos que van al núcleo. Cuando la pelota rebota en el núcleo, las lunas
+  salen en anillo y vuelven. Una segunda pelota con Moons tiene su anillo más
+  afuera; los gemelos de Gemini traen las suyas (`World::updateMoons`).
+- **Leash:** cooldown 11 -> 18 s.
+- **Elder dragon:** echa fuego más tiempo del que descansa: 4.5 s de chorro
+  continuo (golpes cada 0.08 s) y 2.5 s de pausa (-0.25 por nivel); ~1.6x el
+  daño por segundo de antes.
+- **Tu blanco manda (click):** van primero al enemigo que marcaste las
+  invocaciones (también con Guard dog), los dragones y el Swarm (también al
+  jefe marcado), el Beam, el primer salto del Arc, Meteor, Smite, Bounty,
+  Hook, Warp, Portal, Swap (si el marcado está más cerca del núcleo que la
+  pelota) y el lanzallamas del Primal. Sin blanco, eligen como siempre.
 - **Click vs Q:** una pelota tirada se puede volver a agarrar a los 0.6 s
   (antes 1 s), y la Q (Volley) recarga en 2.5 s (antes 1.25): clickear bien
   rinde más que spamear la Q.
 
+### 2026-10-06: jefes en tres fases, disparos al núcleo y Caster
+
+Pedido (usuario): que las peleas con jefes duren más, que cada uno se sienta
+distinto, que se vea a las pelotas ganándole (solas o tiradas) y que un
+equipo flojo o mal apuntado pierda; cosas que disparen al núcleo y haya que
+interceptar; un "mago" que drene el núcleo de lejos.
+
+- **Tres fases** por jefe, cortadas en 66% y 33% de vida (`cfg::boss::stageAt`,
+  muescas en la barra de arriba y en la del jefe). Al cruzar una el daño se
+  corta ahí, el jefe **vuelve a su punto de entrada** (2.2 s, sin recibir
+  daño; el Orbital vuelve a abrir su espiral) y arranca su mecánica, con un
+  cartel corto. La última fase es la furia (ENRAGED, cae boss2.ogg). Reemplaza
+  al "NOT YET" (dormido + oleada).
+  - **Charger:** cada golpe limpio lo empuja atrás (tira y afloje). Fase 2/3:
+    planta 3/4 **pilares**; mientras quede uno no recibe daño y sigue
+    caminando; los pilares le disparan al núcleo.
+  - **Hive:** fase 2/3: se queda atrás y pone 3/4 **nidos** que largan runners
+    hasta romperlos; no recibe daño mientras haya nidos. Furioso, abanicos de 6.
+  - **Warden:** fase 2+: **punto débil** en la espalda (brilla, lado opuesto al
+    escudo): ahí pega x3, lo frena 1.4 s y lo empuja; en el resto del cuerpo
+    x0.4. Abre abanicos de orbes al núcleo (3, furioso 5). Fase 3: el escudo
+    cambia de sentido de giro cada tanto.
+  - **Dasher:** fase 2+: **blindado** (x0.2 de daño) salvo **aturdido**: sus
+    embestidas ya no rebotan, corren hasta una pared y se estrella (2.4 s,
+    furioso 1.8 s, x1.6 de daño), soltando 3 orbes al núcleo. Las embestidas
+    nunca cruzan el núcleo (antes podía atravesarlo y perder al toque).
+  - **Orbital:** fase 2/3: 4 **anclas** que disparan al núcleo y reponen el
+    anillo el doble de rápido; no recibe daño mientras haya anclas. Fase 3:
+    cada 5 s un escudo del anillo se suelta y va al núcleo.
+- **Partes** (pilares / nidos / anclas): enemigos quietos (`Enemy::part`), 12
+  grunts de vida; los empujes se deshacen. El auto-apuntado no va al jefe
+  mientras está protegido, así las pelotas solas van a romper las partes.
+- **Disparos** (`Shot`): orbes lentos (150 px/s) al núcleo; una pelota (o
+  copia, o la que tenés agarrada) que los toca los rompe; si llegan, 5 de
+  daño al núcleo ("Aegis" lo absorbe). En la derrota: "a boss shot got through".
+- **Caster** (enemigo nuevo, desde la oleada 7): se para a distancia del
+  núcleo, carga 1.5 s y lo drena con un rayo (0.8/s) hasta que lo matás;
+  congelado o aturdido no drena.
+- **Duración:** jefes más lentos (Charger 22 px/s, Hive 14, Warden 20, Dasher
+  acecha a 16, espiral del Orbital 4 px/s) y con más vida (120 / 100 / 110 /
+  64 / 130 grunts). Sim con bot (scratchpad, mismo bot en la versión vieja):
+  las peleas duran ~3x (2-4x según el jefe); un equipo flojo pierde con el
+  jefe final; ganando, el núcleo suele terminar entre 20% y 70%.
+
+### 2026-10-06: el cielo de la web crece con tus clases
+
+La web arranca en negro. El fondo es una galaxia 2x la pantalla que se mueve
+con la cámara (la mitad del paneo), así que moviéndote la explorás; "Hide web
+(H)" (arriba a la derecha) saca la red para mirar sólo el cielo (arrastrar
+para recorrerlo). El cartel de cada nodo aparece sólo con el cursor encima.
+Cada clase desbloqueada suma su motivo, repartido por toda la galaxia salvo
+los grandes, que quedan a la vista (`ui/WebSky.cpp`): Striker cometas
+rápidos, Guardian un planeta chico con escudo hexagonal (derecha), Support
+constelaciones, Mage un círculo mágico girando (izquierda), Shooter trazos de
+balas cruzando todo el mapa a distintas alturas, Assassin ojos rojos que se
+abren de a ratos y te miran, Summoner luces que suben y un dragón que pasa
+volando cada tanto, Jester cartas por todos lados, Slinger arcos de tiro,
+Alchemist nebulosas de colores. Por cantidad de clases: 2 pelotas que
+flotan, 3 nebulosas, 4 galaxias espirales, 5 planetas, 6 estrellas gemelas,
+7 un púlsar, 8 la vía láctea, 9 supernovas, 10 planetas que explotan y un
+agujero negro. Al desbloquear una clase, un aro fino de su color se abre
+desde el centro. Las capturas 41 / 42 muestran cada motivo y las etapas.
+
+### 2026-10-06: Shrines, ascender (Guardian -> Atlas) y Expandir
+
+- Se mantiene: 2 items de una clase = la clase; 4 = su forma completa de hoy.
+  Las pelotas arrancan con 4 slots y como mucho 2 clases.
+- **Shrine** (parada nueva, una por acto desde el acto 2 - desde el acto 4 a partir del 2026-10-07 -, en lugar de un "?" o
+  un Descanso de las filas del medio; hexágono dorado "A"): elegís UNA de dos,
+  para UNA pelota que no haya usado su Shrine:
+  - **Ascender** (con los 4 items de Guardian; máx. 3 pelotas ascendidas por
+    run): se borran sus items de Guardian y elige 1 de 3 planetas (todos
+    épicos o legendarios) que va directo a ella. Pasa a ser **Atlas** (clase
+    `Astronomer` por dentro): con 1 planeta ya tiene la clase. Desde ahí, en
+    toda la run, dejan de salir items de Guardian y salen planetas
+    (`RunState::poolOut / poolIn`). La pelota ascendida suma además 2
+    planetas al azar más débiles por combate.
+  - **Expandir**: +2 slots de item (6), en dos columnas en el panel: una
+    clase completa + otra, o 3 clases de 2.
+- **Atlas (Astronomer)**: contacto 0.75x, planetas +10%, +5 de vida del
+  núcleo. Items (`sim/WorldPlanets.cpp`, `cfg::planet`): épicos Mercurio,
+  Venus, Tierra, Marte, Júpiter, Saturno, Neptuno; legendarios Cinturón de
+  asteroides (lugar del viejo Satellite/Moons; detrás de su nodo de la web) y
+  Noche estrellada. La Luna sólo sale como planeta extra. Cada planeta orbita
+  el núcleo a su distancia (elipses que entran en la arena), empuja y aturde
+  lo que toca, rompe disparos y, cuando su pelota rebota en el núcleo
+  (con la clase): Mercurio x2 de velocidad 3 s, Venus nube ácida, Tierra
+  ráfaga de cohetes (y un cohete cada 2.5 s), Marte lanza Fobos y Deimos,
+  Júpiter la Gran Mancha Roja (y deja gas que frena y daña), Saturno lanza
+  sus anillos en un aro que corta (vuelven en 4 s), Neptuno anillo de
+  escarcha, el Cinturón dispara la mitad de sus rocas, Noche estrellada hace
+  caer una estrella por planeta y suma 3 planetas al azar por combate. Más
+  grande la pelota, más grandes los planetas y más cosas tiran.
+- Guardado: los datos nuevos van al final de cada línea (`run.ball`,
+  `run.ascend`), las runs viejas siguen cargando.
+
+### 2026-10-06: Atlas más fuerte, Hermes y Odín
+
+- **Atlas:** órbitas x1.7 más rápidas; la pelota va derecha al núcleo cada 2
+  rebotes (pared o enemigo: `cfg::planet::homeEvery`), así oscila y los
+  planetas se activan seguido. Cada planeta con lo suyo, nada reciclado:
+  Tierra cohetes con llama que explotan en área; Marte lanza Fobos y Deimos
+  (rocas que vuelven a su órbita); Venus una tormenta ácida pegada al planeta
+  (veneno + los enemigos reciben más daño); Júpiter la Gran Mancha Roja, una
+  espiral que va hacia el grupo más denso y atrae; Saturno sus anillos; Neptuno
+  una onda de hielo que congela; Mercurio acelera y deja una estela solar que
+  quema; el Cinturón tira meteoritos; Noche estrellada estrellas fugaces.
+- **Ascensión general:** tabla clase -> dios (`godOf`): Guardian -> Atlas,
+  Striker -> Hermes, Mage -> Odín. Pocos items, todos épicos/legendarios.
+- **Hermes** (clase: x1.2 velocidad, x1.6 velocidad máxima, el golpe crece con
+  la velocidad): Talaria (ép.: +12% de velocidad por rebote en pared hasta el
+  núcleo, el tiro casi no se frena), Caduceo (ép.: rápido, cada golpe también
+  pega a los 2 más cercanos con dos serpientes de luz), Mensajero (ép.: cada
+  4 s va y vuelve al instante al enemigo más lejano del núcleo), Petaso (leg.:
+  rápido se vuelve dorado, atraviesa enemigos y deja estampidos sónicos),
+  Quicksilver (leg.: rápido, todos los enemigos 30% más lentos).
+- **Odín** (clase: 3 slots de habilidad, recarga +30%, contacto 0.6x): Hugin
+  (ép.: un cuervo re-lanza su última habilidad al 50% cada 4 s desde donde
+  está), Munin (ép.: cada hechizo también lanza otro que ya usó en la pelea,
+  al 60%), Runas (ép.: cada hechizo deja una runa trampa), Gungnir (leg.: cada
+  6 s una lanza atraviesa la fila hasta el más fuerte y vuelve), Draupnir
+  (leg.: cada 3er hechizo se lanza dos veces y sus habilidades +1 nivel). Los
+  cuervos no re-lanzan las que mueven la pelota (Dash, Warp, Swap, Leash).
+- **Odín con cooldown real:** sus habilidades ya no se lanzan una por una:
+  SÓLO en descargas (todo junto) cada 8 s / su velocidad de recarga
+  (decreciente). Hugin: cada 3ª descarga sale 3 veces. Matar adelanta la
+  próxima descarga 4%. Gungnir cada 10 s / su recarga.
+- **Hermes casi nunca toca el núcleo:** lo esquiva con fuerza (giro 14 rad/s y,
+  si igual va a chocar, se desvía del todo) hasta llevar 30 rebotes; ahí va
+  derecho al núcleo a entregar el mensaje (cargado).
+- **Tiamat siempre haciendo algo:** la montura (dibujada debajo de la pelota,
+  que va montada) rasguña lo cercano cada 0.35 s, deja un rastro de brasas,
+  tira bolas de fuego cada 1.8 s, y cada 7 s: Rugido, Picada (se lanza sobre
+  el grupo más denso y choca), Infierno (un anillo de fuego la acompaña 4 s)
+  o Meteoros (3 caen sobre grupos). El wyrm deja escarcha en su recorrido
+  (frena y daña), el draco tiene un campo estático que electrocuta lo cercano
+  cada 0.5 s, la sombra del dragón dorado quema lo que tapa y su choque deja
+  un charco de oro fundido. El dragón del cielo de la web también usa el
+  dibujo del Elder (otra forma en cada pasada).
+- **Infinito (dev):** arranca en la arena grande (la de los actos 2+);
+  botones "+20 enemies", "+20 tough (x8 HP)" y "Arena: act 1 / wide" (cambia
+  la arena desde esa oleada).
+- **Hide web arreglado** (la vista de la web se guardaba cada cuadro y lo
+  apagaba).
+- **Balance de dioses por simulación (`SB_BALANCE=<oleadas> ./space_breakers`,
+  `SB_BALANCE_ONLY=<nombre>` para uno):** cada clase con sus mejores items
+  contra su dios con los suyos, una sola pelota, las mismas habilidades (Nova;
+  Mage/Odín además Arc y Meteor), 30 enemigos constantes 12 s por oleada, la
+  Q cada vez que está lista, núcleo invulnerable; cuenta sólo las muertes
+  acreditadas a la pelota. Meta del usuario: el dios mata 1.5x-2x (3x como
+  mucho). Resultado (60 oleadas, promedio de 3): Hermes 2.05x, Atlas 2.2x,
+  Odín 1.65x, Thanatos 1.73x, Tiamat ~1.55x. Ajustes que lo dieron: Hermes
+  crucero x1.5 / tope x1.7, golpe x0.3 y sin bonus por velocidad (su vuelo
+  ya es su ventaja); Odín potencia x1.0, Munin 0.5x, Gungnir 6x; Atlas toques
+  algo más fuertes pero estrellas / meteoros / muralla / Mancha y crecimiento
+  más débiles; Thanatos puñalada x1.7, salto cada 0.9 s, +8% por alma; Tiamat
+  bola de fuego cada 1 s y más grande, garras, lagartos (hasta 24) y dragones
+  más fuertes. Ojo: sin la Q simulada el Striker base queda muy abajo (vive
+  de los tiros).
+- **Dragones de Tiamat recorren el mapa y tiran por la boca:** Wyrm de hielo
+  (serpiente: escupe esquirlas de hielo, aliento, deja escarcha), Draco de
+  tormenta (siempre volando: rayo en cadena desde la boca, campo estático,
+  esferas de rayo lentas que electrocutan a su paso, nube de tormenta cada
+  7 s sobre el grupo más denso), Oro antiguo de TRES CABEZAS (izquierda
+  lanzallamas continuo, centro oro fundido que deja charcos, derecha rugido que
+  atrae a los enemigos), Devorador (nuevo, ép.: se traga un enemigo entero -
+  no jefes, a esos los muerde - y lo mastica 4 s antes del próximo),
+  Dragoncito (nuevo, ép.: da vueltas alrededor del grupo más cercano dejando
+  una estela; cuando la cruza, todo lo que quedó adentro del lazo explota).
+- **Hermes:** entrega a los 100 rebotes (2026-10-07: antes cualquier roce con
+  el núcleo la disparaba antes de tiempo; ahora tocar el núcleo antes de los
+  100 no entrega ni reinicia nada). El halo dorado se llena con los rebotes:
+  lleno = va al núcleo. Sólo gana velocidad (nunca baja hasta que entrega).
+- **Thanatos, la daga (2026-10-07):** rebota 3 veces hacia enemigos lejanos
+  (hasta 800 px), eligiendo el camino que atraviesa más enemigos (después el
+  más lejano); todo lo que cruza en el camino recibe un corte liviano (0.25x).
+  Sim ~2x del Assassin.
+- **Draupnir (visual, 2026-10-07):** un anillo de oro grueso, inclinado,
+  girando alrededor de Odín con un brillo que lo recorre; en cada andanada
+  suelta 8 anillos iguales que salen despedidos (el anillo que se multiplica).
+- **Gungnir (2026-10-07):** tira una lanza más por cada hechizo lanzado desde
+  la anterior (hasta +10), una tras otra (0.07 s), cada una al siguiente
+  enemigo más fuerte (el jefe primero); las extra pegan 0.3x de la principal.
+  Visual nueva: estela de luz dorada que se afina, asta oscura con 3 runas
+  celestes, guarda y hoja de oro en forma de hoja con filo blanco. Sim Odín
+  ~2.2–2.4x del Mage (la lanza extra suma ~10%).
+- **REGLA (el usuario, 2026-10-06): ningún item de clase normal puede ser
+  mejor que uno de un dios.** Al balancear o agregar items, un item de dios
+  siempre rinde más que cualquiera de las clases base.
+- **Tiamat, montura nueva:** lenta y pesada (x0.55 de velocidad); su dragón
+  lanza una bola de fuego en arco al grupo más denso cada 1.8 s (explota en
+  área) y cada 7 s hace un movimiento propio con su nombre en pantalla:
+  Rugido (aturde lo cercano), Tormenta de fuego (6 bolas sobre distintos
+  enemigos), Ráfaga de alas (empuja lejos todo alrededor), Coletazo (un
+  barrido circular fuerte). Sus dragones usan el dibujo del Elder dragon en
+  otras formas (`drawDragonForm`): Wyrm de hielo = dragón serpiente (sin
+  alas, cuerpo largo y bigotes), Draco de tormenta = wyverno (alas-brazo con
+  garras, dos patas, cola con púa), Oro antiguo = cuatro alas, gigante; la
+  montura, el dragón clásico.
+- **Thanatos:** nunca dos saltos a menos de 0.5 s (salvo Última hora).
+- **Nerf a Thanatos y Odín (2026-10-06):** Thanatos: su salto tiene 1.2 s de
+  cooldown (vuela libre mientras; matar lo baja a la mitad). Odín: lanza todo
+  cada 6 s (no 2), Hugin cada 10 s, potencia x1.3, matar resta 8%. **Toda
+  reducción de cooldown va a una sola suma con rendimiento decreciente**
+  (`World::mageCastRate`: x(1 + 2B/(2+B)), tope x3): la clase Odín (+0.3),
+  Valknut (+0.4), Focus, la web... el primero rinde mucho, cada uno más rinde
+  menos. El lanzamiento total, Hugin y Gungnir vienen a esa velocidad
+  (Gungnir escala con su recarga).
+- **Colores de los dioses = los de su clase base** (sin colores nuevos): Atlas
+  el del Guardian, Hermes el del Striker, Odín el del Mage, Thanatos el del
+  Assassin, Tiamat el del Summoner. Para distinguirlos, los items de las
+  clases base se ven un poco apagados y los de los dioses más brillantes, con
+  borde encendido y un reflejo que los cruza (`tagColor`, `ui/Widgets.cpp`).
+- **Que se note que son dioses:** toda pelota de un dios lleva un aura y un
+  halo flotante de su color, más su cosmético grande: Atlas una esfera
+  armilar (dos anillos inclinados con estrellas), Hermes alas doradas que
+  baten, Odín un anillo de runas, Thanatos capucha de sombra y guadaña, Tiamat
+  montada en su dragón (cabeza adelante, alas, cola). Se ve en la arena y en
+  el TAB (`drawGodLook`).
+- **Pasivas al matar:** Odín: cada muerte resta 15% a todos sus cooldowns y a
+  su próximo lanzamiento total. Atlas: cada muerte +3% de tamaño (y sus
+  planetas) en la pelea, hasta +60%. Thanatos: un alma, +6% de daño en la
+  pelea (hasta +90%) y salta al siguiente al instante. Tiamat: nace un
+  lagarto. Hermes: su vuelo (impulso y mensaje). Hermes ahora es rapidísimo
+  de base (x2 crucero, x2.2 tope) y recupera la velocidad al instante.
+- **Thanatos (dios del Assassin):** salta detrás de un enemigo y lo apuñala
+  cada 0.18 s (x1.5) hasta matarlo; recién ahí salta al siguiente (el
+  marcado primero). Items: Paso de sombra (ép.: cada salto corta lo que hay en
+  el camino), Marca de muerte (ép.: lo que apuñala con menos de 25% muere; no
+  jefes), Eclipse (ép.: cada 4º salto una nova de sombra), Guadaña (leg.:
+  cada salto golpea también a los 2 más cercanos), Última hora (leg.: cada
+  15 s salta por hasta 12 enemigos en un instante).
+- **Tiamat (diosa del Summoner):** monta un dragón que escupe fuego hacia
+  adelante cada 2.5 s; cada muerte hace nacer un lagarto (hasta 16). Items:
+  Wyrm de hielo (ép.: un dragón blanco enroscado alrededor del núcleo que
+  escupe hielo y congela), Draco de tormenta (ép.: un dragón azul posado en el
+  campo que cambia de lugar y lanza rayos en cadena a 4), Horda de lagartos
+  (ép.: cada 5 s salen 6 lagartos), Oro antiguo (leg.: un dragón dorado
+  gigante que vuela alto y cada 7 s se lanza en picada sobre el más fuerte:
+  4x su golpe en área), Madre de la cría (leg.: los lagartos muerden el doble
+  y cada muerte suya hace nacer 2 más, hasta 30).
+- **Odín rehecho (que las habilidades se noten):** la clase lanza TODAS sus
+  habilidades a la vez cada 2 s (un círculo de runas se enciende bajo la
+  pelota), con potencia x1.5 (daño y radio) y recarga +30%. Hugin (ép.): cada
+  6 s lanza todo 3 veces seguidas. Munin (ép.): cada hechizo baja una
+  explosión arcana sobre el grupo más denso (1.2x su golpe). Valknut (ép.,
+  lugar de Runas): +40% de recarga y el lanzamiento total más seguido. Gungnir
+  (leg.): cada 5 s la lanza pega 10x su golpe al más fuerte, ida y vuelta.
+  Draupnir (leg.): habilidades +1 nivel y x1.5 de potencia y radio.
+- **Hermes vuela a su manera (pasiva de la clase):** esquiva el núcleo cuando
+  va hacia él (gira hasta 4 rad/s de cerca; a veces igual le pega) y se curva
+  hacia el enemigo marcado o el más cercano. Cada rebote (pared o enemigo) sin
+  tocar el núcleo suma +5% de velocidad (hasta +120%). Cada pared y cada
+  segundo volando rápido cargan un mensaje (halo dorado que crece); al tocar
+  el núcleo lo entrega: "MESSAGE DELIVERED", una onda dorada y un golpe a
+  todos los enemigos de la arena (0.5x su golpe por punto de carga, tope 12) y
+  vuelve a cero (`cfg::hermes`, `World::godsCoreBounce`).
+- **Saturno y Neptuno, rehechos:** al rebotar en el núcleo, los anillos de
+  Saturno se instalan alrededor del NÚCLEO 5 s como una muralla doble que gira:
+  corta y tira hacia afuera lo que intenta cruzar y frena disparos; después
+  vuelven al planeta. Neptuno lanza a Tritón, su luna, que orbita el núcleo al
+  revés 6 s congelando todo lo que toca (con estela de escarcha).
+- **Items de dioses, sólo para su dios:** un item de un dios sólo entra en la
+  pelota que ascendió a ese dios (no se pasa a otra pelota ni a otro dios), y
+  una pelota ascendida sólo acepta items de su dios (elementos y habilidades
+  sí). Lo que ya tenía al ascender se queda. En dev, dar un item de dios
+  asciende la pelota en el acto.
+- **Ascender conserva el tamaño:** lo que la pelota perdería al borrarse los
+  items de su clase (y la clase Guardian) se le devuelve
+  (`BallLoadout::keptSize`), así un Guardian grande da un Atlas grande y
+  planetas grandes.
+- Dev (F1): pestaña "Gods" con los items de los dioses y "Shrine (ascend)".
+- Pendiente: Thanatos (Assassin, se teletransporta saltando entre enemigos),
+  Nergal, Tiamat, Artemisa, Loki, Apolo, Ares.
+
 ### Anotado para después (el usuario lo pidió así)
+
+- **El juego por etapas (2026-10-06, el usuario lo quiere más adelante):** se
+  desbloquea de a partes: primero las habilidades, después Q / E / F, después
+  aparecen los pactos, después las ascensiones. Sin desbloquear las etapas
+  casi no se puede ganar (salvo un equipo muy bueno). Los items épicos y
+  legendarios también se desbloquean en la web, y las ascensiones son otro
+  anillo de la web más afuera, después de los legendarios y de vencer a cierto
+  jefe.
+- **Ascensiones como dioses (2026-10-06):** hechos Atlas (Guardian), Hermes
+  (Striker), Odín (Mage), Thanatos (Assassin), Tiamat (Summoner). Faltan,
+  con lo que pidió el usuario: Nergal (Alchemist, la plaga), Artemisa
+  (Slinger), **Loki** (Jester: crea clones cada tanto que tiran una ruleta
+  especial - un rayo, juntar todas las pelotas en un punto, cosas así),
+  **Apolo** (Support: aleja a los enemigos del núcleo, se clona un montón y
+  cada tanto da a los aliados efectos mejorados al azar, todo muy visible),
+  Ares (Shooter). Cada dios con su pasiva al matar y su cosmético.
+- **Los dioses que faltan, diseño del usuario (2026-10-07):**
+  - **Loki (Jester):** se clona; cada clon juega algo de azar (moneda,
+    ruleta, cartas, dados...) y lo que sale pasa. Sus items suman juegos, por
+    estilos: juegos de casino, luego cartas, luego pachinko.
+  - **Nergal (Alchemist):** plagas y pestes: lluvia de sangre, la plaga como
+    ratas que corren por el campo, cosas así.
+  - **Apolo (Support):** 4 clones, cada uno da un buff fuerte y distinto a una
+    pelota (fuerza, mucha velocidad, duplicar la pelota con todo y sus
+    habilidades, ...). Los buffs van rotando entre las pelotas, y una pelota
+    nunca tiene dos de estos buffs a la vez.
+  - **Ares (Shooter):** un descontrol de balas, misiles y artillería pesada;
+    cada item le suma un arma más.
+  - **Artemisa (Slinger):** sin idea del usuario todavía (propuesta abajo).
+- **Loki (dios del Jester, hecho 2026-10-07, `sim/WorldLoki.cpp`):** cada 2 s
+  se desprende un clon (hasta 5, 7 s cada uno; cada muerte 25% de otro al
+  instante). Los clones vuelan rondando a los enemigos (se los atraviesa, son
+  ilusión) y cada ~1 s juegan algo de azar que se ve girando sobre su cabeza:
+  moneda siempre (cara: un rayo del cielo 6x en área; cruz: un golpe 2.5x).
+  Items: Dados cargados (ép.: tantos cuchillos como saca, 2 a 12), Ruleta
+  (ép.: rojo nova de fuego, negro atrae y aturde, verde 1 en 10 JACKPOT 12x en
+  área + oro), Mazo marcado (ép.: picas un tajo en línea, tréboles un golpe
+  que aturde, diamantes esquirlas a 3, corazones curan el núcleo; figura x2,
+  as x4), Pachinko (leg.: 14 bolitas de acero caen desde arriba y rebotan
+  entre los enemigos), Mesa alta (leg.: +2 clones, uno cada 2 s, todo paga
+  50% más, el verde el doble de seguido). Contacto 1x.
+  Cambio del usuario (mismo día): cada clon juega UN solo juego UNA vez y
+  desaparece (un dado, una ruleta, una carta...); como mucho 3 clones (4 con
+  Mesa alta), uno cada 0.45 s; el pachinko cae por todo el ancho de la
+  arena. Sim: ~1.5x del Jester.
+- **Nergal (dios del Alchemist, hecho 2026-10-07, `sim/WorldNergal.cpp`):**
+  su elemento es propio y único, la **Plaga negra** (`Element::Plague`, casi
+  negro; nunca sale al azar ni se elige): su pelota sólo lleva ésa, y
+  reacciona con cada elemento a su manera: fuego PYRE (quema y contagia),
+  hielo COLD DEATH (congela y la podredumbre sale de golpe), veneno
+  PESTILENCE (la podredumbre se duplica y se esparce), eléctrico FEVER (rayo
+  negro por los infectados), agua MIASMA (una nube negra que queda), piedra
+  MASS GRAVE (la tierra los traga un momento y salen ratas). Se ve en su type
+  slot (hexágono negro, borde violeta) y no acepta otro elemento: el
+  potencial sale cuando las OTRAS pelotas traen elementos. Cada golpe
+  infecta (podredumbre = veneno, 4 s). Por defecto deja una estela de
+  enjambres (uno cada 0.5 s) que persiguen a lo cercano, mastican e infectan.
+  Cada infectado que muere suelta una rata (hasta 20). Contacto 0.85x.
+  Items: Lluvia de sangre (ép.: cada 6 s una nube roja GRANDE llueve 4 s sobre
+  el grupo más denso: daño y los marca, +35% de todo), Marea de ratas (ép.:
+  cada 5 s salen 8 ratas, muerden 50% más), Enjambre de langostas (ép.: sus
+  enjambres se vuelven langostas: el doble, más grandes, más fuertes, duran
+  más), Peste negra (leg.: el infectado que muere estalla 0.6x e infecta
+  alrededor; ya NO encadena estallidos - el usuario lo vio muy fuerte),
+  Caballo pálido (leg., reemplaza a Cosecha: cada 10 s un jinete pálido
+  cruza la arena al galope por el grupo más denso: 3x y les deja la plaga
+  negra - que reacciona con lo que tengan). Sim: ~1.9x del Alchemist (sin
+  reacciones: el sim es una sola pelota). El sim ahora da a cada build Fuego
+  (y Veneno de segundo para el Alchemist).
+- **Apolo (dios del Support, hecho 2026-10-07, `sim/WorldApolo.cpp`):** 4
+  musas (5 con Carro del sol), cada una de su color (Fuerza roja, Velocidad
+  celeste, Gemelo violeta, Gigante verde, Sol naranja; anillo, mira y flechas
+  del mismo color), cada una al lado de una pelota distinta
+  (nunca dos en la misma) dándole un don: Fuerza (x2 daño), Velocidad (x1.8),
+  Gemelo (una copia de la pelota con sus items y habilidades - que lanza -
+  mientras ella esté), Gigante (x1.5 tamaño, +50% daño). Cada musa marca un
+  punto débil (la marca del Support, +35% de todo) permanente: lo mantiene
+  hasta que muere (no salta según la distancia de la pelota) y recién ahí
+  elige el enemigo libre más cercano a ella; varios marcados a la vez, uno por
+  musa. Cada 5 s rotan a
+  la pelota siguiente; con menos pelotas que musas los dones igual van
+  pasando (las que sobran esperan en el núcleo). Cada muerte las retiene 0.5 s.
+  Contacto 0.9x. Items: Lira (ép.: cada rotación cura el núcleo; la pelota que
+  pierde un don se queda la mitad 3 s), Corona de laurel (ép.: dones +40%),
+  Arco de plata (ép.: cada musa tira una flecha de sol a su punto débil cada
+  0.8 s, 2x), Carro del sol (leg.: una 5ª musa: su pelota es un pequeño sol
+  que quema y prende fuego alrededor), Oráculo (leg.: rotan el doble de
+  rápido y el golpe al llegar es crítico x3). La musa "Luz" de la propuesta
+  la cambió el usuario: quedó Gigante. Sim (una sola pelota, lo subestima):
+  ~1.5x del Support.
+- **Ares (dios del Shooter, 2026-10-07, sim/WorldAres.cpp):** el usuario
+  pidió "un descontrol de balas, misiles y artillería, cada item un arma más",
+  y que las armas se sientan de un dios (mitología, no un tanque). Base: el
+  Arsenal de la guerra, 6 cañones fantasma de bronce que giran alrededor y
+  disparan sin parar (una bala cada 0.1 s, 45% del golpe, con el arma del
+  Shooter: sus items comunes le sirven), apuntando a los 3 más cercanos; Sed
+  de sangre: cada kill +8% de cadencia a TODAS sus armas (hasta x2), se
+  sostiene 2 s y se apaga; con mucha arde roja y los cañones escupen fuego.
+  Contacto 40%. Items (cada uno un arma): Phobos y Deimos (ép.: sus hijos
+  Miedo y Terror, las lunas de Marte, una roja y una negra, orbitan y tiran
+  misiles teledirigidos 1.5x con explosión chica; los alcanzados quedan
+  aterrados un instante), Dientes del dragón (ép.: cada 6 s siembra 3
+  dientes en fila y brotan hoplitas de bronce, escudo y lanza, que disparan
+  ráfagas de 3 balas por 8 s; máx 9), Carro de guerra (ép.: cada 7 s un carro
+  con caballos que escupen fuego cruza la arena por el grupo más denso, 2x y
+  Fuego, dejando un surco en llamas), Ira del Olimpo (leg.: cada 4 s un
+  círculo rojo se cierra sobre el grupo más denso y cae una estrella roja,
+  5x en área grande y un cráter ardiendo), Guerra de Troya (leg.: cada 10 s
+  una lluvia de 14 lanzas de bronce cae de punta a punta en el carril, fila o
+  columna, con más enemigos, 2.5x cada una). Visual: penacho espartano rojo
+  sobre la pelota, marca de espadas cruzadas. Sim ~1.66x del Shooter
+  (Deadeye: Minigun, Ion cannon, Lead storm, Shrapnel).
+- **Artemisa (diosa del Slinger, 2026-10-07, sim/WorldArtemisa.cpp):** la
+  cazadora, gemela de Apolo (luna y caza). Regla del usuario: todo tiene que
+  salir del lanzamiento. Base: tiro x1.6; cada lanzamiento dispara una flecha
+  de plata por toda la línea del tiro (0.8x a todo lo que cruza) y el primer
+  enemigo que toca queda como **presa** (marca del Support 6 s, luna creciente
+  encima); el primer golpe de la pelota sobre su presa x2. **Si no la tirás,
+  se tira sola cada 4 s** hacia los enemigos (o tu objetivo), como si la
+  tiraras con el mouse, con todos los beneficios del lanzamiento (rinde más
+  si la tira el jugador, pero se puede jugar sin tirarla); el lanzamiento
+  quedó en `World::launchThrow`, compartido con `releaseHeld`. Contacto 0.8.
+  Items: Sabuesos de plata (ép.: cada tiro suelta 2 perros espectrales que
+  corren a la presa mordiendo todo en el camino), Luna creciente (ép.: cada
+  tiro salen 2 pelotas más, copias de 3 s, por la misma trayectoria, un
+  instante atrás - pedido del usuario), Lluvia de flechas (ép.: al agarrarla,
+  o cuando se tira sola, llueven flechas en cada lugar donde pegó el tiro
+  anterior, hasta 12), Ciervo dorado (leg.: un tiro con la honda al máximo -
+  y los suyos propios - invoca un ciervo de cuernos de oro que embiste por la
+  misma línea hasta la pared, 3x, y marca como presa todo lo que toca), Noche
+  de caza (leg.: cada 15 s cae la noche 5 s: la pantalla se oscurece un poco,
+  resaltando a Artemisa; todos los enemigos son presa; y al tirarla sale a
+  toda velocidad atravesando a TODOS los enemigos en pantalla, uno tras
+  otro, 1.5x a cada uno). Visual: arco de plata detrás y lunita creciente
+  encima. Sim: ~4900 kills (el Slinger base no se tira en la sim, así que la
+  comparación con él no sirve; queda en el medio de los dioses).
+- **2026-10-07, varios (pedidos del usuario):**
+  - **Shrines (altares de ascensión) recién desde el acto 4**
+    (`cfg::shrine::fromAct`, antes 2).
+  - **Cámara más lejos:** la arena ancha (jefes y actos 2-5) pasa de
+    1.95x/1.45x a 2.35x/1.75x (`cfg::boss::arenaScaleX/Y`).
+  - **Los dragones de Tiamat le pegan a los jefes:** vuelan hacia el jefe;
+    el Frost wyrm lo enrosca y le sopla hielo, el Storm drake le tira
+    descargas, cadena y nubes de tormenta encima si no hay grupos, las
+    cabezas de Ancient gold le escupen fuego y oro, el Ravager lo embiste si
+    no hay grupo, el Wyrmling lo muerde y las lagartijas lo rodean y muerden.
+    Al jefe le hacen la mitad, como todo lo que no es una pelota.
+  - **Tiamat (montura):** lagartijas máx 18 (24 con Brood mother; antes
+    24/36); sus movimientos propios (rugido, dive, inferno, meteoros) cada
+    3.5 s (2.5 s adulta; antes 7/5), y entre medio escupe fuego: un cono a
+    lo más cercano cada 1.2 s (1.4x, Fuego). Sim ~1.6x del Summoner.
+  - **Tres clases de verdad:** antes `BallLoadout::roles()` cortaba en 2
+    aunque DESIGN decía que con 6 slots se podían 3 clases de 2; ahora
+    cuenta hasta 3 (la tercera también aplica). Se ve como una órbita
+    chiquita de puntos en su color con una lunita (estilo Atlas).
+  - **Ares - Ira del Olimpo:** va por su propio reloj (la sed de sangre no la
+    acelera), cada 2.5 s, 6x, y como mucho 9 a la vez entre estrellas
+    cayendo y cráteres. Balas de los cañones 55%. Sim ~1.56x del Shooter.
 
 - **Progresión:** por ahora todo se desbloquea como está; se ve más adelante.
 - **5 actos:** se queda así; el balance entre actos se ve después.

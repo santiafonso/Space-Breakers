@@ -56,6 +56,8 @@ inline const sf::Color enemy = soften({232, 120, 120});
 // darker. Old vivid values in DESIGN.md (Fase Q).
 inline const sf::Color elemFire{206, 136, 92};
 inline const sf::Color elemPoison{142, 180, 108};
+inline const sf::Color elemPlague{14, 11, 17};   // Nergal's own: black
+inline const sf::Color plagueEdge{170, 150, 190};   // ...its edge / its name, so the black reads on the dark
 inline const sf::Color elemWater{104, 138, 204};
 inline const sf::Color elemIce{158, 192, 204};
 inline const sf::Color elemStone{154, 142, 126};
@@ -83,6 +85,18 @@ inline const sf::Color classSummoner = soften({150, 226, 120});
 inline const sf::Color classJester = soften({255, 124, 214});
 inline const sf::Color classSlinger = soften({86, 214, 255});
 inline const sf::Color classAlchemist = soften({206, 238, 84});
+// The gods wear their class's colour (2026-10-06: no new hues); their items
+// shine brighter than the base class's (tagColor in ui/Widgets.cpp).
+inline const sf::Color classAstronomer = core;       // Atlas: the Guardian's
+inline const sf::Color classHermes = ballFast;       // the Striker's
+inline const sf::Color classOdin = classMage;
+inline const sf::Color classThanatos = classAssassin;
+inline const sf::Color classTiamat = classSummoner;
+inline const sf::Color classLoki = classJester;
+inline const sf::Color classNergal = classAlchemist;
+inline const sf::Color classApolo = puSurge;     // the Support's
+inline const sf::Color classAres = classShooter;
+inline const sf::Color classArtemisa = classSlinger;
 inline const sf::Color ability = soften({120, 216, 255});   // ability picks and slots
 inline const sf::Color bulletTime = soften({110, 232, 140});   // the E bullet-time gauge
 inline const sf::Color pact = soften({206, 74, 146});       // pacts and the Altar: a gift with a price

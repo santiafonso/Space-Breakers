@@ -41,4 +41,10 @@ void drawElementPulse(sf::RenderTarget& t, Element el, sf::Vector2f pos, float r
 // the enemies and under the balls. World view.
 void drawClassWorld(sf::RenderTarget& t, const World& world);
 
+// A dragon in the Elder dragon's look, in one of its shapes (0 classic, 1 wyvern,
+// 2 four wings, 3 serpent) - Tiamat's dragons, the web sky's.
+void drawDragonForm(sf::RenderTarget& t, int form, sf::Vector2f pos, sf::Vector2f face, sf::Vector2f headDir, float S, float phase,
+                    sf::Color c, float glowA, const sf::Vector2f* trail, int trailN, float k, int heads = 1,
+                    const sf::Vector2f* headDirs = nullptr);   // (several heads: where each looks, else fanned out)
+
 }  // namespace sb

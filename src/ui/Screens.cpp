@@ -1,3 +1,4 @@
+#include "ui/WebSky.hpp"
 #include "ui/Screens.hpp"
 
 #include <algorithm>
@@ -190,8 +191,12 @@ bool webVisible(int node, const int* unlock) {
 }
 
 // The camera is remembered between visits to the web.
-struct WebView { bool saved = false; float zoom = kZoomStart; sf::Vector2f pan{0.f, 0.f}; int sel = 0; bool legendMin = false; };
+struct WebView { bool saved = false; float zoom = kZoomStart; sf::Vector2f pan{0.f, 0.f}; int sel = 0; bool legendMin = false;
+                 bool hidden = false; };   // hidden: the web put away, just the sky (H)
 WebView g_webView;
+
+// "Hide web" / "Show web": under the cores and prisms, top right.
+sf::FloatRect hideWebRect(sf::Vector2f s) { return {s.x - 168.f, 100.f, 148.f, 26.f}; }
 // The legend lists the routes clockwise from the top, like the web.
 constexpr MetaBranch kLegend[] = {MetaBranch::Striker,  MetaBranch::Slinger, MetaBranch::Shooter, MetaBranch::Jester,
                                   MetaBranch::Assassin, MetaBranch::Creeds,   MetaBranch::Summoner,
@@ -539,6 +544,20 @@ void LoadoutScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse
         panFrom_ = pan_;
         return;
     }
+    if (isKey(e, sf::Keyboard::H) || (isLeftClick(e) && hideWebRect(app.size()).contains(mouse))) {   // put the web away / back
+        g_webView.hidden = !g_webView.hidden;
+        app.audio().uiClick();
+        return;
+    }
+    if (g_webView.hidden) {   // only the sky: a drag explores it
+        if (isLeftClick(e)) {
+            panning_ = true;
+            flyNode_ = -1;
+            panStart_ = mouse;
+            panFrom_ = pan_;
+        }
+        return;
+    }
     if (e.type == sf::Event::KeyPressed) {
         switch (e.key.code) {
             case sf::Keyboard::Add: case sf::Keyboard::Equal:     zoomAt(app, webCentre(app), 1.15f); return;
@@ -631,11 +650,11 @@ void LoadoutScreen::update(App& app, float dt, sf::Vector2f mouse) {
         }
     }
     clampPan(app);
-    g_webView = {true, zoomT_, pan_, selNode_, g_webView.legendMin};   // the camera; the legend keeps its fold
+    g_webView = {true, zoomT_, pan_, selNode_, g_webView.legendMin, g_webView.hidden};   // the camera; the legend's fold and Hide web stay
     legendHover_ = legendAt(app, mouse);
     uisound::hover(&g_webView, legendHeader(app.size(), g_webView.legendMin).contains(mouse) ? 0 : -1);
     if (length(mouse - lastMouse_) > 0.5f) { keyNav_ = false; lastMouse_ = mouse; }
-    hoverNode_ = nodeAt(app, mouse);
+    hoverNode_ = g_webView.hidden ? -1 : nodeAt(app, mouse);
     if (hoverNode_ >= 0) { selNode_ = hoverNode_; selUsed_ = true; }   // hover drives card + E key
     uisound::hover(this, hoverNode_);
     const int active = hoverNode_ >= 0 ? hoverNode_ : (keyNav_ ? selNode_ : -1);
@@ -705,11 +724,14 @@ void LoadoutScreen::drawInfoCard(App& app, sf::RenderWindow& w, int node) const 
 }
 
 void LoadoutScreen::drawSky(App& app, sf::RenderWindow& w, float alpha) const {
-    if (alpha <= 0.01f) return;
-    backdrop_.draw(w, alpha);
+    // The sky grows with the classes you've unlocked (ui/WebSky.cpp): black at
+    // first, then stars, each class's motif, a nebula, the planets, a milky way.
+    const int* unlock = app.data().meta.unlock;
     const sf::Vector2f s = app.size();
     const sf::Vector2f c = sf::Vector2f{s.x * 0.5f, s.y * kWebCenterY} + pan_ * kSkyParallax;
-    drawOrbitingPlanets(w, c, skyT_, 0.6f + 0.4f * zoom_, alpha);   // a touch of the zoom, much less than the web
+    drawWebSky(w, s, c, pan_, unlock, skyT_, 0.6f + 0.4f * zoom_, alpha);   // planets: a touch of the zoom; the galaxy drifts with the pan
+    if (const int n = webSkyClasses(unlock); n >= 2 && alpha > 0.01f)   // the drifting balls, from the 2nd class
+        backdrop_.draw(w, alpha * clampf((static_cast<float>(n) - 1.f) / 2.f, 0.f, 1.f));
 }
 
 void LoadoutScreen::draw(App& app, sf::RenderWindow& w) {
@@ -717,6 +739,19 @@ void LoadoutScreen::draw(App& app, sf::RenderWindow& w) {
     const MetaState& m = app.data().meta;
     const float it = intro();
     drawSky(app, w, clampf(introPop(it, 0.f, 0.5f), 0.f, 1.f));
+    {   // put the web away to see the sky (H)
+        const sf::FloatRect r = hideWebRect(s);
+        const bool hot = r.contains(lastMouse_);
+        draw::box(w, r, theme::corner, withAlpha(theme::bg, 0.75f), withAlpha(theme::bg, 0.75f),
+                  withAlpha(hot ? theme::textLo : theme::arenaEdge, 0.8f), 1.f);
+        drawCentered(w, app.font(), g_webView.hidden ? "Show web  (H)" : "Hide web  (H)", theme::fsSmall,
+                     {r.left + r.width * 0.5f, r.top + r.height * 0.5f - 1.f}, hot ? theme::textHi : theme::textLo);
+    }
+    if (g_webView.hidden) {   // just the sky - drag to look round the galaxy
+        drawCentered(w, app.font(), "drag to look around   -   H: back to the web", theme::fsSmall, {s.x * 0.5f, s.y - 24.f},
+                     withAlpha(theme::textDim, 0.8f));
+        return;
+    }
 
     // Faint concentric rings behind the web - every node sits on one of them.
     const sf::Vector2f centre = nodePos(app, 0);
@@ -967,7 +1002,7 @@ void LoadoutScreen::draw(App& app, sf::RenderWindow& w) {
         w.draw(lt);
     }
 
-    if (hoverNode_ >= 0 || selUsed_) drawInfoCard(app, w, selNode_);
+    if (hoverNode_ >= 0 || keyNav_) drawInfoCard(app, w, hoverNode_ >= 0 ? hoverNode_ : selNode_);   // only while pointing at a node
     if (app.devMode())   // the dev keys, quietly under the title band
         drawCentered(w, app.font(), "DEV   F1  +1000 cores, +10 prisms     F2  lock the web again (refund)     F3  unlock everything",
                      theme::fsSmall, {s.x * 0.5f, 110.f}, withAlpha(theme::coreLow, 0.8f));
@@ -1149,10 +1184,21 @@ void PlayScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
         dropHeld(app);
         return;
     }
-    if (isLeftClick(e) && app.data().run.endless && endlessButton(app).contains(app.uiMouse())) {   // dev endless: a crowd
-        app.world().devSpawn(cfg::app::endlessCrowd);
-        app.audio().uiClick();
-        return;
+    if (isLeftClick(e) && app.data().run.endless) {   // dev endless: a crowd, a tough crowd, the arena
+        const sf::FloatRect r = endlessButton(app);
+        const sf::FloatRect r2{r.left, r.top + 36.f, r.width, r.height}, r3{r.left, r.top + 72.f, r.width, r.height};
+        if (r.contains(app.uiMouse())) { app.world().devSpawn(cfg::app::endlessCrowd); app.audio().uiClick(); return; }
+        if (r2.contains(app.uiMouse())) {
+            app.world().devSpawnTough(cfg::app::endlessCrowd, cfg::app::endlessTough);
+            app.audio().uiClick();
+            return;
+        }
+        if (r3.contains(app.uiMouse())) {   // the other arena, from this wave
+            app.endlessWide = !app.endlessWide;
+            app.endlessWave();
+            app.audio().uiClick();
+            return;
+        }
     }
     if (isLeftClick(e)) { grab(app, mouse); return; }
     if (e.type == sf::Event::MouseButtonReleased && e.mouseButton.button == sf::Mouse::Left)
@@ -1227,7 +1273,7 @@ void PlayScreen::drawAim(App& app, sf::RenderWindow& w) const {
 // Dev endless: the "+N enemies" button, top right under the HUD (UI units).
 sf::FloatRect PlayScreen::endlessButton(App& app) {
     const sf::Vector2f s = app.size();
-    return {s.x - 170.f, 74.f, 150.f, 30.f};
+    return {s.x - 210.f, 74.f, 190.f, 30.f};
 }
 
 void PlayScreen::draw(App& app, sf::RenderWindow& w) {
@@ -1316,6 +1362,16 @@ void PlayScreen::draw(App& app, sf::RenderWindow& w) {
                   withAlpha(theme::coreLow, hot ? 0.95f : 0.6f), 1.5f);
         drawCentered(w, app.font(), "+" + std::to_string(cfg::app::endlessCrowd) + " enemies", theme::fsSmall,
                      {r.left + r.width * 0.5f, r.top + r.height * 0.5f - 1.f}, hot ? theme::textHi : theme::textLo);
+        const char* more[2] = {"+20 tough (x8 HP)", nullptr};
+        const std::string arena = app.endlessWide ? "Arena: wide (acts 2+)" : "Arena: act 1";
+        for (int i = 0; i < 2; ++i) {
+            const sf::FloatRect q{r.left, r.top + 36.f * static_cast<float>(i + 1), r.width, r.height};
+            const bool h = q.contains(app.uiMouse());
+            draw::box(w, q, theme::corner, withAlpha(theme::bgDeep, 0.9f), withAlpha(theme::bgDeep, 0.9f),
+                      withAlpha(theme::coreLow, h ? 0.95f : 0.6f), 1.5f);
+            drawCentered(w, app.font(), i == 0 ? std::string(more[0]) : arena, theme::fsSmall,
+                         {q.left + q.width * 0.5f, q.top + q.height * 0.5f - 1.f}, h ? theme::textHi : theme::textLo);
+        }
         drawLabel(w, app.font(), "ENDLESS  wave " + std::to_string(app.data().run.wave), 12,
                   {r.left + r.width * 0.5f, r.top - 12.f}, theme::textDim);
     }
@@ -1659,7 +1715,9 @@ void drawLoadoutOverlay(App& app, sf::RenderWindow& w, bool paused, const TabPee
         const int part = panelPartAt(panelCenter(s, i, n, rowY, rowCx), um, L);
         std::string tt, td;
         if (part >= 0 && loadoutTooltip(L, part, tt, td)) {
-            drawTooltip(w, app.font(), um, s, tt, td);
+            std::string st;
+            const float g = loadoutGrowth(L, part, st);
+            drawTooltip(w, app.font(), um, s, tt, td, theme::textHi, g, st);
             return;
         }
     }
@@ -2052,6 +2110,8 @@ void RunOverScreen::draw(App& app, sf::RenderWindow& w) {
     if (r.hard) where += "   hard";
     std::string cause;
     if (r.killer == World::kCoreHitByBoss) cause = "the boss reached the core";
+    else if (r.killer == World::kCoreHitByShot) cause = "a boss shot got through";
+    else if (r.killer == static_cast<int>(EnemyKind::Caster)) cause = "a Caster drained it";
     else if (r.killer >= 0) cause = std::string("a ") + enemyName(static_cast<EnemyKind>(r.killer)) + " got through";
     const float sa = clampf(introPop(it, 0.14f), 0.f, 1.f);
     drawLabel(w, app.font(), where, 14, {cx, s.y * 0.20f + 50.f}, withAlpha(theme::textLo, sa));
@@ -2094,7 +2154,7 @@ void RunOverScreen::draw(App& app, sf::RenderWindow& w) {
             const sf::Color ec = i < static_cast<int>(balls.size()) ? ballHue(balls[static_cast<std::size_t>(i)]) : theme::ballMid;
             draw::disc(w, {x, y}, 13.f, withAlpha(lerpColor(ec, sf::Color::White, 0.2f), ba), withAlpha(ec, ba), {1.f, 1.f}, 28);
             std::string cls;
-            ItemTag roles[2];
+            ItemTag roles[3];
             for (int k = 0, m = L.roles(roles); k < m; ++k)
                 cls += (k ? " / " : "") + std::string(L.ascended() == roles[k] ? ascendedName(tagRole(roles[k])) : itemTagName(roles[k]));
             drawLabel(w, app.font(), cls.empty() ? "no class" : cls, 11, {x, y + 26.f}, withAlpha(cls.empty() ? theme::textDim : theme::textLo, ba));
