@@ -71,6 +71,9 @@ private:
     int legendHover_ = -1;                // MetaBranch under the pointer in the legend: light that branch
     int kindHover_ = -1;                  // MetaNodeKind under the pointer in the legend's shapes row: light those nodes
     int kindAt(App& app, sf::Vector2f mouse) const;
+public:
+    void snapFocus(int node) { selNode_ = node; keyNav_ = true; hoverNode_ = -1; }   // SB_SNAPSHOT: a node's card
+private:
     int hoverNode_ = -1;
     int selNode_ = 0;
     bool selUsed_ = false;                // hovered a node or used the arrows at least once

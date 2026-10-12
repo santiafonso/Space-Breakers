@@ -109,7 +109,7 @@ inline const CreedDef& creedDef(CreedId id) {
          "Magnetic core, Spring core, Guardian items, Mender", -1},
         {"Fortress", CreedArchetype::Core,
          "core max health x1.75, and anything that reaches the core blows up, hurting and shoving everything around it",
-         "the core no longer heals before fights, and rests repair only half",
+         "no repair when a new act starts, Mend does nothing, and rests repair only half",
          "Aegis, Regen, Mender, Slow field", -1},
         {"Loaded Dice", CreedArchetype::Gambler,
          "+12 luck: every chance (crits, echoes, zaps, bombs, ghosts) almost doubles and cards roll much rarer",

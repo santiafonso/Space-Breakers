@@ -38,7 +38,12 @@ void World::refundAbility(Ball& b, int i, float seconds, float frac) {
 
 void World::updateAbilities(Ball& b, float dt, const WorldParams& p, FrameEvents& ev) {
     b.abilityFlash = std::max(0.f, b.abilityFlash - dt * 2.5f);
-    if (!waveRunning_) return;
+    if (!waveRunning_) {   // the fight is over: a Beam or Blades still going stops here (it used to hang on into the next)
+        CommonState& s = b.cls.common;
+        s.beamOn = false;
+        s.beamT = s.bladesT = 0.f;
+        return;
+    }
     const float rate = mageCastRate(b);   // Mage "Focus"
     const bool odin = b.hasRole(BallRole::Odin);   // Odin casts in volleys only (sim/WorldGods.cpp)
     for (int i = 0; i < kMaxAbilitySlots; ++i) {
@@ -108,13 +113,28 @@ void World::abilityTick(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
         s.bladesT -= dt;
         s.bladeAng += A::bladeSpin * dt;
         if ((s.bladeTickT -= dt) <= 0.f) {
+            // Every cut counts the whole arc each blade swept since the last one
+            // (2026-10-12): checking only where the blades stood let them spin
+            // past enemies without ever touching them.
             s.bladeTickT = A::bladeTick;
             castBall_ = &b;
-            for (int i = 0; i < s.bladeN; ++i) {
-                const float ang = s.bladeAng + 2.f * kPi * static_cast<float>(i) / static_cast<float>(s.bladeN);
-                const sf::Vector2f at = b.pos + sf::Vector2f{std::cos(ang), std::sin(ang)} * (A::bladeOrbit * as + b.radius);
-                for (Enemy& e : enemies_)
-                    if (e.hp > 0.f && length(e.pos - at) <= A::bladeRadius * as + e.radius) damageEnemy(e, s.bladeDmg);
+            const float swept = A::bladeSpin * A::bladeTick;
+            const float orbit = A::bladeOrbit * as + b.radius, reachR = A::bladeRadius * as;
+            for (Enemy& e : enemies_) {
+                if (e.hp <= 0.f) continue;
+                const sf::Vector2f d = e.pos - b.pos;
+                const float L = length(d);
+                if (std::fabs(L - orbit) > reachR + e.radius) continue;   // off the blades' ring
+                const float ea = std::atan2(d.y, d.x);
+                const float halfW = (reachR + e.radius) / std::max(L, 1.f);   // its angular size on the ring
+                bool hit = false;
+                for (int i = 0; i < s.bladeN && !hit; ++i) {
+                    const float tip = s.bladeAng + 2.f * kPi * static_cast<float>(i) / static_cast<float>(s.bladeN);
+                    float diff = std::fmod(tip - ea, 2.f * kPi);
+                    if (diff < 0.f) diff += 2.f * kPi;
+                    hit = diff <= swept + halfW || diff >= 2.f * kPi - halfW;   // it passed over the enemy
+                }
+                if (hit) damageEnemy(e, s.bladeDmg);
             }
             castBall_ = nullptr;
         }

@@ -31,6 +31,8 @@ const char* hintText(App::Hint h) {
         case App::Hint::Boss:    return "the boss: break it to end the act";
         case App::Hint::WebBuy:  return "your cores buy upgrades: click a lit node";
         case App::Hint::WebStart: return "Start run: a real one this time, with paths to choose";
+        case App::Hint::Event:   return "?: anything can happen - a stranger, a trade, a gamble";
+        case App::Hint::Finale:  return "the last fight: wave after wave - hold them all off to finish";
         case App::Hint::Count:   break;
     }
     return "";
@@ -76,7 +78,8 @@ void App::updateHints(float dt) {
                     case MapNodeType::Elite:   h = Hint::Elite; break;
                     case MapNodeType::Shop:    h = Hint::Shop; break;
                     case MapNodeType::Forge:   h = Hint::Forge; break;
-                    case MapNodeType::Boss:    h = Hint::Boss; break;
+                    case MapNodeType::Boss:    h = data_.run.tutorial ? Hint::Finale : Hint::Boss; break;
+                    case MapNodeType::Upgrade: h = Hint::Event; break;
                     default: break;
                 }
                 if (h != Hint::Count && !hintSeen(h)) want = static_cast<int>(h);

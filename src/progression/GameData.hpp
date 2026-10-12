@@ -36,6 +36,7 @@ struct MetaState {
     SoundSettings sound;      // volumes + a style per sound category (the Sound screen)
     bool fullscreen = false;
     bool hardMode = false;    // the next run starts in hard mode (cfg::hard)
+    bool simpleText = false;  // simple descriptions (Options): the gist of every card, not every number
     int ascMax = 0;           // highest Ascension level opened (win a run at it to open the next)
     int ascSel = 0;           // the level the next run starts at (0..ascMax)
     std::uint32_t hints = 0;  // first-run hints already done (bit per App::Hint)
@@ -129,6 +130,9 @@ struct RunState {
             if (p == static_cast<int>(id)) return true;
         return false;
     }
+    // "Unbinding" ("?", 2026-10-12): pacts whose price is lifted (bits by PactId) - the gift stays.
+    unsigned pactsPure = 0;
+    bool pactCost(PactId id) const { return hasPact(id) && !((pactsPure >> static_cast<unsigned>(id)) & 1u); }
     // The hidden Altar path: flawless fights in a row this act (a fight that
     // lets anything reach the core resets it; stops in between don't), and
     // 0 = not earned / 1 = earned, still hidden / 2 = revealed this act.

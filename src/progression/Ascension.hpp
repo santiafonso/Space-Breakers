@@ -8,7 +8,7 @@ namespace sb {
 inline const char* ascensionRule(int level) {
     switch (level) {
         case 1:  return "elites have +25% health and bring a second Brute from act 1";
-        case 2:  return "no free core repair before each fight";
+        case 2:  return "a new act repairs only 25% of the core (instead of 50%)";
         case 3:  return "enemies move 10% faster";
         case 4:  return "a Rest repairs half the core, and shops cost 25% more";
         case 5:  return "bosses change phase sooner and rage harder";

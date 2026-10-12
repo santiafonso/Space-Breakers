@@ -906,6 +906,7 @@ void World::commonWaveStart() {
         b.cls.common.archStacks = b.cls.common.stopCasts = b.cls.common.showStacks = 0;
         b.cls.common.stormOn = 0.f;
         b.cls.common.empower = b.cls.common.beamT = b.cls.common.bladesT = b.cls.common.leashT = b.cls.common.leashFlyT = 0.f;
+        b.cls.common.beamOn = false;   // no beam left drawn from the last fight
         b.cls.common.empowerHit = false;
         b.cls.common.stormT = b.mods.cls.common.leadStorm * 0.5f;   // the first storm comes early
     }

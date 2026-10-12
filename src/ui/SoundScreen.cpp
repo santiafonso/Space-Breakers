@@ -58,8 +58,9 @@ sf::FloatRect switchRect(sf::Vector2f s, int i) {
     return {cx + kChipX, sliderY(i) - kChipH * 0.5f, kChipW * 2.f + kChipGap, kChipH};
 }
 
-sf::FloatRect backRect(sf::Vector2f s) { return {s.x * 0.5f + 10.f, 716.f, 160.f, 30.f}; }
-sf::FloatRect fullRect(sf::Vector2f s) { return {s.x * 0.5f - 170.f, 716.f, 160.f, 30.f}; }
+sf::FloatRect backRect(sf::Vector2f s) { return {s.x * 0.5f + 100.f, 716.f, 160.f, 30.f}; }
+sf::FloatRect fullRect(sf::Vector2f s) { return {s.x * 0.5f - 260.f, 716.f, 160.f, 30.f}; }
+sf::FloatRect textRect(sf::Vector2f s) { return {s.x * 0.5f - 90.f, 716.f, 180.f, 30.f}; }
 
 }  // namespace
 
@@ -71,6 +72,7 @@ int SoundScreen::itemAt(App& app, sf::Vector2f m) const {
         if (switchRect(s, i).contains(m)) return kMute + i;
     if (backRect(s).contains(m)) return kBack;
     if (fullRect(s).contains(m)) return kFull;
+    if (textRect(s).contains(m)) return kText;
     for (int c = 0; c < SoundCatCount; ++c) {
         if (sliderHit(s, 100 + c).contains(m)) return 100 + c;
         for (int st = 0; st < SoundStyleCount; ++st)
@@ -110,6 +112,7 @@ void SoundScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) 
     if (id < 0) return;
     if (id == kBack) { close(app); return; }
     if (id == kFull) { app.toggleFullscreen(); return; }
+    if (id == kText) { app.toggleSimpleText(); return; }
     if (id == kMute) {
         app.toggleSound();
         return;
@@ -143,7 +146,7 @@ void SoundScreen::update(App& app, float, sf::Vector2f mouse) {
     }
     hover_ = drag_ >= 0 ? drag_ : itemAt(app, mouse);
     // Sliders and chips preview their own sound, so only the plain buttons click.
-    uisound::hover(this, hover_, (hover_ >= kMute && hover_ <= kMute + 2) || hover_ == kBack || hover_ == kFull);
+    uisound::hover(this, hover_, (hover_ >= kMute && hover_ <= kMute + 2) || hover_ == kBack || hover_ == kFull || hover_ == kText);
 }
 
 void SoundScreen::draw(App& app, sf::RenderWindow& w) {
@@ -233,6 +236,15 @@ void SoundScreen::draw(App& app, sf::RenderWindow& w) {
     draw::panel(w, fr, full ? theme::accent : theme::arenaEdge, a, hover_ == kFull ? 1.f : 0.f);
     drawLabel(w, f, full ? "Fullscreen: on" : "Fullscreen: off", 12, {fr.left + fr.width * 0.5f, fr.top + fr.height * 0.5f},
               withAlpha(lerpColor(theme::textLo, theme::textHi, hover_ == kFull ? 1.f : 0.5f), a));
+
+    const sf::FloatRect tr = textRect(s);   // simple / detailed descriptions
+    const bool simple = app.data().meta.simpleText;
+    draw::panel(w, tr, simple ? theme::accent : theme::arenaEdge, a, hover_ == kText ? 1.f : 0.f);
+    drawLabel(w, f, simple ? "Descriptions: simple" : "Descriptions: detailed", 12, {tr.left + tr.width * 0.5f, tr.top + tr.height * 0.5f},
+              withAlpha(lerpColor(theme::textLo, theme::textHi, hover_ == kText ? 1.f : 0.5f), a));
+    if (hover_ == kText)
+        drawCentered(w, f, simple ? "cards show the gist of each item - click for every number" : "cards show every number - click for just the gist",
+                     theme::fsSmall, {s.x * 0.5f, tr.top - 16.f}, withAlpha(theme::textLo, a));
 
     const sf::FloatRect br = backRect(s);
     draw::panel(w, br, theme::accent, a, hover_ == kBack ? 1.f : 0.f);

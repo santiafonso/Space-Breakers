@@ -344,7 +344,7 @@ bool App::openAbilityChoice() {
     }
     for (int i = static_cast<int>(pool.size()) - 1; i > 0; --i)
         std::swap(pool[static_cast<std::size_t>(i)], pool[static_cast<std::size_t>(rng_.irange(0, i))]);
-    const int want = cfg::meta::abilityPickCards + (data_.meta.unlock[MetaCalling] > 0 ? 1 : 0);   // "Calling"
+    const int want = cfg::meta::abilityPickCards;
     if (static_cast<int>(pool.size()) > want) pool.resize(static_cast<std::size_t>(want));
     if (pool.empty()) return false;
     std::sort(pool.begin(), pool.end());   // stable card order: the enum's
@@ -431,7 +431,9 @@ bool App::openStarterChoice() {
 
 // ---------------------------------------------------------------- shop extras
 
-int App::forgeCap() const { return kMaxGearLevel; }   // items stop at Lv3 (each level counts double)
+// Items stop at Lv3 (each level counts double); elements and abilities go to 5
+// (2026-10-12: the forge used to stop everything at 3).
+int App::forgeCap(int slot) const { return slot < kBallSlots ? kMaxGearLevel : kMaxItemLevel; }
 
 int App::saleOffPercent() const {
     const float off = cfg::gold::saleOff + cfg::meta::merchantSalePerLevel * static_cast<float>(data_.meta.unlock[MetaMerchant]);
@@ -462,7 +464,19 @@ void App::rollShopOffers() {
     std::vector<UpgradeKind> fresh;
     // At most cfg::gold::shopMaxItems items on the shelf, and on most visits none.
     int items = rng_.range(0.f, 1.f) < cfg::gold::shopItemChance ? 0 : cfg::gold::shopMaxItems;
-    for (int i = 0; i < count; ++i) {
+    if (r.tutorial) {   // the tutorial's shop: its cheap items first, so the gold buys one
+        items = 0;
+        for (int i = 0; i < cfg::gold::shopMaxItems; ++i) {
+            const UpgradeKind k = rollPick(RollSource::Shop, taken, [](UpgradeKind u) {
+                return upgradeCat(u) == UpgradeCat::Item && upgradeTier(u) <= Tier::Uncommon;
+            });
+            if (upgradeCat(k) != UpgradeCat::Item || std::find(taken.begin(), taken.end(), k) != taken.end()) break;
+            ++items;
+            taken.push_back(k);
+            fresh.push_back(k);
+        }
+    }
+    for (int i = static_cast<int>(fresh.size()); i < count; ++i) {
         const UpgradeKind k = items >= cfg::gold::shopMaxItems
             ? rollPick(RollSource::Shop, taken, [](UpgradeKind u) { return upgradeCat(u) != UpgradeCat::Item; })
             : rollPick(RollSource::Shop, taken);

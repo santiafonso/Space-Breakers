@@ -45,6 +45,7 @@ bool saveGame(const std::string& path, const GameData& d) {
         f << "snd.cat " << i << ' ' << m.sound.vol[i] << ' ' << m.sound.style[i] << '\n';
     f << "fullscreen " << (m.fullscreen ? 1 : 0) << '\n';
     f << "hard " << (m.hardMode ? 1 : 0) << '\n';
+    f << "simpleText " << (m.simpleText ? 1 : 0) << '\n';
     f << "asc " << m.ascMax << ' ' << m.ascSel << '\n';
     f << "hints " << m.hints << '\n';
     f << "stat.enemiesKilled " << m.stats.enemiesKilled << '\n';
@@ -109,6 +110,7 @@ bool loadGame(const std::string& path, GameData& d) {
         }
         else if (key == "fullscreen") { int v = 0; ls >> v; m.fullscreen = v != 0; }
         else if (key == "hard") { int v = 0; ls >> v; m.hardMode = v != 0; }
+        else if (key == "simpleText") { int v = 0; ls >> v; m.simpleText = v != 0; }
         else if (key == "asc") {
             sawAsc = true;
             ls >> m.ascMax >> m.ascSel;
@@ -211,6 +213,7 @@ bool saveRun(const std::string& path, const RunState& r) {
         f << '\n';
         f << "run.pacts " << r.pacts.size();
         for (int c : r.pacts) f << ' ' << c;
+        f << '\n' << "run.pactsPure " << r.pactsPure;
         f << '\n';
         auto writeBall = [&](const BallLoadout& L) {
             for (int i = 0; i < kBaseItemSlots; ++i) f << ' ' << L.gear[i] << ' ' << L.gearLvl[i];
@@ -296,6 +299,8 @@ bool loadRun(const std::string& path, RunState& out) {
                               &m.catalyst, &m.chainReaction, &m.luckyClover, &m.glassCannon, &m.magneticCore,
                               &m.prismCore, &m.phoenix, &m.timeDilation, &m.overcharge};
             for (bool* b : fields) { int v = 0; ls >> v; *b = v != 0; }
+        } else if (key == "run.pactsPure") {
+            ls >> r.pactsPure;
         } else if (key == "run.creeds" || key == "run.pacts") {
             std::size_t n = 0;
             ls >> n;

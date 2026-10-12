@@ -35,7 +35,8 @@ World::World(sf::Vector2f size) : baseSize_(size), size_(size) { core_.pos = siz
 // The wave's enemy stats, with hard mode on top (cfg::hard).
 float World::enemyHp(int wave) const {
     return waveEnemyHp(wave) * (hard_ ? cfg::hard::enemyHpMul : 1.f) * pact_.enemyHpMul *   // "Mirror" pact
-           (asc_ >= 10 ? cfg::asc::allHpMul : 1.f);
+           (asc_ >= 10 ? cfg::asc::allHpMul : 1.f) * easeHp_ *
+           (cfg::run::actOfWave(wave) == 1 ? cfg::wave::act1HpMul : 1.f);   // act 1: few items yet
 }
 float World::enemySpeed(int wave) const {
     return waveEnemySpeed(wave) * (hard_ ? cfg::hard::enemySpeedMul : 1.f) * (asc_ >= 3 ? cfg::asc::enemySpeedMul : 1.f) *
@@ -372,6 +373,7 @@ void World::carryBalls(const WorldParams& p) {
 void World::startWave(int wave, const WorldParams& p, bool elite) {
     hard_ = p.hard;
     asc_ = p.ascension;
+    easeHp_ = p.enemyHpMul;
     pact_ = p.pact;
     bossWave_ = false;
     boss_ = Boss{};
@@ -426,6 +428,7 @@ sf::Vector2f World::wideArenaSize() const {
 void World::startPostBossWave(int wave, const WorldParams& p, bool elite) {
     hard_ = p.hard;
     asc_ = p.ascension;
+    easeHp_ = p.enemyHpMul;
     pact_ = p.pact;
     bossWave_ = false;
     boss_ = Boss{};
@@ -453,6 +456,7 @@ void World::updateCoreSlide(float dt) {
 void World::startBossWave(int wave, const WorldParams& p) {
     hard_ = p.hard;
     asc_ = p.ascension;
+    easeHp_ = p.enemyHpMul;
     bossHpMul_ = p.bossHpMul;
     pact_ = p.pact;
     const int act = cfg::run::actOfWave(wave);
@@ -529,12 +533,14 @@ void World::ascendBoss(bool last) {
 float World::bossHp(float grunts, int wave) const {
     const float extra = static_cast<float>(std::max(0, static_cast<int>(balls_.size()) - 1));
     return grunts * waveEnemyHp(wave) * (1.f + cfg::boss::hpPerExtraBall * extra) *
-           (hard_ ? cfg::hard::bossHpMul : 1.f) * bossHpMul_;
+           (hard_ ? cfg::hard::bossHpMul : 1.f) * bossHpMul_ *
+           (cfg::run::actOfWave(wave) == 1 ? cfg::wave::act1BossHpMul : 1.f);
 }
 
 void World::startChargerWave(int wave, const WorldParams& p) {
     hard_ = p.hard;
     asc_ = p.ascension;
+    easeHp_ = p.enemyHpMul;
     pact_ = p.pact;
     bossWave_ = true;
     waveHpMul_ = 1.f;
@@ -574,6 +580,7 @@ void World::startChargerWave(int wave, const WorldParams& p) {
 void World::startFinalBossWave(const WorldParams& p) {
     hard_ = p.hard;
     asc_ = p.ascension;
+    easeHp_ = p.enemyHpMul;
     pact_ = p.pact;
     bossWave_ = true;
     waveHpMul_ = 1.f;
@@ -3007,7 +3014,7 @@ void World::updateBoss(float dt, const WorldParams& p, FrameEvents& ev) {
         return;
     }
 
-    if (boss_.intro <= 0.f &&
+    if (boss_.intro <= 0.f && !invuln_ &&   // (dev / staged invulnerability: not even this)
         length(core_.pos - boss_.pos) <= core_.radius + boss_.radius) {
         boss_.alive = false;
         core_.hp = 0.f;

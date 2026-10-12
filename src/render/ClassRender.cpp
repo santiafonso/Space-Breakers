@@ -1401,7 +1401,8 @@ void worldAbilities(sf::RenderTarget& t, const World& world) {
                     const sf::Vector2f d{std::cos(ang), std::sin(ang)};
                     const sf::Vector2f at = b.pos + d * (cfg::ability::bladeOrbit * k + b.radius);
                     const sf::Vector2f side{-d.y, d.x};
-                    draw::line(t, at - side * (7.f * k), at + side * (7.f * k), (2.5f - 0.6f * j) * k,
+                    draw::line(t, at - side * (cfg::ability::bladeLength * k), at + side * (cfg::ability::bladeLength * k),
+                               (3.f - 0.7f * j) * k,
                                j == 0 ? white(0.85f) : withAlpha(hot, 0.35f - 0.1f * static_cast<float>(j)));
                 }
         if (s.leashT > 0.f) {   // "Leash": a beaded rope that runs, brighter when it's taut

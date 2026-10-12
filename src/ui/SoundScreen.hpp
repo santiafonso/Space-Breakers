@@ -25,6 +25,7 @@ private:
     static constexpr int kMute = 10;
     static constexpr int kBack = 20;
     static constexpr int kFull = 21;   // the fullscreen switch
+    static constexpr int kText = 22;   // simple / detailed descriptions
     int itemAt(App& app, sf::Vector2f mouse) const;
     void setSlider(App& app, int id, float x);
     void close(App& app);

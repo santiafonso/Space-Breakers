@@ -89,6 +89,7 @@ public:
     enum class Hint { Throw, Aim, Volley, Bullet, Repulse, Map, Tab,
                       Recruit, Elite, Shop, Forge, Boss,   // a map stop, before you first step on one
                       WebBuy, WebStart,                    // the skill web, after the first run
+                      Event, Finale,                       // a "?" stop; the tutorial's last fight (2026-10-12)
                       Count };
     void hintDone(Hint h);
     bool hintSeen(Hint h) const { return (data_.meta.hints >> static_cast<int>(h)) & 1u; }
@@ -151,7 +152,7 @@ public:
     int saleOffPercent() const;
     void beginSell();
     int sellValue(int ball, int slot) const;
-    int forgeCap() const;               // max forge level ("Duet" raises it)
+    int forgeCap(int slot) const;       // max forge level for that slot: items 3, element / abilities 5
     void rerollChoice(int idx);   // Choice: swap card `idx` for another item (costs a Foresight charge)
     void repairCoreSkipItem();    // Choice: heal the core to full instead of taking an item
     void skipChoice();            // Choice: take nothing
@@ -198,8 +199,10 @@ public:
     void choosePact(int idx);           // Altar screen: take card idx
     void refusePacts();                 // Altar screen: walk away
     bool hasPact(PactId id) const { return data_.run.hasPact(id); }
-    bool aimSlows() const { return !hasPact(PactId::HeavyArm); }   // "Heavy Arm": no bullet time
-    bool aimGuide() const { return !hasPact(PactId::Blind); }      // "Blind": no dotted guide
+    bool aimSlows() const { return !data_.run.pactCost(PactId::HeavyArm); }   // "Heavy Arm": no bullet time
+    bool aimGuide() const { return !data_.run.pactCost(PactId::Blind); }      // "Blind": no dotted guide
+    std::vector<PactId> pactsWithPrice() const;   // pacts an "Unbinding" can lift the price of
+    void liftPactPrice(PactId id);
     float quickThrowMul() const;        // "Stillness": weaker quick throws
     bool consumeAltarReveal();          // the map: play the "a path opens" animation once
     void devTogglePact(PactId id);      // SB_DEV: grant it (or drop the rule)
@@ -249,6 +252,7 @@ public:
     void toggleSound();
     void setAiming(bool on);   // slingshot aim in progress: time slows for a moment
     void toggleFullscreen();
+    void toggleSimpleText();
     void save();
 
 private:
@@ -307,7 +311,8 @@ private:
     void applyDuet();
     void applyLegion();
     int randomItemFor(const BallLoadout& b, Tier maxTier);   // a random unlocked item that fits (-1 none)
-    int randomItemOfTier(Tier t, const BallLoadout* fits);   // exactly this tier; fits that ball, or any ball (-1 none)
+    int randomItemOfTier(Tier t, const BallLoadout* fits);
+    bool anyItemOfTier(Tier t) const;   // an unlocked item of exactly this tier fits some ball   // exactly this tier; fits that ball, or any ball (-1 none)
     void afterFight();        // a fight won: cocoons count down, benched balls come back
     void rollShopOffers();                                           // fresh stock (keeps prepaid reveals)
     BallSpec ballSpec(const BallLoadout& b) const;
@@ -329,9 +334,11 @@ private:
     // Dev "photo mode" (SB_SNAPSHOT=<dir>): stage every screen, save a PNG of
     // each and quit - a way to look at the UI without playing.
     int runSnapshots(const std::string& dir);
+    int runTutorialSim(int trials);   // SB_TUTSIM: the tutorial's fights back to back, how often the core holds (dev)
     int runBalance(int waves);   // SB_BALANCE: each class at its best against its god (dev)
     void snapFrame(const std::string& file);
     std::string capturePath_;   // non-empty: render() saves this frame here
+    bool snapInvuln_ = false;   // SB_SNAPSHOT: the staged core never falls (no repair between fights)
     bool snapMouseOn_ = false;  // photo mode: uiMouse() reports snapMouse_ (a drag in the TAB peek)
     sf::Vector2f snapMouse_;
     void processEvents(const FrameEvents& ev);
@@ -404,7 +411,8 @@ private:
     float bulletIdle_ = 0.f;  // real s since it last ran (refill waits a moment)
     std::vector<EventKind> eventDeals_;   // the "?" event on screen
     bool openEvent();         // a "?" stop rolled an event: false = nothing to offer
-    bool openForgePicker();   // the Forge's item picker: false = nothing to level up
+    bool openForgePicker();
+    void forgeLeftover();     // forge points nothing can take: paid out as gold   // the Forge's item picker: false = nothing to level up
     // A forge visit has a budget (2026-10-05): 2 points. A common / uncommon
     // level costs 1; a rare / epic costs 1 but only as the visit's first; a
     // legendary takes both (so it's the only one).

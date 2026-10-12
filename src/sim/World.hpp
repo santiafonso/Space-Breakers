@@ -64,6 +64,7 @@ public:
     void pulseClass(int idx, bool ascended);
     void pulseElement(int idx);   // it just took an element: rings in its colour when the fight runs
     void repairCore(float amount);
+    void woundCore(float amount) { core_.hp = std::max(std::min(core_.hp, 1.f), core_.hp - amount); }   // a "?" deal's price: damage, never the last point
     void addCoreMaxHp(float delta);                  // raise the core's max HP mid-run
 
     // ---- creeds (sim/WorldCreeds.cpp) -----------------------------------
@@ -189,6 +190,7 @@ public:
     // Ascension: this fight's elite trait and the boss's rules (BossRule bits).
     EliteTrait eliteTrait() const { return eliteTrait_; }
     unsigned bossRules() const { return bossRules_; }
+    void stretchWave(float mul) { toSpawn_ = std::max(1, static_cast<int>(std::lround(static_cast<float>(toSpawn_) * mul))); }   // the tutorial's finale
     void resetCombo() { comboStreak_ = 0.f; sinceHit_ = 0.f; reportedTier_ = 0; }   // every fight starts at x1
     void devSetCombo(float hits) { comboStreak_ = hits; sinceHit_ = 0.f; }   // snapshots
     float comboCapMultiplier() const { return 1.f + static_cast<float>(comboCapTier_) * cfg::combo::multiplierPerTier; }
@@ -534,6 +536,7 @@ private:
     void chargerShock(FrameEvents& ev);
     bool hard_ = false;       // hard mode (cfg::hard), from WorldParams at each wave start
     int asc_ = 0;             // Ascension level, likewise
+    float easeHp_ = 1.f;      // WorldParams::enemyHpMul (the tutorial), likewise
     EliteTrait eliteTrait_ = EliteTrait::None;   // Ascension 6: the elite fight's trait
     unsigned bossRules_ = 0;  // Ascension 9: BossRule bits
     float hexT_ = 0.f;        // "Hex": to its next freeze

@@ -320,7 +320,8 @@ inline constexpr float vortexCooldown = 9.f, vortexRadius = 140.f, vortexRadiusP
 inline constexpr float beamCooldown = 7.f, beamTime = 1.f, beamTimePerLevel = 0.2f, beamFrac = 0.25f,
                        beamFracPerLevel = 0.04f, beamTick = 0.1f, beamRange = 460.f, beamElemEvery = 0.3f;
 inline constexpr float bladesCooldown = 9.f, bladesTime = 4.f, bladesTimePerLevel = 0.5f, bladeFrac = 0.6f,
-                       bladeFracPerLevel = 0.1f, bladeOrbit = 55.f, bladeRadius = 9.f, bladeSpin = 7.f, bladeTick = 0.25f;
+                       bladeFracPerLevel = 0.1f, bladeOrbit = 70.f, bladeRadius = 13.f, bladeSpin = 7.f, bladeTick = 0.25f;
+inline constexpr float bladeLength = 10.f;   // half the drawn blade (2026-10-12: bigger, was 7; orbit 55, radius 9)
 inline constexpr int blades = 3;
 inline constexpr float cloudCooldown = 8.f, cloudRadius = 90.f, cloudRadiusPerLevel = 10.f, cloudTime = 3.f,
                        cloudTimePerLevel = 0.5f, cloudFrac = 0.2f, cloudTick = 0.5f;
@@ -356,8 +357,8 @@ namespace tier {
 inline constexpr int weightsNormal[5] = {53, 30, 12, 4, 1};   // upgrade nodes, shops (was 45/30/16/7/2)
 // Rare tiers stay rare so one landing is an event: ~3% Legendary per elite card.
 inline constexpr int weightsElite[5]  = {30, 36, 22, 9, 3};   // elite fights (their item pick)
-inline constexpr int weightsShop[5]   = {40, 34, 17, 7, 2};   // the shop's shelf
-inline constexpr int weightsBoss[5]   = {0, 0, 0, 65, 35};    // the treasure after a boss
+inline constexpr int weightsShop[5]   = {38, 32, 16, 8, 6};   // the shop's shelf (2026-10-12: Legendaries 2 -> 6)
+inline constexpr int weightsBoss[5]   = {0, 0, 0, 40, 60};    // the treasure after a boss (2026-10-12: mostly Legendary)
 }  // namespace tier
 
 // Game-changing items (Fase J) and behaviour items (Fase M). Level-1 values,
@@ -518,8 +519,11 @@ inline constexpr float radius = 34.f;
 inline constexpr float baseHp = 60.f;
 inline constexpr float hpPerBulwark = 20.f;    // "Bulwark" meta unlock, per level
 inline constexpr float enemyDamage = 8.f;      // hp lost per enemy that reaches the core
-inline constexpr float waveHeal = 9.f;         // core repaired this much on a wave clear
-inline constexpr float mendPerLevel = 3.f;     // "Mend" meta node: + this to waveHeal per level
+// No free repair between fights (2026-10-12): healing is something you pick up
+// (Mend, Regen, Mender, rests, "?" deals). The core does get half its health
+// back at the start of every act (actHealFrac; Ascension 2 and Fortress cut it).
+inline constexpr float mendPerLevel = 3.f;     // "Mend" meta node: core repaired this much before each fight, per level
+inline constexpr float actHealFrac = 0.5f;     // share of max hp repaired when a new act starts
 inline constexpr float regenPerLevel = 1.5f;   // "Regen" meta node: core hp/s during a wave, per level
 inline constexpr float bastionPerWavePerLevel = 1.0f;  // "Bastion" meta node: + core max hp each wave, per level
 }  // namespace core
@@ -543,13 +547,18 @@ inline constexpr int rerollsPerLevel = 2;     // "Foresight" web node: reroll ch
 }  // namespace run
 
 // Hard mode (toggled on the run-start screen, saved): everything hits harder,
-// comes in bigger numbers and the core gets no free repair between fights.
-// Pays more cores.
+// comes in bigger numbers. Pays more cores.
 // The very first run (no run played yet; SB_DEV=1 SB_TUTORIAL=1 forces it):
-// one straight path - fight, recruit, elite, shop, forge, then a softer boss -
-// with a hint at each stop. Win or lose, it ends at the skill web.
+// one straight path - fight, recruit, elite (it hands you Seeker), a "?"
+// (free gold), the shop (cheap items, gold for one) and a finale that is just
+// a long fight, no boss and no pulled-back camera - with a hint at each stop.
+// Win or lose, it ends at the skill web. (2026-10-12)
 namespace tutorial {
-inline constexpr float bossHpMul = 0.6f;
+inline constexpr float bossHpMul = 0.6f;       // (unused since the finale has no boss)
+inline constexpr float enemyHpMul = 0.8f;      // every tutorial enemy (x act 1's 0.75: 0.6 in all)
+inline constexpr int eventGold = 50;           // the "?": a gift
+inline constexpr int finaleWave = 5;           // the finale plays as this wave...
+inline constexpr float finaleCountMul = 1.8f;  // ...with this many times the enemies
 }  // namespace tutorial
 
 namespace hard {
@@ -570,6 +579,7 @@ namespace asc {
 inline constexpr int maxLevel = 10;
 inline constexpr float eliteHpMul = 1.25f;              // 1: elites tougher, and the second Brute from act 1
 inline constexpr float enemySpeedMul = 1.10f;           // 3
+inline constexpr float actHealFrac = 0.25f;             // 2: a new act repairs this much instead of cfg::core::actHealFrac
 inline constexpr float restHealFrac = 0.5f;             // 4: a Rest repairs half the core...
 inline constexpr float shopPriceMul = 1.25f;            // ...and the shop is dearer
 inline constexpr float stageAt[2] = {0.75f, 0.45f};     // 5: bosses change phase sooner...
@@ -665,7 +675,7 @@ inline constexpr int priceRepair = 20;     // repairs repairFrac of the core's m
 inline constexpr float repairFrac = 0.30f;
 inline constexpr int shopOffers = 3;   // a small shelf...
 inline constexpr int shopMaxItems = 1; // ...with at most one item on it (items are scarce)...
-inline constexpr float shopItemChance = 0.6f;   // ...and only on this share of visits
+inline constexpr float shopItemChance = 0.85f;  // ...on this share of visits (0.6 until 2026-10-12)
 inline constexpr int maxItemLevel = 3;     // forge cap
 // Shop extras (Fase O): one offer is on sale, a mystery box, a paid reroll,
 // selling an item back, and the forge as a paid service.
@@ -679,6 +689,7 @@ inline constexpr float rerollGrowth = 1.7f;
 inline constexpr float sellFrac = 0.45f;   // selling an item pays this of its tier price, x its level
 inline constexpr int forgeServicePrice = 45;   // level up an item without a Forge node
 inline constexpr int forgePoints = 2;          // a forge visit: common/uncommon 1, rare/epic 1 but only first, legendary 2
+inline constexpr int forgePointGold = 20;      // a forge point nothing can take turns into this much gold (2026-10-12)
 }  // namespace gold
 
 // Wave 10 is a miniboss duel in a wider arena.
@@ -828,6 +839,8 @@ inline constexpr float spawnIntervalMin = 0.28f;   // ...tightening to this by s
 inline constexpr int spawnMinWave = 30;
 inline constexpr float introDelay = 1.15f;   // calm beat before the first enemy of a wave
 inline constexpr float hpBase = 3.5f;
+inline constexpr float act1HpMul = 0.75f;     // act 1 (2026-10-12): softer while the squad has almost no items...
+inline constexpr float act1BossHpMul = 0.8f;  // ...and its boss
 inline constexpr float hpGrowth = 1.18f;      // per wave up to hpKneeWave...
 inline constexpr int   hpKneeWave = 20;
 inline constexpr float hpGrowthLate = 1.04f;  // ...and this per wave after
@@ -954,7 +967,7 @@ inline constexpr float juggernautPerLevel = 0.06f;      // contact damage and to
 inline constexpr float gripPerLevel = 0.06f;            // "Grip": catch reach, every ball
 inline constexpr float windupPerLevel = 0.06f;          // "Wind-up": thrown first hit, every ball
 inline constexpr float masteryPerLevel = 0.5f;          // "<Class> mastery": that class's role perks x(1 + this) more per level
-inline constexpr int abilityPickCards = 3;           // the run's first-ability pick (+1 with "Calling")
+inline constexpr int abilityPickCards = 2;           // the run's first-ability pick (2026-10-12: 2, was 3 +1 with "Calling")
 }  // namespace meta
 
 // Creeds (Fase O): run-defining rules picked after the act-1 boss (and at the
@@ -1050,8 +1063,8 @@ namespace event {
 inline constexpr int deals = 2;               // deals on offer (plus walking away)
 inline constexpr int ballPrice = 120, ballPerAct = 40;        // a new ball
 inline constexpr int smugglerPrice = 70, smugglerPerAct = 20; // an item pick at elite odds
-inline constexpr int bloodGold = 60, bloodPerAct = 20;        // gold for core max HP...
-inline constexpr float bloodHpFrac = 0.12f;                   // ...this share of it
+inline constexpr int bloodGold = 60, bloodPerAct = 20;        // gold for core damage...
+inline constexpr float bloodHpFrac = 0.12f;                   // ...this share of its max HP (damage, not max HP, since 2026-10-12)
 inline constexpr int tithePrice = 50, tithePerAct = 15;       // core max HP for gold...
 inline constexpr float titheHpFrac = 0.15f;                   // ...this much more (and healed)
 inline constexpr int gambleStake = 40, gamblePerAct = 15;     // coin flip: lose it or win...
@@ -1063,8 +1076,16 @@ inline constexpr int barterItems = 2;                          // Barter: items 
 inline constexpr int barterTierW[5] = {40, 30, 18, 9, 3};      // ...their rarity odds (common..legendary)
 inline constexpr int mercenaryFights = 2;                      // Recruiter: fights a ball sits out
 inline constexpr int tomePrice = 45, tomePerAct = 15;          // Old tome: a random ability
-inline constexpr float bloodForgeHpFrac = 0.1f;                // Blood forge: core max HP for a level
+inline constexpr float bloodForgeHpFrac = 0.1f;                // Blood forge: core damage (share of max HP) for a level
 inline constexpr int cocoonFights = 3;                         // Strange cocoon: fights until it hatches
+// third batch (2026-10-12): paid in the core and in levels, not gold
+inline constexpr float darkHpFrac = 0.15f;                     // Dark bargain: core damage for an elite item pick
+inline constexpr float medicHealFrac = 0.35f;                  // Field medic: core repaired, for an item level
+inline constexpr float riteHpFrac = 0.10f;                     // Blood rite: core damage for an ability level
+inline constexpr int purifyPrice = 150, purifyPerAct = 40;     // Unbinding: lifts a pact's price - dear...
+inline constexpr int purifyPct = 35;                           // ...and rare: offered this % of the times it could be
+inline constexpr int scavengeUntilAct = 1;                     // Scavenge (free: 1 of 3 Common / Uncommon items) is always one of the deals up to this act...
+inline constexpr int scavengeLatePct = 35;                     // ...and after it, offered only this % of the times it could be
 inline constexpr int cocoonLegendaryPct = 25;                  // ...the odds it's a Legendary (else Epic)
 }  // namespace event
 
@@ -1150,7 +1171,7 @@ inline constexpr float slingMaxSpeed = 1500.f;
 // at this fraction of the slingshot range (~1090 px/s, a firm pull - full power
 // stays a reward for aiming by hand). Pulling further aims with the slingshot.
 inline constexpr float quickThrowSlop = 12.f;
-inline constexpr float regrabDelay = 0.6f;   // s after a throw before that ball can be grabbed again (no click-spam; 1 s until 2026-10-06)
+inline constexpr float regrabDelay = 0.4f;   // s after a throw before that ball can be grabbed again (no click-spam; 1 s until 2026-10-06, 0.6 until 2026-10-12)
 inline constexpr int endlessCrowd = 20;      // dev endless: enemies the button throws in
 inline constexpr float endlessTough = 8.f;   // ...and the tough button's, with this x the health
 inline constexpr float quickThrowPower = 0.65f;

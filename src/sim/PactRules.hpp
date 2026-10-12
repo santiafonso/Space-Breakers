@@ -18,6 +18,10 @@ struct PactRules {
     bool lastBreath = false;      // Last Breath: x2 damage with the core low
     bool mirror = false;          // Mirror: a throw also sends a ghost the other way
     bool frenzy = false;          // Frenzy: the combo climbs twice as fast; grabbing breaks it
+    // The prices, apart from the gifts, so an "Unbinding" can lift one (2026-10-12)
+    bool potatoSlip = false;      // Hot Potato: held too long, it slips
+    bool juggleChip = false;      // Juggler: the core drops the streak and gets chipped
+    bool frenzyBreak = false;     // Frenzy: grabbing resets the combo
     float enemyHpMul = 1.f;       // Mirror's cost
     float enemyCountMul = 1.f;    // Horde's cost
 };

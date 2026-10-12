@@ -344,7 +344,7 @@ inline const char* upgradeKindId(UpgradeKind k) {
     return "";
 }
 
-inline UpgradeInfo upgradeInfo(UpgradeKind k) {
+inline UpgradeInfo upgradeInfoFull(UpgradeKind k) {
     switch (k) {
         case UpgradeKind::AddBall:       return {"Extra ball", "one more ball in the arena"};
         case UpgradeKind::ElemFire:      return {"Fire", "the ball turns fire: every hit sets the enemy alight, hotter each time; a burning enemy that dies sets the ones around it on fire"};
@@ -439,6 +439,40 @@ inline UpgradeInfo upgradeInfo(UpgradeKind k) {
     }
     if (const ItemDef* d = classItemDef(k)) return {d->title, d->desc};
     return {"", ""};
+}
+
+// Simple descriptions (an option, 2026-10-12): the gist of a text - up to its
+// first ";", " - ", " (" or full stop, and past ~90 characters up to the last
+// comma before that.
+inline bool& simpleTextOn() {
+    static bool on = false;
+    return on;
+}
+inline std::string simplifyText(const std::string& full) {
+    std::size_t cut = full.size();
+    for (const char* sep : {"; ", " - ", " (", ". "}) {
+        const std::size_t at = full.find(sep);
+        if (at != std::string::npos && at > 12 && at < cut) cut = at;
+    }
+    std::string s = full.substr(0, cut);
+    if (s.size() > 90) {
+        const std::size_t comma = s.rfind(", ", 90);
+        if (comma != std::string::npos && comma > 24) s = s.substr(0, comma);
+    }
+    while (!s.empty() && (s.back() == ' ' || s.back() == ',' || s.back() == ':')) s.pop_back();
+    return s;
+}
+// The card text: the full description, or its gist with simple descriptions on.
+inline UpgradeInfo upgradeInfo(UpgradeKind k) {
+    UpgradeInfo info = upgradeInfoFull(k);
+    if (!simpleTextOn() || !info.desc) return info;
+    static std::vector<std::string> cache(static_cast<std::size_t>(kUpgradeKindCount));
+    static std::vector<bool> made(static_cast<std::size_t>(kUpgradeKindCount), false);
+    const std::size_t i = static_cast<std::size_t>(k);
+    if (i >= cache.size()) return info;
+    if (!made[i]) { cache[i] = simplifyText(info.desc); made[i] = true; }
+    info.desc = cache[i].c_str();
+    return info;
 }
 
 // What one more level of an item does (items, elements and abilities; ""
@@ -768,6 +802,24 @@ inline int elementsUnlocked(const UpgradeCtx& c) {
     return n;
 }
 
+// Items that only work on a ball carrying an element (or setting off
+// reactions): none of them rolls before an element is unlocked on the web
+// (2026-10-12). The ones that bring their own element (planets, wyrms,
+// chariots...) aren't here.
+inline bool itemNeedsElement(UpgradeKind k) {
+    switch (k) {
+        case UpgradeKind::Volatile: case UpgradeKind::Seep: case UpgradeKind::Reagent: case UpgradeKind::Tincture:
+        case UpgradeKind::Distill: case UpgradeKind::HollowPoint: case UpgradeKind::Fission: case UpgradeKind::Elixir:
+        case UpgradeKind::Conduit: case UpgradeKind::Martyr: case UpgradeKind::VenomBlade: case UpgradeKind::Transmute:
+        case UpgradeKind::Residue: case UpgradeKind::Aurum: case UpgradeKind::Spellweave: case UpgradeKind::Soulbind:
+        case UpgradeKind::Saturate: case UpgradeKind::Maelstrom: case UpgradeKind::BabyDragon: case UpgradeKind::Hive:
+        case UpgradeKind::ToxicTrail: case UpgradeKind::Primal:
+            return true;
+        default:
+            return false;
+    }
+}
+
 inline bool upgradeEligible(UpgradeKind k, const UpgradeCtx& c) {
     if (c.isLocked(k)) return false;
     const int ballCount = c.balls ? static_cast<int>(c.balls->size()) : 0;
@@ -784,6 +836,7 @@ inline bool upgradeEligible(UpgradeKind k, const UpgradeCtx& c) {
         case UpgradeCat::Element:  return c.elemUnlocked[elementItemSlot(k)] && anyBallFits();
         case UpgradeCat::Item:
             if (k == UpgradeKind::Shatter && !c.elemUnlocked[3]) return false;   // ice
+            if (itemNeedsElement(k) && elementsUnlocked(c) == 0) return false;   // nothing to carry yet
             return anyBallFits();
         case UpgradeCat::Relic: break;
     }
@@ -845,9 +898,9 @@ inline bool classHasItems(ItemTag t) {
 // the route perks and ability unlocks (58+).
 
 enum MetaUnlock {
-    MetaCalling,      // Calling   - a 4th card in the run's first-ability pick   (root; was Squad, then the class pick)
+    MetaCalling,      // Calling   - opens the web (root; was Squad, then the class pick, then a 4th ability card)
     MetaCoreHp,       // Bulwark   - +core HP at the start
-    MetaMend,         // Mend      - core heals more between waves
+    MetaMend,         // Mend      - the core heals before each fight (the only free repair between fights)
     MetaFireItem,     // Ignition  - unlocks the fire item, +fire potency
     MetaVenom,        // Venom     - unlocks the poison ball item, +poison potency
     MetaTide,         // Tide      - unlocks the water ball item, +water potency
@@ -1012,11 +1065,11 @@ inline const MetaUnlockDef& metaUnlockDef(int u) {
     using B = MetaBranch;
     constexpr MetaCurrency C = MetaCurrency::Cores, P = MetaCurrency::Prisms;
     static const MetaUnlockDef defs[MetaUnlockCount] = {
-        /* Calling   */ {"Calling",   "opens the web. Every run starts by picking your ball's first ability: with Calling you choose from 4 cards instead of 3",
+        /* Calling   */ {"Calling",   "opens the web: everything else grows from here",
                          8u,  1, B::Root,     C, -1,   0.f, 0.f},
         /* Bulwark   */ {"Bulwark",   "start with +20 core health",
                          10u, 3, B::Guardian, C,  0, 330.f, 1.f},
-        /* Mend      */ {"Mend",      "the core heals +3 more between waves",
+        /* Mend      */ {"Mend",      "the core repairs 3 before each fight per level (otherwise it doesn't heal between fights)",
                          12u, 3, B::Guardian, C,  1, 316.f, 2.f},
         /* Ignition  */ {"Ignition",  "the fire element can appear; higher levels burn hotter",
                          2u,  3, B::Alchemist, P,  0, 299.f, 1.f},
@@ -1518,6 +1571,8 @@ inline std::string metaNodeName(int u) {
         return itemTagName(godOf(static_cast<ItemTag>(classGateIndex(u, MetaGodStriker))));
     return metaUnlockDef(u).name;
 }
+inline std::string metaNodeEffect(int u);
+inline std::string metaNodeEffectFor(int u, bool simple) { return simple ? simplifyText(metaNodeEffect(u)) : metaNodeEffect(u); }
 inline std::string metaNodeEffect(int u) {
     auto tierLine = [](ItemTag t, Tier tier, const char* what) {
         return std::string(itemTagName(t)) + " " + what + " can appear: " + joinItemTitles(classItemsOfTier(t, tier));

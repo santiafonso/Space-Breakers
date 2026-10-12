@@ -47,14 +47,14 @@ void World::pactWallBump(Ball& b) {
 
 // "Juggler": a juggled ball touching the core loses its streak and chips it.
 void World::pactCoreBounce(Ball& b) {
-    if (!pact_.juggler || b.juggle <= 0 || b.ghost) return;
+    if (!pact_.juggler || !pact_.juggleChip || b.juggle <= 0 || b.ghost) return;
     b.juggle = 0;
     core_.hp = std::max(1.f, core_.hp - core_.maxHp * cfg::pact::juggleCoreChip);
     core_.hitFlash = 1.f;
 }
 
 void World::pactOnGrab(Ball& b) {
-    if (pact_.frenzy) comboStreak_ = 0;   // "Frenzy": your hands break the combo
+    if (pact_.frenzyBreak) comboStreak_ = 0;   // "Frenzy": your hands break the combo
     if (pact_.juggler) b.juggle = std::min(b.juggle + 1, cfg::pact::juggleMax);   // "Juggler": one more catch
 }
 
@@ -84,7 +84,7 @@ void World::pactOnThrow(Ball& b) {
 // throw behind it (App / PlayScreen see the grab end).
 void World::pactHeldTick(float dt) {
     heldT_ += dt;
-    if (!pact_.hotPotato || heldT_ < cfg::pact::potatoMax || grabbed_ != Grabbed::Ball) return;
+    if (!pact_.potatoSlip || heldT_ < cfg::pact::potatoMax || grabbed_ != Grabbed::Ball) return;
     Ball& b = balls_[static_cast<std::size_t>(heldIndex_)];
     b.held = false;
     b.vel = rng_.direction() * cfg::ball::nudgeSpeed;

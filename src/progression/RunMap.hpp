@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <functional>
 #include <cstdlib>
 #include <iterator>
 #include <vector>
@@ -88,7 +89,10 @@ namespace detail {
 // A path's leaning (see cfg::map): which of balls or items it tends to offer.
 enum class PathLean { Neutral, Recruit, Item };
 
-inline MapNodeType rollNodeType(Rng& rng, int row, int act, PathLean lean) {
+// No shop before the middle of the map (2026-10-12); the pre-boss row's shop stays.
+inline int shopFromRow(int rows) { return std::max(3, (rows + 1) / 2); }
+
+inline MapNodeType rollNodeType(Rng& rng, int row, int act, PathLean lean, int rows) {
     if (row == 1) return MapNodeType::Combat;              // always open on a fight
     namespace M = cfg::map;
     // Recruit stops aren't rolled: generateMap places them on the recruit paths.
@@ -106,9 +110,9 @@ inline MapNodeType rollNodeType(Rng& rng, int row, int act, PathLean lean) {
     const W table[] = {
         {MapNodeType::Combat,  M::wCombat},
         {MapNodeType::Elite,   row >= 3 ? elite : 0},
-        {MapNodeType::Shop,    row >= 3 ? shop : 0},
+        {MapNodeType::Shop,    row >= shopFromRow(rows) ? shop : 0},
         {MapNodeType::Rest,    row >= 4 ? M::wRest : 0},   // (no Forge stops since 2026-10-05: the Rest is where you forge)
-        {MapNodeType::Upgrade, M::wUpgrade},
+        {MapNodeType::Upgrade, row >= 3 ? M::wUpgrade : 0},   // no "?" on the act's first two rows (2026-10-12)
         {MapNodeType::Recruit, row >= 3 ? recruit : 0},
     };
     int total = 0;
@@ -119,6 +123,64 @@ inline MapNodeType rollNodeType(Rng& rng, int row, int act, PathLean lean) {
         pick -= w.w;
     }
     return MapNodeType::Combat;
+}
+
+// A path from row 1 to the boss that never steps on `want` (empty: none).
+inline std::vector<int> pathMissing(const RunMap& m, MapNodeType want) {
+    const int n = static_cast<int>(m.nodes.size());
+    std::vector<int> memo(static_cast<std::size_t>(n), -1);   // -1 unknown, 0 no, 1 yes: reaches the boss without `want`
+    std::function<bool(int)> clear = [&](int i) -> bool {
+        int& v = memo[static_cast<std::size_t>(i)];
+        if (v >= 0) return v == 1;
+        const MapNode& nd = m.nodes[static_cast<std::size_t>(i)];
+        bool ok = false;
+        if (nd.type == want) ok = false;
+        else if (nd.type == MapNodeType::Boss) ok = true;
+        else
+            for (int j : nd.next) ok = ok || clear(j);
+        v = ok ? 1 : 0;
+        return ok;
+    };
+    for (int i = 0; i < n; ++i) {
+        if (m.nodes[static_cast<std::size_t>(i)].row != 1 || !clear(i)) continue;
+        std::vector<int> path;
+        for (int at = i; m.nodes[static_cast<std::size_t>(at)].type != MapNodeType::Boss;) {
+            path.push_back(at);
+            int nx = -1;
+            for (int j : m.nodes[static_cast<std::size_t>(at)].next)
+                if (clear(j)) { nx = j; break; }
+            if (nx < 0) break;
+            at = nx;
+        }
+        return path;
+    }
+    return {};
+}
+
+inline void ensureOnEveryPath(RunMap& m, Rng& rng, MapNodeType want, int fromRow) {
+    const int R = m.rowCount();
+    for (int guard = 0; guard < 24; ++guard) {
+        const std::vector<int> path = pathMissing(m, want);
+        if (path.empty()) return;
+        // a plain fight on it, else a Recruit stop, a shop, an elite
+        std::vector<int> spots;
+        // (never a Rest or a "?": that could undo the other guarantee; a short
+        // first-run map may have only shops and elites left on the way)
+        // (the Rests go first: one may still take a "?" as a last resort - the
+        // "?" pass that follows puts one back wherever a path lost its only one)
+        static const MapNodeType kOrder[] = {MapNodeType::Combat, MapNodeType::Recruit, MapNodeType::Shop, MapNodeType::Elite,
+                                             MapNodeType::Upgrade};
+        for (MapNodeType take : kOrder) {
+            if (take == MapNodeType::Upgrade && want != MapNodeType::Rest) break;
+            for (int i : path) {
+                const MapNode& nd = m.nodes[static_cast<std::size_t>(i)];
+                if (nd.row >= fromRow && nd.row < R && nd.type == take) spots.push_back(i);
+            }
+            if (!spots.empty()) break;
+        }
+        if (spots.empty()) return;   // nothing to turn (a tiny map): leave it
+        m.nodes[static_cast<std::size_t>(spots[static_cast<std::size_t>(rng.irange(0, static_cast<int>(spots.size()) - 1))])].type = want;
+    }
 }
 
 }  // namespace detail
@@ -141,7 +203,7 @@ static_assert(sizeof(kPreBossRow) / sizeof(kPreBossRow[0]) == cfg::map::lanes);
 // stop is met once (App::newRun, cfg::tutorial).
 inline RunMap tutorialMap() {
     static const MapNodeType kStops[] = {MapNodeType::Combat, MapNodeType::Recruit, MapNodeType::Elite,
-                                         MapNodeType::Shop, MapNodeType::Rest};
+                                         MapNodeType::Upgrade, MapNodeType::Shop};   // then the finale (the boss row)
     RunMap m;
     m.act = 1;
     m.rows = static_cast<int>(std::size(kStops));
@@ -263,7 +325,7 @@ inline RunMap generateMap(Rng& rng, int act, int rows = 0) {
             n.row = r;
             n.lane = lane;
             n.type = r == 1 ? MapNodeType::Combat
-                            : (preBoss ? kPreBossRow[lane] : detail::rollNodeType(rng, r, act, lean));
+                            : (preBoss ? kPreBossRow[lane] : detail::rollNodeType(rng, r, act, lean, R));
             ids.push_back(static_cast<int>(m.nodes.size()));
             m.nodes.push_back(n);
         }
@@ -362,17 +424,18 @@ inline RunMap generateMap(Rng& rng, int act, int rows = 0) {
 
     // Never two plain fights in a row: a fight that leads on to another
     // fight turns the second one into a stop (bottom-up, so a change never
-    // makes a new pair below). Elites, Recruits and the row-1 trunk stay.
+    // makes a new pair below). Elites, Recruits and the row-1 trunk stay,
+    // and so does row 2: an act opens on two fights, never on a "?" (2026-10-12).
     for (MapNode& a : m.nodes) {
         if (a.type != MapNodeType::Combat) continue;
         for (int j : a.next) {
             MapNode& b = m.nodes[static_cast<std::size_t>(j)];
-            if (b.type != MapNodeType::Combat) continue;
+            if (b.type != MapNodeType::Combat || b.row <= 2) continue;
             namespace M = cfg::map;
             struct W { MapNodeType t; int w; };
             const W table[] = {
                 {MapNodeType::Upgrade, M::wUpgrade},
-                {MapNodeType::Shop,    b.row >= 3 ? M::wShopNeutral : 0},
+                {MapNodeType::Shop,    b.row >= detail::shopFromRow(R) ? M::wShopNeutral : 0},
                 {MapNodeType::Rest,    b.row >= 4 ? M::wRest : 0},
             };
             int total = 0;
@@ -417,6 +480,12 @@ inline RunMap generateMap(Rng& rng, int act, int rows = 0) {
         if (!spots.empty()) spots[static_cast<std::size_t>(rng.irange(0, static_cast<int>(spots.size()) - 1))]->type =
             MapNodeType::Altar;
     }
+    // Whatever way you climb, an act always offers at least one Rest and one
+    // "?" (2026-10-12): while some path to the boss misses one, a plain fight
+    // on that path (a Rest from row 4, a "?" from row 3, never the pre-boss
+    // row) turns into it.
+    detail::ensureOnEveryPath(m, rng, MapNodeType::Rest, 4);
+    detail::ensureOnEveryPath(m, rng, MapNodeType::Upgrade, 3);
     return m;
 }
 

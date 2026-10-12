@@ -347,6 +347,19 @@ sf::FloatRect legendRow(sf::Vector2f s, int i) {
 constexpr MetaNodeKind kKindRow[] = {MetaNodeKind::Perk, MetaNodeKind::Unlock, MetaNodeKind::Bridge,
                                      MetaNodeKind::EpicGate, MetaNodeKind::LegendGate, MetaNodeKind::God};
 constexpr int kKindCount = 6;
+// No spoilers (2026-10-12): a node counts as "known" once you own it or can buy
+// it now, and a shape shows in the legend only once a node of its kind is known
+// - hovering it lights only the known ones.
+bool nodeKnown(int i, const int* unlock) {
+    return !metaNodeRetired(i) && (unlock[i] > 0 || (webVisible(i, unlock) && metaUnlockAvailable(i, unlock)));
+}
+std::vector<MetaNodeKind> knownKinds(const int* unlock) {
+    std::vector<MetaNodeKind> v;
+    for (MetaNodeKind k : kKindRow)
+        for (int i = 0; i < MetaUnlockCount; ++i)
+            if (metaNodeKind(i) == k && nodeKnown(i, unlock)) { v.push_back(k); break; }
+    return v;
+}
 sf::FloatRect kindCell(sf::Vector2f s, int i) {
     const sf::FloatRect row = legendRow(s, kLegendCount);
     return {row.left + 8.f + static_cast<float>(i) * 22.f, row.top + 6.f, 22.f, row.height};
@@ -635,8 +648,9 @@ int LoadoutScreen::legendAt(App& app, sf::Vector2f mouse) const {
 
 int LoadoutScreen::kindAt(App& app, sf::Vector2f mouse) const {
     if (g_webView.legendMin) return -1;
-    for (int i = 0; i < kKindCount; ++i)
-        if (kindCell(app.size(), i).contains(mouse)) return static_cast<int>(kKindRow[i]);
+    const std::vector<MetaNodeKind> kinds = knownKinds(app.data().meta.unlock);
+    for (int i = 0; i < static_cast<int>(kinds.size()); ++i)
+        if (kindCell(app.size(), i).contains(mouse)) return static_cast<int>(kinds[static_cast<std::size_t>(i)]);
     return -1;
 }
 
@@ -837,36 +851,22 @@ void LoadoutScreen::drawInfoCard(App& app, sf::RenderWindow& w, int node) const 
 
     // A card on the left: the name, its route, WHAT IT GIVES in readable
     // text, the level it's at, and what the next step costs (or what's missing).
-    const float cw = 340.f;
-    const std::vector<std::string> lines = wrapText(app.font(), metaNodeEffect(node), theme::fsBody, cw - 32.f);
-    const float ch = 124.f + 22.f * static_cast<float>(lines.size());
-    const sf::Vector2f o(theme::margin, s.y * 0.14f);
-
-    draw::panel(w, {o.x, o.y, cw, ch}, col, 1.f, 0.3f);
-    draw::box(w, {o.x, o.y, 4.f, ch}, 0.f, col, col);   // branch colour spine
-
-    sf::Text name = makeText(app.font(), metaNodeName(node), theme::fsHeading, theme::textHi);
-    name.setPosition(o.x + 16.f, o.y + 10.f);
-    w.draw(name);
+    // Every part wraps and the card grows to fit (2026-10-12: long names, route
+    // lines and footers used to run into each other).
+    const float cw = 340.f, inner = cw - 32.f;
+    const std::vector<std::string> nameLines = wrapText(app.font(), metaNodeName(node), theme::fsHeading, inner);
+    const std::vector<std::string> lines = wrapText(app.font(), metaNodeEffectFor(node, app.data().meta.simpleText), theme::fsBody, inner);
     const MetaNodeKind kind = metaNodeKind(node);
     std::string where = kind == MetaNodeKind::Bridge
                             ? std::string(branchLabel(d.branch)) + " - " + branchLabel(metaUnlockDef(d.parent2).branch)
                         : d.branch == MetaBranch::Root || d.branch == MetaBranch::Creeds ? std::string(branchLabel(d.branch))
                                                                                           : std::string(branchLabel(d.branch)) + " route";
     if (kind != MetaNodeKind::Root) where += std::string("   -   ") + metaNodeKindName(kind);
-    drawLabel(w, app.font(), where, 11, {o.x + 16.f, o.y + 52.f}, col, -1);
     char lv[48];
     std::snprintf(lv, sizeof(lv), "level %d / %d", lvl, d.maxLevel);
-    drawLabel(w, app.font(), lv, 11, {o.x + cw - 16.f, o.y + 52.f}, theme::textLo, 1);
-
-    drawLabel(w, app.font(), "what it gives", 10, {o.x + 16.f, o.y + 74.f}, theme::textDim, -1);
-    float y = o.y + 84.f;
-    for (const std::string& dl : lines) {
-        sf::Text t = makeText(app.font(), dl, theme::fsBody, theme::textHi);
-        t.setPosition(o.x + 16.f, y);
-        w.draw(t);
-        y += 22.f;
-    }
+    const float whereW = makeLabel(app.font(), where, 11, col).getLocalBounds().width;
+    const float lvW = makeLabel(app.font(), lv, 11, theme::textLo).getLocalBounds().width;
+    const bool levelBelow = whereW + lvW + 24.f > inner;   // no room beside the route: its own line
 
     std::string foot;
     sf::Color footCol = theme::textDim;
@@ -885,9 +885,46 @@ void LoadoutScreen::drawInfoCard(App& app, sf::RenderWindow& w, int node) const 
                (afford ? "   -   click or E" : "   -   not enough");
         footCol = afford ? (isPrism ? kPrismColor : theme::accent) : theme::coreLow;
     }
-    sf::Text ft = makeText(app.font(), foot, theme::fsSmall, footCol);
-    ft.setPosition(o.x + 16.f, o.y + ch - 28.f);
-    w.draw(ft);
+    const std::vector<std::string> footLines = wrapText(app.font(), foot, theme::fsSmall, inner);
+
+    constexpr float kNameStep = 30.f, kBodyStep = 22.f, kFootStep = 18.f;
+    const float nameH = kNameStep * static_cast<float>(nameLines.size());
+    const float metaH = levelBelow ? 36.f : 20.f;
+    const float ch = 14.f + nameH + 8.f + metaH + 22.f + kBodyStep * static_cast<float>(lines.size()) + 14.f +
+                     kFootStep * static_cast<float>(footLines.size()) + 12.f;
+    const sf::Vector2f o(theme::margin, s.y * 0.14f);
+
+    draw::panel(w, {o.x, o.y, cw, ch}, col, 1.f, 0.3f);
+    draw::box(w, {o.x, o.y, 4.f, ch}, 0.f, col, col);   // branch colour spine
+
+    float y = o.y + 10.f;
+    for (const std::string& nl : nameLines) {
+        sf::Text name = makeText(app.font(), nl, theme::fsHeading, theme::textHi);
+        name.setPosition(o.x + 16.f, y);
+        w.draw(name);
+        y += kNameStep;
+    }
+    y += 8.f;
+    drawLabel(w, app.font(), where, 11, {o.x + 16.f, y + 6.f}, col, -1);
+    if (levelBelow) drawLabel(w, app.font(), lv, 11, {o.x + 16.f, y + 22.f}, theme::textLo, -1);
+    else drawLabel(w, app.font(), lv, 11, {o.x + cw - 16.f, y + 6.f}, theme::textLo, 1);
+    y += metaH;
+
+    drawLabel(w, app.font(), "what it gives", 10, {o.x + 16.f, y + 6.f}, theme::textDim, -1);
+    y += 16.f;
+    for (const std::string& dl : lines) {
+        sf::Text t = makeText(app.font(), dl, theme::fsBody, theme::textHi);
+        t.setPosition(o.x + 16.f, y);
+        w.draw(t);
+        y += kBodyStep;
+    }
+    y += 14.f;
+    for (const std::string& fl : footLines) {
+        sf::Text ft = makeText(app.font(), fl, theme::fsSmall, footCol);
+        ft.setPosition(o.x + 16.f, y);
+        w.draw(ft);
+        y += kFootStep;
+    }
 }
 
 void LoadoutScreen::drawSky(App& app, sf::RenderWindow& w, float alpha) const {
@@ -1060,7 +1097,7 @@ void LoadoutScreen::draw(App& app, sf::RenderWindow& w) {
         const float g = glow_[i];                 // 0 = idle, 1 = lit
         const float pop = introPop(it, 0.12f + 0.06f * nodeRing(i), 0.34f);
         if (pop <= 0.001f) continue;
-        const bool inFocus = kindHover_ >= 0 ? static_cast<int>(metaNodeKind(i)) == kindHover_
+        const bool inFocus = kindHover_ >= 0 ? static_cast<int>(metaNodeKind(i)) == kindHover_ && nodeKnown(i, m.unlock)
                                              : legendHover_ < 0 || static_cast<int>(d.branch) == legendHover_ || i == 0;
         const float na = clampf(pop, 0.f, 1.f) * (inFocus ? 1.f : 0.25f);   // intro alpha, legend focus
         const float ns = nodeScale(zoom_);
@@ -1349,13 +1386,15 @@ void LoadoutScreen::draw(App& app, sf::RenderWindow& w) {
             const sf::FloatRect kr = legendRow(s, kLegendCount);
             draw::line(w, {kr.left + 10.f, kr.top + 3.f}, {kr.left + kr.width - 10.f, kr.top + 3.f}, 1.f,
                        withAlpha(theme::arenaEdge, 0.5f * la));
-            for (int k = 0; k < kKindCount; ++k) {
+            const std::vector<MetaNodeKind> kinds = knownKinds(m.unlock);   // only the kinds you've met
+            for (int k = 0; k < static_cast<int>(kinds.size()); ++k) {
+                const MetaNodeKind kind = kinds[static_cast<std::size_t>(k)];
                 const sf::FloatRect c = kindCell(s, k);
                 const sf::Vector2f q{c.left + c.width * 0.5f, c.top + c.height * 0.5f};
-                const bool hot = kindHover_ == static_cast<int>(kKindRow[k]);
+                const bool hot = kindHover_ == static_cast<int>(kind);
                 const sf::Color ic = withAlpha(hot ? theme::textHi : theme::textLo, la);
                 const float ir = hot ? 6.5f : 5.5f;
-                switch (kKindRow[k]) {
+                switch (kind) {
                     case MetaNodeKind::Unlock:
                         draw::polygonOutline(w, q, ir * 1.2f, 4, kPi * 0.25f, 1.5f, ic);
                         break;
@@ -1395,17 +1434,17 @@ void LoadoutScreen::draw(App& app, sf::RenderWindow& w) {
     if (menu_.hovered() == 1)   // what hard mode means, on hover only
         drawTooltip(w, app.font(), lastMouse_, s, "Hard mode",
                     "enemies tougher, faster and more of them, bosses much tougher, Brutes everywhere, "
-                    "enemies hit the core harder and no free repair between fights. Pays x1.75 cores. Click to toggle.",
+                    "enemies hit the core harder. Pays x1.75 cores. Click to toggle.",
                     theme::coreLow);
     if (menu_.hovered() == 2 && app.data().meta.ascMax > 0) {   // the rules this level adds up to
         const int lvl = app.data().meta.ascSel;
         std::string desc;
         if (lvl == 0) desc = "no extra rules.";
         for (int k = 1; k <= lvl; ++k) desc += std::to_string(k) + ": " + ascensionRule(k) + ".  ";
-        char pay[96];
-        std::snprintf(pay, sizeof(pay), "Pays x%.2f cores%s. Win at your highest level to open the next. Click to change.",
-                      1.f + cfg::asc::coresPerLevel * static_cast<float>(lvl), lvl >= cfg::asc::prismLevel ? " and +1 prism on a win" : "");
-        desc += pay;
+        char mul[16];
+        std::snprintf(mul, sizeof(mul), "%.2f", 1.f + cfg::asc::coresPerLevel * static_cast<float>(lvl));
+        desc += std::string("Pays x") + mul + " cores" + (lvl >= cfg::asc::prismLevel ? " and +1 prism on a win" : "") +
+                ". Win at your highest level to open the next. Click to change.";
         drawTooltip(w, app.font(), lastMouse_, s, "Ascension " + std::to_string(lvl), desc, theme::coreLow);
     }
 }
@@ -1989,21 +2028,32 @@ void drawLoadoutOverlay(App& app, sf::RenderWindow& w, bool paused, const TabPee
         int hb, hs;
         peekSlotAt(app, um, hb, hs);
         land = hb >= 0 ? app.slotMoveTarget(peek.dragBall, peek.dragSlot, hb, hs) : -1;
+        // each slot in its own shape: the element's hexagon, an ability's diamond, an item's bar
+        auto shape = [&](const sf::FloatRect& sr, int sl, sf::Color fill, sf::Color edge) {
+            const sf::Vector2f pc{sr.left + sr.width * 0.5f, sr.top + sr.height * 0.5f};
+            if (sl == kSlotType || isAbilitySlot(sl)) {
+                const bool hex = sl == kSlotType;
+                const float rad = sr.width * 0.5f * (hex ? 1.f : 1.15f) + 1.f;
+                const int sides = hex ? 6 : 4;
+                const float rot = hex ? kPi / 6.f : 0.f;
+                if (fill.a > 0) draw::polygon(w, pc, rad, sides, rot, fill, fill);
+                draw::polygonOutline(w, pc, rad, sides, rot, 1.f, edge);
+            } else {
+                draw::box(w, sr, theme::corner, fill, fill, edge, 1.f);
+            }
+        };
         for (int i = 0; i < n; ++i) {
             const BallLoadout& L = r.balls[static_cast<std::size_t>(i)];
             const sf::Vector2f c = panelCenter(s, i, n, rowY, rowCx);
             for (int sl = 0; sl < kSlotAbility + abilityBoxes(L); ++sl) {
                 const sf::FloatRect sr = slotRect(c, sl, L);
                 if (i == peek.dragBall && sl == peek.dragSlot) {
-                    draw::box(w, sr, theme::corner, withAlpha(theme::bgDeep, 0.8f), withAlpha(theme::bgDeep, 0.8f),
-                              withAlpha(theme::accent, 0.3f), 1.f);
+                    shape(sr, sl, withAlpha(theme::bgDeep, 0.8f), withAlpha(theme::accent, 0.3f));
                     continue;
                 }
                 if (app.slotMoveTarget(peek.dragBall, peek.dragSlot, i, sl) != sl) continue;
                 const bool hot = i == hb && sl == land;
-                draw::box(w, sr, theme::corner, withAlpha(theme::accent, hot ? 0.16f : 0.f),
-                          withAlpha(theme::accent, hot ? 0.06f : 0.f), withAlpha(theme::accent, hot ? 0.85f : 0.42f),
-                          1.f);
+                shape(sr, sl, withAlpha(theme::accent, hot ? 0.12f : 0.f), withAlpha(theme::accent, hot ? 0.85f : 0.42f));
             }
         }
     }
@@ -2388,7 +2438,8 @@ void BossWinScreen::draw(App& app, sf::RenderWindow& w) {
     const bool goingOn = app.bossWinCanContinue();   // run still live: the reward isn't due yet
     const bool runEnd = !goingOn && app.lastRunWave() >= cfg::run::finalWave;
     const std::string downed = std::string(bossName(app.runBoss(cfg::run::actOfWave(app.data().run.wave)))) + " defeated";
-    drawCenteredPop(w, app.font(), runEnd ? "Run complete" : downed, theme::fsTitle,
+    const bool tutorial = app.data().run.tutorial;
+    drawCenteredPop(w, app.font(), tutorial ? "Tutorial complete" : runEnd ? "Run complete" : downed, theme::fsTitle,
                     {s.x * 0.5f, s.y * 0.28f}, theme::core, introPop(it, 0.05f, 0.34f));
 
     if (goingOn) {
@@ -2407,7 +2458,8 @@ void BossWinScreen::draw(App& app, sf::RenderWindow& w) {
                         theme::accent, introPop(it, 0.16f));
         const int opened = app.lastRunAscUnlocked();
         drawCenteredPop(w, app.font(), opened > 0 ? "run complete  -  Ascension " + std::to_string(opened) + " unlocked"
-                                                  : std::string("run complete"),
+                                   : tutorial ? std::string("spend your cores on the skill web - then a real run, with paths to choose")
+                                              : std::string("run complete"),
                         theme::fsBody, {s.x * 0.5f, s.y * 0.28f + 78.f}, opened > 0 ? theme::coreLow : theme::textDim,
                         introPop(it, 0.24f));
     }

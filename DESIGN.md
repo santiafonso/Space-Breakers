@@ -3339,3 +3339,133 @@ desde el centro. Las capturas 41 / 42 muestran cada motivo y las etapas.
 - **Versión** abajo a la izquierda del menú (`cfg::app::version`, "0.1.0-beta"):
   subirla con cada build que se publique, así el feedback dice en cuál fue.
 - El menú aprieta sus filas cuando son más de 7, para que "Quit" no pise el marco.
+
+### 2026-10-12: curarse es algo que se elige (playtest del usuario)
+- **Sin curación gratis entre peleas, de base** (antes era la regla de Ascensión
+  2): el core solo se repara si lo elegís - Mend (web: 3 por nivel antes de cada
+  pelea), Regen, Mender, Descanso, la reparación del Choice, tratos del "?".
+  Así importa más agarrar curación y duele más pagar con vida.
+- **Cada acto nuevo repara el 50% del core** (`cfg::core::actHealFrac`), con un
+  cartel "core repaired 50%".
+- **Ascensión 2** pasa a ser "un acto nuevo repara solo el 25%".
+- **Fortress:** su contra ahora es "sin reparación al empezar un acto, Mend no
+  hace nada y el Descanso repara la mitad".
+- **Hard** ya no menciona la reparación (es la base).
+- **Strange cocoon** ("?") solo aparece si algún Legendary desbloqueado le entra
+  a alguna de tus pelotas (`App::anyItemOfTier`).
+- **Mapa:** las dos primeras filas de cada acto nunca son "?": arranca con dos
+  peleas (la regla de "nunca dos peleas seguidas" deja en paz la fila 2).
+
+### 2026-10-12: tutorial nuevo (más fácil, una parada de cada cosa)
+- **Mapa:** pelea -> Recruit -> élite -> "?" -> tienda -> oleada final (sin
+  Descanso).
+- **Élite:** una sola carta, **Seeker** (Legendary del Striker), "Elite reward -
+  a Striker Legendary".
+- **"?":** +50 de oro de regalo y un cartel: "a ? can hold anything: deals,
+  strangers, gambles, odd things" (al costado de la columna del mapa). Hint
+  nuevo `Hint::Event` para el primer "?" de cualquier run.
+- **Tienda:** sus primeros ítems son Common/Uncommon, así el oro alcanza para uno.
+- **Final:** no hay jefe ni arena ancha ni cámara alejada: una pelea normal de
+  la oleada 5 con 1.8x enemigos ("FINAL WAVE", hint `Hint::Finale`). Ganarla cierra
+  el tutorial ("Tutorial complete"). El jefe y la cámara alejada recién en la
+  primera run normal.
+- **Enemigos del tutorial con 60% de vida** (`cfg::tutorial::enemyHpMul`); el
+  tutorial ignora Hard y Ascensión.
+- **SB_TUTSIM=<n>** (dev): corre las peleas del tutorial en orden (1 pelota, luego
+  2, Seeker después del élite, sin reparar) con un jugador que solo aprieta Q:
+  gana 52 de 60 y llega al final con ~39% del core. Un jugador real (apunta, más la
+  pick del Recruit y el ítem de la tienda) debería ganar casi siempre.
+
+### 2026-10-12: forja - lo que no se puede elegir se ve, y lo que sobra paga
+- La regla de la forja (2 puntos; raro / épico solo como primero; legendario los
+  2) ya estaba; ahora en la pantalla cada ítem que esos puntos no pueden tomar
+  queda velado, así se ve que después de un épico solo quedan comunes, poco
+  comunes, elementos y habilidades.
+- **Un punto que nada puede tomar paga 20 de oro** (`cfg::gold::forgePointGold`):
+  al terminar una mejora si sobra y no hay en qué gastarlo, o al entrar si no hay
+  nada para mejorar. Irse de la forja a propósito con puntos útiles no paga.
+
+### 2026-10-12: la leyenda de la web no adelanta nada
+- La fila de figuras de "routes" (perk, unlock, bridge, class items, legendary
+  item, god) muestra una figura recién cuando tenés un nodo de ese tipo comprado o
+  comprable ahora (`nodeKnown` / `knownKinds`); al pasar el mouse se iluminan solo
+  esos, no todos los de ese tipo. Una web nueva muestra solo perk y unlock.
+
+### 2026-10-12: Blades corta de verdad (y más grande)
+- **Bug:** el corte se revisaba cada 0.25 s solo donde estaba cada cuchilla en
+  ese instante; girando a 7 rad/s saltaban ~100° entre revisiones y casi nunca
+  tocaban a nadie. Ahora cada corte cuenta todo el arco que barrió cada cuchilla
+  (un enemigo sobre el anillo que una cuchilla cruzó, recibe el corte). Medido en
+  60 s contra un campo lleno: 76 cortes (antes 10). El Bufón usa la misma Blades
+  (palo de picas): 30 cortes (antes 2).
+- **Más grande:** órbita 70 (era 55), radio de corte 13 (era 9), la cuchilla
+  dibujada 20 de largo (era 14) y más gruesa.
+
+### 2026-10-12: playtest - menos duro al principio, más ítems, "?" nuevos
+- **Primera habilidad: 2 cartas** (era 3, +1 con Calling). Calling ahora solo
+  abre la web.
+- **Lanzar:** una pelota tirada se puede volver a agarrar a los 0.4 s (era 0.6).
+- **Acto 1 más blando:** enemigos con 75% de vida, su jefe 80%
+  (`cfg::wave::act1HpMul` / `act1BossHpMul`); el tutorial lleva además su 0.8
+  (60% en total; SB_TUTSIM: 57 de 60).
+- **Tiendas desde la mitad del mapa** (`detail::shopFromRow`: fila (rows+1)/2,
+  mínimo 3); la del pre-jefe queda. Traen ítem en el 85% de las visitas (era 60%).
+- **Legendarios primero en tienda y jefe:** tienda 38/32/16/8/6 (legendario era
+  2%), tesoro del jefe 40% épico / 60% legendario (era 65/35).
+- **Sin elementos desbloqueados no salen ítems que los necesitan**
+  (`itemNeedsElement`: Volatile, Seep, Reagent, Hollow point, Spellweave, Primal,
+  Swarm...), ni el pacto Elemental. Los que traen su propio elemento (planetas,
+  wyrms, carros) sí.
+- **"?" que pagan con vida ahora hacen daño, no bajan la vida máxima** (Blood
+  price, Blood forge): `World::woundCore`, nunca mata. El Altar no cambia.
+- **"?" nuevos (tercer lote), casi ninguno por oro:**
+  - Dark bargain: 15% de daño al core -> elegir un ítem a odds de élite.
+  - Field medic: repara 35% del core; un ítem al azar pierde un nivel.
+  - Blood rite: una habilidad al azar sube de nivel por 10% de daño al core.
+  - Scavenge: gratis, elegir 1 de 3 ítems Common/Uncommon. En los actos 1-2 uno de
+    los tratos de cada "?" es siempre este (`cfg::event::scavengeUntilAct`).
+  - Unbinding (raro, 35% de las veces que podría, caro: 150 + 40 por acto): un
+    pacto al azar pierde su precio y se queda con su regalo
+    (`RunState::pactsPure`, guardado). Last Breath devuelve la vida máxima que
+    quitó; Void Walls no se puede (su precio es su regalo).
+- **Bug del Beam:** el rayo quedaba encendido entre peleas (la pelea terminaba
+  antes de apagarlo) y aparecía al empezar la siguiente. Ahora al terminar la
+  pelea Beam y Blades se apagan, y una pelea nueva arranca sin rayo.
+- **Capturas (SB_SNAPSHOT):** el core escenificado es invulnerable
+  (`snapInvuln_`) y un jefe que llega al core ya no termina la run si el core es
+  invulnerable (dev); las peleas de jefe de Ascensión de prueba vuelven después a
+  una pelea normal. Sin esto la prueba de guardar/cargar la run fallaba al azar.
+- **Velos con la forma de la casilla:** en la forja (lo que no se puede tomar) y al
+  arrastrar en el TAB (el hueco de origen y los destinos), el elemento lleva un
+  hexágono, una habilidad un rombo y un ítem su barra - antes todo era un
+  rectángulo y elementos / habilidades quedaban como un cuadro negro.
+- **"?" y Descansos por acto (medido 2026-10-12):** en un camino al azar salen
+  2.3-2.5 "?" y 2.1-2.5 Descansos por acto (contando la fila de antes del jefe);
+  4-7% de los caminos no pasan por ningún Descanso.
+
+### 2026-10-12: cierre del día
+- **Forja:** el tope ahora es por casilla - ítems 3, elementos y habilidades 5
+  (`App::forgeCap(slot)`); antes cortaba todo en 3 (Magic missile no pasaba de 3).
+- **Nombre de la habilidad bajo el rombo:** uno largo ("Magic missile") se escribe
+  más chico en vez de no escribirse.
+- **Todo camino tiene al menos un Descanso y un "?" por acto**
+  (`detail::ensureOnEveryPath`: si algún camino al jefe no pasa por uno, una pelea
+  normal de ese camino se convierte - Descanso desde la fila 4, "?" desde la 3; si
+  no hay pelea, un Recruit, una tienda o un élite; los Descansos primero). Medido
+  en 20.000 mapas: ninguno falla.
+- **Scavenge** seguro solo en el acto 1; después, 35% de las veces que podría.
+- **Saltear el tutorial** paga lo mismo que ganarlo (cores de la oleada final +
+  bono de victoria, 1 prisma), con un cartel en la web.
+- **Aro blanco en la web:** el anillo que aparece al desbloquear una clase se
+  apagaba con el reloj del cielo, que puede quedarse quieto - quedaba fijo. Ahora
+  se apaga con el reloj real (1.6 s) y solo una vez.
+- **Tarjeta de los nodos de la web:** nombre, ruta, nivel y pie se acomodan (el
+  nivel baja a su línea si no entra al lado de la ruta, todo se parte en líneas)
+  - antes "LEGENDARY ITEM" y "LEVEL 1 / 1" se pisaban.
+- **Descripciones simples o detalladas** (Opciones, abajo; se guarda y sobrevive
+  a "Reset progress"): en simple cada carta, ítem y nodo de la web muestra lo
+  esencial - el texto hasta su primer ";", " - ", " (" o punto, y pasado ~90
+  caracteres hasta la última coma (`simplifyText`, `upgradeInfo` /
+  `metaNodeEffectFor`).
+- **SB_TUTSIM** simula siempre un jugador nuevo (web vacía): antes tomaba la web
+  del save cargado y daba de más. Con web vacía: 51 de 60, 35% de core al final.

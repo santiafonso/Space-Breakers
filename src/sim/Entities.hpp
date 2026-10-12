@@ -553,6 +553,7 @@ struct FrameEvents {
 struct WorldParams {
     bool hard = false;            // hard mode (cfg::hard)
     int ascension = 0;            // Ascension level 0-10 (cfg::asc, progression/Ascension.hpp)
+    float enemyHpMul = 1.f;       // the tutorial's softer enemies (cfg::tutorial)
     float bossHpMul = 1.f;        // the tutorial's softer boss (cfg::tutorial)
     int bossKind = -1;            // the act's boss (BossKind) - the run shuffles them; -1 = bossOfAct
     float damageMult = 1.f;       // Heft (web): every ball

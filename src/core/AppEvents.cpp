@@ -34,12 +34,12 @@ bool App::eventApplies(EventKind k) const {
         case EventKind::Temper:
             for (const BallLoadout& L : r.balls)
                 for (int sl = 0; sl < kLoadoutSlots; ++sl)
-                    if (levelableItem(L, sl, forgeCap())) return true;
+                    if (levelableItem(L, sl, forgeCap(sl))) return true;
             return false;
         case EventKind::BloodForge:
             for (const BallLoadout& L : r.balls)
                 for (int sl = 0; sl < kBallSlots; ++sl)
-                    if (levelableItem(L, sl, forgeCap())) return true;
+                    if (levelableItem(L, sl, forgeCap(sl))) return true;
             return false;
         case EventKind::Barter:
             for (const BallLoadout& L : r.balls)
@@ -47,6 +47,23 @@ bool App::eventApplies(EventKind k) const {
                     if (L.gear[sl] >= 0 && L.gear[sl] != static_cast<int>(UpgradeKind::Cocoon)) return true;
             return false;
         case EventKind::Mercenary: return runBallCount() >= 2;
+        case EventKind::Cocoon: return anyItemOfTier(Tier::Legendary);   // only once a Legendary could hatch out of it
+        case EventKind::Purify: return !pactsWithPrice().empty();
+        case EventKind::Scavenge: return anyItemOfTier(Tier::Common) || anyItemOfTier(Tier::Uncommon);
+        case EventKind::FieldMedic: {   // a hurt core, and an item with a level to give
+            if (world_.core().hp >= world_.core().maxHp - 0.5f) return false;
+            for (const BallLoadout& L : r.balls)
+                for (int sl = 0; sl < kBallSlots; ++sl)
+                    if (L.gear[sl] >= 0 && L.gear[sl] != static_cast<int>(UpgradeKind::Cocoon) && L.gearLvl[sl] >= 2) return true;
+            return false;
+        }
+        case EventKind::BloodRite:   // an ability that can still level up
+            for (const BallLoadout& L : r.balls)
+                for (int sl = 0; sl < kLoadoutSlots; ++sl)
+                    if (L.kindAt(sl) >= 0 && upgradeCat(static_cast<UpgradeKind>(L.kindAt(sl))) == UpgradeCat::Ability &&
+                        L.levelAt(sl) < forgeCap(sl))
+                        return true;
+            return false;
         default: return true;
     }
 }
@@ -61,11 +78,21 @@ bool App::eventDealOk(EventKind k) const {
 // afford still shows, greyed out, so you know what you missed.
 bool App::openEvent() {
     std::vector<EventKind> pool;
-    for (int i = 0; i < kEventKindCount; ++i)
-        if (eventApplies(static_cast<EventKind>(i))) pool.push_back(static_cast<EventKind>(i));
+    for (int i = 0; i < kEventKindCount; ++i) {
+        const auto k = static_cast<EventKind>(i);
+        if (k == EventKind::Purify && rng_.irange(0, 99) >= cfg::event::purifyPct) continue;   // rare
+        if (k == EventKind::Scavenge && data_.run.map.act > cfg::event::scavengeUntilAct &&
+            rng_.irange(0, 99) >= cfg::event::scavengeLatePct)
+            continue;   // past act 1 items come easier: the free one turns up less
+        if (eventApplies(k)) pool.push_back(k);
+    }
     if (static_cast<int>(pool.size()) < cfg::event::deals) return false;
     for (int i = static_cast<int>(pool.size()) - 1; i > 0; --i)
         std::swap(pool[static_cast<std::size_t>(i)], pool[static_cast<std::size_t>(rng_.irange(0, i))]);
+    // Early on items are scarce: up to cfg::event::scavengeUntilAct a free item deal is always one of them.
+    if (data_.run.map.act <= cfg::event::scavengeUntilAct)
+        if (const auto it = std::find(pool.begin(), pool.end(), EventKind::Scavenge); it != pool.end())
+            std::iter_swap(pool.begin(), it);
     pool.resize(static_cast<std::size_t>(cfg::event::deals));
     eventDeals_ = pool;
     push(ScreenId::Event);
@@ -96,7 +123,7 @@ void App::takeEventDeal(int idx) {
             break;
         case EventKind::BloodPrice:
             r.gold += gold;
-            world_.addCoreMaxHp(-world_.core().maxHp * cfg::event::bloodHpFrac);
+            world_.woundCore(world_.core().maxHp * cfg::event::bloodHpFrac);   // damage, not max HP (2026-10-12)
             effects_.flash(theme::coreLow, 0.5f);
             effects_.addLabel("+" + std::to_string(gold) + " gold", mid, theme::puGolden, 26, 1.4f);
             audio_.purchase();
@@ -183,7 +210,7 @@ void App::takeEventDeal(int idx) {
             std::vector<std::pair<int, int>> can;
             for (int b = 0; b < runBallCount(); ++b)
                 for (int sl = 0; sl < kBallSlots; ++sl)
-                    if (levelableItem(r.balls[static_cast<std::size_t>(b)], sl, forgeCap())) can.push_back({b, sl});
+                    if (levelableItem(r.balls[static_cast<std::size_t>(b)], sl, forgeCap(sl))) can.push_back({b, sl});
             if (!can.empty()) {
                 const auto [b, sl] = can[static_cast<std::size_t>(rng_.irange(0, static_cast<int>(can.size()) - 1))];
                 BallLoadout& L = r.balls[static_cast<std::size_t>(b)];
@@ -191,7 +218,7 @@ void App::takeEventDeal(int idx) {
                 audio_.levelUp(lvl);
                 effects_.addLabel(std::string(upgradeInfo(static_cast<UpgradeKind>(L.gear[sl])).title) + "  Lv " + std::to_string(lvl),
                                   mid, tierColor(upgradeTier(static_cast<UpgradeKind>(L.gear[sl]))), 26, 1.6f);
-                world_.addCoreMaxHp(-world_.core().maxHp * cfg::event::bloodForgeHpFrac);
+                world_.woundCore(world_.core().maxHp * cfg::event::bloodForgeHpFrac);
                 effects_.flash(theme::coreLow, 0.5f);
                 syncWorldBalls();
             }
@@ -202,6 +229,87 @@ void App::takeEventDeal(int idx) {
             giftQueue_.push_back(UpgradeKind::Cocoon);
             nextGift();
             break;
+        case EventKind::DarkBargain:   // the core pays for an item pick
+            world_.woundCore(world_.core().maxHp * cfg::event::darkHpFrac);
+            effects_.flash(theme::coreLow, 0.5f);
+            audio_.purchase();
+            openChoice(RollSource::Elite);
+            choiceTitle_ = "Dark bargain - choose an item";
+            break;
+        case EventKind::FieldMedic: {   // an item gives a level, the core is patched
+            std::vector<std::pair<int, int>> can;
+            for (int b = 0; b < runBallCount(); ++b)
+                for (int sl = 0; sl < kBallSlots; ++sl) {
+                    const BallLoadout& L = r.balls[static_cast<std::size_t>(b)];
+                    if (L.gear[sl] >= 0 && L.gear[sl] != static_cast<int>(UpgradeKind::Cocoon) && L.gearLvl[sl] >= 2) can.push_back({b, sl});
+                }
+            if (!can.empty()) {
+                const auto [b, sl] = can[static_cast<std::size_t>(rng_.irange(0, static_cast<int>(can.size()) - 1))];
+                BallLoadout& L = r.balls[static_cast<std::size_t>(b)];
+                L.gearLvl[sl] -= 1;
+                effects_.addLabel(std::string(upgradeInfo(static_cast<UpgradeKind>(L.gear[sl])).title) + "  Lv " +
+                                      std::to_string(L.gearLvl[sl]), mid + sf::Vector2f{0.f, 40.f}, theme::textLo, 22, 1.6f);
+                world_.repairCore(world_.core().maxHp * cfg::event::medicHealFrac);
+                r.repairedThisAct = true;   // a repair you chose: "Iron core" is off
+                effects_.flash(theme::core, 0.5f);
+                effects_.addLabel("core repaired", mid, theme::core, 26, 1.4f);
+                syncWorldBalls();
+            }
+            audio_.purchase();
+            openMap();
+            break;
+        }
+        case EventKind::BloodRite: {   // an ability levels up, the core pays
+            std::vector<std::pair<int, int>> can;
+            for (int b = 0; b < runBallCount(); ++b)
+                for (int sl = 0; sl < kLoadoutSlots; ++sl) {
+                    const BallLoadout& L = r.balls[static_cast<std::size_t>(b)];
+                    if (L.kindAt(sl) >= 0 && upgradeCat(static_cast<UpgradeKind>(L.kindAt(sl))) == UpgradeCat::Ability &&
+                        L.levelAt(sl) < forgeCap(sl))
+                        can.push_back({b, sl});
+                }
+            if (!can.empty()) {
+                const auto [b, sl] = can[static_cast<std::size_t>(rng_.irange(0, static_cast<int>(can.size()) - 1))];
+                BallLoadout& L = r.balls[static_cast<std::size_t>(b)];
+                const int lvl = L.levelUp(sl);
+                audio_.levelUp(lvl);
+                effects_.addLabel(std::string(upgradeInfo(static_cast<UpgradeKind>(L.kindAt(sl))).title) + "  Lv " + std::to_string(lvl),
+                                  mid, theme::accent, 26, 1.6f);
+                world_.woundCore(world_.core().maxHp * cfg::event::riteHpFrac);
+                effects_.flash(theme::coreLow, 0.5f);
+                syncWorldBalls();
+            }
+            openMap();
+            break;
+        }
+        case EventKind::Scavenge: {   // a free item pick, nothing rare
+            std::vector<UpgradeKind> taken;
+            choiceCount_ = pickCards();
+            for (int i = 0; i < choiceCount_; ++i) {
+                const UpgradeKind c = rollPick(RollSource::Shop, taken, [](UpgradeKind u) {
+                    return upgradeCat(u) == UpgradeCat::Item && upgradeTier(u) <= Tier::Uncommon;
+                });
+                if (upgradeCat(c) != UpgradeCat::Item || std::find(taken.begin(), taken.end(), c) != taken.end()) break;
+                choices_[static_cast<std::size_t>(taken.size())] = c;
+                taken.push_back(c);
+            }
+            choiceCount_ = static_cast<int>(taken.size());
+            if (choiceCount_ == 0) { openMap(); break; }
+            rollSource_ = RollSource::Shop;
+            starterChoice_ = false;
+            choiceTitle_ = "Scavenge - choose an item";
+            audio_.purchase();
+            push(ScreenId::Choice);
+            break;
+        }
+        case EventKind::Purify: {   // a pact keeps its gift and loses its price
+            r.gold -= gold;
+            const std::vector<PactId> v = pactsWithPrice();
+            if (!v.empty()) liftPactPrice(v[static_cast<std::size_t>(rng_.irange(0, static_cast<int>(v.size()) - 1))]);
+            audio_.purchase();
+            openMap();
+            break;
+        }
         case EventKind::Rest:
             restRepair();
             openMap();
@@ -245,6 +353,17 @@ void App::nextGift() {
 }
 
 // A Barter's haul: an item of a random rarity (weighted) that fits some ball.
+bool App::anyItemOfTier(Tier t) const {
+    const UpgradeCtx c = buildUpgradeCtx();
+    for (int i = 0; i < kUpgradeKindCount; ++i) {
+        const auto k = static_cast<UpgradeKind>(i);
+        if (upgradeCat(k) != UpgradeCat::Item || upgradeTier(k) != t || c.isLocked(k)) continue;
+        for (const BallLoadout& L : data_.run.balls)
+            if (upgradeFitsBall(k, L)) return true;
+    }
+    return false;
+}
+
 int App::randomItemOfTier(Tier t, const BallLoadout* fits) {
     const UpgradeCtx c = buildUpgradeCtx();
     std::vector<int> pool;

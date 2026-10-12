@@ -637,13 +637,15 @@ void drawLoadoutPanel(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f c,
                                  withAlpha(lerpColor(theme::ability, sf::Color::White, 0.25f), (0.9f + 0.1f * lit) * sa));
             if (L.levelAt(s) > 1 && r > 8.f)
                 drawCentered(w, font, std::to_string(L.levelAt(s)), 12u, {pc.x, pc.y - 1.f}, withAlpha(theme::textHi, sa));
-            if (s == kSlotAbility) {   // the main one's name under it
-                sf::Text nm = makeText(font, upgradeInfo(static_cast<UpgradeKind>(kind)).title, 12,
-                                       withAlpha(theme::ability, sa));
-                if (nm.getLocalBounds().width < 70.f) {
+            if (s == kSlotAbility) {   // the main one's name under it - a long one ("Magic missile") in smaller type
+                for (unsigned fs : {12u, 11u, 10u, 9u}) {
+                    sf::Text nm = makeText(font, upgradeInfo(static_cast<UpgradeKind>(kind)).title, fs,
+                                           withAlpha(theme::ability, sa));
+                    if (nm.getLocalBounds().width >= 76.f && fs > 9u) continue;
                     centerOrigin(nm);
                     nm.setPosition(std::round(pc.x), std::round(pc.y + r * 1.15f + 11.f));
                     w.draw(nm);
+                    break;
                 }
             }
             return;

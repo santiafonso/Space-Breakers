@@ -256,9 +256,10 @@ void EquipScreen::draw(App& app, sf::RenderWindow& w) {
             ? "Forge - pick an item to level up (" + std::to_string(cfg::gold::forgeServicePrice) + " gold)"
             : "Forge - " + std::to_string(pts) + (pts == 1 ? " point left" : " points left");
         sub = src == EquipSource::ShopForge
-            ? "each level: the item's bonus or chance grows by half, and the ball hits 10% harder (max level " +
-                  std::to_string(app.forgeCap()) + ")"
-            : "common / uncommon: 1 point - rare / epic: 1 point, only as your first - legendary: both points";
+            ? "each level: the item's bonus or chance grows by half, and the ball hits 10% harder (max level: items " +
+                  std::to_string(app.forgeCap(0)) + ", elements and abilities " + std::to_string(app.forgeCap(kSlotType)) + ")"
+            : "common / uncommon: 1 point - rare / epic: 1 point, only as your first - legendary: both points - a point "
+              "nothing can take pays " + std::to_string(cfg::gold::forgePointGold) + " gold";
         hint = src == EquipSource::ShopForge ? "click an item   -   Back: the shop"
                                              : "click an item   -   Back: leave the forge";
     } else if (src == EquipSource::Ascend) {
@@ -333,6 +334,21 @@ void EquipScreen::draw(App& app, sf::RenderWindow& w) {
         drawLoadoutPanel(w, app.font(), c, balls[static_cast<std::size_t>(i)], cp, hot ? 1.f : 0.f,
                          hot ? hoverSlot_ : -1, !app.equipFitsBall(i),
                          forge || sell || barter || !upgradeTakesSlot(k) ? -1 : static_cast<int>(k));
+        if (forge && app.equipFitsBall(i)) {   // what this visit's points can't take: veiled
+            const BallLoadout& L = balls[static_cast<std::size_t>(i)];
+            const sf::Color veil = withAlpha(theme::bg, 0.72f * cp);
+            for (int sl = 0; sl < kLoadoutSlots; ++sl) {
+                if (L.kindAt(sl) < 0 || app.equipFitsSlot(i, sl)) continue;
+                const sf::FloatRect sr = slotRect(c, sl, L);
+                const sf::Vector2f pc{sr.left + sr.width * 0.5f, sr.top + sr.height * 0.5f};
+                if (sl == kSlotType)   // the element's hexagon (flat top), as drawLoadoutPanel draws it
+                    draw::polygon(w, pc, sr.width * 0.5f + 1.f, 6, kPi / 6.f, veil, veil);
+                else if (isAbilitySlot(sl))   // the ability's diamond
+                    draw::polygon(w, pc, sr.width * 0.5f * 1.15f + 1.f, 4, 0.f, veil, veil);
+                else
+                    draw::box(w, sr, 0.f, veil, veil);
+            }
+        }
     }
 
     for (int i = 0; i < n; ++i) {   // what's in the slot / on the ball under the pointer
@@ -710,7 +726,7 @@ void MapScreen::draw(App& app, sf::RenderWindow& w) {
         drawTooltip(w, app.font(), mouse_, s, "Iron core",
                     "no repairs yet this act. Beat the boss without resting, buying a repair or skipping a pick "
                     "to repair, and the run banks +" + std::to_string(cfg::meta::ironCoreCores) +
-                        " cores. The heal before each fight doesn't count.", theme::core);
+                        " cores. Mend before each fight and the repair at a new act don't count.", theme::core);
     } else if (!creedHover && std::fabs(mouse_.y - kStatusY) < 12.f && std::fabs(mouse_.x - s.x * 0.5f) < 220.f) {
         drawTooltip(w, app.font(), mouse_, s, "Gold, core and luck",
                     "gold buys things in shops; the core must survive - rests and shops repair it. Luck (" +

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 
 #include "core/Theme.hpp"
@@ -38,7 +39,15 @@ struct SkyState {
     float lastT = 0.f;
     std::array<float, kClassCount> appear{};   // 0..1
     std::array<float, kClassCount> flare{};    // 1 -> 0 just after unlocking
+    std::array<double, kClassCount> flareAt{}; // real seconds when it arrived (the flare fades on the wall clock)
 };
+// Real seconds, for the arrival flare: the sky's own clock can stand still,
+// and a flare frozen on it stayed on screen as a white ring (2026-10-12).
+double wallSeconds() {
+    using C = std::chrono::steady_clock;
+    static const C::time_point start = C::now();
+    return std::chrono::duration<double>(C::now() - start).count();
+}
 SkyState gSky;
 sf::Vector2f gLook;   // where the watching eyes look (the middle of the screen, in galaxy space)
 
@@ -450,11 +459,11 @@ void drawWebSky(sf::RenderWindow& w, sf::Vector2f size, sf::Vector2f centre, sf:
     for (int i = 0; i < kClassCount; ++i) {   // fade each motif in; a new one flares
         float& ap = st.appear[static_cast<std::size_t>(i)];
         float& fl = st.flare[static_cast<std::size_t>(i)];
-        if (!has[static_cast<std::size_t>(i)]) { ap = 0.f; continue; }
+        if (!has[static_cast<std::size_t>(i)]) { ap = 0.f; fl = 0.f; continue; }
         if (!st.ready) { ap = 1.f; continue; }   // already there when the web opens
-        if (ap <= 0.f) fl = 1.f;
-        ap = std::min(1.f, ap + dt / 2.5f);
-        fl = std::max(0.f, fl - dt / 1.6f);
+        if (ap <= 0.f) st.flareAt[static_cast<std::size_t>(i)] = wallSeconds();   // just arrived
+        ap = std::min(1.f, std::max(ap, 0.001f) + dt / 2.5f);   // (off zero at once: it flares only once)
+        fl = clampf(1.f - static_cast<float>(wallSeconds() - st.flareAt[static_cast<std::size_t>(i)]) / 1.6f, 0.f, 1.f);
     }
     st.ready = true;
     if (alpha <= 0.01f || n == 0) return;   // nothing unlocked: a black sky

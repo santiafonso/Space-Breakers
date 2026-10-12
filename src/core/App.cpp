@@ -118,6 +118,7 @@ App::App() : window_(kLogical()), world_({kLogical().x, kLogical().y - 2.f * cfg
     audio_.setFadeIn(Audio::Track::Boss, 1, 0.6f);
 
     loadGame(savePath_, data_);
+    simpleTextOn() = data_.meta.simpleText;   // the cards' text: simple or detailed (Options)
     audio_.setEnabled(data_.meta.soundOn);
     audio_.applySettings(data_.meta.sound);
     uisound::attach(&audio_);
@@ -140,6 +141,7 @@ WorldParams App::params() const {
     p.hard = data_.run.hard;
     p.ascension = data_.run.ascension;
     p.bossHpMul = data_.run.tutorial ? cfg::tutorial::bossHpMul : 1.f;
+    p.enemyHpMul = data_.run.tutorial ? cfg::tutorial::enemyHpMul : 1.f;
     p.bossKind = static_cast<int>(runBoss(cfg::run::actOfWave(data_.run.wave)));
     p.damageMult = 1.f + cfg::combat::heftPerLevel * static_cast<float>(u[MetaHeft]);
     p.wave = std::max(1, data_.run.wave);
@@ -479,7 +481,7 @@ std::vector<BallSpec> App::ballSpecs() const {
             if (i == big) {
                 m.damageMult *= cfg::pact::colossusMul;
                 m.radiusMult *= cfg::pact::colossusMul;
-            } else {
+            } else if (data_.run.pactCost(PactId::Colossus)) {
                 m.damageMult *= cfg::pact::colossusOthers;
             }
         }
@@ -778,6 +780,10 @@ void App::newRun() {
     r.balls = startLoadout(startBallCount());
     // The very first run is the tutorial (SB_DEV=1 SB_TUTORIAL=1 forces it).
     r.tutorial = data_.meta.stats.runs == 0 || (devMode() && envInt("SB_TUTORIAL", 0) != 0);
+    if (r.tutorial) {   // the tutorial is always plain: no hard mode, no Ascension
+        r.hard = false;
+        r.ascension = 0;
+    }
     ++data_.meta.stats.runs;
     hintDone(Hint::WebStart);
     // Acts 1-4 meet their bosses in a fresh order every run (the tutorial
@@ -901,9 +907,9 @@ void App::startWaveAt(int wave, bool elite) {
     data_.run.wave = wave;
     data_.run.eliteWave = elite;
     waveIntro_ = cfg::app::waveIntroTime;   // ease the sim in instead of snapping
-    if (!hasCreed(CreedId::Fortress) && !data_.run.hard && ascension() < 2)   // "Fortress" creed / hard mode / Ascension 2: no free healing before a fight
-        world_.repairCore(cfg::core::waveHeal +
-                          cfg::core::mendPerLevel * static_cast<float>(data_.meta.unlock[MetaMend]));
+    // No free repair before a fight (2026-10-12) - only "Mend" on the web ("Fortress" creed: not even that).
+    if (const int mend = data_.meta.unlock[MetaMend]; mend > 0 && !hasCreed(CreedId::Fortress))
+        world_.repairCore(cfg::core::mendPerLevel * static_cast<float>(mend));
     if (const int bastion = data_.meta.unlock[MetaBastion]; bastion > 0)   // "Bastion": max HP grows each wave
         world_.addCoreMaxHp(cfg::core::bastionPerWavePerLevel * static_cast<float>(bastion));
     const int w = data_.run.wave;
@@ -1335,8 +1341,8 @@ void App::travelTo(int node) {
     n.visited = true;
     r.mapNode = node;
     r.mapRow = n.row;
-    // The tutorial's stops climb gently (row N plays as wave N); its boss is the act's.
-    const int wave = r.tutorial && n.row < r.map.bossRow() ? n.row : mapRowWave(r.map, n.row);
+    // The tutorial's stops climb gently (row N plays as wave N); its finale is a long fight, no boss.
+    const int wave = r.tutorial ? (n.row < r.map.bossRow() ? n.row : cfg::tutorial::finaleWave) : mapRowWave(r.map, n.row);
     audio_.travel();
     hintDone(Hint::Map);
     switch (n.type) {   // the stop's own hint (App::updateHints)
@@ -1344,7 +1350,8 @@ void App::travelTo(int node) {
         case MapNodeType::Elite:   hintDone(Hint::Elite); break;
         case MapNodeType::Shop:    hintDone(Hint::Shop); break;
         case MapNodeType::Forge:   hintDone(Hint::Forge); break;
-        case MapNodeType::Boss:    hintDone(Hint::Boss); break;
+        case MapNodeType::Boss:    hintDone(r.tutorial ? Hint::Finale : Hint::Boss); break;
+        case MapNodeType::Upgrade: hintDone(Hint::Event); break;
         default: break;
     }
     back();   // close the map: the Play screen is underneath
@@ -1354,6 +1361,10 @@ void App::travelTo(int node) {
         case MapNodeType::Elite:
         case MapNodeType::Boss:
             startWaveAt(wave, n.type == MapNodeType::Elite);
+            if (r.tutorial && n.type == MapNodeType::Boss) {   // the tutorial's finale: wave after wave, no boss
+                world_.stretchWave(cfg::tutorial::finaleCountMul);
+                effects_.addLabel("FINAL WAVE", {size().x * 0.5f, size().y * 0.3f}, theme::coreLow, 34, 1.8f);
+            }
             break;
         case MapNodeType::Rest:   // repair the core, or forge an item
             r.wave = wave;
@@ -1361,6 +1372,19 @@ void App::travelTo(int node) {
             break;
         case MapNodeType::Upgrade:   // a "?": an encounter (a free pick only if none can apply)
             r.wave = wave;
+            if (r.tutorial) {   // the tutorial's "?": a gift, and word of what else one can hold
+                r.gold += cfg::tutorial::eventGold;
+                audio_.purchase();
+                effects_.flash(theme::puGolden, 0.4f);
+                // beside the map's single column, not over it
+                const sf::Vector2f side{size().x * 0.25f, size().y * 0.45f};
+                effects_.addLabel("+" + std::to_string(cfg::tutorial::eventGold) + " gold - a stranger's gift", side,
+                                  theme::puGolden, 26, 3.f);
+                effects_.addLabel("a ? can hold anything:", side + sf::Vector2f{0.f, 40.f}, theme::textHi, 18, 4.f);
+                effects_.addLabel("deals, strangers, gambles, odd things", side + sf::Vector2f{0.f, 66.f}, theme::textHi, 18, 4.f);
+                openMap();
+                break;
+            }
             if (!openEvent()) openChoice();
             break;
         case MapNodeType::Recruit:
@@ -1478,10 +1502,26 @@ bool App::openForgePicker() {
     forgePoints_ = cfg::gold::forgePoints;
     bool any = false;
     for (int b = 0; b < runBallCount() && !any; ++b) any = equipFitsBall(b);
-    if (!any) return false;
+    if (!any) {   // nothing to level: the visit pays in gold instead
+        forgeLeftover();
+        return false;
+    }
     equipRef_ = -1;
     push(ScreenId::Equip);
     return true;
+}
+
+// Forge points left that no item, element or ability can take turn into gold
+// (2026-10-12): an epic first leaves a point only commons, uncommons and
+// abilities can use - with none of those, it pays out.
+void App::forgeLeftover() {
+    if (forgePoints_ <= 0) return;
+    const int gold = forgePoints_ * cfg::gold::forgePointGold;
+    data_.run.gold += gold;
+    forgePoints_ = 0;
+    audio_.purchase();
+    effects_.addLabel("+" + std::to_string(gold) + " gold - nothing left to forge",
+                      {size().x * 0.5f, size().y * 0.4f}, theme::puGolden, 24, 1.8f);
 }
 
 // ---------------------------------------------------------------- equip picker
@@ -1500,7 +1540,7 @@ bool App::equipFitsSlot(int ball, int slot) const {
     // takes items only.
     const int cocoon = static_cast<int>(UpgradeKind::Cocoon);   // it counts fights in its level: no forging it
     if (equipSrc_ == EquipSource::Forge || equipSrc_ == EquipSource::ShopForge) {
-        if (slot < 0 || slot >= kLoadoutSlots || b.kindAt(slot) < 0 || b.kindAt(slot) == cocoon || b.levelAt(slot) >= forgeCap())
+        if (slot < 0 || slot >= kLoadoutSlots || b.kindAt(slot) < 0 || b.kindAt(slot) == cocoon || b.levelAt(slot) >= forgeCap(slot))
             return false;
         if (equipSrc_ == EquipSource::ShopForge) return true;   // paid per level: no budget
         // The visit's budget: commons / uncommons any time there's a point; a rare,
@@ -1591,6 +1631,7 @@ void App::confirmEquip(int ball, int slot) {
             bool more = false;   // budget left for something: stay at the anvil
             for (int b = 0; b < runBallCount() && !more; ++b) more = equipFitsBall(b);
             if (more) { save(); break; }
+            forgeLeftover();   // a point nothing can take (only rares / epics / legendaries left): gold
             back();
             openMap();
             break;
@@ -1895,6 +1936,14 @@ void App::continuePastBoss() {
     r.mapRow = 0;
     r.phoenixUsedAct = false;
     r.repairedThisAct = false;   // "Iron core": a fresh streak for the new act
+    if (!hasCreed(CreedId::Fortress)) {   // a new act: the core gets half its health back (Ascension 2: a quarter)
+        const float frac = ascension() >= 2 ? cfg::asc::actHealFrac : cfg::core::actHealFrac;
+        const float before = world_.core().hp;
+        world_.repairCore(world_.core().maxHp * frac);
+        if (world_.core().hp > before + 0.5f)
+            effects_.addLabel("core repaired " + std::to_string(static_cast<int>(std::lround(frac * 100.f))) + "%",
+                              {size().x * 0.5f, size().y * 0.4f}, theme::core, 26, 1.6f);
+    }
     r.cleanStreak = 0;           // the hidden Altar path starts over
     r.altarState = 0;
     r.altarReveal = false;
@@ -1941,11 +1990,25 @@ void App::leaveBossWin() {
 
 void App::abandonRun() {
     if (data_.run.endless) { replaceStack(ScreenId::Menu); return; }   // dev endless: the real saved run stays put
+    // "Skip tutorial" (2026-10-12): you still get what winning it pays, so the
+    // web has something to spend from the start.
+    const bool skippedTutorial = data_.run.tutorial && !runBanked_;
+    int cores = 0, prisms = 0;
+    if (skippedTutorial) {
+        cores = cfg::tutorial::finaleWave * cfg::meta::coresPerWave + cfg::meta::winBonus;
+        prisms = cfg::meta::prismsPerWin;
+        data_.meta.cores += static_cast<std::uint32_t>(cores);
+        data_.meta.prisms += static_cast<std::uint32_t>(prisms);
+        data_.meta.stats.coresEarned += static_cast<std::uint32_t>(cores);
+    }
     clearRun(runPath());
     data_.run = RunState{};
     save();
     replaceStack(ScreenId::Menu);
     push(ScreenId::Loadout);
+    if (skippedTutorial)
+        effects_.addLabel("tutorial skipped:  +" + std::to_string(cores) + " cores   +" + std::to_string(prisms) + " prism",
+                          {size().x * 0.5f, size().y * 0.22f}, theme::accent, 24, 2.6f);
 }
 
 void App::wipeSave() {
@@ -1954,8 +2017,10 @@ void App::wipeSave() {
     clearRun(runPath());
 
     const SoundSettings sound = data_.meta.sound;   // a preference, not progress: keep the mix
+    const bool simple = data_.meta.simpleText;      // ...and the cards' text
     data_ = GameData{};                        // cores, prisms, unlocks, stats, run
     data_.meta.sound = sound;
+    data_.meta.simpleText = simple;
     audio_.setEnabled(data_.meta.soundOn);
     window_.applyVideoMode(data_.meta.fullscreen);
 
@@ -2198,6 +2263,12 @@ void App::toggleSound() {
 void App::setAiming(bool on) {
     aiming_ = on;
     aimT_ = 0.f;
+}
+
+void App::toggleSimpleText() {   // Options: every card's text, its gist or every number
+    data_.meta.simpleText = !data_.meta.simpleText;
+    simpleTextOn() = data_.meta.simpleText;
+    save();
 }
 
 void App::toggleFullscreen() {
@@ -2498,6 +2569,13 @@ void App::processEvents(const FrameEvents& ev) {
             data_.run.bountyCores += cfg::meta::interestPerLevel * static_cast<float>(interest);
         const int w = data_.run.wave;
         const bool flawless = world_.coreCleanWave();   // nothing reached the core this fight
+        if (data_.run.tutorial && data_.run.mapRow >= data_.run.map.bossRow()) {   // the tutorial's finale held: it's won
+            bossFlawlessGold_ = 0;
+            bossIronCores_ = 0;
+            bankRun(true);
+            push(ScreenId::BossWin);
+            return;
+        }
         if (cfg::run::isBossWave(w)) {
             // Boss down: a flawless boss pays gold for the next act, and an act
             // with no deliberate repair banks "Iron core" cores (before bankRun).
@@ -2570,6 +2648,16 @@ void App::postFight() {
 }
 
 void App::afterFightPick() {
+    if (data_.run.tutorial && data_.run.eliteWave) {   // the tutorial's elite hands you a Striker Legendary
+        rollSource_ = RollSource::Elite;
+        starterChoice_ = false;
+        choiceTitle_ = "Elite reward - a Striker Legendary";
+        choiceCount_ = 1;
+        choices_[0] = UpgradeKind::Seeker;
+        push(ScreenId::Choice);
+        effects_.flash(tierColor(Tier::Legendary), 0.7f);
+        return;
+    }
     openChoice(data_.run.eliteWave ? RollSource::Elite : RollSource::PostFight);
 }
 
@@ -2691,6 +2779,7 @@ void App::update(float frameDt) {
         worldAccum_ += simDt;
         int steps = 0;
         while (worldAccum_ >= cfg::loop::fixedDt && steps < cfg::loop::maxSteps) {
+            if (snapInvuln_) world_.devSetInvuln(true);
             processEvents(world_.step(cfg::loop::fixedDt, params()));
             worldAccum_ -= cfg::loop::fixedDt;
             ++steps;
@@ -2910,11 +2999,69 @@ int App::runBalance(int waves) {
     return 0;
 }
 
+// SB_TUTSIM=<trials> (dev): the tutorial's fights in order on a fresh save -
+// fight (1 ball), recruit (a 2nd ball), elite, Seeker on ball 1, then the
+// finale - with no repair between them and a player who presses Q whenever
+// it's ready (SB_TUTSIM_LAZY=1: never). Prints the core's health after each.
+int App::runTutorialSim(int trials) {
+    savePath_ = (std::filesystem::temp_directory_path() / "sb_tutsim_save.txt").string();   // never the real save
+    data_.meta = MetaState{};   // a fresh player: nothing on the web (the save it loaded may be well grown)
+    const bool lazy = std::getenv("SB_TUTSIM_LAZY") != nullptr;
+    int wins = 0;
+    double hpSum[3] = {0, 0, 0};
+    for (int t = 0; t < trials; ++t) {
+        RunState& r = data_.run;
+        r = RunState{};
+        r.active = true;
+        r.tutorial = true;
+        r.coreMaxHp = r.coreHp = startCoreHp();
+        r.balls.assign(1, BallLoadout{});
+        world_.startRun(params(), ballSpecs(), r.coreHp, r.coreMaxHp);
+        struct Fight { int wave; bool elite; float mul; };
+        const Fight fights[3] = {{1, false, 1.f}, {3, true, 1.f}, {cfg::tutorial::finaleWave, false, cfg::tutorial::finaleCountMul}};
+        bool alive = true;
+        for (int f = 0; f < 3 && alive; ++f) {
+            if (f == 1) {   // after fight 1: its ability, and the Recruit's ball
+                r.balls[0].ability[0] = static_cast<int>(UpgradeKind::AbilityDash);
+                r.balls[0].abilityLvl[0] = 1;
+                r.balls.push_back(BallLoadout{});
+                syncWorldBalls();
+            }
+            if (f == 2) {   // the elite's Seeker
+                r.balls[0].setSlot(0, static_cast<int>(UpgradeKind::Seeker), 1);
+                syncWorldBalls();
+            }
+            r.wave = fights[f].wave;
+            startWaveAt(fights[f].wave, fights[f].elite);
+            if (fights[f].mul > 1.f) world_.stretchWave(fights[f].mul);
+            float q = 0.f;
+            for (float time = 0.f; time < 240.f; time += cfg::loop::fixedDt) {
+                if (!lazy && (q -= cfg::loop::fixedDt) <= 0.f) {
+                    q = cfg::player::markCooldown;
+                    world_.volley(lerpf(cfg::app::slingMinSpeed, cfg::app::slingMaxSpeed, cfg::app::quickThrowPower) *
+                                  cfg::player::volleySpeedMul * quickThrowMul() * world_.arenaScale() * flingPower());
+                }
+                const FrameEvents ev = world_.step(cfg::loop::fixedDt, params());
+                if (ev.runOver || world_.core().hp <= 0.f) { alive = false; break; }
+                if (ev.waveCleared) break;
+            }
+            hpSum[f] += alive ? world_.core().hp / world_.core().maxHp : 0.0;
+        }
+        wins += alive ? 1 : 0;
+    }
+    std::fprintf(stderr, "tutsim: %s player, %d of %d won; core left after fight / elite / finale: %.0f%% %.0f%% %.0f%%\n",
+                 lazy ? "lazy" : "Q", wins, trials, 100.0 * hpSum[0] / trials, 100.0 * hpSum[1] / trials, 100.0 * hpSum[2] / trials);
+    return 0;
+}
+
 int App::runSnapshots(const std::string& dir) {
     std::error_code ec;
     std::filesystem::create_directories(dir, ec);
     savePath_ = dir + "/snapshot_save.txt";   // never touch the real save
     const std::string d = dir + "/";
+    // The staged fights must not end the staged run (there's no repair between
+    // fights since 2026-10-12): the core takes no damage here.
+    snapInvuln_ = true;
 
     snapFrame(d + "01_menu.png");
 
@@ -2975,7 +3122,9 @@ int App::runSnapshots(const std::string& dir) {
     }
     {   // Ascension 10: an elite fight with its trait, then bosses with their rules
         const int keepAsc = data_.run.ascension;
+        const int keepWave = data_.run.wave;
         data_.run.ascension = 10;
+        world_.devSetInvuln(true);   // staged fights: the run goes on afterwards
         for (int tries = 0; tries < 8; ++tries) {
             data_.run.wave = 3;
             world_.startWave(3, params(), true);
@@ -3003,7 +3152,9 @@ int App::runSnapshots(const std::string& dir) {
             render();
         }
         data_.run.ascension = keepAsc;
-        data_.run.wave = 1;
+        data_.run.wave = keepWave;
+        world_.startWave(keepWave, params());   // back to a plain fight: a staged boss left alive would end the run later
+        world_.repairCore(1e9f);
     }
 
     // Tesla would give ball 3 (Storm) its Support class: the card says so.
@@ -3011,6 +3162,9 @@ int App::runSnapshots(const std::string& dir) {
     rollSource_ = RollSource::Normal;
     push(ScreenId::Choice);
     snapFrame(d + "05_choice.png");
+    simpleTextOn() = true;   // the same cards with simple descriptions (Options)
+    snapFrame(d + "05b_choice_simple.png");
+    simpleTextOn() = false;
     back();
 
     // Class-gain moments: ball 3 takes Tesla (2 Support = the class), then -
@@ -3035,6 +3189,16 @@ int App::runSnapshots(const std::string& dir) {
     rollShop();
     push(ScreenId::Shop);
     snapFrame(d + "06_shop.png");
+    {   // the forge after an epic took the first point: only commons / uncommons / abilities left, the rest veiled
+        r.balls[2].setSlot(1, static_cast<int>(UpgradeKind::Hunter), 1);
+        r.balls[1].typeLvl = forgeCap(kSlotType);   // an element at its cap: veiled too (its hexagon)
+        syncWorldBalls();
+        if (openForgePicker()) {
+            forgePoints_ = 1;
+            snapFrame(d + "06b_forge_one_point.png");
+            back();
+        }
+    }
     back();
 
     beginEquip(EquipSource::Choice, UpgradeKind::Railgun, 0);
@@ -3063,6 +3227,15 @@ int App::runSnapshots(const std::string& dir) {
         snapMouse_ = slotMid(2, 1);
         snapFrame(d + "08_tab_drag.png");
         snapMouse_ = {size().x * 0.5f, 20.f};   // let go off every panel: it snaps back
+        press.type = sf::Event::MouseButtonReleased;
+        stack_.back()->handleEvent(*this, press, {0.f, 0.f});
+        // an ability in hand: its diamond empties, the diamonds it may land on light up
+        press.type = sf::Event::MouseButtonPressed;
+        snapMouse_ = slotMid(0, kSlotAbility);
+        stack_.back()->handleEvent(*this, press, {0.f, 0.f});
+        snapMouse_ = slotMid(1, kSlotAbility);
+        snapFrame(d + "08_tab_drag_ability.png");
+        snapMouse_ = {size().x * 0.5f, 20.f};
         press.type = sf::Event::MouseButtonReleased;
         stack_.back()->handleEvent(*this, press, {0.f, 0.f});
         snapMouseOn_ = false;
@@ -3620,6 +3793,21 @@ int App::runSnapshots(const std::string& dir) {
     snapMouse_ = {size().x * 0.5f, size().y * 0.5f};
     snapFrame(d + "15b_web_card.png");
     snapMouseOn_ = false;
+    if (auto* web = dynamic_cast<LoadoutScreen*>(stack_.back().get())) {   // long cards: a bridge's route line, a long name, simple text
+        web->snapFocus(MetaOuterJesterAssassin);
+        snapFrame(d + "15j_web_card_bridge.png");
+        int longest = MetaLegend2Striker;
+        for (int u = MetaLegend2Striker; u <= MetaLegend2Alchemist; ++u)
+            if (metaNodeName(u).size() > metaNodeName(longest).size()) longest = u;
+        web->snapFocus(longest);
+        snapFrame(d + "15k_web_card_long.png");
+        simpleTextOn() = true;
+        snapFrame(d + "15l_web_card_simple.png");
+        simpleTextOn() = false;
+        web->snapFocus(0);
+    }
+    snapMouseOn_ = true;
+    snapMouseOn_ = false;
     {   // zoomed right out: the whole web, to judge the routes' spacing
         sf::Event wheel{};
         wheel.type = sf::Event::MouseWheelScrolled;
@@ -3741,6 +3929,41 @@ int App::runSnapshots(const std::string& dir) {
         openMap();
         settle();
         snapFrame(d + "38_tutorial_recruit.png");
+        {   // further up: the elite's Seeker, the "?", the shop and the finale
+            RunState& tr = data_.run;
+            if (tr.balls.size() < 2) tr.balls.push_back(BallLoadout{});
+            syncWorldBalls();
+            back();
+            tr.eliteWave = true;
+            afterFightPick();
+            snapFrame(d + "38b_tutorial_elite_seeker.png");
+            back();
+            tr.eliteWave = false;
+            tr.map.nodes[1].visited = tr.map.nodes[2].visited = true;
+            tr.mapNode = 2;
+            tr.mapRow = 3;
+            openMap();
+            travelTo(3);   // the "?"
+            for (int i = 0; i < 8; ++i) update(0.1f);
+            snapFrame(d + "38c_tutorial_event.png");
+            travelTo(4);   // the shop
+            snapFrame(d + "38d_tutorial_shop.png");
+            std::cerr << "snapshot: tutorial shop items";
+            for (int k : tr.shopOffers)
+                if (upgradeCat(static_cast<UpgradeKind>(k)) == UpgradeCat::Item)
+                    std::cerr << ' ' << upgradeInfo(static_cast<UpgradeKind>(k)).title << " (" << shopPrice(static_cast<UpgradeKind>(k)) << ')';
+            std::cerr << "  gold " << tr.gold << '\n';
+            back();
+            openMap();
+            settle();
+            snapFrame(d + "38e_tutorial_finale_map.png");
+            travelTo(5);   // the finale
+            for (int i = 0; i < 90; ++i) update(1.f / 30.f);
+            capturePath_ = d + "38f_tutorial_finale.png";
+            render();
+            std::cerr << "snapshot: tutorial finale wave " << tr.wave << " boss " << (world_.bossWave() ? "yes" : "no") << '\n';
+            replaceStack(ScreenId::Play);
+        }
         openPause();
         snapFrame(d + "39_tutorial_pause.png");
         abandonRun();
@@ -3765,6 +3988,7 @@ int App::run() {
         return 0;
     }
     if (const char* bal = std::getenv("SB_BALANCE"); bal && *bal) return runBalance(std::atoi(bal));
+    if (const char* ts = std::getenv("SB_TUTSIM"); ts && *ts) return runTutorialSim(std::atoi(ts));
     sf::Clock clock;
     while (window_.isOpen()) {
         sf::Event e;
