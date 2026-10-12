@@ -51,7 +51,7 @@ endif()
 if(WIN32)
     # No console window on double-click; sfml-main supplies the entry point.
     set_target_properties(space_breakers PROPERTIES WIN32_EXECUTABLE ON)
-    target_link_libraries(space_breakers PRIVATE sfml-main)
+    target_link_libraries(space_breakers PRIVATE sfml-main shell32)   # shell32: ShellExecute (the "Feedback" link)
 endif()
 
 # --- bundle runtime files beside the binary -----------------------------

@@ -1129,6 +1129,11 @@ inline constexpr float magnetMaxSpeed = 340.f;
 }  // namespace powerup
 
 namespace app {
+// The build's version, shown under the main menu (bump it with every release).
+inline constexpr const char* version = "0.1.0-beta";
+// "Feedback" in the main menu opens this (the itch page: comments once it's public;
+// swap in a form or a Discord invite here).
+inline constexpr const char* feedbackUrl = "https://santiafonso.itch.io/space-breakers";
 inline constexpr float autosaveInterval = 20.f;
 // A new wave eases in: the sim runs from this fraction of speed up to full over
 // this long, so the scene you ended on flows into the next one instead of snapping.

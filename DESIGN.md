@@ -3331,3 +3331,11 @@ desde el centro. Las capturas 41 / 42 muestran cada motivo y las etapas.
   de su nombre (hover: qué hacen). La pelota congelada por Hex lleva un aro violeta
   que se consume.
 - **Pendiente:** un sexto jefe para el nivel 10 (por ahora "todo +15% y dos reglas").
+
+### 2026-10-12: preparando la beta abierta
+- **Feedback** en el menú principal: abre el navegador en `cfg::app::feedbackUrl`
+  (por ahora la página de itch; se cambia por un formulario o Discord ahí).
+  `platform/Browser.cpp`: ShellExecute en Windows (shell32), xdg-open en Linux.
+- **Versión** abajo a la izquierda del menú (`cfg::app::version`, "0.1.0-beta"):
+  subirla con cada build que se publique, así el feedback dice en cuál fue.
+- El menú aprieta sus filas cuando son más de 7, para que "Quit" no pise el marco.

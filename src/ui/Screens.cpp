@@ -14,6 +14,8 @@
 #include "core/App.hpp"
 #include "core/Config.hpp"
 #include "core/Theme.hpp"
+#include "platform/Browser.hpp"
+#include "progression/Ascension.hpp"
 #include "render/Draw.hpp"
 #include "ui/CreedScreen.hpp"
 #include "ui/UiSound.hpp"
@@ -433,7 +435,6 @@ void drawDot(sf::RenderWindow& w, sf::Vector2f p, float r, sf::Color c) {
 
 void MenuScreen::rebuild(App& app) {
     const sf::Vector2f s = app.size();
-    menu_.init(app.font(), theme::fsItem, s.y * 0.072f);
     hasRun_ = app.hasSavedRun();
     std::vector<Menu::Item> items;
     if (hasRun_) items.push_back({"Continue run", true});
@@ -441,10 +442,14 @@ void MenuScreen::rebuild(App& app) {
                     {"Stats", true},
                     {"How to Play", true},
                     {"Options", true},
+                    {"Feedback", true},
                     {resetArm_ > 0.f ? "Reset progress - click again to confirm" : "Reset progress",
                      true},
                     {"Quit", true}});
     if (app.devMode()) items.insert(items.end() - 1, {"Endless (dev)", true});   // dev only: waves back to back
+    // a long list (a saved run, dev) packs its rows closer so "Quit" clears the frame
+    const float gap = items.size() > 7 ? 0.058f : 0.066f;
+    menu_.init(app.font(), theme::fsItem, s.y * gap);
     menu_.setItems(items);
     menu_.layout({s.x * 0.5f, s.y * 0.44f});
 }
@@ -472,16 +477,17 @@ void MenuScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
         case 1: app.openStats(); break;
         case 2: app.openHowTo(); break;
         case 3: app.openSound(); break;
-        case 4:
+        case 4: openUrl(cfg::app::feedbackUrl); break;   // the browser: tell us what you think
+        case 5:
             if (resetArm_ > 0.f) { app.wipeSave(); return; }  // wipeSave rebuilds the menu
             resetArm_ = 4.f;
             rebuild(app);
             break;
-        case 5:
+        case 6:
             if (app.devMode()) { app.startEndless(); break; }   // "Endless (dev)" sits before Quit
             app.quit();
             break;
-        case 6: app.quit(); break;
+        case 7: app.quit(); break;
         default: break;
     }
 }
@@ -521,6 +527,8 @@ void MenuScreen::draw(App& app, sf::RenderWindow& w) {
     }
     drawLabel(w, app.font(), currencyLine(app.data().meta), 14, {tc.x, tc.y + 76.f},
               withAlpha(theme::accent, clampf(introPop(it, 0.09f), 0.f, 1.f)));
+    drawLabel(w, app.font(), std::string("v") + cfg::app::version, 12, {theme::margin, s.y - 22.f},   // which build this is
+              withAlpha(theme::textDim, 0.8f), -1);
     menu_.draw(w, it);
 }
 
