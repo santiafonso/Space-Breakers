@@ -65,11 +65,13 @@ public:
     int lastRunWave() const { return lastRunWave_; }
     int lastRunCores() const { return lastRunCores_; }
     int lastRunPrisms() const { return lastRunPrisms_; }
+    int lastRunAscUnlocked() const { return lastRunAscUnlocked_; }
     bool lastRunWon() const { return lastRunWon_; }
     // A lost run, as the run-over card shows it (filled when the core falls).
     struct RunSummary {
         int act = 1, row = 0, rows = 0;
         bool boss = false, elite = false, hard = false;
+        int ascension = 0;
         int killer = -1;          // World::lastCoreHitBy
         std::uint32_t kills = 0;
         int bestCombo = 0;
@@ -182,6 +184,10 @@ public:
     void chooseCreed(int idx);          // Creed screen: take card idx
     void refuseCreeds();                // Creed screen: turn them all down for gold
     bool hasCreed(CreedId id) const { return data_.run.hasCreed(id); }
+    int ascension() const { return data_.run.ascension; }   // the run's Ascension level (cfg::asc)
+    // A Rest (and the Choice repair-skip) repairs half the core: "Fortress" creed, Ascension 4.
+    bool halfRepair() const { return hasCreed(CreedId::Fortress) || ascension() >= 4; }
+    int pickCards() const { return ascension() >= 8 ? cfg::asc::choiceCards : cfg::run::choiceCards; }   // Ascension 8
     int luck() const;   // the run's luck, in points (Lucky clover, Lucky star, Loaded Dice, Lucky charm)
     bool canGrab() const;              // "Hunters" / "Clockwork" take the balls out of your hands
     bool beckon(sf::Vector2f at);      // "Beckon": a click on empty ground - the best-built ready ball blinks there
@@ -356,6 +362,7 @@ private:
     int lastRunWave_ = 0;
     int lastRunCores_ = 0;
     int lastRunPrisms_ = 0;
+    int lastRunAscUnlocked_ = 0;   // the Ascension level the last run opened (0 none)
     bool lastRunWon_ = false;
     RunSummary summary_;
     std::uint32_t runStartKills_ = 0;   // stats at the run start (or resume), for the summary

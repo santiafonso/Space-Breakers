@@ -245,6 +245,7 @@ void World::mageTick(Ball& b, float dt, const WorldParams& p, FrameEvents& ev) {
             const AbilitySpec a = b.abilities[slot];
             if (a.id != Ability::None && fireAbility(b, a, p, ev)) {
                 b.abilityFlash = 1.f;
+                itemFx(CommonWorld::Fx::Twin, b.pos, b.radius, theme::classMage, 0.45f, normalized(b.vel, {1.f, 0.f}));
                 mageOnCast(b, slot, true, p, ev);
             }
         }
@@ -744,6 +745,8 @@ template <> struct ClassHooks<BallRole::Assassin> : NoClassHooks {
     }
 
     static void onHit(World& w, Ball& b, Enemy& e, float dmg, bool kill, const WorldParams& p, FrameEvents& ev) {
+        if (b.cls.assassin.armedT > 0.f && b.mods.cls.assassin.backstab > 0.f)   // "Backstab" lands: a glint
+            w.itemFx(CommonWorld::Fx::Glint, e.pos, e.radius * 1.4f, theme::classAssassin, 0.3f, normalized(b.vel, {1.f, 0.f}));
         b.cls.assassin.armedT = 0.f;   // "Backstab" is spent
         if (b.mods.cls.common.reaper > 0.f && !b.held) {   // "Reaper": every hit queues a blink, not just kills
             w.itemFx(CommonWorld::Fx::Scythe, b.pos, b.radius * 2.2f, theme::classAssassin, 0.3f, normalized(b.vel, {1.f, 0.f}));
@@ -756,6 +759,7 @@ template <> struct ClassHooks<BallRole::Assassin> : NoClassHooks {
         }
         const float cull = b.mods.cls.assassin.cull;   // "Cull": finish it off (the kill blinks on)
         if (!kill && cull > 0.f && e.hp > 0.f && e.hp < e.maxHp * cull) {
+            w.itemFx(CommonWorld::Fx::Execute, e.pos, e.radius * 1.6f, theme::classAssassin, 0.35f);
             w.damageEnemy(e, e.hp);
             w.onKill(b, e, dmg, p, ev);
         }

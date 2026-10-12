@@ -69,6 +69,8 @@ private:
     sf::Vector2f panStart_{0.f, 0.f};
     sf::Vector2f panFrom_{0.f, 0.f};
     int legendHover_ = -1;                // MetaBranch under the pointer in the legend: light that branch
+    int kindHover_ = -1;                  // MetaNodeKind under the pointer in the legend's shapes row: light those nodes
+    int kindAt(App& app, sf::Vector2f mouse) const;
     int hoverNode_ = -1;
     int selNode_ = 0;
     bool selUsed_ = false;                // hovered a node or used the arrows at least once

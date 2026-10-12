@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <bitset>
+#include <string>
 #include <cstdint>
 #include <vector>
 
@@ -941,6 +942,47 @@ enum MetaUnlock {
     MetaClassStriker, // Striker        - Striker items can appear
     MetaClassAlchemist, // Alchemist    - Alchemist items can appear; its route holds the six elements
     MetaLoreAlchemist,  // Alchemist lore
+    // ---- 2026-10-10 append (never reorder): each class's epic and legendary
+    // items wait on their own nodes past its lore (same order as ItemTag) ----
+    MetaEpicStriker, MetaEpicGuardian, MetaEpicSupport, MetaEpicMage, MetaEpicShooter,
+    MetaEpicAssassin, MetaEpicSummoner, MetaEpicJester, MetaEpicSlinger, MetaEpicAlchemist,
+    MetaLegendStriker, MetaLegendGuardian, MetaLegendSupport, MetaLegendMage, MetaLegendShooter,
+    MetaLegendAssassin, MetaLegendSummoner, MetaLegendJester, MetaLegendSlinger, MetaLegendAlchemist,
+    // ...and the bridges: one node between each two neighbouring classes,
+    // opened from either side (MetaUnlockDef::parent2)
+    MetaFollowThrough,  // Striker  - Slinger
+    MetaTrickShot,      // Slinger  - Shooter
+    MetaLuckyShot,      // Shooter  - Jester
+    MetaGambit,         // Jester   - Assassin
+    MetaShades,         // Assassin - Summoner (across the Creeds)
+    MetaKinship,        // Summoner - Support
+    MetaHarmony,        // Support  - Mage
+    MetaSpellbrew,      // Mage     - Alchemist
+    MetaBedrock,        // Alchemist - Guardian
+    MetaJuggernaut,     // Guardian - Striker
+    // ---- 2026-10-10 b (never reorder): the items open up on the web - a
+    // class node opens its Common and Uncommon items; its Rares, Epics and
+    // each Legendary wait on their own nodes - and the gods sit on the
+    // outer ring (same order as ItemTag) ----
+    MetaRareStriker, MetaRareGuardian, MetaRareSupport, MetaRareMage, MetaRareShooter,
+    MetaRareAssassin, MetaRareSummoner, MetaRareJester, MetaRareSlinger, MetaRareAlchemist,
+    MetaLegend2Striker, MetaLegend2Guardian, MetaLegend2Support, MetaLegend2Mage, MetaLegend2Shooter,
+    MetaLegend2Assassin, MetaLegend2Summoner, MetaLegend2Jester, MetaLegend2Slinger, MetaLegend2Alchemist,
+    MetaGodStriker, MetaGodGuardian, MetaGodSupport, MetaGodMage, MetaGodShooter,
+    MetaGodAssassin, MetaGodSummoner, MetaGodJester, MetaGodSlinger, MetaGodAlchemist,
+    // ---- 2026-10-12 append (never reorder): the longest links get a node in
+    // between - two on the way out to the Slinger, and each class's Mastery
+    // between its first Legendary and its god (same order as ItemTag) ----
+    MetaGrip,         // Grip    - catch from further away                           (Slinger)
+    MetaWindup,       // Wind-up - a thrown ball's first hit lands harder
+    MetaMasteryStriker, MetaMasteryGuardian, MetaMasterySupport, MetaMasteryMage, MetaMasteryShooter,
+    MetaMasteryAssassin, MetaMasterySummoner, MetaMasteryJester, MetaMasterySlinger, MetaMasteryAlchemist,
+    // ---- 2026-10-12 b (never reorder): the outer bridges - one between each
+    // two neighbouring classes out by their Legendaries, in the same order as
+    // the inner ones (MetaFollowThrough...), each adding to its inner bridge ----
+    MetaOuterStrikerSlinger, MetaOuterSlingerShooter, MetaOuterShooterJester, MetaOuterJesterAssassin,
+    MetaOuterAssassinSummoner, MetaOuterSummonerSupport, MetaOuterSupportMage, MetaOuterMageAlchemist,
+    MetaOuterAlchemistGuardian, MetaOuterGuardianStriker,
     MetaUnlockCount
 };
 
@@ -963,6 +1005,7 @@ struct MetaUnlockDef {
     int parent;     // node that gates this one; -1 for the root
     float ang;      // layout: direction from the centre, degrees clockwise from straight up
     float ring;     // ...and distance, in rings (0 = the centre)
+    int parent2 = -1;   // a bridge: this node opens from either parent
 };
 
 inline const MetaUnlockDef& metaUnlockDef(int u) {
@@ -1144,7 +1187,7 @@ inline const MetaUnlockDef& metaUnlockDef(int u) {
         /* Stonewall */ {"Stonewall", "balls with the Guardian class patch the core up by 0.5 per level on every core bounce",
                          12u, 2, B::Guardian, C, 52, 336.f, 4.f},
         /* Slinger   */ {"Slinger",   "unlocks the Slinger class: its items can appear (throwing and catching)",
-                         18u, 1, B::Slinger,  C,  0,  14.f, 3.f},
+                         18u, 1, B::Slinger,  C,  MetaWindup,  14.f, 3.f},
         /* SlingerLore*/{"Slinger lore","Slinger items show up 50% more often per level",
                          10u, 2, B::Slinger,  C, MetaClassSlinger, 14.f, 4.f},
         /* Striker   */ {"Striker",   "unlocks the Striker class: its items can appear (hits far harder when flung)",
@@ -1153,6 +1196,143 @@ inline const MetaUnlockDef& metaUnlockDef(int u) {
                          18u, 1, B::Alchemist, C, 4, 299.f, 3.f},
         /* AlchLore  */ {"Alchemist lore", "Alchemist items show up 50% more often per level",
                          10u, 2, B::Alchemist, C, MetaClassAlchemist, 299.f, 5.5f},
+        // ---- 2026-10-10: each class's epics and legendaries, past its lore ----
+        /* EpicStriker */ {"Striker epics", "Striker Epic items can appear (until then a Striker roll stops at Rare)",
+                         3u,  1, B::Striker, P, MetaLoreStriker, 0.f, 6.f},
+        /* EpicGuardian*/ {"Guardian epics", "Guardian Epic items can appear (until then a Guardian roll stops at Rare)",
+                         3u,  1, B::Guardian, P, MetaLoreGuardian, 324.f, 6.f},
+        /* EpicSupport */ {"Support epics", "Support Epic items can appear (until then a Support roll stops at Rare)",
+                         3u,  1, B::Support, P, MetaLoreSupport, 217.f, 6.f},
+        /* EpicMage    */ {"Mage epics", "Mage Epic items can appear (until then a Mage roll stops at Rare)",
+                         3u,  1, B::Mage, P, MetaLoreMage, 275.f, 6.f},
+        /* EpicShooter */ {"Shooter epics", "Shooter Epic items can appear (until then a Shooter roll stops at Rare)",
+                         3u,  1, B::Shooter, P, MetaLoreShooter, 21.f, 6.f},
+        /* EpicAssassin*/ {"Assassin epics", "Assassin Epic items can appear (until then a Assassin roll stops at Rare)",
+                         3u,  1, B::Assassin, P, MetaLoreAssassin, 109.f, 6.f},
+        /* EpicSummoner*/ {"Summoner epics", "Summoner Epic items can appear (until then a Summoner roll stops at Rare)",
+                         3u,  1, B::Summoner, P, MetaLoreSummoner, 172.f, 6.f},
+        /* EpicJester  */ {"Jester epics", "Jester Epic items can appear (until then a Jester roll stops at Rare)",
+                         3u,  1, B::Jester, P, MetaLoreJester, 67.f, 6.f},
+        /* EpicSlinger */ {"Slinger epics", "Slinger Epic items can appear (until then a Slinger roll stops at Rare)",
+                         3u,  1, B::Slinger, P, MetaLoreSlinger, 14.f, 6.f},
+        /* EpicAlchemis*/ {"Alchemist epics", "Alchemist Epic items can appear (until then a Alchemist roll stops at Rare)",
+                         3u,  1, B::Alchemist, P, MetaLoreAlchemist, 299.f, 6.f},
+        /* LegStriker  */ {"Striker legendaries", "Striker Legendary items can appear",
+                         5u,  1, B::Striker, P, MetaEpicStriker, 0.f, 7.f},
+        /* LegGuardian */ {"Guardian legendaries", "Guardian Legendary items can appear",
+                         5u,  1, B::Guardian, P, MetaEpicGuardian, 324.f, 7.f},
+        /* LegSupport  */ {"Support legendaries", "Support Legendary items can appear",
+                         5u,  1, B::Support, P, MetaEpicSupport, 217.f, 7.f},
+        /* LegMage     */ {"Mage legendaries", "Mage Legendary items can appear",
+                         5u,  1, B::Mage, P, MetaEpicMage, 275.f, 7.f},
+        /* LegShooter  */ {"Shooter legendaries", "Shooter Legendary items can appear",
+                         5u,  1, B::Shooter, P, MetaEpicShooter, 21.f, 7.f},
+        /* LegAssassin */ {"Assassin legendaries", "Assassin Legendary items can appear",
+                         5u,  1, B::Assassin, P, MetaEpicAssassin, 109.f, 7.f},
+        /* LegSummoner */ {"Summoner legendaries", "Summoner Legendary items can appear",
+                         5u,  1, B::Summoner, P, MetaEpicSummoner, 172.f, 7.f},
+        /* LegJester   */ {"Jester legendaries", "Jester Legendary items can appear",
+                         5u,  1, B::Jester, P, MetaEpicJester, 67.f, 7.f},
+        /* LegSlinger  */ {"Slinger legendaries", "Slinger Legendary items can appear",
+                         5u,  1, B::Slinger, P, MetaEpicSlinger, 14.f, 7.f},
+        /* LegAlchemist*/ {"Alchemist legendaries", "Alchemist Legendary items can appear",
+                         5u,  1, B::Alchemist, P, MetaEpicAlchemist, 299.f, 7.f},
+        // ---- 2026-10-10: the bridges, between two neighbouring classes (either opens it) ----
+        /* FollowThro*/ {"Follow-through", "balls with the Striker or Slinger class: a thrown ball's first hit +12% per level (twice that with both)",
+                         16u, 2, B::Striker, C, MetaClassStriker, 0.f, 4.6f, MetaClassSlinger},
+        /* TrickShot */ {"Trick shot", "balls with the Slinger or Shooter class: +3% critical chance per level (twice that with both)",
+                         16u, 2, B::Slinger, C, MetaClassSlinger, 0.f, 4.6f, MetaClassShooter},
+        /* LuckyShot */ {"Lucky shot", "balls with the Shooter or Jester class: critical hits deal +0.2x more per level (twice that with both)",
+                         16u, 2, B::Shooter, C, MetaClassShooter, 0.f, 4.6f, MetaClassJester},
+        /* Gambit    */ {"Gambit", "balls with the Jester or Assassin class: +3% chance a hit strikes twice per level (twice that with both)",
+                         16u, 2, B::Jester, C, MetaClassJester, 0.f, 4.6f, MetaClassAssassin},
+        /* Shades    */ {"Shades", "balls with the Assassin or Summoner class: ghost copies last 15% longer per level (twice that with both)",
+                         16u, 2, B::Assassin, C, MetaClassAssassin, 0.f, 4.6f, MetaClassSummoner},
+        /* Kinship   */ {"Kinship", "balls with the Summoner or Support class: summons hit 8% harder and last 8% longer per level (twice that with both)",
+                         16u, 2, B::Summoner, C, MetaClassSummoner, 0.f, 4.6f, MetaClassSupport},
+        /* Harmony   */ {"Harmony", "balls with the Support or Mage class: abilities recharge 5% faster per level (twice that with both)",
+                         16u, 2, B::Support, C, MetaClassSupport, 0.f, 4.6f, MetaClassMage},
+        /* Spellbrew */ {"Spellbrew", "balls with the Mage or Alchemist class: elements 8% stronger per level (twice that with both)",
+                         16u, 2, B::Mage, C, MetaClassMage, 0.f, 4.6f, MetaClassAlchemist},
+        /* Bedrock   */ {"Bedrock", "balls with the Alchemist or Guardian class: shoves 10% harder and patches the core by 0.25 on core bounces per level (twice that with both)",
+                         16u, 2, B::Alchemist, C, MetaClassAlchemist, 0.f, 4.6f, MetaClassGuardian},
+        /* Juggernaut*/ {"Juggernaut", "balls with the Guardian or Striker class: +6% contact damage and 6% higher top speed per level (twice that with both)",
+                         16u, 2, B::Guardian, C, MetaClassGuardian, 0.f, 4.6f, MetaClassStriker},
+        // ---- 2026-10-10 b: Rares (from the class), the second Legendary, the gods (names and texts: metaNodeName) ----
+        /* RareStriker */ {"Striker rares", "", 14u, 1, B::Striker, C, MetaClassStriker, 0.f, 5.f},
+        /* RareGuardian*/ {"Guardian rares", "", 14u, 1, B::Guardian, C, MetaClassGuardian, 324.f, 5.f},
+        /* RareSupport */ {"Support rares", "", 14u, 1, B::Support, C, MetaClassSupport, 217.f, 5.f},
+        /* RareMage    */ {"Mage rares", "", 14u, 1, B::Mage, C, MetaClassMage, 275.f, 5.f},
+        /* RareShooter */ {"Shooter rares", "", 14u, 1, B::Shooter, C, MetaClassShooter, 21.f, 5.f},
+        /* RareAssassin*/ {"Assassin rares", "", 14u, 1, B::Assassin, C, MetaClassAssassin, 109.f, 5.f},
+        /* RareSummoner*/ {"Summoner rares", "", 14u, 1, B::Summoner, C, MetaClassSummoner, 172.f, 5.f},
+        /* RareJester  */ {"Jester rares", "", 14u, 1, B::Jester, C, MetaClassJester, 67.f, 5.f},
+        /* RareSlinger */ {"Slinger rares", "", 14u, 1, B::Slinger, C, MetaClassSlinger, 14.f, 5.f},
+        /* RareAlchemis*/ {"Alchemist rares", "", 14u, 1, B::Alchemist, C, MetaClassAlchemist, 299.f, 5.f},
+        /* Leg2Striker */ {"Striker legendary II", "", 6u, 1, B::Striker, P, MetaEpicStriker, 0.f, 8.f},
+        /* Leg2Guardian*/ {"Guardian legendary II", "", 6u, 0, B::Guardian, P, MetaEpicGuardian, 324.f, 8.f},   // the Guardian has one Legendary: off the web
+        /* Leg2Support */ {"Support legendary II", "", 6u, 1, B::Support, P, MetaEpicSupport, 217.f, 8.f},
+        /* Leg2Mage    */ {"Mage legendary II", "", 6u, 1, B::Mage, P, MetaEpicMage, 275.f, 8.f},
+        /* Leg2Shooter */ {"Shooter legendary II", "", 6u, 1, B::Shooter, P, MetaEpicShooter, 21.f, 8.f},
+        /* Leg2Assassin*/ {"Assassin legendary II", "", 6u, 1, B::Assassin, P, MetaEpicAssassin, 109.f, 8.f},
+        /* Leg2Summoner*/ {"Summoner legendary II", "", 6u, 1, B::Summoner, P, MetaEpicSummoner, 172.f, 8.f},
+        /* Leg2Jester  */ {"Jester legendary II", "", 6u, 1, B::Jester, P, MetaEpicJester, 67.f, 8.f},
+        /* Leg2Slinger */ {"Slinger legendary II", "", 6u, 1, B::Slinger, P, MetaEpicSlinger, 14.f, 8.f},
+        /* Leg2Alchemis*/ {"Alchemist legendary II", "", 6u, 1, B::Alchemist, P, MetaEpicAlchemist, 299.f, 8.f},
+        /* GodStriker  */ {"Striker god", "", 8u, 1, B::Striker, P, MetaMasteryStriker, 0.f, 9.f},
+        /* GodGuardian */ {"Guardian god", "", 8u, 1, B::Guardian, P, MetaMasteryGuardian, 324.f, 9.f},
+        /* GodSupport  */ {"Support god", "", 8u, 1, B::Support, P, MetaMasterySupport, 217.f, 9.f},
+        /* GodMage     */ {"Mage god", "", 8u, 1, B::Mage, P, MetaMasteryMage, 275.f, 9.f},
+        /* GodShooter  */ {"Shooter god", "", 8u, 1, B::Shooter, P, MetaMasteryShooter, 21.f, 9.f},
+        /* GodAssassin */ {"Assassin god", "", 8u, 1, B::Assassin, P, MetaMasteryAssassin, 109.f, 9.f},
+        /* GodSummoner */ {"Summoner god", "", 8u, 1, B::Summoner, P, MetaMasterySummoner, 172.f, 9.f},
+        /* GodJester   */ {"Jester god", "", 8u, 1, B::Jester, P, MetaMasteryJester, 67.f, 9.f},
+        /* GodSlinger  */ {"Slinger god", "", 8u, 1, B::Slinger, P, MetaMasterySlinger, 14.f, 9.f},
+        /* GodAlchemist*/ {"Alchemist god", "", 8u, 1, B::Alchemist, P, MetaMasteryAlchemist, 299.f, 9.f},
+        /* Grip      */ {"Grip",    "every ball can be caught from 6% further away per level",
+                         8u,  2, B::Slinger, C, 0, 14.f, 1.5f},
+        /* Windup    */ {"Wind-up", "a thrown ball's first hit +6% per level",
+                         12u, 2, B::Slinger, C, MetaGrip, 14.f, 3.f},
+        /* MasteryStr */ {"Striker mastery", "balls with the Striker class: its own perks (+8% damage and +10% top speed) grow by half again per level",
+                         30u, 3, B::Striker, C, MetaLegendStriker, 0.f, 8.5f},
+        /* MasteryGua */ {"Guardian mastery", "balls with the Guardian class: its own perks (+20% knockback and core healing on core bounces) grow by half again per level",
+                         30u, 3, B::Guardian, C, MetaLegendGuardian, 324.f, 8.5f},
+        /* MasterySup */ {"Support mastery", "balls with the Support class: its own perks (+10% element potency and +5% ability recharge) grow by half again per level",
+                         30u, 3, B::Support, C, MetaLegendSupport, 217.f, 8.5f},
+        /* MasteryMag */ {"Mage mastery", "balls with the Mage class: its own perks (+15% ability recharge and +5% element potency) grow by half again per level",
+                         30u, 3, B::Mage, C, MetaLegendMage, 275.f, 8.5f},
+        /* MasterySho */ {"Shooter mastery", "balls with the Shooter class: its own perks (+10% bullet damage and +5% crit chance) grow by half again per level",
+                         30u, 3, B::Shooter, C, MetaLegendShooter, 21.f, 8.5f},
+        /* MasteryAss */ {"Assassin mastery", "balls with the Assassin class: its own perks (+10% crit chance and +25% crit damage) grow by half again per level",
+                         30u, 3, B::Assassin, C, MetaLegendAssassin, 109.f, 8.5f},
+        /* MasterySum */ {"Summoner mastery", "balls with the Summoner class: its own perks (+15% summon damage and +5% ability recharge) grow by half again per level",
+                         30u, 3, B::Summoner, C, MetaLegendSummoner, 172.f, 8.5f},
+        /* MasteryJes */ {"Jester mastery", "balls with the Jester class: its own perks (+8% crit chance and +5% chance a hit strikes twice) grow by half again per level",
+                         30u, 3, B::Jester, C, MetaLegendJester, 67.f, 8.5f},
+        /* MasterySli */ {"Slinger mastery", "balls with the Slinger class: its own perks (+20% catch reach and +15% thrown first hit) grow by half again per level",
+                         30u, 3, B::Slinger, C, MetaLegendSlinger, 14.f, 8.5f},
+        /* MasteryAlc */ {"Alchemist mastery", "balls with the Alchemist class: its own perks (+15% element potency and +5% ability recharge) grow by half again per level",
+                         30u, 3, B::Alchemist, C, MetaLegendAlchemist, 299.f, 8.5f},
+        /* OuterStrSli */ {"Hurl", "balls with the Striker or Slinger class: a thrown ball's first hit +12% per level (twice that with both) - on top of Follow-through",
+                         36u, 2, B::Striker, C, MetaLegendStriker, 0.f, 8.f, MetaLegendSlinger},
+        /* OuterSliSho */ {"Deadeye", "balls with the Slinger or Shooter class: +3% critical chance per level (twice that with both) - on top of Trick shot",
+                         36u, 2, B::Slinger, C, MetaLegendSlinger, 0.f, 8.f, MetaLegendShooter},
+        /* OuterShoJes */ {"Jackpot", "balls with the Shooter or Jester class: critical hits deal +0.2x more per level (twice that with both) - on top of Lucky shot",
+                         36u, 2, B::Shooter, C, MetaLegendShooter, 0.f, 8.f, MetaLegendJester},
+        /* OuterJesAss */ {"Double cross", "balls with the Jester or Assassin class: +3% chance a hit strikes twice per level (twice that with both) - on top of Gambit",
+                         36u, 2, B::Jester, C, MetaLegendJester, 0.f, 8.f, MetaLegendAssassin},
+        /* OuterAssSum */ {"Phantoms", "balls with the Assassin or Summoner class: ghost copies last 15% longer per level (twice that with both) - on top of Shades",
+                         36u, 2, B::Assassin, C, MetaLegendAssassin, 0.f, 8.f, MetaLegendSummoner},
+        /* OuterSumSup */ {"Fellowship", "balls with the Summoner or Support class: summons hit 8% harder and last 8% longer per level (twice that with both) - on top of Kinship",
+                         36u, 2, B::Summoner, C, MetaLegendSummoner, 0.f, 8.f, MetaLegendSupport},
+        /* OuterSupMag */ {"Resonance", "balls with the Support or Mage class: abilities recharge 5% faster per level (twice that with both) - on top of Harmony",
+                         36u, 2, B::Support, C, MetaLegendSupport, 0.f, 8.f, MetaLegendMage},
+        /* OuterMagAlc */ {"Transmute", "balls with the Mage or Alchemist class: elements 8% stronger per level (twice that with both) - on top of Spellbrew",
+                         36u, 2, B::Mage, C, MetaLegendMage, 0.f, 8.f, MetaLegendAlchemist},
+        /* OuterAlcGua */ {"Earthwork", "balls with the Alchemist or Guardian class: shoves 10% harder and patches the core by 0.25 on core bounces per level (twice that with both) - on top of Bedrock",
+                         36u, 2, B::Alchemist, C, MetaLegendAlchemist, 0.f, 8.f, MetaLegendGuardian},
+        /* OuterGuaStr */ {"Colossus", "balls with the Guardian or Striker class: +6% contact damage and 6% higher top speed per level (twice that with both) - on top of Juggernaut",
+                         36u, 2, B::Guardian, C, MetaLegendGuardian, 0.f, 8.f, MetaLegendStriker},
     };
     return defs[u];
 }
@@ -1216,10 +1396,39 @@ inline std::uint32_t metaUnlockCost(int u, int level) {
 inline MetaCurrency metaUnlockCurrency(int u) { return metaUnlockDef(u).currency; }
 
 // A node opens up once the node toward the centre that gates it has a level.
+// Cross links (2026-10-10): a second way into a node from a neighbouring
+// route, where the two share a theme. Either end opens it. (Bridges carry
+// their second parent in MetaUnlockDef::parent2 instead.)
+struct MetaLink { int node, from; };
+inline constexpr MetaLink kMetaLinks[] = {
+    {MetaKinetics, MetaSling},               // speed: faster throws -> the speed surge
+    {MetaClassSlinger, MetaSling},           // throwing
+    {MetaEliteSpoils, MetaTreasury},         // gold
+    {MetaCreedHunters, MetaKeenInstinct},    // the hunt
+    {MetaQuartermaster, MetaCovenant},       // choosing at the start of a run
+    {MetaGravity, MetaAbilityBulwark},       // pull: Vortex -> the gravity well
+    {MetaArc, MetaAbilityArc},               // lightning: the Arc ability -> the electric element
+    {MetaAbilityMeteor, MetaEmber},          // fire from the sky
+    {MetaQuarry, MetaStonewall},             // stone
+    {MetaCharged, MetaChannel},              // charge: abilities recharging -> power-ups arriving charged
+    {MetaGemini, MetaAbilitySplit},          // copies: Split -> the permanent twin
+    {MetaTide, MetaRegen},                   // water that mends
+    {MetaFrost, MetaDamper},                 // slowing down
+    {MetaMass, MetaHeft},                    // weight
+    {MetaSling, MetaVelocity},               // speed
+    {MetaCreedLegion, MetaMuster},           // more balls
+    {MetaCreedDice, MetaFoolsLuck},          // luck
+};
+
 inline bool metaUnlockAvailable(int u, const int* levels) {
-    const int p = metaUnlockDef(u).parent;
-    return p < 0 || levels[p] > 0;
+    const MetaUnlockDef& d = metaUnlockDef(u);
+    if (d.parent < 0 || levels[d.parent] > 0 || (d.parent2 >= 0 && levels[d.parent2] > 0)) return true;
+    for (const MetaLink& l : kMetaLinks)
+        if (l.node == u && levels[l.from] > 0) return true;
+    return false;
 }
+inline bool metaIsBridge(int u) { return metaUnlockDef(u).parent2 >= 0; }
+inline bool metaIsOuterBridge(int u) { return u >= MetaOuterStrikerSlinger && u <= MetaOuterGuardianStriker; }
 
 // The web node that unlocks a class.
 inline int classUnlockNode(ItemTag t) {
@@ -1236,6 +1445,147 @@ inline int classUnlockNode(ItemTag t) {
         case ItemTag::Alchemist: return MetaClassAlchemist;
         default:                return -1;
     }
+}
+
+// The nodes that let a class's Epic / Legendary items roll (2026-10-10). -1 none.
+inline int epicGateNode(ItemTag t) {
+    const int i = static_cast<int>(t);
+    return i >= 1 && i <= 10 ? MetaEpicStriker + i - 1 : -1;
+}
+inline int legendGateNode(ItemTag t) {
+    const int i = static_cast<int>(t);
+    return i >= 1 && i <= 10 ? MetaLegendStriker + i - 1 : -1;
+}
+inline int classGateIndex(int u, int first) { return u - first + 1; }   // node -> its class's ItemTag value
+
+// A class's items of one tier, in their enum order.
+inline std::vector<UpgradeKind> classItemsOfTier(ItemTag t, Tier tier) {
+    std::vector<UpgradeKind> v;
+    for (int i = 0; i < kUpgradeKindCount; ++i) {
+        const auto k = static_cast<UpgradeKind>(i);
+        if (upgradeCat(k) == UpgradeCat::Item && itemTag(k) == t && upgradeTier(k) == tier) v.push_back(k);
+    }
+    return v;
+}
+
+// The web node an item waits on (2026-10-10): its class's Rares / Epics node,
+// the first Legendary its own node, the rest the second one. -1: it comes
+// with the class (Common, Uncommon) or isn't a class item.
+inline int itemUnlockNode(UpgradeKind k) {
+    if (upgradeCat(k) != UpgradeCat::Item) return -1;
+    const ItemTag t = itemTag(k);
+    const int i = static_cast<int>(t);
+    if (i < 1 || i > 10) return -1;
+    switch (upgradeTier(k)) {
+        case Tier::Rare: return MetaRareStriker + i - 1;
+        case Tier::Epic: return MetaEpicStriker + i - 1;
+        case Tier::Legendary: {
+            const std::vector<UpgradeKind> legs = classItemsOfTier(t, Tier::Legendary);
+            return !legs.empty() && legs.front() == k ? MetaLegendStriker + i - 1 : MetaLegend2Striker + i - 1;
+        }
+        default: return -1;
+    }
+}
+inline int masteryNode(ItemTag t) {   // "<Class> mastery": that class's own perks grow
+    const int i = static_cast<int>(t);
+    return i >= 1 && i <= 10 ? MetaMasteryStriker + i - 1 : -1;
+}
+inline int godNode(ItemTag base) {   // the node that lets `base` ascend into its god
+    const int i = static_cast<int>(base);
+    return i >= 1 && i <= 10 ? MetaGodStriker + i - 1 : -1;
+}
+
+// Names and texts for the nodes that carry items or gods: built from the
+// item tables, so they always say exactly what they open.
+inline std::string joinItemTitles(const std::vector<UpgradeKind>& v) {
+    std::string s;
+    for (std::size_t j = 0; j < v.size(); ++j) {
+        if (j > 0) s += j + 1 == v.size() ? " and " : ", ";
+        s += upgradeInfo(v[j]).title;
+    }
+    return s;
+}
+inline std::string metaNodeName(int u) {
+    if (u >= MetaLegendStriker && u <= MetaLegendAlchemist) {
+        const auto legs = classItemsOfTier(static_cast<ItemTag>(classGateIndex(u, MetaLegendStriker)), Tier::Legendary);
+        if (!legs.empty()) return upgradeInfo(legs.front()).title;
+    }
+    if (u >= MetaLegend2Striker && u <= MetaLegend2Alchemist) {
+        auto legs = classItemsOfTier(static_cast<ItemTag>(classGateIndex(u, MetaLegend2Striker)), Tier::Legendary);
+        if (legs.size() > 1) return joinItemTitles({legs.begin() + 1, legs.end()});
+    }
+    if (u >= MetaGodStriker && u <= MetaGodAlchemist)
+        return itemTagName(godOf(static_cast<ItemTag>(classGateIndex(u, MetaGodStriker))));
+    return metaUnlockDef(u).name;
+}
+inline std::string metaNodeEffect(int u) {
+    auto tierLine = [](ItemTag t, Tier tier, const char* what) {
+        return std::string(itemTagName(t)) + " " + what + " can appear: " + joinItemTitles(classItemsOfTier(t, tier));
+    };
+    if (u >= MetaRareStriker && u <= MetaRareAlchemist)
+        return tierLine(static_cast<ItemTag>(classGateIndex(u, MetaRareStriker)), Tier::Rare, "Rare items");
+    if (u >= MetaEpicStriker && u <= MetaEpicAlchemist)
+        return tierLine(static_cast<ItemTag>(classGateIndex(u, MetaEpicStriker)), Tier::Epic, "Epic items");
+    if (u >= MetaLegendStriker && u <= MetaLegendAlchemist) {
+        const ItemTag t = static_cast<ItemTag>(classGateIndex(u, MetaLegendStriker));
+        const auto legs = classItemsOfTier(t, Tier::Legendary);
+        if (!legs.empty())
+            return std::string("the ") + itemTagName(t) + " Legendary " + upgradeInfo(legs.front()).title + " can appear: " +
+                   upgradeInfo(legs.front()).desc;
+    }
+    if (u >= MetaLegend2Striker && u <= MetaLegend2Alchemist) {
+        const ItemTag t = static_cast<ItemTag>(classGateIndex(u, MetaLegend2Striker));
+        auto legs = classItemsOfTier(t, Tier::Legendary);
+        if (legs.size() > 1) {
+            std::string s = std::string("the ") + itemTagName(t) + (legs.size() > 2 ? " Legendaries " : " Legendary ") +
+                            joinItemTitles({legs.begin() + 1, legs.end()}) + " can appear";
+            if (legs.size() == 2) s += std::string(": ") + upgradeInfo(legs[1]).desc;
+            return s;
+        }
+    }
+    if (u >= MetaGodStriker && u <= MetaGodAlchemist) {
+        const ItemTag t = static_cast<ItemTag>(classGateIndex(u, MetaGodStriker));
+        return std::string("a ball with 4 ") + itemTagName(t) + " items can ascend into " + itemTagName(godOf(t)) +
+               ", its god, at a Shrine - and " + itemTagName(godOf(t)) + "'s own items start to roll";
+    }
+    return metaUnlockDef(u).effect;
+}
+
+// What a node is, so the web can draw each kind its own way.
+enum class MetaNodeKind { Root, Perk, Unlock, Class, EpicGate, LegendGate, Bridge, God };
+inline MetaNodeKind metaNodeKind(int u) {
+    if (u == MetaCalling) return MetaNodeKind::Root;
+    if (classUnlockNode(metaBranchTag(metaUnlockDef(u).branch)) == u) return MetaNodeKind::Class;
+    if ((u >= MetaEpicStriker && u <= MetaEpicAlchemist) || (u >= MetaRareStriker && u <= MetaRareAlchemist))
+        return MetaNodeKind::EpicGate;
+    if ((u >= MetaLegendStriker && u <= MetaLegendAlchemist) || (u >= MetaLegend2Striker && u <= MetaLegend2Alchemist))
+        return MetaNodeKind::LegendGate;
+    if (u >= MetaGodStriker && u <= MetaGodAlchemist) return MetaNodeKind::God;
+    if (metaIsBridge(u)) return MetaNodeKind::Bridge;
+    switch (u) {
+        case MetaFireItem: case MetaVenom: case MetaTide: case MetaFrost: case MetaQuarry: case MetaArc:
+        case MetaDamper: case MetaFacet: case MetaOverload: case MetaLedger: case MetaKinetics:
+        case MetaSatellite: case MetaGravity: case MetaGemini: case MetaPrism:
+        case MetaCreedHunters: case MetaCreedLegion: case MetaCreedDice: case MetaCreedAlchemy:
+        case MetaAbilityMissile: case MetaAbilityArc: case MetaAbilityBulwark: case MetaAbilitySplit:
+        case MetaAbilityOverclock: case MetaAbilityMeteor:
+            return MetaNodeKind::Unlock;
+        default:
+            return MetaNodeKind::Perk;
+    }
+}
+inline const char* metaNodeKindName(MetaNodeKind k) {
+    switch (k) {
+        case MetaNodeKind::Root:       return "the centre";
+        case MetaNodeKind::Perk:       return "perk";
+        case MetaNodeKind::Unlock:     return "unlock";
+        case MetaNodeKind::Class:      return "class";
+        case MetaNodeKind::EpicGate:   return "class items";
+        case MetaNodeKind::LegendGate: return "legendary item";
+        case MetaNodeKind::God:        return "god";
+        case MetaNodeKind::Bridge:     return "bridge";
+    }
+    return "";
 }
 
 inline bool classUnlocked(ItemTag t, const int* levels) {

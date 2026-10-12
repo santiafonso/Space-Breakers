@@ -5,6 +5,7 @@
 
 #include "core/Config.hpp"
 #include "sim/Entities.hpp"
+#include "progression/Ascension.hpp"
 
 namespace sb {
 
@@ -176,13 +177,23 @@ public:
     // or the neutral speed grey without a class. The element isn't in it.
     sf::Color ballTint(const Ball& b, float speed, const WorldParams& p) const;
     float cruiseSpeed(const WorldParams& p) const;
-    int comboStreak() const { return comboStreak_; }
+    int comboStreak() const { return static_cast<int>(comboStreak_); }
     int comboTier() const {
-        return std::min(comboStreak_ / cfg::combo::bouncesPerTier, comboCapTier_);
+        return std::min(static_cast<int>(comboStreak_) / cfg::combo::bouncesPerTier, comboCapTier_);
     }
-    float comboMultiplier() const {
-        return 1.f + static_cast<float>(comboTier()) * cfg::combo::multiplierPerTier;
+    // The combo bar, in tiers (fractional: it climbs a little every hit).
+    float comboLevel() const {
+        return std::min(comboStreak_ / static_cast<float>(cfg::combo::bouncesPerTier), static_cast<float>(comboCapTier_));
     }
+    float comboMultiplier() const { return 1.f + comboLevel() * cfg::combo::multiplierPerTier; }
+    // Ascension: this fight's elite trait and the boss's rules (BossRule bits).
+    EliteTrait eliteTrait() const { return eliteTrait_; }
+    unsigned bossRules() const { return bossRules_; }
+    void resetCombo() { comboStreak_ = 0.f; sinceHit_ = 0.f; reportedTier_ = 0; }   // every fight starts at x1
+    void devSetCombo(float hits) { comboStreak_ = hits; sinceHit_ = 0.f; }   // snapshots
+    float comboCapMultiplier() const { return 1.f + static_cast<float>(comboCapTier_) * cfg::combo::multiplierPerTier; }
+    // 1 right after a hit, 0 once the bar starts to drain (the HUD's fuse).
+    float comboFuse() const { return comboNoDecay_ ? 1.f : clampf(1.f - sinceHit_ / cfg::combo::decayWindow, 0.f, 1.f); }
     float fastestBall() const;
 
 private:
@@ -497,7 +508,8 @@ private:
     PactRules pact_;                         // the run's pacts, from WorldParams (each step / wave start)
     float autoFlingTimer_ = 1.f;   // "Clockwork": time to its next throw
 
-    int comboStreak_ = 0;
+    float comboStreak_ = 0.f;   // hits, fractional while it drains
+    bool comboNoDecay_ = false; // "Bloodlust": the bar never drains (set each step)
     int comboCapTier_ = cfg::combo::baseCapTier;
     float sinceHit_ = 0.f;
     int reportedTier_ = 0;
@@ -521,6 +533,14 @@ private:
     void updateLaunch(float dt, const WorldParams& p, FrameEvents& ev);
     void chargerShock(FrameEvents& ev);
     bool hard_ = false;       // hard mode (cfg::hard), from WorldParams at each wave start
+    int asc_ = 0;             // Ascension level, likewise
+    EliteTrait eliteTrait_ = EliteTrait::None;   // Ascension 6: the elite fight's trait
+    unsigned bossRules_ = 0;  // Ascension 9: BossRule bits
+    float hexT_ = 0.f;        // "Hex": to its next freeze
+    float bossContact_ = 0.f; // boss HP ball contact took this step ("Warded" spares it)
+    void ascendBoss(bool last);                                  // Ascension 5 / 9 / 10 on a fresh boss
+    void ascensionTick(float dt, const WorldParams& p);          // "Regenerating", "Hex"
+    float stageAt(int i) const { return asc_ >= 5 ? cfg::asc::stageAt[i] : cfg::boss::stageAt[i]; }
     float bossHpMul_ = 1.f;   // WorldParams::bossHpMul, from the boss wave's start
     std::vector<int> bruteSlots_;   // toSpawn_ values at which a Brute (miniboss) spawns instead
     bool eliteWave_ = false;

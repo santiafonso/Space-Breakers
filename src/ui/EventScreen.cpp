@@ -99,7 +99,7 @@ void EventScreen::draw(App& app, sf::RenderWindow& w) {
         const float pulse = 0.5f + 0.5f * std::sin(clock_ * 1.8f + static_cast<float>(i) * 1.3f);
         const int gold = app.eventGoldOf(k);
         std::string gain = eventGain(k, gold), cost = eventCost(k, gold);
-        if (k == EventKind::Rest && app.hasCreed(CreedId::Fortress)) gain = "the core is half repaired";
+        if (k == EventKind::Rest && app.halfRepair()) gain = "the core is half repaired";
         if (k == EventKind::Rest && app.ironCoreAlive()) cost = "ends this act's Iron core";
         drawRuleCard(w, f, r, col, a, h, pulse, std::to_string(i + 1) + (rest || shrine ? "   CHOICE" : "   DEAL"),
                      ok ? eventHint(k) : eventFree(k) ? "no ball can take it" : "not enough gold", eventName(k), gain, cost);

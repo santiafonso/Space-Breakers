@@ -36,6 +36,8 @@ struct MetaState {
     SoundSettings sound;      // volumes + a style per sound category (the Sound screen)
     bool fullscreen = false;
     bool hardMode = false;    // the next run starts in hard mode (cfg::hard)
+    int ascMax = 0;           // highest Ascension level opened (win a run at it to open the next)
+    int ascSel = 0;           // the level the next run starts at (0..ascMax)
     std::uint32_t hints = 0;  // first-run hints already done (bit per App::Hint)
     Stats stats;
 };
@@ -64,6 +66,7 @@ struct RunMods {
 struct RunState {
     bool active = false;
     bool hard = false;        // hard mode, fixed at the run start
+    int ascension = 0;        // Ascension level, fixed at the run start (cfg::asc)
     bool tutorial = false;    // the very first run: a straight map and a soft boss (cfg::tutorial)
     bool endless = false;     // dev: endless waves, no map, nothing saved (App::startEndless)
     float platingHp = 0.f;    // core max hp the balls' "Plating" items add (already in coreMaxHp)

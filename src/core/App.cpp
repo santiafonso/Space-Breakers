@@ -1,4 +1,5 @@
 #include "core/App.hpp"
+#include "render/ClassRender.hpp"
 #include "render/Backdrop.hpp"
 
 #include <algorithm>
@@ -137,6 +138,7 @@ WorldParams App::params() const {
     const int* u = data_.meta.unlock;
     WorldParams p;
     p.hard = data_.run.hard;
+    p.ascension = data_.run.ascension;
     p.bossHpMul = data_.run.tutorial ? cfg::tutorial::bossHpMul : 1.f;
     p.bossKind = static_cast<int>(runBoss(cfg::run::actOfWave(data_.run.wave)));
     p.damageMult = 1.f + cfg::combat::heftPerLevel * static_cast<float>(u[MetaHeft]);
@@ -366,19 +368,81 @@ BallSpec App::ballSpec(const BallLoadout& L) const {
     if (L.hasRole(ItemTag::Assassin)) m.cls.assassin.cull += W::deathmarkPerLevel * lv(MetaDeathmark);    // "Deathmark"
     if (L.hasRole(ItemTag::Mage)) m.cls.mage.focus += W::archivePerLevel * lv(MetaArchive);             // "Archive"
     if (L.hasRole(ItemTag::Guardian)) m.menderHeal += W::stonewallPerLevel * lv(MetaStonewall);         // "Stonewall"
+    // The bridges: either class gives it, both give it twice.
+    // The outer bridge between the same two classes adds to it.
+    auto bridge = [&](int node, ItemTag a, ItemTag b) {
+        const float levels = lv(node) + lv(MetaOuterStrikerSlinger + (node - MetaFollowThrough));
+        return levels * static_cast<float>((L.hasRole(a) ? 1 : 0) + (L.hasRole(b) ? 1 : 0));
+    };
+    m.reach *= 1.f + W::gripPerLevel * lv(MetaGrip);                           // "Grip"
+    m.heavyThrow += W::windupPerLevel * lv(MetaWindup);                        // "Wind-up"
+    m.heavyThrow += W::followThroughPerLevel * bridge(MetaFollowThrough, ItemTag::Striker, ItemTag::Slinger);
+    m.critChance += W::trickShotPerLevel * bridge(MetaTrickShot, ItemTag::Slinger, ItemTag::Shooter);
+    m.critMult += W::luckyShotPerLevel * bridge(MetaLuckyShot, ItemTag::Shooter, ItemTag::Jester);
+    m.echoChance += W::gambitPerLevel * bridge(MetaGambit, ItemTag::Jester, ItemTag::Assassin);
+    {
+        const float shades = 1.f + W::shadesPerLevel * bridge(MetaShades, ItemTag::Assassin, ItemTag::Summoner);
+        m.copyLife *= shades;
+        m.mitosisLife *= shades;
+    }
+    m.cls.summoner.bond *= 1.f + W::kinshipPerLevel * bridge(MetaKinship, ItemTag::Summoner, ItemTag::Support);
+    m.cls.mage.focus += W::harmonyPerLevel * bridge(MetaHarmony, ItemTag::Support, ItemTag::Mage);
+    m.elemMult *= 1.f + W::spellbrewPerLevel * bridge(MetaSpellbrew, ItemTag::Mage, ItemTag::Alchemist);
+    {
+        const float rock = bridge(MetaBedrock, ItemTag::Alchemist, ItemTag::Guardian);
+        m.knockMult *= 1.f + W::bedrockKnockPerLevel * rock;
+        m.menderHeal += W::bedrockMendPerLevel * rock;
+    }
+    {
+        const float jug = bridge(MetaJuggernaut, ItemTag::Guardian, ItemTag::Striker);
+        m.damageMult *= 1.f + W::juggernautPerLevel * jug;
+        m.maxSpeedMult *= 1.f + W::juggernautPerLevel * jug;
+    }
 
     // Each class's small stat perks, besides its items (cfg::role, 2026-10-06).
+    // "<Class> mastery" on the web grows them by half again per level.
     namespace R = cfg::role;
-    if (L.hasRole(ItemTag::Striker)) { m.damageMult *= 1.f + R::strikerDamage; m.maxSpeedMult *= 1.f + R::strikerTop; }
-    if (L.hasRole(ItemTag::Guardian)) { m.knockMult *= 1.f + R::guardianKnock; m.menderHeal += R::guardianMend; }
-    if (L.hasRole(ItemTag::Support)) { m.elemMult *= 1.f + R::supportElem; m.cls.mage.focus += R::supportFocus; }
-    if (L.hasRole(ItemTag::Mage)) { m.cls.mage.focus += R::mageFocus; m.elemMult *= 1.f + R::mageElem; }
-    if (L.hasRole(ItemTag::Shooter)) { m.cls.shooter.dmgMul *= 1.f + R::shooterBullet; m.critChance += R::shooterCrit; }
-    if (L.hasRole(ItemTag::Assassin)) { m.critChance += R::assassinCrit; m.critMult += R::assassinCritMult; }
-    if (L.hasRole(ItemTag::Summoner)) { m.cls.summoner.bond *= 1.f + R::summonerBond; m.cls.mage.focus += R::summonerFocus; }
-    if (L.hasRole(ItemTag::Jester)) { m.critChance += R::jesterCrit; m.echoChance += R::jesterEcho; }
-    if (L.hasRole(ItemTag::Slinger)) { m.reach *= 1.f + R::slingerReach; m.heavyThrow += R::slingerHeavy; }
-    if (L.hasRole(ItemTag::Alchemist)) { m.elemMult *= 1.f + R::alchemistElem; m.cls.mage.focus += R::alchemistFocus; }
+    auto ms = [&](ItemTag t) { return 1.f + W::masteryPerLevel * lv(masteryNode(t)); };
+    if (L.hasRole(ItemTag::Striker)) {
+        const float k = ms(ItemTag::Striker);
+        m.damageMult *= 1.f + R::strikerDamage * k; m.maxSpeedMult *= 1.f + R::strikerTop * k;
+    }
+    if (L.hasRole(ItemTag::Guardian)) {
+        const float k = ms(ItemTag::Guardian);
+        m.knockMult *= 1.f + R::guardianKnock * k; m.menderHeal += R::guardianMend * k;
+    }
+    if (L.hasRole(ItemTag::Support)) {
+        const float k = ms(ItemTag::Support);
+        m.elemMult *= 1.f + R::supportElem * k; m.cls.mage.focus += R::supportFocus * k;
+    }
+    if (L.hasRole(ItemTag::Mage)) {
+        const float k = ms(ItemTag::Mage);
+        m.cls.mage.focus += R::mageFocus * k; m.elemMult *= 1.f + R::mageElem * k;
+    }
+    if (L.hasRole(ItemTag::Shooter)) {
+        const float k = ms(ItemTag::Shooter);
+        m.cls.shooter.dmgMul *= 1.f + R::shooterBullet * k; m.critChance += R::shooterCrit * k;
+    }
+    if (L.hasRole(ItemTag::Assassin)) {
+        const float k = ms(ItemTag::Assassin);
+        m.critChance += R::assassinCrit * k; m.critMult += R::assassinCritMult * k;
+    }
+    if (L.hasRole(ItemTag::Summoner)) {
+        const float k = ms(ItemTag::Summoner);
+        m.cls.summoner.bond *= 1.f + R::summonerBond * k; m.cls.mage.focus += R::summonerFocus * k;
+    }
+    if (L.hasRole(ItemTag::Jester)) {
+        const float k = ms(ItemTag::Jester);
+        m.critChance += R::jesterCrit * k; m.echoChance += R::jesterEcho * k;
+    }
+    if (L.hasRole(ItemTag::Slinger)) {
+        const float k = ms(ItemTag::Slinger);
+        m.reach *= 1.f + R::slingerReach * k; m.heavyThrow += R::slingerHeavy * k;
+    }
+    if (L.hasRole(ItemTag::Alchemist)) {
+        const float k = ms(ItemTag::Alchemist);
+        m.elemMult *= 1.f + R::alchemistElem * k; m.cls.mage.focus += R::alchemistFocus * k;
+    }
     if (L.hasRole(ItemTag::Astronomer)) {   // its planets bigger, the core a little sturdier
         m.cls.astronomer.size *= cfg::planet::classSize;
         m.cls.common.plating += cfg::planet::classPlating;
@@ -704,6 +768,7 @@ void App::newRun() {
     r = RunState{};
     r.active = true;
     r.hard = data_.meta.hardMode;
+    r.ascension = std::clamp(data_.meta.ascSel, 0, data_.meta.ascMax);
     r.wave = 0;
     r.coreMaxHp = startCoreHp();
     r.coreHp = r.coreMaxHp;
@@ -836,12 +901,13 @@ void App::startWaveAt(int wave, bool elite) {
     data_.run.wave = wave;
     data_.run.eliteWave = elite;
     waveIntro_ = cfg::app::waveIntroTime;   // ease the sim in instead of snapping
-    if (!hasCreed(CreedId::Fortress) && !data_.run.hard)   // "Fortress" creed / hard mode: no free healing before a fight
+    if (!hasCreed(CreedId::Fortress) && !data_.run.hard && ascension() < 2)   // "Fortress" creed / hard mode / Ascension 2: no free healing before a fight
         world_.repairCore(cfg::core::waveHeal +
                           cfg::core::mendPerLevel * static_cast<float>(data_.meta.unlock[MetaMend]));
     if (const int bastion = data_.meta.unlock[MetaBastion]; bastion > 0)   // "Bastion": max HP grows each wave
         world_.addCoreMaxHp(cfg::core::bastionPerWavePerLevel * static_cast<float>(bastion));
     const int w = data_.run.wave;
+    world_.resetCombo();   // the damage combo doesn't carry over from the last fight (2026-10-12)
     if (cfg::run::isBossWave(w)) audio_.bossAppear();
     else audio_.waveStart();
     if (cfg::run::isBossWave(w))
@@ -893,6 +959,8 @@ UpgradeCtx App::buildUpgradeCtx() const {
             const unsigned bit = RunState::tagBit(itemTag(k));
             const bool in = (data_.run.poolIn & bit) != 0;
             if ((!classUnlocked(itemTag(k), u) && !in) || (data_.run.poolOut & bit) != 0) c.lock(k);
+            // a class's Rares, Epics and each Legendary wait on their own web nodes
+            if (const int gate = itemUnlockNode(k); gate >= 0 && u[gate] == 0) c.lock(k);
         }
         if (upgradeCat(k) == UpgradeCat::Ability && !abilityUnlocked(k, u)) c.lock(k);   // the Mage route
     }
@@ -1007,7 +1075,7 @@ void App::rollChoices(RollSource src) {
     rollSource_ = src;
     starterChoice_ = false;
     choiceTitle_.clear();
-    choiceCount_ = cfg::run::choiceCards;
+    choiceCount_ = pickCards();
     std::vector<UpgradeKind> taken;
     for (int i = 0; i < choiceCount_; ++i) {
         choices_[i] = rollPick(src, taken);
@@ -1046,7 +1114,7 @@ void App::rollRecruitChoices() {
     rollSource_ = RollSource::Normal;
     starterChoice_ = false;
     choiceTitle_.clear();
-    choiceCount_ = cfg::run::choiceCards;
+    choiceCount_ = pickCards();
     std::vector<UpgradeKind> taken{choices_[0], UpgradeKind::AddBall};
     for (int t = 0; t < choiceCount_ - 1; ++t) {
         choices_[t + 1] = rollPick(RollSource::Normal, taken);
@@ -1153,7 +1221,7 @@ void App::applyUpgradeKind(UpgradeKind k, int ball, int slot) {
 
 // "Repair core" button on the Item screen: heal to full, but forfeit the pick.
 void App::repairCoreSkipItem() {
-    playerRepair(hasCreed(CreedId::Fortress) ? world_.core().maxHp * cfg::creed::fortressRestHeal : 1e9f);
+    playerRepair(halfRepair() ? world_.core().maxHp * cfg::creed::fortressRestHeal : 1e9f);
     if (const int prospector = data_.meta.unlock[MetaProspector]; prospector > 0)
         data_.run.rerollsLeft += prospector;   // "Prospector": skipping refunds reroll charges
     audio_.purchase();
@@ -1330,7 +1398,9 @@ void App::travelTo(int node) {
 // ---------------------------------------------------------------- Shrines (2026-10-06)
 
 bool App::shrineAscends(const BallLoadout& L) const {
-    return !L.shrineUsed && L.ascendTag() != ItemTag::None && data_.run.ascensions < cfg::shrine::maxAscended;
+    const int gate = godNode(L.ascendTag());   // the god waits on its web node
+    return !L.shrineUsed && L.ascendTag() != ItemTag::None && data_.run.ascensions < cfg::shrine::maxAscended &&
+           (gate < 0 || data_.meta.unlock[gate] > 0);
 }
 bool App::shrineExpands(const BallLoadout& L) const { return !L.shrineUsed && L.itemSlots < kBallSlots; }
 
@@ -1712,7 +1782,8 @@ int App::shopPrice(UpgradeKind k) const {
         default:                   base = cfg::gold::priceByTier[static_cast<int>(upgradeTier(k))]; break;
     }
     const float off = cfg::meta::hagglerPerLevel * static_cast<float>(data_.meta.unlock[MetaHaggler]);   // "Haggler"
-    return std::max(1, static_cast<int>(std::lround(static_cast<float>(base) * (1.f - off))));
+    const float asc = ascension() >= 4 ? cfg::asc::shopPriceMul : 1.f;                                    // Ascension 4
+    return std::max(1, static_cast<int>(std::lround(static_cast<float>(base) * (1.f - off) * asc)));
 }
 
 // A fresh shop visit: new stock, rerolls and sells back to full.
@@ -1766,14 +1837,23 @@ void App::bankRun(bool won) {
     int cores = r.wave * cfg::meta::coresPerWave + (won ? cfg::meta::winBonus : 0);
     cores += static_cast<int>(r.bountyCores);   // "Fortune" node: cores per enemy killed
     if (r.hard) cores = static_cast<int>(std::lround(static_cast<float>(cores) * cfg::hard::coresMul));
+    cores = static_cast<int>(std::lround(static_cast<float>(cores) * (1.f + cfg::asc::coresPerLevel * static_cast<float>(r.ascension))));
     lastRunCores_ = cores;
 
     lastRunPrisms_ = 0;
+    lastRunAscUnlocked_ = 0;
     if (won) {
         lastRunPrisms_ = cfg::meta::prismsPerWin;
         if (data_.meta.unlock[MetaWindfall] > 0 &&
             rng_.range(0.f, 1.f) < cfg::meta::windfallChance)
             lastRunPrisms_ += 1;                 // "Windfall" node
+        if (r.ascension >= cfg::asc::prismLevel) lastRunPrisms_ += 1;   // a high Ascension win
+        // Win at your highest Ascension and the next level opens (and is picked).
+        if (!r.tutorial && r.ascension >= data_.meta.ascMax && data_.meta.ascMax < cfg::asc::maxLevel) {
+            data_.meta.ascMax = r.ascension + 1;
+            data_.meta.ascSel = data_.meta.ascMax;
+            lastRunAscUnlocked_ = data_.meta.ascMax;
+        }
     }
 
     data_.meta.cores += static_cast<std::uint32_t>(cores);
@@ -2383,6 +2463,7 @@ void App::processEvents(const FrameEvents& ev) {
         summary_.boss = cfg::run::isBossWave(r.wave);
         summary_.elite = r.eliteWave;
         summary_.hard = r.hard;
+        summary_.ascension = r.ascension;
         summary_.killer = world_.lastCoreHitBy();
         summary_.kills = data_.meta.stats.enemiesKilled - runStartKills_;
         summary_.bestCombo = runBestCombo_;
@@ -2677,7 +2758,7 @@ void App::update(float frameDt) {
     // slowly when the combo drops or the fight ends.
     {
         const float target = simulating() && cfg::combo::baseCapTier > 0
-            ? static_cast<float>(world_.comboTier()) / static_cast<float>(cfg::combo::baseCapTier)
+            ? world_.comboLevel() / static_cast<float>(cfg::combo::baseCapTier)
             : 0.f;
         const float rate = target > heat_ ? cfg::app::heatRise : cfg::app::heatFall;
         heat_ += (target - heat_) * (1.f - std::exp(-rate * frameDt));
@@ -2686,11 +2767,14 @@ void App::update(float frameDt) {
 
     const Core& c = world_.core();
     hud_.setHard(data_.run.hard);
+    hud_.setAscension(data_.run.ascension, world_.eliteTrait(), world_.bossRules());
     {   // the boss's health for the top bar
         const Boss& bs = world_.boss();
         hud_.setBossKind(runBoss(data_.run.map.act));
         hud_.setBoss(bs.alive && bs.maxHp > 0.f ? clampf(bs.hp / bs.maxHp, 0.f, 1.f) : -1.f);
     }
+    hud_.setCombo(world_.comboLevel(), (world_.comboCapMultiplier() - 1.f) / cfg::combo::multiplierPerTier,
+                  world_.comboFuse());
     hud_.update(frameDt, data_.run.map.act, data_.run.mapRow, data_.run.map.rowCount() + 1, world_.enemiesLeft(),
                 c.maxHp > 0.f ? c.hp / c.maxHp : 0.f, world_.comboMultiplier(),
                 data_.run.score, data_.run.gold, world_.effect(), world_.bossWave(), data_.run.eliteWave);
@@ -2883,6 +2967,44 @@ int App::runSnapshots(const std::string& dir) {
     for (int i = 0; i < 250; ++i) update(1.f / 60.f);   // then fighting
     capturePath_ = d + "04_play.png";
     render();
+    for (float hits : {95.f, 400.f}) {   // the combo bar, part way and full
+        world_.devSetCombo(hits);
+        for (int i = 0; i < 40; ++i) update(1.f / 60.f);
+        capturePath_ = d + (hits < 200.f ? "04c_combo.png" : "04d_combo_full.png");
+        render();
+    }
+    {   // Ascension 10: an elite fight with its trait, then bosses with their rules
+        const int keepAsc = data_.run.ascension;
+        data_.run.ascension = 10;
+        for (int tries = 0; tries < 8; ++tries) {
+            data_.run.wave = 3;
+            world_.startWave(3, params(), true);
+            if (world_.eliteTrait() != EliteTrait::None) break;
+        }
+        for (int i = 0; i < 300; ++i) update(1.f / 60.f);
+        std::cerr << "snapshot: asc elite trait " << eliteTraitName(world_.eliteTrait()) << '\n';
+        capturePath_ = d + "04e_asc_elite.png";
+        render();
+        for (int w : {10, 50}) {
+            data_.run.wave = w;
+            world_.startBossWave(w, params());
+            const float hp0 = world_.boss().maxHp;
+            bool hexed = false;
+            for (int i = 0; i < 60 * 25; ++i) {
+                update(1.f / 60.f);
+                for (const Ball& b : world_.balls()) hexed = hexed || b.hexT > 0.f;
+                if (hexed && w == 10 && i > 60 * 12) break;
+            }
+            std::string rules;
+            for (unsigned rr : kBossRules) if (world_.bossRules() & rr) rules += std::string(bossRuleName(rr)) + " ";
+            std::cerr << "snapshot: asc boss wave " << w << " rules " << rules << " hp " << world_.boss().hp << " / " << hp0
+                      << (hexed ? " hex fired" : "") << '\n';
+            capturePath_ = d + (w == 10 ? "04f_asc_boss.png" : "04g_asc_final_boss.png");
+            render();
+        }
+        data_.run.ascension = keepAsc;
+        data_.run.wave = 1;
+    }
 
     // Tesla would give ball 3 (Storm) its Support class: the card says so.
     choices_ = {UpgradeKind::Railgun, UpgradeKind::Tesla, UpgradeKind::Cleave, UpgradeKind::Hunter};
@@ -3489,6 +3611,8 @@ int App::runSnapshots(const std::string& dir) {
                   MetaLuckyStar, MetaClassJester, MetaSling, MetaClassSlinger, MetaHeft, MetaClassStriker, MetaVenom, MetaClassAlchemist, MetaTreasury, MetaHaggler, MetaCharged, MetaClassSupport, MetaRally,
                   MetaKinetics, MetaClassShooter, MetaBrood, MetaMend, MetaAegis, MetaMomentum, MetaKeenInstinct})
         data_.meta.unlock[u] = 1;
+    data_.meta.ascMax = 4;   // a few won runs: the Ascension row shows
+    data_.meta.ascSel = 3;
     replaceStack(ScreenId::Menu);
     openLoadout();
     snapFrame(d + "15_web_grown.png");
@@ -3512,6 +3636,19 @@ int App::runSnapshots(const std::string& dir) {
         snapFrame(d + "15d_web_fresh.png");
         for (int u = 0; u < MetaUnlockCount; ++u) data_.meta.unlock[u] = metaUnlockDef(u).maxLevel;   // and all of it
         snapFrame(d + "15e_web_all.png");
+        for (sf::Vector2f at : {sf::Vector2f{size().x * 0.38f, size().y * 0.32f}, sf::Vector2f{size().x * 0.72f, size().y * 0.55f}}) {
+            // half way in, over a crowded corner: can the names be read?
+            sf::Event in{};
+            in.type = sf::Event::MouseWheelScrolled;
+            in.mouseWheelScroll.delta = 6.f;
+            in.mouseWheelScroll.x = static_cast<int>(at.x);
+            in.mouseWheelScroll.y = static_cast<int>(at.y);
+            stack_.back()->handleEvent(*this, in, at);
+            snapFrame(d + (at.x < size().x * 0.5f ? "15g_web_mid_left.png" : "15h_web_mid_right.png"));
+            in.mouseWheelScroll.delta = -6.f;
+            stack_.back()->handleEvent(*this, in, at);
+            snapFrame(d + "15i_web_back.png");
+        }
         {   // "Hide web": a click on the button, the sky alone, then back
             sf::Event click{};
             click.type = sf::Event::MouseButtonPressed;
@@ -3615,6 +3752,18 @@ int App::runSnapshots(const std::string& dir) {
 
 int App::run() {
     if (const char* snap = std::getenv("SB_SNAPSHOT"); snap && *snap) return runSnapshots(snap);
+    if (const char* sheet = std::getenv("SB_FXSHEET"); sheet && *sheet) {   // dev: every flourish, side by side
+        sf::RenderTexture rt;
+        rt.create(1280, 800);
+        std::filesystem::create_directories(sheet);
+        for (int page = 0;; ++page) {
+            rt.clear(theme::bg);
+            if (!drawFxSheet(rt, page, font())) break;
+            rt.display();
+            rt.getTexture().copyToImage().saveToFile(std::string(sheet) + "/fx_" + std::to_string(page + 1) + ".png");
+        }
+        return 0;
+    }
     if (const char* bal = std::getenv("SB_BALANCE"); bal && *bal) return runBalance(std::atoi(bal));
     sf::Clock clock;
     while (window_.isOpen()) {

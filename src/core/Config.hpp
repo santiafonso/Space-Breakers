@@ -54,11 +54,13 @@ inline constexpr int maxSubsteps = 8;
 
 namespace combo {
 // Combo is a DAMAGE multiplier: climbs on enemy hits, decays on time since the
-// last hit.
-inline constexpr int bouncesPerTier = 6;
-inline constexpr int baseCapTier = 8;
-inline constexpr float decayWindow = 2.4f;
+// last hit. Since 2026-10-12 it's a bar that climbs a little with every hit
+// (no jumps): a tier is a +0.5x mark on it, and the cap takes a long fight.
+inline constexpr int bouncesPerTier = 30;          // hits per +0.5x (was 6)
+inline constexpr int baseCapTier = 8;              // x5 at 240 hits
+inline constexpr float decayWindow = 2.4f;         // no hit for this long and the bar starts to drain...
 inline constexpr float decayWindowPerLevel = 0.0f;
+inline constexpr float drainPerSecond = 18.f;      // ...this many hits' worth per second, until the next hit
 inline constexpr float multiplierPerTier = 0.5f;
 }  // namespace combo
 
@@ -561,6 +563,35 @@ inline constexpr float bruteFightChance = 0.5f;   // ...this often; elites alway
 inline constexpr float coresMul = 1.75f;
 }  // namespace hard
 
+// Ascension (2026-10-12): levels 1-10 past a won run, each adding one rule on
+// top of the ones below it (progression/Ascension.hpp has the texts). Win a
+// run at your highest level and the next one opens. Works on Normal or Hard.
+namespace asc {
+inline constexpr int maxLevel = 10;
+inline constexpr float eliteHpMul = 1.25f;              // 1: elites tougher, and the second Brute from act 1
+inline constexpr float enemySpeedMul = 1.10f;           // 3
+inline constexpr float restHealFrac = 0.5f;             // 4: a Rest repairs half the core...
+inline constexpr float shopPriceMul = 1.25f;            // ...and the shop is dearer
+inline constexpr float stageAt[2] = {0.75f, 0.45f};     // 5: bosses change phase sooner...
+inline constexpr float enragePace = 1.75f;              // ...and rage harder (cfg::boss::enragePace 1.5)
+inline constexpr float comboDrainMul = 2.f;             // 7
+inline constexpr int choiceCards = 2;                   // 8: a pick deals this many
+inline constexpr float allHpMul = 1.15f;                // 10: every enemy and boss
+// 6: an elite fight rolls one trait for all its enemies
+inline constexpr float armoredTaken = 0.7f;             // Armored: damage taken x this
+inline constexpr float swiftSpeed = 1.3f;               // Swift
+inline constexpr float regenPerSec = 0.03f;             // Regenerating: max hp per s
+inline constexpr float vengefulCore = 1.5f;             // Vengeful: core damage x this
+// 9: a boss rolls one rule (two for the act 5 boss at 10)
+inline constexpr float thickHideContact = 0.4f;         // Thick hide: ball contact x this
+inline constexpr float wardedOther = 0.4f;              // Warded: everything but contact x this
+inline constexpr float hexEvery = 11.f;                 // Hex: this often the strongest ball...
+inline constexpr float hexTime = 3.f;                   // ...is frozen for this long
+// Rewards
+inline constexpr float coresPerLevel = 0.15f;           // cores x (1 + this * level)
+inline constexpr int prismLevel = 5;                    // a win at this level or above pays +1 prism
+}  // namespace asc
+
 // The path map between waves (one per act) and the run's gold.
 namespace map {
 inline constexpr int rows = 13;         // choosable rows per act (acts 2-5); the boss is row rows+1
@@ -906,6 +937,23 @@ inline constexpr float rallyPerLevel = 0.10f;        // "Rally": + damage vs mar
 inline constexpr float channelPerLevel = 0.06f;      // "Channel": ability recharge speed, every ball
 inline constexpr float archivePerLevel = 0.15f;      // "Archive": ability recharge speed, Mage-class balls
 inline constexpr float stonewallPerLevel = 0.5f;     // "Stonewall": core HP per core bounce, Guardian-class balls
+// The bridges (2026-10-10): per level, for a ball with either class; a ball
+// with both gets it twice.
+inline constexpr float followThroughPerLevel = 0.12f;   // thrown first hit
+inline constexpr float trickShotPerLevel = 0.03f;       // crit chance
+inline constexpr float luckyShotPerLevel = 0.2f;        // crit multiplier
+inline constexpr float gambitPerLevel = 0.03f;          // echo chance
+inline constexpr float shadesPerLevel = 0.15f;          // ghost copies' life
+inline constexpr float kinshipPerLevel = 0.08f;         // summons' bond
+inline constexpr float harmonyPerLevel = 0.05f;         // ability recharge (focus)
+inline constexpr float spellbrewPerLevel = 0.08f;       // element potency
+inline constexpr float bedrockKnockPerLevel = 0.10f;    // shove
+inline constexpr float bedrockMendPerLevel = 0.25f;     // core HP per core bounce
+inline constexpr float juggernautPerLevel = 0.06f;      // contact damage and top speed
+// The in-between nodes (2026-10-12).
+inline constexpr float gripPerLevel = 0.06f;            // "Grip": catch reach, every ball
+inline constexpr float windupPerLevel = 0.06f;          // "Wind-up": thrown first hit, every ball
+inline constexpr float masteryPerLevel = 0.5f;          // "<Class> mastery": that class's role perks x(1 + this) more per level
 inline constexpr int abilityPickCards = 3;           // the run's first-ability pick (+1 with "Calling")
 }  // namespace meta
 

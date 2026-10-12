@@ -343,7 +343,7 @@ void World::commonTick(Ball& b, float dt, const WorldParams& p, FrameEvents& ev)
             itemFx(sym == 2 ? CommonWorld::Fx::Coins : CommonWorld::Fx::Confetti, b.pos, 120.f * arenaScale(), theme::puGolden, 0.9f);
             ev.kick = std::max(ev.kick, 5.f);
         } else if (sym >= 0) {
-            itemFx(CommonWorld::Fx::Reels, b.pos, b.radius, theme::classJester, 0.6f);
+            itemFx(CommonWorld::Fx::Reels, b.pos, b.radius, theme::classJester, 0.6f, {static_cast<float>(sym), 0.f});   // the symbol it paired
         }
     }
     if (s.frenzyT > 0.f && !b.held) {   // "777" frenzy: it lurches about

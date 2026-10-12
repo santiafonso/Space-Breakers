@@ -194,6 +194,7 @@ struct Ball {
     float radius = cfg::ball::radius;
     bool held = false;
     int snaredBy = -1;       // a Snare's id while one holds it (it can't move or be grabbed)
+    float hexT = 0.f;        // Ascension boss "Hex": s left frozen in place (can't move or be grabbed)
     RoleMask roles = 0;      // its classes (see BallRole)
     RoleMask ascended = 0;   // ...and which of them are ascended
     RoleMask legend = 0;     // classes it wears the cosmetic of (all 4 items of the class)
@@ -478,7 +479,8 @@ struct Boss {
     float homeDist = 0.f, fromDist = 0.f;   // Orbital: the spiral's start, and where its pull-back began
     float shotT = 0.f;        // Warden: to its next fan of shots
     float launchT = 0.f;      // Orbital, last phase: to the next orbiter it lets loose at the core
-    float pace() const { return enraged ? cfg::boss::enragePace : 1.f; }
+    float ragePace = cfg::boss::enragePace;   // Ascension 5 raises it
+    float pace() const { return enraged ? ragePace : 1.f; }
     // Something the auto-aim (and summons, bullets) should go for.
     bool targetable() const { return alive && hp > 0.f && intro <= 0.f && !guarded && retreat <= 0.f; }
 };
@@ -550,6 +552,7 @@ struct FrameEvents {
 // between-wave upgrades the player has picked this run.
 struct WorldParams {
     bool hard = false;            // hard mode (cfg::hard)
+    int ascension = 0;            // Ascension level 0-10 (cfg::asc, progression/Ascension.hpp)
     float bossHpMul = 1.f;        // the tutorial's softer boss (cfg::tutorial)
     int bossKind = -1;            // the act's boss (BossKind) - the run shuffles them; -1 = bossOfAct
     float damageMult = 1.f;       // Heft (web): every ball

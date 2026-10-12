@@ -609,7 +609,14 @@ void WorldRenderer::draw(sf::RenderWindow& window, const World& world) const {
     for (const Pickup& pu : world.pickups()) drawPickup(window, pu);
     drawClassWorld(window, world);   // per-class things on the field (ClassRender.cpp)
     for (const Ball& g : world.ghosts()) drawBall(window, g, world.effect());
-    for (const Ball& b : world.balls()) drawBall(window, b, world.effect());
+    for (const Ball& b : world.balls()) {
+        drawBall(window, b, world.effect());
+        if (b.hexT > 0.f) {   // Ascension boss "Hex": frozen - a violet ring burning down
+            const float r = b.radius + 6.f, f = clampf(b.hexT / cfg::asc::hexTime, 0.f, 1.f);
+            draw::glow(window, b.pos, r * 1.6f, theme::puSurge, 0.35f);
+            draw::ring(window, b.pos, r, 2.5f, withAlpha(theme::puSurge, 0.9f), -kPi * 0.5f, -kPi * 0.5f + 2.f * kPi * f, 40);
+        }
+    }
 }
 
 }  // namespace sb

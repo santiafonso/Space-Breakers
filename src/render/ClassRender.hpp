@@ -47,4 +47,9 @@ void drawDragonForm(sf::RenderTarget& t, int form, sf::Vector2f pos, sf::Vector2
                     sf::Color c, float glowA, const sf::Vector2f* trail, int trailN, float k, int heads = 1,
                     const sf::Vector2f* headDirs = nullptr);   // (several heads: where each looks, else fanned out)
 
+// Dev (SB_FXSHEET=<dir>): a contact sheet of every item / ability flourish,
+// each at three moments, so they can be judged side by side. `page` 0..;
+// returns false past the last page.
+bool drawFxSheet(sf::RenderTarget& t, int page, const sf::Font& font);
+
 }  // namespace sb

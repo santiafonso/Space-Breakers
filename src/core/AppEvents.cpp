@@ -230,10 +230,10 @@ void App::openRestStop() {
 
 void App::restRepair() {
     const sf::Vector2f mid{size().x * 0.5f, size().y * 0.4f};
-    playerRepair(hasCreed(CreedId::Fortress) ? world_.core().maxHp * cfg::creed::fortressRestHeal : 1e9f);
+    playerRepair(halfRepair() ? world_.core().maxHp * cfg::creed::fortressRestHeal : 1e9f);
     audio_.purchase();
     effects_.flash(theme::core, 0.5f);
-    effects_.addLabel(hasCreed(CreedId::Fortress) ? "Core half repaired" : "Core repaired", mid, theme::core, 26, 1.2f);
+    effects_.addLabel(halfRepair() ? "Core half repaired" : "Core repaired", mid, theme::core, 26, 1.2f);
 }
 
 // Event picks, one Equip screen each; then the map.

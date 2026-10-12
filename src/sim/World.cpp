@@ -34,9 +34,13 @@ World::World(sf::Vector2f size) : baseSize_(size), size_(size) { core_.pos = siz
 
 // The wave's enemy stats, with hard mode on top (cfg::hard).
 float World::enemyHp(int wave) const {
-    return waveEnemyHp(wave) * (hard_ ? cfg::hard::enemyHpMul : 1.f) * pact_.enemyHpMul;   // "Mirror" pact
+    return waveEnemyHp(wave) * (hard_ ? cfg::hard::enemyHpMul : 1.f) * pact_.enemyHpMul *   // "Mirror" pact
+           (asc_ >= 10 ? cfg::asc::allHpMul : 1.f);
 }
-float World::enemySpeed(int wave) const { return waveEnemySpeed(wave) * (hard_ ? cfg::hard::enemySpeedMul : 1.f); }
+float World::enemySpeed(int wave) const {
+    return waveEnemySpeed(wave) * (hard_ ? cfg::hard::enemySpeedMul : 1.f) * (asc_ >= 3 ? cfg::asc::enemySpeedMul : 1.f) *
+           (eliteTrait_ == EliteTrait::Swift ? cfg::asc::swiftSpeed : 1.f);
+}
 
 // ---------------------------------------------------------------- speeds
 
@@ -337,6 +341,7 @@ void World::carryBalls(const WorldParams& p) {
     for (Ball& b : balls_) {
         b.held = false;
         b.snaredBy = -1;
+        b.hexT = 0.f;
         if (length(b.vel) < cfg::ball::minThrowSpeed)
             b.vel = rng_.direction() * ballBaseCruise(b, p);
         b.gluttonStacks = 0;   // "Glutton" grows per wave
@@ -366,6 +371,7 @@ void World::carryBalls(const WorldParams& p) {
 
 void World::startWave(int wave, const WorldParams& p, bool elite) {
     hard_ = p.hard;
+    asc_ = p.ascension;
     pact_ = p.pact;
     bossWave_ = false;
     boss_ = Boss{};
@@ -386,12 +392,14 @@ void World::beginWave(int wave, bool elite) {
     if (elite) toSpawn_ = static_cast<int>(std::lround(static_cast<float>(toSpawn_) * cfg::map::eliteCountMul));
     if (hard_) toSpawn_ = static_cast<int>(std::lround(static_cast<float>(toSpawn_) * cfg::hard::countMul));
     toSpawn_ = static_cast<int>(std::lround(static_cast<float>(toSpawn_) * pact_.enemyCountMul));   // "Horde" pact
-    waveHpMul_ = elite ? cfg::map::eliteHpMul : 1.f;
+    waveHpMul_ = elite ? cfg::map::eliteHpMul * (asc_ >= 1 ? cfg::asc::eliteHpMul : 1.f) : 1.f;
     eliteWave_ = elite;
+    eliteTrait_ = elite && asc_ >= 6 ? static_cast<EliteTrait>(rng_.irange(1, 4)) : EliteTrait::None;
+    bossRules_ = 0;
     bruteSlots_.clear();
     if (elite) {
         bruteSlots_.push_back(1);   // the last spawn of the wave
-        if (cfg::run::actOfWave(wave) >= 3 || hard_) bruteSlots_.push_back(toSpawn_ / 2);
+        if (cfg::run::actOfWave(wave) >= 3 || hard_ || asc_ >= 1) bruteSlots_.push_back(toSpawn_ / 2);
     } else if (wave >= (hard_ ? cfg::hard::bruteWave : cfg::enemy::bruteWave) &&
                rng_.range(0.f, 1.f) < (hard_ ? cfg::hard::bruteFightChance : cfg::enemy::bruteFightChance)) {
         bruteSlots_.push_back(1);
@@ -417,6 +425,7 @@ sf::Vector2f World::wideArenaSize() const {
 // (hard) wave. The core eases from the boss's far-left spot back to the centre.
 void World::startPostBossWave(int wave, const WorldParams& p, bool elite) {
     hard_ = p.hard;
+    asc_ = p.ascension;
     pact_ = p.pact;
     bossWave_ = false;
     boss_ = Boss{};
@@ -443,6 +452,7 @@ void World::updateCoreSlide(float dt) {
 // core far left, the Orbital finale, and Hive / Warden / Dasher in between.
 void World::startBossWave(int wave, const WorldParams& p) {
     hard_ = p.hard;
+    asc_ = p.ascension;
     bossHpMul_ = p.bossHpMul;
     pact_ = p.pact;
     const int act = cfg::run::actOfWave(wave);
@@ -491,8 +501,28 @@ void World::startBossWave(int wave, const WorldParams& p) {
     boss_.dashDir = normalized(core_.pos - boss_.pos, {-1.f, 0.f});
     boss_.home = boss_.pos;
     boss_.hpSeen = boss_.hp;
+    ascendBoss(false);
 
     carryBalls(p);
+}
+
+// Ascension on a fresh boss: 5 rages harder, 9 gives it a rule (10: the last
+// boss two), 10 more health.
+void World::ascendBoss(bool last) {
+    eliteTrait_ = EliteTrait::None;
+    bossRules_ = 0;
+    hexT_ = cfg::asc::hexEvery;
+    if (asc_ >= 5) boss_.ragePace = cfg::asc::enragePace;
+    if (asc_ >= 10) {
+        boss_.hp *= cfg::asc::allHpMul;
+        boss_.maxHp = boss_.hp;
+        boss_.hpSeen = boss_.hp;
+    }
+    if (asc_ >= 9) {
+        const int n = asc_ >= 10 && last ? 2 : 1;
+        while (static_cast<int>(__builtin_popcount(bossRules_)) < n)
+            bossRules_ |= kBossRules[rng_.irange(0, 2)];
+    }
 }
 
 // A boss's HP in grunts of its wave, padded for a wide squad.
@@ -504,6 +534,7 @@ float World::bossHp(float grunts, int wave) const {
 
 void World::startChargerWave(int wave, const WorldParams& p) {
     hard_ = p.hard;
+    asc_ = p.ascension;
     pact_ = p.pact;
     bossWave_ = true;
     waveHpMul_ = 1.f;
@@ -532,6 +563,7 @@ void World::startChargerWave(int wave, const WorldParams& p) {
     boss_.shockR = cfg::boss::shockRadius * arenaScale();
     boss_.home = boss_.pos;
     boss_.hpSeen = boss_.hp;
+    ascendBoss(false);
 
     carryBalls(p);
 }
@@ -541,6 +573,7 @@ void World::startChargerWave(int wave, const WorldParams& p) {
 // ring of shield enemies spins around it and is topped up while it lives.
 void World::startFinalBossWave(const WorldParams& p) {
     hard_ = p.hard;
+    asc_ = p.ascension;
     pact_ = p.pact;
     bossWave_ = true;
     waveHpMul_ = 1.f;
@@ -576,6 +609,7 @@ void World::startFinalBossWave(const WorldParams& p) {
     boss_.shieldTimer = cfg::finalBoss::shieldRespawn;
     boss_.homeDist = boss_.dist;
     boss_.hpSeen = boss_.hp;
+    ascendBoss(true);
 
     for (int i = 0; i < cfg::finalBoss::shieldCount; ++i)
         spawnOrbiter(static_cast<float>(i) / cfg::finalBoss::shieldCount * 2.f * kPi);
@@ -783,7 +817,7 @@ bool World::grabAt(sf::Vector2f point, float catchRadius) {
     int best = -1;
     float bestDist = catchRadius;
     for (std::size_t i = 0; i < balls_.size(); ++i) {
-        if (balls_[i].snaredBy >= 0) continue;   // held by a Snare
+        if (balls_[i].snaredBy >= 0 || balls_[i].hexT > 0.f) continue;   // held by a Snare / a "Hex"
         if (balls_[i].regrabT > 0.f) continue;   // just thrown: let it fly a moment
         const float d = length(balls_[i].pos - point) / balls_[i].mods.reach;   // "Reach": grabbed from further
         if (d < bestDist) {
@@ -1042,9 +1076,36 @@ void World::advanceCombo(float dt, const WorldParams& p) {
     comboCapTier_ = cfg::combo::baseCapTier * (p.overcharge ? cfg::changer::overchargeMul : 1);   // "Overcharge"
     comboExtra_ = p.creed.bloodlust || p.pact.frenzy ? 1 : 0;   // "Bloodlust" creed / "Frenzy" pact: twice as fast...
     sinceHit_ += dt;
-    if (!p.creed.bloodlust && sinceHit_ > cfg::combo::decayWindow && comboStreak_ > 0) {   // ...and never cools
-        comboStreak_ = std::max(0, comboStreak_ - cfg::combo::bouncesPerTier);
-        sinceHit_ = 0.f;
+    comboNoDecay_ = p.creed.bloodlust;
+    if (!p.creed.bloodlust && sinceHit_ > cfg::combo::decayWindow && comboStreak_ > 0.f) {   // ...and never cools
+        // drains a little at a time - from the cap down, so the bar moves at once (Ascension 7: twice as fast)
+        const float capHits = static_cast<float>(comboCapTier_ * cfg::combo::bouncesPerTier);
+        const float drain = cfg::combo::drainPerSecond * (asc_ >= 7 ? cfg::asc::comboDrainMul : 1.f);
+        comboStreak_ = std::max(0.f, std::min(comboStreak_, capHits) - drain * dt);
+    }
+}
+
+// Ascension, every step: "Regenerating" elites heal; a "Hex" boss freezes the
+// strongest ball now and then.
+void World::ascensionTick(float dt, const WorldParams& p) {
+    if (eliteTrait_ == EliteTrait::Regenerating)
+        for (Enemy& e : enemies_)
+            if (e.hp > 0.f) e.hp = std::min(e.maxHp, e.hp + e.maxHp * cfg::asc::regenPerSec * dt);
+    if (!(bossRules_ & BossRuleHex) || !boss_.targetable()) return;
+    hexT_ -= dt;
+    if (hexT_ > 0.f) return;
+    hexT_ = cfg::asc::hexEvery;
+    Ball* best = nullptr;
+    float top = -1.f;
+    for (std::size_t i = 0; i < balls_.size(); ++i) {
+        Ball& b = balls_[i];
+        if (b.ghost || b.held || b.snaredBy >= 0 || b.hexT > 0.f || static_cast<int>(i) == heldIndex_) continue;
+        if (const float d = ballDamage(b, p); d > top) { top = d; best = &b; }
+    }
+    if (best && balls_.size() > 1) {   // never your only ball
+        best->hexT = cfg::asc::hexTime;
+        best->vel = {0.f, 0.f};
+        best->trail.clear();
     }
 }
 
@@ -1433,6 +1494,7 @@ void World::damageEnemy(Enemy& e, float dmg) {
     if (e.shrinkT > 0.f) dmg *= cfg::ability::shrinkDamage;   // "Shrink" (ability)
     if (const int by = dmgOwner_ >= 0 ? dmgOwner_ : castBall_ ? castBall_->owner : reactBall_ ? reactBall_->owner : -1; by >= 0)
         e.lastBy = by;   // kill credit
+    if (eliteTrait_ == EliteTrait::Armored) dmg *= cfg::asc::armoredTaken;   // Ascension 6
     e.hp -= dmg * (e.brittle > 0.f ? cfg::synergy::brittleMul : 1.f) *
             (1.f + cfg::element::crackDamage * static_cast<float>(e.cracks));   // stone cracks
     e.hitFlash = 1.f;
@@ -2607,7 +2669,8 @@ void World::sweepDeadEnemies(FrameEvents& ev, const WorldParams& p) {
 // mode scale it); then "Phoenix", the dev endless mode, or the run ends.
 void World::coreLoses(float hp, const WorldParams& p, FrameEvents& ev) {
     if (invuln_) return;
-    core_.hp -= hp * p.creed.coreDamageMul * (hard_ ? cfg::hard::coreDamageMul : 1.f);
+    core_.hp -= hp * p.creed.coreDamageMul * (hard_ ? cfg::hard::coreDamageMul : 1.f) *
+                (eliteTrait_ == EliteTrait::Vengeful ? cfg::asc::vengefulCore : 1.f);
     coreHitThisWave_ = true;
     if (core_.hp <= 0.f && phoenixLeft_ > 0) {   // "Phoenix": back from the ashes, once an act
         --phoenixLeft_;
@@ -2700,7 +2763,15 @@ float World::bossTakenMul() const {
 // Every hit on the boss lands straight on its HP (balls, bullets, summons,
 // abilities); here, once a step, what got through is scaled.
 void World::settleBossDamage() {
-    if (boss_.hp < boss_.hpSeen) boss_.hp = boss_.hpSeen - (boss_.hpSeen - boss_.hp) * bossTakenMul();
+    if (boss_.hp < boss_.hpSeen) {
+        float taken = boss_.hpSeen - boss_.hp;
+        if (bossRules_ & BossRuleWarded) {   // Ascension 9 "Warded": only ball contact gets through fully
+            const float contact = std::min(taken, bossContact_);
+            taken = contact + (taken - contact) * cfg::asc::wardedOther;
+        }
+        boss_.hp = boss_.hpSeen - taken * bossTakenMul();
+    }
+    bossContact_ = 0.f;
 }
 
 void World::enterBossStage(int stage, FrameEvents& ev) {
@@ -2831,8 +2902,8 @@ void World::updateBoss(float dt, const WorldParams& p, FrameEvents& ev) {
     boss_.hitFlash *= std::exp(-6.f * dt);
 
     // A phase threshold stops the damage there and starts the next phase.
-    while (boss_.stage < 2 && boss_.hp < boss_.maxHp * B::stageAt[boss_.stage]) {
-        boss_.hp = boss_.maxHp * B::stageAt[boss_.stage];
+    while (boss_.stage < 2 && boss_.hp < boss_.maxHp * stageAt(boss_.stage)) {
+        boss_.hp = boss_.maxHp * stageAt(boss_.stage);
         enterBossStage(boss_.stage + 1, ev);
     }
     boss_.hpSeen = boss_.hp;
@@ -3130,9 +3201,12 @@ void World::ballHitsBoss(Ball& b, float cdMul, const WorldParams& p, FrameEvents
             ev.bursts.push_back({boss_.pos + back * boss_.radius, boss_.radius * 0.8f, theme::ember, nullptr});
         }
     }
+    if (bossRules_ & BossRuleThickHide) mul *= cfg::asc::thickHideContact;   // Ascension 9 "Thick hide"
+    const float before = boss_.hp;
     boss_.hp -= ballDamage(b, p) * (1.f + b.mods.cls.common.bully) * mul;   // "Bully": bosses are bigger
     if (classWorld_.common.contractBoss && b.mods.cls.common.contractBoss > 0.f)   // "Contract" on the boss
         boss_.hp -= boss_.maxHp * b.mods.cls.common.contractBoss;
+    bossContact_ += before - boss_.hp;
     boss_.hitFlash = 1.f;
     boss_.hitCd = B::hitCooldown * cdMul;
     ev.bossHit = true;
@@ -3395,6 +3469,7 @@ FrameEvents World::step(float dt, const WorldParams& p) {
 
     pact_ = p.pact;
     advanceCombo(dt, p);
+    ascensionTick(dt, p);
     updateCoreSlide(dt);
     updateAutoFling(dt, p, ev);
     updateHunters(dt, p);                 // "Hunters" creed
@@ -3407,6 +3482,14 @@ FrameEvents World::step(float dt, const WorldParams& p) {
             b.squash *= std::exp(-cfg::ball::squashDecay * dt);
             pactHeldTick(dt);   // "Hot Potato": held too long, it slips
             continue;
+        }
+        if (b.hexT > 0.f) {   // Ascension boss "Hex": frozen in place, then off again
+            b.hexT -= dt;
+            b.vel = {0.f, 0.f};
+            b.squash *= std::exp(-cfg::ball::squashDecay * dt);
+            if (b.hexT > 0.f) continue;
+            b.hexT = 0.f;
+            b.vel = rng_.direction() * ballCruise(b, p);
         }
         if (b.snaredBy >= 0) {   // held by a Snare until it dies
             updateSnared(b, p);

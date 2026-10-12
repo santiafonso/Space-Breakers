@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <functional>
+#include <map>
 #include <array>
 #include <cmath>
 #include <cstdint>
@@ -58,18 +59,19 @@ std::string currencyLine(const MetaState& m) {
 // centre (Offers.hpp); the web is stretched sideways (kStretchX) into an
 // ellipse so the long side routes use the screen's width.
 constexpr float kRingGap = 124.f;      // pixels between concentric rings (at zoom 1 the web is bigger than the screen)
-constexpr float kStretchX = 1.0f;     // horizontal stretch of the whole web (1: true circles, so the class ring is round)
+constexpr float kStretchX = 1.0f;     // horizontal stretch of the whole web (1: a true circle - the user wants it round)
 constexpr float kInnerPad = 1.1f;     // ring r sits at (r + this) gaps: room for the 9 routes around the centre
 constexpr float kNodeR = 15.f;        // branch node radius
 constexpr float kClassR = 22.f;       // a class node: bigger, with an outer ring
 constexpr float kRootR = 26.f;        // centre node radius
 constexpr float kWebCenterY = 0.53f;  // * size.y
 constexpr int   kBackRings = 7;       // faint rings drawn behind the web
-constexpr float kZoomMin = 0.35f, kZoomMax = 1.6f;
-constexpr float kZoomStart = 1.0f;    // the first visit: the centre and the inner rings
+constexpr float kZoomMin = 0.24f, kZoomMax = 1.6f;
+constexpr float kZoomStart = 0.7f;    // the first visit: the centre and the routes around it
 constexpr float kPanKeySpeed = 620.f; // WASD, px/s
-// Node sizes follow the zoom, a little less than the layout does.
-float nodeScale(float zoom) { return clampf(0.55f + 0.45f * zoom, 0.6f, 1.25f); }
+// Node sizes follow the zoom, a little less than the layout does - but zoomed
+// well out they shrink with it, so the close ones don't run into each other.
+float nodeScale(float zoom) { return clampf(std::min(0.55f + 0.45f * zoom, 0.13f + 1.05f * zoom), 0.36f, 1.25f); }
 
 constexpr float kSkyParallax = 0.3f;   // planets move this much of the camera's pan
 
@@ -85,7 +87,45 @@ float wrapDeg(float a) {   // into (-180, 180]
     return a;
 }
 
-constexpr int kRouteMinTips = 5;
+constexpr int kRouteMinTips = 4;
+
+float webRing(int node);   // (below)
+bool isGodNode(int i);     // (below)
+bool isMasteryNode(int i) { return i >= MetaMasteryStriker && i <= MetaMasteryAlchemist; }
+// The lattice (2026-10-10, the user: "que quede geométrico"): every ring is
+// cut into evenly spaced slots - a multiple of 12, so the rings share their
+// spokes - and every node sits on a slot. Neighbours one or two slots apart on
+// the same ring are joined by faint "constellation" lines (they light up when
+// you own both ends).
+constexpr float kSlotGap = 0.5f;    // the closest two nodes on a ring, in ring gaps
+constexpr float kConstellationReach = 2.7f;    // ring neighbours this close (in ring gaps, along the ring) get a line
+std::vector<std::pair<int, int>> g_constellation;
+
+// The web is an ellipse (kStretchX), so a degree near the top spans more
+// pixels than one at the sides. This bends an even share of the circle into
+// angles that are even in arc length along the ellipse, so the side routes
+// get as much room as the top and bottom ones.
+float evenOnEllipse(float deg) {
+    constexpr int kN = 720;
+    static float cum[kN + 1];
+    static bool built = false;
+    if (!built) {
+        built = true;
+        cum[0] = 0.f;
+        for (int i = 0; i < kN; ++i) {
+            const float a = (static_cast<float>(i) + 0.5f) * 2.f * kPi / kN;
+            const float speed = std::sqrt(kStretchX * kStretchX * std::cos(a) * std::cos(a) + std::sin(a) * std::sin(a));
+            cum[i + 1] = cum[i] + speed;
+        }
+    }
+    float a = std::fmod(deg, 360.f);
+    if (a < 0.f) a += 360.f;
+    const float want = a / 360.f * cum[kN];
+    int i = 0;
+    while (i < kN - 1 && cum[i + 1] < want) ++i;
+    const float f = (want - cum[i]) / std::max(1e-6f, cum[i + 1] - cum[i]);
+    return (static_cast<float>(i) + f) * 360.f / kN;
+}
 
 float webAngle(int node) {
     static float table[MetaUnlockCount];
@@ -94,7 +134,7 @@ float webAngle(int node) {
         built = true;
         std::vector<std::vector<int>> kids(MetaUnlockCount);
         for (int i = 0; i < MetaUnlockCount; ++i)
-            if (!metaNodeRetired(i) && metaUnlockDef(i).parent >= 0) kids[static_cast<std::size_t>(metaUnlockDef(i).parent)].push_back(i);
+            if (!metaNodeRetired(i) && !metaIsBridge(i) && metaUnlockDef(i).parent >= 0) kids[static_cast<std::size_t>(metaUnlockDef(i).parent)].push_back(i);
         std::vector<int> tips(MetaUnlockCount, 0);
         // tips under each node (itself, if it has none), children before parents
         std::function<int(int)> count = [&](int n) {
@@ -135,6 +175,59 @@ float webAngle(int node) {
         table[0] = 0.f;
         for (int i = 0; i < MetaUnlockCount; ++i)
             if (metaNodeRetired(i)) table[i] = metaUnlockDef(i).ang;
+        for (int i = 0; i < MetaUnlockCount; ++i)
+            if (!metaNodeRetired(i)) table[i] = evenOnEllipse(table[i]);
+        {   // snap onto the lattice
+            std::map<int, std::vector<int>> byRing;   // ring x2 -> its nodes
+            for (int i = 1; i < MetaUnlockCount; ++i)
+                if (!metaNodeRetired(i) && !metaIsBridge(i) && !isGodNode(i) && !isMasteryNode(i))
+                    byRing[static_cast<int>(std::lround(webRing(i) * 2.f))].push_back(i);
+            for (auto& [key, v] : byRing) {
+                const float ring = static_cast<float>(key) * 0.5f;
+                const float circ = 2.f * kPi * (ring + kInnerPad);
+                int S = std::max(static_cast<int>(v.size()), static_cast<int>(circ / kSlotGap));
+                S = (S + 11) / 12 * 12;
+                const float slot = 360.f / static_cast<float>(S);
+                auto norm = [](float a) { a = std::fmod(a, 360.f); return a < 0.f ? a + 360.f : a; };
+                std::sort(v.begin(), v.end(), [&](int x, int y) { return norm(table[x]) < norm(table[y]); });
+                std::vector<int> at(v.size());
+                for (std::size_t j = 0; j < v.size(); ++j) {
+                    const int want = static_cast<int>(std::lround(norm(table[v[j]]) / slot));
+                    at[j] = j == 0 ? want : std::max(want, at[j - 1] + 1);
+                }
+                if (!at.empty() && at.back() > at.front() + S - 1) {   // ran round into the first: push back
+                    at.back() = at.front() + S - 1;
+                    for (std::size_t j = at.size() - 1; j-- > 0;) at[j] = std::min(at[j], at[j + 1] - 1);
+                }
+                for (std::size_t j = 0; j < v.size(); ++j) table[v[j]] = static_cast<float>(at[j]) * slot;
+                for (std::size_t j = 0; j < v.size(); ++j) {   // the constellation: close neighbours on this ring
+                    const std::size_t n = (j + 1) % v.size();
+                    if (n == j) break;
+                    int gap = at[n] - at[j];
+                    if (n == 0) gap += S;
+                    const int a = v[j], b = v[n];
+                    const int reach = std::max(1, static_cast<int>(kConstellationReach / (circ / static_cast<float>(S))));
+                    if (gap <= reach && metaUnlockDef(a).parent != b && metaUnlockDef(b).parent != a)
+                        g_constellation.push_back({a, b});
+                }
+            }
+        }
+        // a bridge sits halfway between its two classes
+        for (int i = 0; i < MetaUnlockCount; ++i)
+            if (metaIsBridge(i)) {
+                const float a = table[metaUnlockDef(i).parent], b = table[metaUnlockDef(i).parent2];
+                table[i] = a + wrapDeg(b - a) * 0.5f;
+            }
+        // a god sits straight out from its class, on the outer ring
+        for (int t = 1; t <= 10; ++t)
+            if (const int g = godNode(static_cast<ItemTag>(t)); g >= 0)
+                table[g] = table[classUnlockNode(static_cast<ItemTag>(t))];
+        // a Mastery halfway between its Legendary and its god
+        for (int t = 1; t <= 10; ++t)
+            if (const int ms = masteryNode(static_cast<ItemTag>(t)); ms >= 0) {
+                const float a = table[metaUnlockDef(ms).parent], b = table[godNode(static_cast<ItemTag>(t))];
+                table[ms] = a + wrapDeg(b - a) * 0.5f;
+            }
     }
     return table[node];
 }
@@ -142,7 +235,13 @@ float webAngle(int node) {
 // The class ring: every class node sits on this ring, so the classes read at
 // a glance as one circle (a red hoop behind it marks it). A class the data put
 // further in moves out to it, with everything beyond it on its route.
-constexpr float kClassRing = 4.f;
+constexpr float kClassRing = 4.5f;
+constexpr float kBridgeRing = 0.5f;   // a bridge: this far past the class ring
+constexpr float kOuterBridgeOut = 0.f;   // an outer bridge: this far past the further of its two Legendaries
+constexpr float kPastClassStep = 1.f;   // past the class ring the rings come a little closer (the item chains are long)
+constexpr float kGodR = 24.f;         // a god node: the biggest after the centre
+bool isGodNode(int i) { return metaNodeKind(i) == MetaNodeKind::God; }
+float godRing() { return webRing(MetaGodStriker); }
 
 bool isClassNodeId(int i) {
     return (i >= MetaClassSupport && i <= MetaClassJester) || i == MetaClassSlinger || i == MetaClassStriker ||
@@ -167,12 +266,27 @@ float webRing(int node) {
         for (int i = 0; i < MetaUnlockCount; ++i)
             if (isClassNodeId(i)) classDepth[static_cast<int>(metaUnlockDef(i).branch)] = depth(i);
         for (int i = 0; i < MetaUnlockCount; ++i) {
+            if (metaIsOuterBridge(i)) continue;                                        // (below)
+            if (metaIsBridge(i)) { table[i] = kClassRing + kBridgeRing; continue; }   // just outside the class ring
+            if (isGodNode(i) || isMasteryNode(i)) continue;                              // (below)
             const int d = depth(i);
             const int cd = classDepth[static_cast<int>(metaUnlockDef(i).branch)];
             if (cd <= 0) table[i] = static_cast<float>(d);   // no class on this route (Creeds), or the centre
             else if (d <= cd) table[i] = kClassRing * static_cast<float>(d) / static_cast<float>(cd);
-            else table[i] = kClassRing + static_cast<float>(d - cd);
+            else table[i] = kClassRing + kPastClassStep * static_cast<float>(d - cd);
         }
+        for (int i = 1; i < MetaUnlockCount; ++i)   // the lattice: rings at every half step
+            if (!isGodNode(i) && !isMasteryNode(i)) table[i] = std::max(1.f, std::round(table[i] * 2.f) * 0.5f);
+        float far = 0.f;
+        for (int i = 0; i < MetaUnlockCount; ++i)
+            if (!isGodNode(i) && !isMasteryNode(i) && !metaNodeRetired(i)) far = std::max(far, table[i]);
+        for (int i = 0; i < MetaUnlockCount; ++i)
+            if (isGodNode(i)) table[i] = far + 1.4f;   // every god on one ring, a clear step past the rest
+        for (int i = 0; i < MetaUnlockCount; ++i)   // an outer bridge: out between its two classes' Legendaries
+            if (metaIsOuterBridge(i))
+                table[i] = std::max(table[metaUnlockDef(i).parent], table[metaUnlockDef(i).parent2]) + kOuterBridgeOut;
+        for (int i = 0; i < MetaUnlockCount; ++i)   // a Mastery halfway out from its Legendary to its god
+            if (isMasteryNode(i)) table[i] = (table[metaUnlockDef(i).parent] + far + 1.4f) * 0.5f;
     }
     return table[node];
 }
@@ -182,12 +296,18 @@ float webRing(int node) {
 bool webVisible(int node, const int* unlock) {
     if (metaNodeRetired(node)) return false;
     if (node == 0 || unlock[node] > 0) return true;
-    int steps = 0;
-    for (int k = node; k >= 0; k = metaUnlockDef(k).parent) {
-        if (k != node && (unlock[k] > 0 || k == 0)) return steps <= 2;
-        ++steps;
-    }
-    return false;
+    auto stepsFrom = [unlock](int start) {   // steps from `start` (1 = the parent) back to something owned
+        int steps = 1;
+        for (int k = start; k >= 0; k = metaUnlockDef(k).parent, ++steps)
+            if (unlock[k] > 0 || k == 0) return steps;
+        return 99;
+    };
+    const MetaUnlockDef& d = metaUnlockDef(node);
+    int steps = stepsFrom(d.parent);
+    if (d.parent2 >= 0) steps = std::min(steps, stepsFrom(d.parent2));   // a bridge: from either side
+    for (const MetaLink& l : kMetaLinks)                                   // a cross link: from its other end too
+        if (l.node == node) steps = std::min(steps, stepsFrom(l.from));
+    return steps <= 2;
 }
 
 // The camera is remembered between visits to the web.
@@ -213,13 +333,21 @@ constexpr float kRunPanelW = 220.f;
 constexpr float kRunPanelPad = 14.f;
 
 sf::FloatRect legendPanel(sf::Vector2f s, bool minimised) {
-    const float h = kLegendHead + (minimised ? 0.f : static_cast<float>(kLegendCount) * kLegendRow + 8.f);
+    const float h = kLegendHead + (minimised ? 0.f : static_cast<float>(kLegendCount + 1) * kLegendRow + 14.f);
     return {theme::margin - 10.f, s.y - kPanelBottomGap - h, kLegendW, h};
 }
 // Row i's band inside the legend.
 sf::FloatRect legendRow(sf::Vector2f s, int i) {
     const sf::FloatRect p = legendPanel(s, false);
     return {p.left, p.top + kLegendHead + static_cast<float>(i) * kLegendRow, p.width, kLegendRow};
+}
+// Under the routes, one row of the node shapes: hover one to light every node of that kind.
+constexpr MetaNodeKind kKindRow[] = {MetaNodeKind::Perk, MetaNodeKind::Unlock, MetaNodeKind::Bridge,
+                                     MetaNodeKind::EpicGate, MetaNodeKind::LegendGate, MetaNodeKind::God};
+constexpr int kKindCount = 6;
+sf::FloatRect kindCell(sf::Vector2f s, int i) {
+    const sf::FloatRect row = legendRow(s, kLegendCount);
+    return {row.left + 8.f + static_cast<float>(i) * 22.f, row.top + 6.f, 22.f, row.height};
 }
 sf::FloatRect legendToggle(sf::Vector2f s, bool minimised) {
     const sf::FloatRect p = legendPanel(s, minimised);
@@ -230,12 +358,15 @@ sf::FloatRect legendHeader(sf::Vector2f s, bool minimised) {
     const sf::FloatRect p = legendPanel(s, minimised);
     return {p.left, p.top, p.width, kLegendHead};
 }
-sf::FloatRect runPanel(sf::Vector2f s, float rowGap) {
-    const float h = 3.f * rowGap + 2.f * kRunPanelPad;
+sf::FloatRect runPanel(sf::Vector2f s, float rowGap, int rows = 3) {
+    const float h = static_cast<float>(rows) * rowGap + 2.f * kRunPanelPad;
     return {s.x - theme::margin - 10.f - kRunPanelW, s.y - kPanelBottomGap - h, kRunPanelW, h};
 }
 
+int runRows(App& app) { return app.data().meta.ascMax > 0 ? 4 : 3; }   // Start / Mode / [Ascension] / Back
+
 const sf::Color kPrismColor = theme::puSurge;   // violet - distinct from the core-blue accent
+const sf::Color kGodGold(255, 206, 110);        // the gods' ring and suns
 
 // A route takes its class's colour; Creeds stay a pale bone (a bargain, no class).
 sf::Color branchColor(MetaBranch b) {
@@ -398,11 +529,13 @@ void MenuScreen::draw(App& app, sf::RenderWindow& w) {
 void LoadoutScreen::rebuild(App& app) {
     const sf::Vector2f s = app.size();
     menu_.init(app.font(), theme::fsItem, s.y * 0.050f);
-    menu_.setItems({{"Start run", true},
-                    {app.data().meta.hardMode ? "Mode: Hard" : "Mode: Normal", true},
-                    {"Back", true}});
-    // Bottom-right, the three rows centred in their panel.
-    const sf::FloatRect rp = runPanel(s, s.y * 0.050f);
+    // The Ascension row shows once a won run has opened level 1.
+    std::vector<Menu::Item> items{{"Start run", true}, {app.data().meta.hardMode ? "Mode: Hard" : "Mode: Normal", true}};
+    if (app.data().meta.ascMax > 0) items.push_back({"Ascension " + std::to_string(app.data().meta.ascSel), true});
+    items.push_back({"Back", true});
+    menu_.setItems(items);
+    // Bottom-right, the rows centred in their panel.
+    const sf::FloatRect rp = runPanel(s, s.y * 0.050f, runRows(app));
     menu_.layout({rp.left + rp.width * 0.5f, rp.top + kRunPanelPad + s.y * 0.050f * 0.5f});
 }
 
@@ -492,13 +625,20 @@ int LoadoutScreen::legendAt(App& app, sf::Vector2f mouse) const {
     return -1;
 }
 
+int LoadoutScreen::kindAt(App& app, sf::Vector2f mouse) const {
+    if (g_webView.legendMin) return -1;
+    for (int i = 0; i < kKindCount; ++i)
+        if (kindCell(app.size(), i).contains(mouse)) return static_cast<int>(kKindRow[i]);
+    return -1;
+}
+
 int LoadoutScreen::nodeAt(App& app, sf::Vector2f mouse) const {
     // The panels over the web cover the nodes under them.
     const sf::Vector2f s = app.size();
-    if (legendPanel(s, g_webView.legendMin).contains(mouse) || runPanel(s, s.y * 0.050f).contains(mouse)) return -1;
+    if (legendPanel(s, g_webView.legendMin).contains(mouse) || runPanel(s, s.y * 0.050f, runRows(app)).contains(mouse)) return -1;
     for (int i = 0; i < MetaUnlockCount; ++i) {
         if (!webVisible(i, app.data().meta.unlock)) continue;
-        const float r = ((i == 0 ? kRootR : isClassNode(i) ? kClassR : kNodeR) + 6.f) * nodeScale(zoom_);   // generous but < half the ring gap
+        const float r = ((i == 0 ? kRootR : isGodNode(i) ? kGodR : isClassNode(i) ? kClassR : kNodeR) + 6.f) * nodeScale(zoom_);   // generous but < half the ring gap
         const sf::Vector2f d = mouse - nodePos(app, i);
         if (d.x * d.x + d.y * d.y <= r * r) return i;
     }
@@ -590,7 +730,17 @@ void LoadoutScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse
             app.save();
             rebuild(app);
             return;
-        case 2: app.back(); return;
+        case 2:
+            if (app.data().meta.ascMax > 0) {   // the next run's Ascension: click steps up, wraps to 0
+                MetaState& m = app.data().meta;
+                m.ascSel = m.ascSel >= m.ascMax ? 0 : m.ascSel + 1;
+                app.save();
+                rebuild(app);
+                return;
+            }
+            app.back();
+            return;
+        case 3: app.back(); return;
         default: break;
     }
     if (legendHeader(app.size(), g_webView.legendMin).contains(mouse)) {   // minimise / open the legend
@@ -652,6 +802,8 @@ void LoadoutScreen::update(App& app, float dt, sf::Vector2f mouse) {
     clampPan(app);
     g_webView = {true, zoomT_, pan_, selNode_, g_webView.legendMin, g_webView.hidden};   // the camera; the legend's fold and Hide web stay
     legendHover_ = legendAt(app, mouse);
+    kindHover_ = kindAt(app, mouse);
+    uisound::hover(&kindHover_, kindHover_);
     uisound::hover(&g_webView, legendHeader(app.size(), g_webView.legendMin).contains(mouse) ? 0 : -1);
     if (length(mouse - lastMouse_) > 0.5f) { keyNav_ = false; lastMouse_ = mouse; }
     hoverNode_ = g_webView.hidden ? -1 : nodeAt(app, mouse);
@@ -678,20 +830,23 @@ void LoadoutScreen::drawInfoCard(App& app, sf::RenderWindow& w, int node) const 
     // A card on the left: the name, its route, WHAT IT GIVES in readable
     // text, the level it's at, and what the next step costs (or what's missing).
     const float cw = 340.f;
-    const std::vector<std::string> lines = wrapText(app.font(), d.effect, theme::fsBody, cw - 32.f);
+    const std::vector<std::string> lines = wrapText(app.font(), metaNodeEffect(node), theme::fsBody, cw - 32.f);
     const float ch = 124.f + 22.f * static_cast<float>(lines.size());
     const sf::Vector2f o(theme::margin, s.y * 0.14f);
 
     draw::panel(w, {o.x, o.y, cw, ch}, col, 1.f, 0.3f);
     draw::box(w, {o.x, o.y, 4.f, ch}, 0.f, col, col);   // branch colour spine
 
-    sf::Text name = makeText(app.font(), d.name, theme::fsHeading, theme::textHi);
+    sf::Text name = makeText(app.font(), metaNodeName(node), theme::fsHeading, theme::textHi);
     name.setPosition(o.x + 16.f, o.y + 10.f);
     w.draw(name);
-    drawLabel(w, app.font(), d.branch == MetaBranch::Root || d.branch == MetaBranch::Creeds
-                                 ? std::string(branchLabel(d.branch))
-                                 : std::string(branchLabel(d.branch)) + " route",
-              11, {o.x + 16.f, o.y + 52.f}, col, -1);
+    const MetaNodeKind kind = metaNodeKind(node);
+    std::string where = kind == MetaNodeKind::Bridge
+                            ? std::string(branchLabel(d.branch)) + " - " + branchLabel(metaUnlockDef(d.parent2).branch)
+                        : d.branch == MetaBranch::Root || d.branch == MetaBranch::Creeds ? std::string(branchLabel(d.branch))
+                                                                                          : std::string(branchLabel(d.branch)) + " route";
+    if (kind != MetaNodeKind::Root) where += std::string("   -   ") + metaNodeKindName(kind);
+    drawLabel(w, app.font(), where, 11, {o.x + 16.f, o.y + 52.f}, col, -1);
     char lv[48];
     std::snprintf(lv, sizeof(lv), "level %d / %d", lvl, d.maxLevel);
     drawLabel(w, app.font(), lv, 11, {o.x + cw - 16.f, o.y + 52.f}, theme::textLo, 1);
@@ -711,7 +866,11 @@ void LoadoutScreen::drawInfoCard(App& app, sf::RenderWindow& w, int node) const 
         foot = lvl > 1 ? "fully unlocked" : "unlocked";
         footCol = col;
     } else if (!avail) {
-        foot = std::string("locked - get ") + metaUnlockDef(d.parent).name + " first";
+        foot = std::string("locked - get ") + metaNodeName(d.parent);
+        if (d.parent2 >= 0) foot += std::string(" or ") + metaNodeName(d.parent2);
+        for (const MetaLink& l : kMetaLinks)
+            if (l.node == node) foot += std::string(" or ") + metaNodeName(l.from);
+        foot += " first";
     } else {
         const bool afford = isPrism ? m.prisms >= cost : m.cores >= cost;
         foot = std::string(lvl > 0 ? "next level  " : "unlock  ") + std::to_string(cost) + (isPrism ? " prisms" : " cores") +
@@ -774,23 +933,33 @@ void LoadoutScreen::draw(App& app, sf::RenderWindow& w) {
         const float ra = clampf(introPop(it, 0.14f, 0.4f), 0.f, 1.f);
         const float rad = (kClassRing + kInnerPad) * kRingGap * zoom_;
         const float th = nodeScale(zoom_);
-        draw::ring(w, centre, rad, 26.f * th, withAlpha(theme::coreLow, 0.06f * ra), 0.f, 2.f * kPi, 160);
-        draw::ring(w, centre, rad, 2.5f * th, withAlpha(theme::coreLow, 0.55f * ra), 0.f, 2.f * kPi, 160);
-        draw::ring(w, centre, rad + 9.f * th, 1.f, withAlpha(theme::coreLow, 0.22f * ra), 0.f, 2.f * kPi, 160);
-        draw::ring(w, centre, rad - 9.f * th, 1.f, withAlpha(theme::coreLow, 0.22f * ra), 0.f, 2.f * kPi, 160);
-        // its name sits in the widest gap between two classes, just outside the hoop
-        std::vector<float> angs;
-        for (int i = 0; i < MetaUnlockCount; ++i)
-            if (isClassNode(i)) angs.push_back(std::fmod(webAngle(i) + 720.f, 360.f));
-        std::sort(angs.begin(), angs.end());
-        float gapMid = 180.f, gapBest = -1.f;
-        for (std::size_t k = 0; k < angs.size(); ++k) {
-            const float a0 = angs[k], a1 = k + 1 < angs.size() ? angs[k + 1] : angs.front() + 360.f;
-            if (a1 - a0 > gapBest) { gapBest = a1 - a0; gapMid = (a0 + a1) * 0.5f; }
+        auto hoop = [&](float R, float thick, sf::Color c) {   // stretched like the web
+            sf::CircleShape e(R);
+            e.setOrigin(R, R);
+            e.setPosition(centre);
+            e.setScale(kStretchX, 1.f);
+            e.setPointCount(160);
+            e.setFillColor(sf::Color::Transparent);
+            e.setOutlineThickness(thick);
+            e.setOutlineColor(c);
+            w.draw(e);
+        };
+        hoop(rad + 13.f * th, 26.f * th, withAlpha(theme::coreLow, 0.06f * ra));   // (an outline grows outward: centre the band)
+        hoop(rad + 1.25f * th, 2.5f * th, withAlpha(theme::coreLow, 0.55f * ra));
+        hoop(rad + 9.f * th, 1.f, withAlpha(theme::coreLow, 0.22f * ra));
+        hoop(rad - 9.f * th, 1.f, withAlpha(theme::coreLow, 0.22f * ra));
+    }
+
+    {   // the gods' ring: a thin gold hoop out past everything, the suns on it
+        const float ga = clampf(introPop(it, 0.2f, 0.4f), 0.f, 1.f);
+        const float rad = (godRing() + kInnerPad) * kRingGap * zoom_;
+        const float th = nodeScale(zoom_);
+        draw::ring(w, centre, rad, 18.f * th, withAlpha(kGodGold, 0.04f * ga), 0.f, 2.f * kPi, 200);
+        draw::ring(w, centre, rad, 1.5f * th, withAlpha(kGodGold, 0.35f * ga), 0.f, 2.f * kPi, 200);
+        for (int k = 0; k < 60; ++k) {   // fine dashes just inside, turning slowly
+            const float a0 = skyT_ * 0.03f + static_cast<float>(k) * (2.f * kPi / 60.f);
+            draw::ring(w, centre, rad - 7.f * th, 1.f, withAlpha(kGodGold, 0.25f * ga), a0, a0 + 0.04f, 3);
         }
-        const float ga = gapMid * kPi / 180.f;
-        const sf::Vector2f dir{std::sin(ga), -std::cos(ga)};
-        drawLabel(w, app.font(), "CLASSES", 11, centre + dir * (rad + 20.f * th), withAlpha(theme::coreLow, 0.75f * ra), 0);
     }
 
     // Links under the nodes - quiet unless both ends (or the parent) are earned.
@@ -799,17 +968,70 @@ void LoadoutScreen::draw(App& app, sf::RenderWindow& w) {
         if (d.parent < 0 || !webVisible(i, m.unlock)) continue;
         const float la = clampf(introPop(it, 0.16f + 0.05f * nodeRing(i), 0.3f), 0.f, 1.f);
         if (la <= 0.001f) continue;
-        const sf::Vector2f a = nodePos(app, d.parent);
         const sf::Vector2f b = nodePos(app, i);
-        const sf::Color col = branchColor(d.branch);
         const bool lit = m.unlock[i] > 0;
-        const bool open = !lit && m.unlock[d.parent] > 0;
-        const float focus = (legendHover_ < 0 || static_cast<int>(d.branch) == legendHover_) ? 1.f : 0.25f;
         const float th = nodeScale(zoom_);
-        if (lit) drawLink(w, a, b, 7.f * th, withAlpha(col, 0.10f * la * focus));   // a soft glow under an earned link
-        drawLink(w, a, b, (lit ? 3.f : 1.5f) * th,
-                 lit ? withAlpha(col, 0.75f * la * focus)
-                     : withAlpha(open ? col : theme::arenaEdge, (open ? 0.35f : 0.22f) * la * focus));
+        for (int par : {d.parent, d.parent2}) {   // a bridge hangs from both its classes, each side in its colour
+            if (par < 0 || !webVisible(par, m.unlock)) continue;
+            const MetaBranch br = metaUnlockDef(par).branch;
+            const sf::Color col = branchColor(br);
+            const sf::Vector2f a = nodePos(app, par);
+            const bool open = !lit && m.unlock[par] > 0;
+            const float focus = (legendHover_ < 0 || static_cast<int>(br) == legendHover_ ||
+                                 static_cast<int>(d.branch) == legendHover_) ? 1.f : 0.25f;
+            if (lit) drawLink(w, a, b, 6.f * th, withAlpha(col, 0.05f * la * focus));   // a soft glow under an earned link
+            drawLink(w, a, b, (lit ? 2.2f : 1.3f) * th,
+                     lit ? withAlpha(col, 0.42f * la * focus)
+                         : withAlpha(open ? col : theme::arenaEdge, (open ? 0.24f : 0.12f) * la * focus));
+        }
+    }
+
+    // The constellations: close neighbours on a ring, joined by hairlines -
+    // barely there until you own both ends, then a soft line in their colours.
+    for (const auto& [ca, cb] : g_constellation) {
+        if (!webVisible(ca, m.unlock) || !webVisible(cb, m.unlock)) continue;
+        const float la = clampf(introPop(it, 0.2f + 0.05f * nodeRing(ca), 0.3f), 0.f, 1.f);
+        if (la <= 0.001f) continue;
+        const bool lit = m.unlock[ca] > 0 && m.unlock[cb] > 0;
+        const sf::Color col = lerpColor(branchColor(metaUnlockDef(ca).branch), branchColor(metaUnlockDef(cb).branch), 0.5f);
+        const float th = nodeScale(zoom_);
+        const sf::Vector2f a = nodePos(app, ca), b = nodePos(app, cb);
+        const bool half = !lit && (m.unlock[ca] > 0 || m.unlock[cb] > 0);
+        drawLink(w, a, b, std::max(1.f, (lit ? 1.8f : 1.2f) * th),
+                 lit ? withAlpha(lerpColor(col, sf::Color::White, 0.6f), 0.35f * la)
+                     : withAlpha(half ? col : theme::arenaEdge, (half ? 0.16f : 0.10f) * la));
+        if (lit) {   // a faint star between them, twinkling
+            const float tw = 0.5f + 0.5f * std::sin(skyT_ * 1.7f + static_cast<float>(ca * 7 + cb));
+            draw::glow(w, (a + b) * 0.5f, 6.f * th, sf::Color::White, 0.25f * tw * la);
+            drawDot(w, (a + b) * 0.5f, 1.4f * th, withAlpha(sf::Color::White, (0.4f + 0.4f * tw) * la));
+        }
+    }
+
+    // Cross links: a second way in from a neighbouring route - drawn finer,
+    // in the colour of the route they come from.
+    for (const MetaLink& l : kMetaLinks) {
+        if (!webVisible(l.node, m.unlock) || !webVisible(l.from, m.unlock)) continue;
+        const float la = clampf(introPop(it, 0.16f + 0.05f * nodeRing(l.node), 0.3f), 0.f, 1.f);
+        if (la <= 0.001f) continue;
+        const MetaBranch br = metaUnlockDef(l.from).branch;
+        const sf::Color col = branchColor(br);
+        const bool lit = m.unlock[l.node] > 0 && m.unlock[l.from] > 0;
+        const bool open = m.unlock[l.from] > 0;
+        const float focus = (legendHover_ < 0 || static_cast<int>(br) == legendHover_ ||
+                             static_cast<int>(metaUnlockDef(l.node).branch) == legendHover_) ? 1.f : 0.25f;
+        const float th = nodeScale(zoom_);
+        const sf::Vector2f a = nodePos(app, l.from), b = nodePos(app, l.node);
+        // A clean dotted line, so it reads as "another way in", not the route
+        // itself: small round dots, evenly spread, stopping short of both nodes.
+        const float gapEnd = (kNodeR + 7.f) * th;
+        const float L = length(b - a) - 2.f * gapEnd;
+        if (L < 4.f) continue;
+        const sf::Vector2f dir = (b - a) / (L + 2.f * gapEnd);
+        const sf::Vector2f from = a + dir * gapEnd;
+        const int n = std::max(2, static_cast<int>(std::lround(L / (11.f * th))));
+        const sf::Color dc = withAlpha(lit || open ? col : theme::arenaEdge, (lit ? 0.45f : open ? 0.28f : 0.14f) * la * focus);
+        for (int k = 0; k <= n; ++k)
+            drawDot(w, from + dir * (L * static_cast<float>(k) / static_cast<float>(n)), (lit ? 1.5f : 1.1f) * th, dc);
     }
 
     // Nodes. Only the one under the cursor / keyboard selection lights up.
@@ -826,11 +1048,12 @@ void LoadoutScreen::draw(App& app, sf::RenderWindow& w) {
         const sf::Color col = branchColor(d.branch);
         const sf::Vector2f p = nodePos(app, i);
         const bool classNode = isClassNode(i);
-        const float baseR = (i == 0 ? kRootR : classNode ? kClassR : kNodeR);
+        const float baseR = (i == 0 ? kRootR : isGodNode(i) ? kGodR : classNode ? kClassR : kNodeR);
         const float g = glow_[i];                 // 0 = idle, 1 = lit
         const float pop = introPop(it, 0.12f + 0.06f * nodeRing(i), 0.34f);
         if (pop <= 0.001f) continue;
-        const bool inFocus = legendHover_ < 0 || static_cast<int>(d.branch) == legendHover_ || i == 0;
+        const bool inFocus = kindHover_ >= 0 ? static_cast<int>(metaNodeKind(i)) == kindHover_
+                                             : legendHover_ < 0 || static_cast<int>(d.branch) == legendHover_ || i == 0;
         const float na = clampf(pop, 0.f, 1.f) * (inFocus ? 1.f : 0.25f);   // intro alpha, legend focus
         const float ns = nodeScale(zoom_);
         const float r = baseR * ns * clampf(pop, 0.f, 1.12f) *
@@ -865,8 +1088,72 @@ void LoadoutScreen::draw(App& app, sf::RenderWindow& w) {
             body.setFillColor(withAlpha(theme::arenaEdge, 0.14f * na));
             body.setOutlineColor(withAlpha(theme::arenaEdge, (0.34f + 0.4f * g) * na));
         }
+        const MetaNodeKind kind = metaNodeKind(i);
         if (!classNode) {
-            w.draw(body);
+            // Each kind of node has its own shape: a perk is a circle, an
+            // unlock a square, a class's epics a hexagon, its legendaries a
+            // star, a bridge a circle split between its two classes.
+            const sf::Color fillC = body.getFillColor(), lineC = body.getOutlineColor();
+            const float th = 2.f * ns;
+            switch (kind) {
+                case MetaNodeKind::Unlock:
+                    draw::polygon(w, p, r * 1.2f, 4, kPi * 0.25f, fillC, fillC);
+                    draw::polygonOutline(w, p, r * 1.2f, 4, kPi * 0.25f, th, lineC);
+                    break;
+                case MetaNodeKind::EpicGate: {
+                    const sf::Color tc = tierColor(Tier::Epic);
+                    draw::polygon(w, p, r * 1.15f, 6, kPi / 6.f, fillC, fillC);
+                    draw::polygonOutline(w, p, r * 1.15f, 6, kPi / 6.f, th, lineC);
+                    draw::polygonOutline(w, p, r * 1.15f + 5.f * ns, 6, kPi / 6.f, 1.2f * ns,
+                                         withAlpha(tc, (owned ? 0.8f : avail ? 0.5f : 0.25f) * na));
+                    break;
+                }
+                case MetaNodeKind::LegendGate: {
+                    const sf::Color tc = tierColor(Tier::Legendary);
+                    const float spin = skyT_ * 0.2f;
+                    draw::polygon(w, p, r * 1.25f, 4, spin, fillC, fillC);   // two squares: an eight-point star
+                    draw::polygon(w, p, r * 1.25f, 4, spin + kPi * 0.25f, fillC, fillC);
+                    draw::polygonOutline(w, p, r * 1.25f, 4, spin, th, lineC);
+                    draw::polygonOutline(w, p, r * 1.25f, 4, spin + kPi * 0.25f, th, lineC);
+                    draw::ring(w, p, r * 1.25f + 5.f * ns, 1.2f * ns, withAlpha(tc, (owned ? 0.8f : avail ? 0.5f : 0.25f) * na));
+                    break;
+                }
+                case MetaNodeKind::God: {
+                    // A god: a small sun - gold rays turning round a disc in its
+                    // class's colour, a gold rim, a halo. Dim until it's in reach.
+                    const float live = owned ? 1.f : avail ? 0.65f : 0.35f;
+                    const sf::Color gold = withAlpha(owned || avail ? kGodGold : lerpColor(kGodGold, theme::arenaEdge, 0.5f), live * na);
+                    draw::glow(w, p, r * 3.6f, owned ? kGodGold : col, (owned ? 0.42f : 0.2f) * na);
+                    const float spin = skyT_ * 0.25f + static_cast<float>(i);
+                    for (int k = 0; k < 12; ++k) {   // rays, long and short
+                        const float an = spin + static_cast<float>(k) * (2.f * kPi / 12.f);
+                        const sf::Vector2f sd{std::cos(an), std::sin(an)};
+                        const float L = (k % 2 == 0 ? 15.f : 8.f) * ns;
+                        draw::line(w, p + sd * (r + 4.f * ns), p + sd * (r + 4.f * ns + L), (k % 2 == 0 ? 2.2f : 1.4f) * ns, gold);
+                    }
+                    w.draw(body);
+                    draw::ring(w, p, r, 2.5f * ns, gold);
+                    draw::ring(w, p, r * 0.62f, 1.2f * ns, withAlpha(lerpColor(col, sf::Color::White, 0.5f), live * na));
+                    draw::polygon(w, p, r * 0.32f, 4, spin * 2.f, gold, gold);   // its spark at the heart
+                    break;
+                }
+                case MetaNodeKind::Bridge: {
+                    w.draw(body);
+                    // the half facing its second class takes that class's colour
+                    const sf::Color colB = branchColor(metaUnlockDef(d.parent2).branch);
+                    const sf::Vector2f tb = nodePos(app, d.parent2) - p;
+                    const float ang = std::atan2(tb.y, tb.x);
+                    const float fa = static_cast<float>(fillC.a) / 255.f, oa = static_cast<float>(lineC.a) / 255.f;
+                    const bool tinted = owned || avail;
+                    draw::ring(w, p, r * 0.5f, r, withAlpha(tinted ? colB : fillC, fa), ang - kPi * 0.5f,
+                               ang + kPi * 0.5f, 20);
+                    draw::ring(w, p, r, th, withAlpha(tinted ? colB : lineC, oa), ang - kPi * 0.5f, ang + kPi * 0.5f, 20);
+                    break;
+                }
+                default:
+                    w.draw(body);
+                    break;
+            }
         } else {
             // A class is a goal, not a step: a hexagon in a strong glow, with an
             // orbit of its own - a turning dashed ring and three moons in its colour.
@@ -904,12 +1191,12 @@ void LoadoutScreen::draw(App& app, sf::RenderWindow& w) {
         // owned multi-level nodes show their level pips.
         // Every node names itself once zoomed in enough to read it: earned in
         // its colour, within reach bright, the rest dim.
-        if (g < 0.03f && i != 0 && !classNode && zoom_ >= 0.6f) {
+        if (g < 0.03f && i != 0 && !classNode && !isGodNode(i) && zoom_ >= 0.5f) {
             const sf::Color lc = owned ? lerpColor(col, sf::Color::White, 0.25f)
                                : afford ? theme::textHi
                                : avail ? theme::textLo
                                        : theme::textDim;
-            drawOutward(w, app.font(), d.name, p, p - centre, r + (owned && d.maxLevel > 1 ? 8.f : 0.f),
+            drawOutward(w, app.font(), metaNodeName(i), p, p - centre, r + (owned && d.maxLevel > 1 ? 8.f : 0.f),
                         withAlpha(lc, (inFocus ? 0.95f : 0.4f) * na));
         }
         // a class node always names its class (the goal at the end of the route)
@@ -923,17 +1210,21 @@ void LoadoutScreen::draw(App& app, sf::RenderWindow& w) {
         }
         if (g < 0.03f && i == 0)
             drawLabel(w, app.font(), d.name, 12, {p.x, p.y + r + 14.f}, withAlpha(theme::textHi, na), 0);
-        if (g < 0.03f && owned && d.maxLevel > 1) {   // level pips just under the node
-            const float span = static_cast<float>(d.maxLevel - 1) * 7.f;
+        if (g < 0.03f && isGodNode(i))   // a god always names itself, in gold, outward
+            drawOutward(w, app.font(), metaNodeName(i), p, p - centre, r + 22.f * ns,
+                        withAlpha(owned ? kGodGold : avail ? lerpColor(kGodGold, theme::textLo, 0.4f) : theme::textDim, na));
+        if (g < 0.03f && owned && d.maxLevel > 1 && zoom_ >= 0.4f) {   // level pips just under the node
+            const float step = 7.f * ns;
+            const float span = static_cast<float>(d.maxLevel - 1) * step;
             for (int k = 0; k < d.maxLevel; ++k)
-                drawDot(w, {p.x - span * 0.5f + static_cast<float>(k) * 7.f, p.y + r + 7.f}, 2.2f,
+                drawDot(w, {p.x - span * 0.5f + static_cast<float>(k) * step, p.y + r + 7.f * ns}, 2.2f * ns,
                         withAlpha(k < lvl ? lerpColor(col, sf::Color::White, 0.3f) : theme::textDim, na));
         }
 
         // name / level / cost only while lit
         if (g > 0.03f) {
             const float a = clampf(g * 1.5f, 0.f, 1.f);
-            drawCentered(w, app.font(), d.name, theme::fsBody, {p.x, p.y - r - 16.f},
+            drawCentered(w, app.font(), metaNodeName(i), theme::fsBody, {p.x, p.y - r - 16.f},
                          withAlpha(theme::textHi, a));
 
             std::string tag;
@@ -1017,7 +1308,9 @@ void LoadoutScreen::draw(App& app, sf::RenderWindow& w) {
         draw::box(w, p, theme::corner, withAlpha(theme::bg, 0.88f * la), withAlpha(theme::bg, 0.88f * la),
                   withAlpha(theme::arenaEdge, 0.6f * la), 1.f);
         const float hy = p.top + kLegendHead * 0.5f;
-        drawLabel(w, app.font(), "routes", 10, {p.left + 12.f, hy}, withAlpha(theme::textDim, la), -1);
+        // the header names the shape under the pointer, else it's the routes list
+        drawLabel(w, app.font(), kindHover_ >= 0 ? metaNodeKindName(static_cast<MetaNodeKind>(kindHover_)) : "routes", 10,
+                  {p.left + 12.f, hy}, withAlpha(kindHover_ >= 0 ? theme::textHi : theme::textDim, la), -1);
         const sf::FloatRect tg = legendToggle(s, mini);
         const bool tgHot = legendHeader(s, mini).contains(lastMouse_);
         const sf::Color tc = withAlpha(tgHot ? theme::textHi : theme::textDim, la);
@@ -1044,12 +1337,50 @@ void LoadoutScreen::draw(App& app, sf::RenderWindow& w) {
                 drawLabel(w, app.font(), std::to_string(owned) + " / " + std::to_string(total), 12,
                           {row.left + row.width - 12.f, cy}, withAlpha(theme::textDim, la), 1);
             }
+            // the shapes: what each kind of node looks like, its name on hover
+            const sf::FloatRect kr = legendRow(s, kLegendCount);
+            draw::line(w, {kr.left + 10.f, kr.top + 3.f}, {kr.left + kr.width - 10.f, kr.top + 3.f}, 1.f,
+                       withAlpha(theme::arenaEdge, 0.5f * la));
+            for (int k = 0; k < kKindCount; ++k) {
+                const sf::FloatRect c = kindCell(s, k);
+                const sf::Vector2f q{c.left + c.width * 0.5f, c.top + c.height * 0.5f};
+                const bool hot = kindHover_ == static_cast<int>(kKindRow[k]);
+                const sf::Color ic = withAlpha(hot ? theme::textHi : theme::textLo, la);
+                const float ir = hot ? 6.5f : 5.5f;
+                switch (kKindRow[k]) {
+                    case MetaNodeKind::Unlock:
+                        draw::polygonOutline(w, q, ir * 1.2f, 4, kPi * 0.25f, 1.5f, ic);
+                        break;
+                    case MetaNodeKind::Bridge:
+                        draw::ring(w, q, ir, 1.5f, ic);
+                        draw::ring(w, q, ir * 0.5f, ir, ic, -kPi * 0.5f, kPi * 0.5f, 12);
+                        break;
+                    case MetaNodeKind::EpicGate:
+                        draw::polygonOutline(w, q, ir * 1.15f, 6, kPi / 6.f, 1.5f, withAlpha(tierColor(Tier::Epic), la));
+                        break;
+                    case MetaNodeKind::LegendGate:
+                        draw::polygonOutline(w, q, ir * 1.2f, 4, 0.f, 1.5f, withAlpha(tierColor(Tier::Legendary), la));
+                        draw::polygonOutline(w, q, ir * 1.2f, 4, kPi * 0.25f, 1.5f, withAlpha(tierColor(Tier::Legendary), la));
+                        break;
+                    case MetaNodeKind::God:
+                        for (int j = 0; j < 8; ++j) {
+                            const float an = static_cast<float>(j) * 0.785f;
+                            const sf::Vector2f sd{std::cos(an), std::sin(an)};
+                            draw::line(w, q + sd * (ir * 0.8f), q + sd * (ir * 1.35f), 1.3f, withAlpha(kGodGold, la));
+                        }
+                        draw::ring(w, q, ir * 0.7f, 1.5f, withAlpha(kGodGold, la));
+                        break;
+                    default:
+                        draw::ring(w, q, ir, 1.5f, ic);
+                        break;
+                }
+            }
         }
     }
 
     {   // a backing for the run buttons, so the web passes under them cleanly
         const float ma = clampf(introPop(it, 0.2f), 0.f, 1.f);
-        draw::box(w, runPanel(s, s.y * 0.050f), theme::corner, withAlpha(theme::bg, 0.88f * ma),
+        draw::box(w, runPanel(s, s.y * 0.050f, runRows(app)), theme::corner, withAlpha(theme::bg, 0.88f * ma),
                   withAlpha(theme::bg, 0.88f * ma), withAlpha(theme::arenaEdge, 0.6f * ma), 1.f);
     }
     menu_.draw(w, it);
@@ -1058,6 +1389,17 @@ void LoadoutScreen::draw(App& app, sf::RenderWindow& w) {
                     "enemies tougher, faster and more of them, bosses much tougher, Brutes everywhere, "
                     "enemies hit the core harder and no free repair between fights. Pays x1.75 cores. Click to toggle.",
                     theme::coreLow);
+    if (menu_.hovered() == 2 && app.data().meta.ascMax > 0) {   // the rules this level adds up to
+        const int lvl = app.data().meta.ascSel;
+        std::string desc;
+        if (lvl == 0) desc = "no extra rules.";
+        for (int k = 1; k <= lvl; ++k) desc += std::to_string(k) + ": " + ascensionRule(k) + ".  ";
+        char pay[96];
+        std::snprintf(pay, sizeof(pay), "Pays x%.2f cores%s. Win at your highest level to open the next. Click to change.",
+                      1.f + cfg::asc::coresPerLevel * static_cast<float>(lvl), lvl >= cfg::asc::prismLevel ? " and +1 prism on a win" : "");
+        desc += pay;
+        drawTooltip(w, app.font(), lastMouse_, s, "Ascension " + std::to_string(lvl), desc, theme::coreLow);
+    }
 }
 
 // ================================================================ Play
@@ -2055,8 +2397,11 @@ void BossWinScreen::draw(App& app, sf::RenderWindow& w) {
                       pr == 1 ? "prism" : "prisms");
         drawCenteredPop(w, app.font(), line, theme::fsHeading, {s.x * 0.5f, s.y * 0.28f + 46.f},
                         theme::accent, introPop(it, 0.16f));
-        drawCenteredPop(w, app.font(), "run complete", theme::fsBody, {s.x * 0.5f, s.y * 0.28f + 78.f},
-                        theme::textDim, introPop(it, 0.24f));
+        const int opened = app.lastRunAscUnlocked();
+        drawCenteredPop(w, app.font(), opened > 0 ? "run complete  -  Ascension " + std::to_string(opened) + " unlocked"
+                                                  : std::string("run complete"),
+                        theme::fsBody, {s.x * 0.5f, s.y * 0.28f + 78.f}, opened > 0 ? theme::coreLow : theme::textDim,
+                        introPop(it, 0.24f));
     }
 
     // Clean-play bonuses this boss earned: one quiet line under the result.
@@ -2108,6 +2453,7 @@ void RunOverScreen::draw(App& app, sf::RenderWindow& w) {
     else if (r.elite) where += "elite fight";
     else where += "stage " + std::to_string(std::max(r.row, 1)) + " / " + std::to_string(r.rows + 1);
     if (r.hard) where += "   hard";
+    if (r.ascension > 0) where += "   ascension " + std::to_string(r.ascension);
     std::string cause;
     if (r.killer == World::kCoreHitByBoss) cause = "the boss reached the core";
     else if (r.killer == World::kCoreHitByShot) cause = "a boss shot got through";

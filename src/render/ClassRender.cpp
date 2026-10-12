@@ -401,6 +401,7 @@ void worldStyle(sf::RenderTarget& t, const World& world) {
 
 void fillShape(sf::RenderTarget& t, std::initializer_list<sf::Vector2f> pts, sf::Color fill);   // (below)
 void drawDigit(sf::RenderTarget& t, sf::Vector2f c, float h, int d, sf::Color col);
+void drawSlotSymbol(sf::RenderTarget& t, sf::Vector2f c, float h, int sym, float a);   // (below: 7, clover, coin)
 
 // ==================================================================== Abilities
 // Each ability has its own small gesture, in the ball's colours, short and
@@ -562,20 +563,51 @@ void drawFx(sf::RenderTarget& t, const CommonWorld::Fx& f, float k) {
             break;
         }
         // ---- items: one shape each
-        case F::Slash: {   // "Death sentence": one long clean cut through it, and a hairline echo
-            const sf::Vector2f d{0.707f, -0.707f};
-            const float L = f.r * (0.4f + 0.6f * easeOut(clampf(u / 0.3f, 0.f, 1.f)));
-            draw::line(t, f.a - d * L, f.a + d * L, (3.f * fl + 0.5f) * k, withAlpha(sf::Color::White, 0.9f * fl));
-            draw::line(t, f.a - d * L + sf::Vector2f{4.f, 4.f} * k, f.a + d * L + sf::Vector2f{4.f, 4.f} * k, 1.f * k,
-                       withAlpha(f.color, 0.7f * fl));
+        case F::Slash: {   // "Death sentence": a blade swipes across it, bright at the edge, then the cut opens and flecks fly
+            const sf::Vector2f d{0.707f, -0.707f}, n{0.707f, 0.707f};
+            const float sw = easeOut(clampf(u / 0.25f, 0.f, 1.f));
+            const sf::Vector2f p0 = f.a - d * f.r, p1 = p0 + d * (2.f * f.r * sw);
+            if (u < 0.35f) {   // the swipe itself
+                const float s = 1.f - u / 0.35f;
+                draw::line(t, p0, p1, (4.f * s + 1.f) * k, withAlpha(sf::Color::White, 0.95f * s));
+                draw::glow(t, p1, 12.f * k, f.color, 0.6f * s);
+            }
+            if (u >= 0.2f) {   // the cut opens: its two lips drift apart
+                const float v = easeOut(clampf((u - 0.2f) / 0.8f, 0.f, 1.f));
+                const float o = 5.f * k * v;
+                for (float sd : {-1.f, 1.f})
+                    draw::line(t, f.a - d * (f.r * 0.85f) + n * (sd * o), f.a + d * (f.r * 0.85f) + n * (sd * o), 1.5f * k,
+                               withAlpha(sd > 0.f ? hot : f.color, 0.85f * fl));
+                for (int i = 0; i < 5; ++i) {   // flecks thrown off the cut
+                    const float h = hash01(f.a.x * 0.13f + static_cast<float>(i) * 1.7f);
+                    const sf::Vector2f q = f.a + d * (f.r * (h - 0.5f) * 1.4f) + n * ((i % 2 ? 1.f : -1.f) * f.r * 0.6f * v);
+                    draw::disc(t, q, 1.6f * k, withAlpha(hot, 0.9f * fl), withAlpha(f.color, 0.3f * fl), {1.f, 1.f}, 6);
+                }
+            }
             break;
         }
-        case F::Clover: {   // "Lucky break": four leaves opening around it
+        case F::Clover: {   // "Lucky break": four heart-shaped leaves unfold round it, turning a little; a glint at the heart
+            const float e = easeOut(clampf(u / 0.45f, 0.f, 1.f));
+            const sf::Color leaf = lerpColor(sf::Color(110, 220, 120), f.color, 0.2f);
+            const sf::Color leafHi = lerpColor(leaf, sf::Color::White, 0.35f);
             for (int i = 0; i < 4; ++i) {
-                const float an = static_cast<float>(i) * 1.571f + 0.785f + u * 1.5f;
-                const sf::Vector2f sd{std::cos(an), std::sin(an)};
-                draw::disc(t, f.a + sd * (f.r * (0.4f + 0.5f * easeOut(u))), f.r * 0.22f, withAlpha(hot, 0.7f * fl),
-                           withAlpha(f.color, 0.3f * fl), {1.f, 1.f}, 12);
+                const float an = static_cast<float>(i) * 1.571f + 0.785f + u * 0.8f;
+                const sf::Vector2f dir{std::cos(an), std::sin(an)}, perp{-dir.y, dir.x};
+                const sf::Vector2f base = f.a + dir * (f.r * 0.3f);
+                const float L = f.r * 0.6f * e;
+                if (L < 1.f) continue;
+                const sf::Vector2f lobe = base + dir * (L * 0.72f);
+                draw::disc(t, lobe + perp * (L * 0.27f), L * 0.33f, withAlpha(leafHi, 0.85f * fl), withAlpha(leaf, 0.75f * fl), {1.f, 1.f}, 12);
+                draw::disc(t, lobe - perp * (L * 0.27f), L * 0.33f, withAlpha(leafHi, 0.85f * fl), withAlpha(leaf, 0.75f * fl), {1.f, 1.f}, 12);
+                fillShape(t, {lobe + perp * (L * 0.58f), lobe - perp * (L * 0.58f), base}, withAlpha(leaf, 0.75f * fl));
+            }
+            if (u < 0.35f) {   // the glint
+                const float g = 1.f - u / 0.35f;
+                for (int i = 0; i < 4; ++i) {
+                    const float an = static_cast<float>(i) * 1.571f;
+                    draw::line(t, f.a, f.a + sf::Vector2f{std::cos(an), std::sin(an)} * (f.r * 0.45f * g), 1.5f * k,
+                               withAlpha(sf::Color::White, 0.9f * g));
+                }
             }
             break;
         }
@@ -599,20 +631,52 @@ void drawFx(sf::RenderTarget& t, const CommonWorld::Fx& f, float k) {
             }
             break;
         }
-        case F::Reels: {   // slot-machine pair: three little reels over the ball, the last one lagging
+        case F::Reels: {   // slot-machine pair: three reels pop up over the ball and spin; two land on the symbol, the third rattles past
+            const int sym = std::clamp(static_cast<int>(f.b.x), 0, 2);
+            const float a = clampf(fl / 0.25f, 0.f, 1.f);
             for (int i = 0; i < 3; ++i) {
-                const float pop = clampf((u - 0.12f * static_cast<float>(i)) / 0.2f, 0.f, 1.f);
-                const sf::Vector2f p = f.a + sf::Vector2f{(static_cast<float>(i) - 1.f) * 17.f * k, -f.r - 16.f * k};
-                draw::polygonOutline(t, p, 10.f * k * pop, 4, 0.785f, 2.f * k, withAlpha(hot, 0.9f * fl));
-                draw::disc(t, p, 3.f * k * pop, withAlpha(f.color, 0.9f * fl), withAlpha(f.color, 0.5f * fl), {1.f, 1.f}, 6);
+                const float pop = easeOut(clampf((u - 0.06f * static_cast<float>(i)) / 0.15f, 0.f, 1.f));
+                if (pop <= 0.f) continue;
+                const sf::Vector2f p = f.a + sf::Vector2f{(static_cast<float>(i) - 1.f) * 19.f * k, -f.r - 22.f * k};
+                const float w = 16.f * k * pop, h = 20.f * k * pop;
+                draw::box(t, {p.x - w * 0.5f, p.y - h * 0.5f, w, h}, 3.f * k, withAlpha(theme::bgDeep, 0.85f * a),
+                          withAlpha(theme::bgDeep, 0.85f * a), withAlpha(hot, 0.8f * a), 1.f);
+                const float stopAt = 0.28f + 0.14f * static_cast<float>(i);
+                if (u < stopAt) {   // still spinning: symbols scroll down through the window
+                    const float roll = u * 28.f + static_cast<float>(i) * 1.3f;
+                    const float fr = roll - std::floor(roll);
+                    drawSlotSymbol(t, p + sf::Vector2f{0.f, (fr - 0.5f) * h * 0.7f}, h * 0.8f, static_cast<int>(roll) % 3, 0.5f * a * pop);
+                } else {           // stopped, with a little bounce
+                    const float s = clampf((u - stopAt) / 0.12f, 0.f, 1.f);
+                    const float bounce = std::sin(s * kPi) * 3.f * k * (1.f - s);
+                    const int shown = i < 2 ? sym : (sym + 1) % 3;
+                    drawSlotSymbol(t, p + sf::Vector2f{0.f, bounce}, h * 0.8f, shown, a * (i < 2 ? 1.f : 0.45f));
+                    if (i == 1 && s < 1.f)   // the match: the first two flash together
+                        draw::glow(t, (p + f.a + sf::Vector2f{-19.f * k, -f.r - 22.f * k}) * 0.5f, 22.f * k, f.color, 0.5f * (1.f - s));
+                }
             }
             break;
         }
-        case F::Boomerang: {   // "Homecoming": three arcs sweeping round as they widen
-            for (int i = 0; i < 3; ++i) {
-                const float s0 = u * 7.f + static_cast<float>(i) * 2.094f;
-                draw::ring(t, f.a, f.r * easeOut(u), 2.5f * k, withAlpha(hot, 0.8f * fl), s0, s0 + 1.1f, 12);
+        case F::Boomerang: {   // "Homecoming": a boomerang spins out on a loop and comes back to the ball, a faint trail behind
+            auto at = [&](float v) {
+                const float th = v * 2.f * kPi;
+                const float rad = f.r * std::sin(v * kPi);
+                return f.a + sf::Vector2f{std::cos(th - kPi * 0.5f), std::sin(th - kPi * 0.5f)} * rad;
+            };
+            constexpr int kTrail = 10;
+            for (int j = 0; j < kTrail; ++j) {
+                const float v0 = u - 0.3f * static_cast<float>(j + 1) / kTrail, v1 = u - 0.3f * static_cast<float>(j) / kTrail;
+                if (v1 <= 0.f) break;
+                const float w = 1.f - static_cast<float>(j) / kTrail;
+                draw::line(t, at(std::max(0.f, v0)), at(v1), (1.f + 2.f * w) * k, withAlpha(f.color, 0.5f * w * fl));
             }
+            const sf::Vector2f head = at(u);
+            const float spin = u * 28.f;
+            for (float o : {0.f, 1.9f}) {   // the two arms of the V
+                const sf::Vector2f arm{std::cos(spin + o), std::sin(spin + o)};
+                draw::line(t, head, head + arm * (8.f * k), 2.6f * k, withAlpha(hot, 0.95f * fl));
+            }
+            if (u > 0.85f) draw::ring(t, f.a, f.r * 0.25f, 1.5f * k, withAlpha(hot, 0.8f * (1.f - (u - 0.85f) / 0.15f)));   // caught
             break;
         }
         case F::Bastion: {   // "Last line": a hexagonal wall thrown out from the core
@@ -641,15 +705,21 @@ void drawFx(sf::RenderTarget& t, const CommonWorld::Fx& f, float k) {
             }
             break;
         }
-        case F::Dust: {   // "Heavy landing": a flat ring of dust and puffs thrown sideways
+        case F::Dust: {   // "Heavy landing": a flat shock along the floor, puffs rolling out both ways, grit thrown up
             const float e = easeOut(u);
-            draw::ring(t, f.a, f.r * e, 2.f * k, withAlpha(hot, 0.6f * fl));
+            draw::disc(t, f.a + sf::Vector2f{0.f, f.r * 0.1f}, f.r * e, withAlpha(f.color, 0.f), withAlpha(hot, 0.45f * fl), {1.f, 0.35f}, 32);
             for (float sd : {-1.f, 1.f})
-                for (int i = 0; i < 3; ++i) {
-                    const sf::Vector2f p = f.a + sf::Vector2f{sd * f.r * e * (0.5f + 0.25f * static_cast<float>(i)), -6.f * k * u * static_cast<float>(i)};
-                    draw::disc(t, p, (5.f - static_cast<float>(i)) * k * (1.f + u), withAlpha(f.color, 0.35f * fl),
-                               withAlpha(f.color, 0.f), {1.f, 1.f}, 10);
+                for (int i = 0; i < 4; ++i) {
+                    const float fi = static_cast<float>(i);
+                    const sf::Vector2f p = f.a + sf::Vector2f{sd * f.r * e * (0.35f + 0.22f * fi), -5.f * k * u * fi};
+                    draw::disc(t, p, (6.f - fi) * k * (1.f + 1.2f * u), withAlpha(f.color, 0.3f * fl), withAlpha(f.color, 0.f), {1.f, 1.f}, 12);
                 }
+            for (int i = 0; i < 6; ++i) {   // grit: up and back down
+                const float h = hash01(static_cast<float>(i) * 3.3f + f.a.x * 0.1f);
+                const float vx = (h - 0.5f) * f.r * 1.4f;
+                const sf::Vector2f p = f.a + sf::Vector2f{vx * u, -f.r * 0.9f * (u - u * u) * (0.6f + 0.6f * h)};
+                draw::polygon(t, p, 1.8f * k, 4, u * 8.f + h * 6.f, withAlpha(hot, 0.85f * fl), withAlpha(f.color, 0.85f * fl));
+            }
             break;
         }
         case F::Clock: {   // "Time stop": a clock face, one hand sweeping round while it holds
@@ -664,11 +734,19 @@ void drawFx(sf::RenderTarget& t, const CommonWorld::Fx& f, float k) {
             draw::line(t, f.a, f.a + sf::Vector2f{std::cos(hand), std::sin(hand)} * (f.r * 0.75f), 2.f * k, withAlpha(sf::Color::White, 0.9f * a));
             break;
         }
-        case F::Echo: {   // "Spell chorus": three rings, one after another, like a chord
+        case F::Echo: {   // "Spell chorus": three rings one after another like a chord, each carrying little rune ticks round
             for (int i = 0; i < 3; ++i) {
                 const float v = clampf((u - 0.15f * static_cast<float>(i)) / 0.55f, 0.f, 1.f);
                 if (v <= 0.f || v >= 1.f) continue;
-                draw::ring(t, f.a, f.r * (0.4f + 0.8f * v), 1.5f * k, withAlpha(hot, 0.7f * (1.f - v)));
+                const float R = f.r * (0.45f + 0.85f * v);
+                const float a = 0.75f * (1.f - v);
+                draw::ring(t, f.a, R, (2.f - 0.4f * static_cast<float>(i)) * k, withAlpha(i == 0 ? hot : f.color, a));
+                const float turn = static_cast<float>(i) * 0.6f + v * (i % 2 ? -1.6f : 1.6f);
+                for (int j = 0; j < 6; ++j) {
+                    const float an = turn + static_cast<float>(j) * 1.047f;
+                    const sf::Vector2f sd{std::cos(an), std::sin(an)};
+                    draw::line(t, f.a + sd * (R - 3.f * k), f.a + sd * (R + 3.f * k), 1.4f * k, withAlpha(sf::Color::White, a));
+                }
             }
             break;
         }
@@ -691,10 +769,30 @@ void drawFx(sf::RenderTarget& t, const CommonWorld::Fx& f, float k) {
             draw::disc(t, f.a + sd * f.r, 8.f * k, withAlpha(sf::Color::White, 0.8f * fl), withAlpha(f.color, 0.f), {1.f, 1.f}, 12);
             break;
         }
-        case F::Link: {   // "Fission": the element leaps to a neighbour along a thin thread
-            const sf::Vector2f head = lerpv(f.a, f.b, easeOut(clampf(u / 0.5f, 0.f, 1.f)));
-            draw::line(t, f.a, head, 1.5f * k, withAlpha(hot, 0.7f * fl));
-            draw::disc(t, head, 3.f * k, withAlpha(sf::Color::White, 0.9f * fl), withAlpha(f.color, 0.5f * fl), {1.f, 1.f}, 8);
+        case F::Link: {   // "Fission": a bead of the element hops to a neighbour on a low arc, a tail behind it, and bursts there
+            const sf::Vector2f d = f.b - f.a;
+            const sf::Vector2f up = normalized(sf::Vector2f{-d.y, d.x}, {0.f, -1.f}) * (length(d) * 0.22f);
+            auto at = [&](float v) { const sf::Vector2f m = (f.a + f.b) * 0.5f + up;
+                                     return f.a * ((1.f - v) * (1.f - v)) + m * (2.f * v * (1.f - v)) + f.b * (v * v); };
+            const float travel = easeOut(clampf(u / 0.55f, 0.f, 1.f));
+            if (u < 0.6f)
+                for (int j = 0; j < 8; ++j) {
+                    const float v = travel - 0.04f * static_cast<float>(j);
+                    if (v < 0.f) break;
+                    const float w = 1.f - static_cast<float>(j) / 8.f;
+                    draw::disc(t, at(v), (1.f + 2.5f * w) * k, withAlpha(j == 0 ? sf::Color::White : hot, 0.9f * w),
+                               withAlpha(f.color, 0.4f * w), {1.f, 1.f}, 8);
+                }
+            if (u >= 0.55f) {   // the burst on the neighbour
+                const float v = (u - 0.55f) / 0.45f;
+                draw::ring(t, f.b, (4.f + 14.f * easeOut(v)) * k, 1.5f * k, withAlpha(hot, 0.8f * (1.f - v)));
+                for (int i = 0; i < 5; ++i) {
+                    const float an = static_cast<float>(i) * 1.2566f + f.b.x * 0.1f;
+                    const sf::Vector2f sd{std::cos(an), std::sin(an)};
+                    const float r0 = (5.f + 12.f * easeOut(v)) * k;
+                    draw::line(t, f.b + sd * r0, f.b + sd * (r0 + 4.f * k), 1.5f * k, withAlpha(f.color, 0.9f * (1.f - v)));
+                }
+            }
             break;
         }
         case F::Sonic: {   // Mega Striker: a sonic boom - arcs fanning out ahead of the hit
@@ -721,19 +819,29 @@ void drawFx(sf::RenderTarget& t, const CommonWorld::Fx& f, float k) {
             }
             break;
         }
-        case F::Pellets: {   // "Frag rounds": a pinch of tiny pellets
-            for (int i = 0; i < 5; ++i) {
-                const float an = static_cast<float>(i) * 1.2566f + hash01(f.a.x * 0.3f) * 6.f;
-                draw::disc(t, f.a + sf::Vector2f{std::cos(an), std::sin(an)} * (f.r * easeOut(u)), 1.8f * k,
-                           withAlpha(hot, 0.9f * fl), withAlpha(f.color, 0.4f * fl), {1.f, 1.f}, 6);
+        case F::Pellets: {   // "Frag rounds": a pinch of pellets spraying out, each with a short hot streak
+            for (int i = 0; i < 7; ++i) {
+                const float an = static_cast<float>(i) * 0.8976f + hash01(f.a.x * 0.3f) * 6.f;
+                const sf::Vector2f sd{std::cos(an), std::sin(an)};
+                const float reach = f.r * (0.7f + 0.3f * hash01(static_cast<float>(i) + f.a.y));
+                const float r1 = reach * easeOut(u), r0 = std::max(0.f, r1 - 9.f * k * fl);
+                draw::line(t, f.a + sd * r0, f.a + sd * r1, 1.4f * k, withAlpha(f.color, 0.6f * fl));
+                draw::disc(t, f.a + sd * r1, 1.8f * k, withAlpha(sf::Color::White, 0.95f * fl), withAlpha(hot, 0.5f * fl), {1.f, 1.f}, 6);
             }
+            if (u < 0.25f) draw::glow(t, f.a, f.r * 0.4f, hot, 0.6f * (1.f - u / 0.25f));   // the pop
             break;
         }
-        case F::Smoke: {   // "Smoke bomb": slow soft puffs that swell and thin out
-            for (int i = 0; i < 6; ++i) {
-                const float an = static_cast<float>(i) * 1.047f + hash01(f.a.y * 0.2f) * 6.f;
-                const sf::Vector2f p = f.a + sf::Vector2f{std::cos(an), std::sin(an)} * (f.r * 0.45f * easeOut(u));
-                draw::disc(t, p, f.r * (0.3f + 0.25f * u), withAlpha(f.color, 0.22f * fl), withAlpha(f.color, 0.f), {1.f, 1.f}, 20);
+        case F::Smoke: {   // "Smoke bomb": a pop, then soft puffs rolling out and round, thinning as they swell
+            if (u < 0.15f) draw::ring(t, f.a, f.r * 0.5f * (u / 0.15f), 2.f * k, withAlpha(hot, 0.7f * (1.f - u / 0.15f)));
+            const sf::Color dark = lerpColor(f.color, theme::bgDeep, 0.55f);
+            for (int i = 0; i < 7; ++i) {
+                const float h = hash01(f.a.y * 0.2f + static_cast<float>(i) * 2.1f);
+                const float an = static_cast<float>(i) * 0.8976f + h * 2.f + u * 0.9f;   // they roll round a little
+                const sf::Vector2f p = f.a + sf::Vector2f{std::cos(an), std::sin(an)} * (f.r * (0.3f + 0.3f * h) * easeOut(u)) -
+                                       sf::Vector2f{0.f, 8.f * k * u};
+                const float pr = f.r * (0.22f + 0.22f * u) * (0.8f + 0.4f * h);
+                draw::disc(t, p, pr, withAlpha(dark, 0.32f * fl), withAlpha(f.color, 0.f), {1.f, 1.f}, 20);
+                draw::disc(t, p - sf::Vector2f{pr * 0.25f, pr * 0.25f}, pr * 0.45f, withAlpha(f.color, 0.18f * fl), withAlpha(f.color, 0.f), {1.f, 1.f}, 14);
             }
             break;
         }
@@ -754,9 +862,23 @@ void drawFx(sf::RenderTarget& t, const CommonWorld::Fx& f, float k) {
             draw::ring(t, f.a, f.r * easeOut(u), 1.5f * k, withAlpha(hot, 0.6f * fl));
             break;
         }
-        case F::Blast: {   // "Bomber": a white-hot fireball that collapses into a ring of flame
-            draw::disc(t, f.a, f.r * 0.6f * (1.f - u), withAlpha(sf::Color::White, 0.8f * fl), withAlpha(f.color, 0.5f * fl), {1.f, 1.f}, 20);
+        case F::Blast: {   // "Bomber": a white-hot fireball, tongues of flame licking out, a ring of fire and a curl of smoke
+            draw::disc(t, f.a, f.r * 0.6f * (1.f - u), withAlpha(sf::Color::White, 0.85f * fl), withAlpha(f.color, 0.5f * fl), {1.f, 1.f}, 20);
             draw::ring(t, f.a, f.r * easeOut(u), (5.f * fl + 1.f) * k, withAlpha(f.color, 0.7f * fl));
+            for (int i = 0; i < 8; ++i) {   // tongues: thick at the root, thin at the tip
+                const float an = static_cast<float>(i) * 0.785f + hash01(f.a.x * 0.07f) * 3.f;
+                const sf::Vector2f sd{std::cos(an), std::sin(an)};
+                const float L = f.r * (0.5f + 0.35f * hash01(static_cast<float>(i) + f.a.y)) * easeOut(clampf(u / 0.4f, 0.f, 1.f));
+                const float a = clampf(1.f - u / 0.6f, 0.f, 1.f);
+                draw::line(t, f.a + sd * (L * 0.3f), f.a + sd * (L * 0.7f), 4.f * k * a, withAlpha(lerpColor(f.color, sf::Color::White, 0.4f), 0.8f * a));
+                draw::line(t, f.a + sd * (L * 0.7f), f.a + sd * L, 1.8f * k * a, withAlpha(f.color, 0.8f * a));
+            }
+            if (u > 0.35f) {   // smoke rising off it
+                const float v = (u - 0.35f) / 0.65f;
+                for (int i = 0; i < 3; ++i)
+                    draw::disc(t, f.a + sf::Vector2f{(static_cast<float>(i) - 1.f) * f.r * 0.3f, -f.r * 0.5f * v}, f.r * (0.2f + 0.2f * v),
+                               withAlpha(sf::Color(70, 70, 80), 0.35f * (1.f - v)), withAlpha(sf::Color(70, 70, 80), 0.f), {1.f, 1.f}, 14);
+            }
             break;
         }
         case F::Fuse: {   // a Jester bomb: crackling sparks, a pop
@@ -780,21 +902,38 @@ void drawFx(sf::RenderTarget& t, const CommonWorld::Fx& f, float k) {
             }
             break;
         }
-        case F::Cards: {   // "Sleight": three cards fanning out over the mark
+        case F::Cards: {   // "Sleight": three little cards fanned out over the mark, then flicked up and away
+            const float fan = easeOut(clampf(u / 0.35f, 0.f, 1.f));
+            const float lift = u > 0.55f ? easeOut((u - 0.55f) / 0.45f) : 0.f;
+            const float a = clampf(fl / 0.3f, 0.f, 1.f);
             for (int i = 0; i < 3; ++i) {
-                const float rot = (static_cast<float>(i) - 1.f) * 0.5f * easeOut(u);
-                const sf::Vector2f p = f.a + sf::Vector2f{std::sin(rot), -std::cos(rot)} * (f.r * 0.6f);
-                draw::polygonOutline(t, p, 7.f * k, 4, 0.785f + rot, 1.5f * k, withAlpha(i == 1 ? sf::Color::White : hot, 0.85f * fl));
+                const float rot = (static_cast<float>(i) - 1.f) * 0.45f * fan;
+                const sf::Vector2f up{std::sin(rot), -std::cos(rot)}, side{-up.y, up.x};
+                const sf::Vector2f c = f.a + up * (f.r * 0.55f + 14.f * k * lift);
+                const float hw = 5.f * k, hh = 7.5f * k;
+                const sf::Vector2f p0 = c - side * hw - up * hh, p1 = c + side * hw - up * hh, p2 = c + side * hw + up * hh,
+                                   p3 = c - side * hw + up * hh;
+                fillShape(t, {p0, p1, p2, p3}, withAlpha(sf::Color(250, 248, 240), 0.95f * a));
+                const sf::Color edge = withAlpha(i == 1 ? hot : f.color, a);
+                draw::line(t, p0, p1, 1.f, edge);
+                draw::line(t, p1, p2, 1.f, edge);
+                draw::line(t, p2, p3, 1.f, edge);
+                draw::line(t, p3, p0, 1.f, edge);
+                draw::disc(t, c, 1.8f * k, withAlpha(i == 1 ? sf::Color(214, 40, 52) : sf::Color(30, 30, 36), a),
+                           withAlpha(i == 1 ? sf::Color(214, 40, 52) : sf::Color(30, 30, 36), a), {1.f, 1.f}, 6);
             }
             break;
         }
-        case F::Arrow: {   // "Ambush": chevrons driving through the target
+        case F::Arrow: {   // "Ambush": chevrons drive right through the target along one speed line
             const sf::Vector2f d = f.b, side{-f.b.y, f.b.x};
-            for (int i = 0; i < 3; ++i) {
-                const sf::Vector2f c = f.a + d * (f.r * (u * 0.8f + 0.25f * static_cast<float>(i) - 0.4f));
-                const float a = fl * (1.f - 0.25f * static_cast<float>(i));
+            draw::line(t, f.a - d * (f.r * 1.2f), f.a + d * (f.r * 1.2f * easeOut(u)), 1.f * k, withAlpha(hot, 0.35f * fl));
+            for (int i = 0; i < 4; ++i) {
+                const float v = u * 1.3f - 0.15f * static_cast<float>(i);
+                if (v < 0.f || v > 1.f) continue;
+                const sf::Vector2f c = f.a + d * (f.r * (2.2f * v - 1.1f));
+                const float a = fl * (1.f - 0.2f * static_cast<float>(i)) * std::sin(v * kPi);
                 for (float sd : {-1.f, 1.f})
-                    draw::line(t, c, c - d * (7.f * k) + side * (sd * 6.f * k), 2.f * k, withAlpha(hot, 0.85f * a));
+                    draw::line(t, c, c - d * (7.f * k) + side * (sd * 6.f * k), 2.f * k, withAlpha(i == 0 ? sf::Color::White : hot, 0.9f * a));
             }
             break;
         }
@@ -856,12 +995,18 @@ void drawFx(sf::RenderTarget& t, const CommonWorld::Fx& f, float k) {
             draw::disc(t, f.b, f.r * 0.5f * fl, withAlpha(f.color, 0.5f * fl), withAlpha(f.color, 0.f), {1.f, 1.f}, 12);
             break;
         }
-        case F::Mana: {   // "Mana spring": blue motes drawn into the ball
-            for (int i = 0; i < 6; ++i) {
-                const float an = static_cast<float>(i) * 1.047f + u * 2.f;
-                const float r = f.r * (1.f - easeOut(u));
-                draw::disc(t, f.a + sf::Vector2f{std::cos(an), std::sin(an)} * r, 2.2f * k, withAlpha(hot, 0.9f * fl),
-                           withAlpha(f.color, 0.2f * fl), {1.f, 1.f}, 8);
+        case F::Mana: {   // "Mana spring": motes stream into the ball on short trails, and it brims with a soft ring
+            for (int i = 0; i < 8; ++i) {
+                const float an = static_cast<float>(i) * 0.785f + u * 2.f;
+                const sf::Vector2f sd{std::cos(an), std::sin(an)};
+                const float r = f.r * (1.f - easeOut(clampf(u / 0.75f, 0.f, 1.f)));
+                if (r < 2.f) continue;
+                draw::line(t, f.a + sd * r, f.a + sd * (r + 7.f * k), 1.2f * k, withAlpha(f.color, 0.5f * fl));
+                draw::disc(t, f.a + sd * r, 2.2f * k, withAlpha(hot, 0.9f * fl), withAlpha(f.color, 0.2f * fl), {1.f, 1.f}, 8);
+            }
+            if (u > 0.7f) {
+                const float v = (u - 0.7f) / 0.3f;
+                draw::ring(t, f.a, f.r * (0.25f + 0.2f * v), 2.f * k, withAlpha(hot, 0.8f * (1.f - v)));
             }
             break;
         }
@@ -877,32 +1022,73 @@ void drawFx(sf::RenderTarget& t, const CommonWorld::Fx& f, float k) {
             }
             break;
         }
-        case F::Saturate: {   // "Saturate": both elements soak in - two rings, one in each colour, sinking inward
-            draw::ring(t, f.a, f.r * (1.f - 0.4f * u), 2.f * k, withAlpha(f.color, 0.7f * fl));
-            draw::ring(t, f.a, f.r * (0.8f - 0.4f * u), 2.f * k, withAlpha(f.color2, 0.7f * fl));
+        case F::Saturate: {   // "Saturate": a drop of each element spirals in from either side, they meet, and both rings soak outward
+            const float in = easeOut(clampf(u / 0.45f, 0.f, 1.f));
+            if (u < 0.5f)
+                for (int s = 0; s < 2; ++s)
+                    for (int j = 0; j < 4; ++j) {
+                        const float v = std::max(0.f, in - 0.06f * static_cast<float>(j));
+                        const float an = static_cast<float>(s) * kPi + v * 3.f;
+                        const sf::Vector2f p = f.a + sf::Vector2f{std::cos(an), std::sin(an)} * (f.r * (1.f - v));
+                        const float w = 1.f - 0.22f * static_cast<float>(j);
+                        draw::disc(t, p, (3.2f * w) * k, withAlpha(s == 0 ? f.color : f.color2, 0.9f * w), withAlpha(s == 0 ? f.color : f.color2, 0.2f),
+                                   {1.f, 1.f}, 8);
+                    }
+            if (u >= 0.4f) {
+                const float v = easeOut((u - 0.4f) / 0.6f);
+                draw::ring(t, f.a, f.r * (0.2f + 0.7f * v), 2.f * k, withAlpha(f.color, 0.75f * fl));
+                draw::ring(t, f.a, f.r * (0.1f + 0.55f * v), 2.f * k, withAlpha(f.color2, 0.75f * fl));
+            }
             break;
         }
-        case F::Wild: {   // "Wild magic": sparks of every colour spinning off
+        case F::Wild: {   // "Wild magic": sparks of every colour and shape spinning off, each on a curling tail
             static const sf::Color kC[5] = {theme::elemFire, theme::elemWater, theme::elemPoison, theme::classMage, theme::puGolden};
             for (int i = 0; i < 10; ++i) {
-                const float an = static_cast<float>(i) * 0.628f + u * 6.f;
-                const sf::Vector2f p = f.a + sf::Vector2f{std::cos(an), std::sin(an)} * (f.r * easeOut(u));
-                draw::disc(t, p, 2.f * k, withAlpha(kC[i % 5], 0.9f * fl), withAlpha(kC[i % 5], 0.f), {1.f, 1.f}, 6);
+                const float base = static_cast<float>(i) * 0.628f;
+                auto at = [&](float v) {
+                    const float an = base + v * 4.f;
+                    return f.a + sf::Vector2f{std::cos(an), std::sin(an)} * (f.r * easeOut(v));
+                };
+                const sf::Color c = kC[i % 5];
+                for (int j = 0; j < 4; ++j) {
+                    const float v1 = u - 0.05f * static_cast<float>(j), v0 = v1 - 0.05f;
+                    if (v0 <= 0.f) break;
+                    draw::line(t, at(v0), at(v1), (2.f - 0.4f * static_cast<float>(j)) * k, withAlpha(c, 0.6f * fl * (1.f - 0.25f * static_cast<float>(j))));
+                }
+                const sf::Vector2f p = at(u);
+                if (i % 3 == 0) draw::polygon(t, p, 3.f * k, 4, u * 9.f, withAlpha(sf::Color::White, 0.9f * fl), withAlpha(c, 0.9f * fl));
+                else if (i % 3 == 1) draw::polygon(t, p, 3.2f * k, 3, -u * 9.f, withAlpha(sf::Color::White, 0.9f * fl), withAlpha(c, 0.9f * fl));
+                else draw::disc(t, p, 2.4f * k, withAlpha(sf::Color::White, 0.9f * fl), withAlpha(c, 0.9f * fl), {1.f, 1.f}, 8);
             }
             break;
         }
-        case F::Chrono: {   // "Chronomancy": a slow, wide, dashed ripple
+        case F::Chrono: {   // "Chronomancy": a slow, wide, dashed ripple and a thinner one turning against it, ticks along the rim
             const float r = f.r * easeOut(u);
             for (int i = 0; i < 24; ++i) {
-                const float a0 = static_cast<float>(i) * 0.2618f;
+                const float a0 = static_cast<float>(i) * 0.2618f + u * 0.4f;
                 draw::ring(t, f.a, r, 1.5f * k, withAlpha(hot, 0.4f * fl), a0, a0 + 0.13f, 4);
+            }
+            const float r2 = r * 0.82f;
+            for (int i = 0; i < 12; ++i) {
+                const float a0 = static_cast<float>(i) * 0.5236f - u * 0.8f;
+                draw::ring(t, f.a, r2, 1.f * k, withAlpha(f.color, 0.35f * fl), a0, a0 + 0.2f, 4);
+                const sf::Vector2f sd{std::cos(a0), std::sin(a0)};
+                draw::line(t, f.a + sd * (r - 5.f * k), f.a + sd * r, 1.2f * k, withAlpha(hot, 0.45f * fl));
             }
             break;
         }
-        case F::Scythe: {   // "Reaper": a crescent swept around the ball
+        case F::Scythe: {   // "Reaper": a crescent blade swept round the ball - a thick bright edge, a thin back, a fading wake
             const float an = std::atan2(f.b.y, f.b.x);
             const float sweep = -1.5f + 3.f * easeOut(u);
-            draw::ring(t, f.a, f.r, (3.f * fl + 1.f) * k, withAlpha(hot, 0.85f * fl), an + sweep - 1.2f, an + sweep, 14);
+            const float a1 = an + sweep, a0 = a1 - 1.2f;
+            for (int j = 1; j <= 3; ++j) {   // the wake
+                const float back = 0.35f * static_cast<float>(j);
+                draw::ring(t, f.a, f.r, 1.f * k, withAlpha(f.color, 0.35f * fl / static_cast<float>(j)), a0 - back, a1 - back, 12);
+            }
+            draw::ring(t, f.a, f.r, (3.5f * fl + 1.f) * k, withAlpha(hot, 0.9f * fl), a0, a1, 16);
+            draw::ring(t, f.a, f.r * 0.82f, 1.2f * k, withAlpha(f.color, 0.7f * fl), a0 + 0.25f, a1, 12);
+            const sf::Vector2f tip = f.a + sf::Vector2f{std::cos(a1), std::sin(a1)} * f.r;
+            draw::glow(t, tip, 8.f * k, sf::Color::White, 0.6f * fl);
             break;
         }
         case F::Streak: {   // "Lightspeed": a white-hot straight streak to each chained enemy
@@ -1067,6 +1253,48 @@ void drawFx(sf::RenderTarget& t, const CommonWorld::Fx& f, float k) {
             const sf::Color cc = u < 0.7f ? theme::puGolden : heads ? theme::puGolden : sf::Color(150, 150, 160);
             draw::disc(t, q, f.r, withAlpha(lerpColor(cc, sf::Color::White, 0.35f), fl), withAlpha(cc, fl), {0.15f + 0.85f * spin, 1.f}, 12);
             if (u >= 0.7f && heads) draw::glow(t, q, f.r * 2.5f, theme::puGolden, 0.4f * fl);
+            break;
+        }
+        case F::Execute: {   // "Cull": two strokes close into an X over it, a white flash, then a ring snaps shut
+            const float c = easeOut(clampf(u / 0.3f, 0.f, 1.f));
+            for (int i = 0; i < 2; ++i) {
+                const float an = 0.785f + static_cast<float>(i) * 1.571f;
+                const sf::Vector2f d{std::cos(an), std::sin(an)};
+                const float L = f.r * (1.6f - 0.6f * c);
+                const sf::Vector2f off = sf::Vector2f{-d.y, d.x} * (f.r * 1.2f * (1.f - c) * (i == 0 ? 1.f : -1.f));   // each slides in from its own side
+                draw::line(t, f.a - d * L * 0.5f + off, f.a + d * L * 0.5f + off, (3.f * fl + 0.8f) * k, withAlpha(i == 0 ? sf::Color::White : hot, 0.9f * fl));
+            }
+            if (u >= 0.3f && u < 0.5f) draw::glow(t, f.a, f.r * 1.4f, sf::Color::White, 0.6f * (1.f - (u - 0.3f) / 0.2f));
+            if (u >= 0.3f) {
+                const float v = easeOut((u - 0.3f) / 0.7f);
+                draw::ring(t, f.a, f.r * (1.3f - 0.8f * v), 1.5f * k, withAlpha(f.color, 0.8f * fl));
+            }
+            break;
+        }
+        case F::Glint: {   // "Backstab": a four-point glint where the blade went in, and a short stab line along the ball's path
+            const float g = clampf(1.f - u / 0.6f, 0.f, 1.f);
+            const float s = f.r * (0.4f + 0.8f * easeOut(clampf(u / 0.2f, 0.f, 1.f))) * g;
+            for (int i = 0; i < 4; ++i) {
+                const float an = static_cast<float>(i) * 1.571f + 0.3f;
+                const sf::Vector2f sd{std::cos(an), std::sin(an)};
+                draw::line(t, f.a, f.a + sd * s * (i % 2 ? 0.6f : 1.f), (2.f * g + 0.6f) * k, withAlpha(sf::Color::White, 0.95f * g));
+            }
+            draw::glow(t, f.a, f.r * 0.8f, f.color, 0.5f * fl);
+            const sf::Vector2f d = f.b;
+            draw::line(t, f.a - d * (f.r * 1.4f), f.a - d * (f.r * (1.4f - 1.2f * easeOut(u))), 1.5f * k, withAlpha(hot, 0.7f * fl));
+            break;
+        }
+        case F::Twin: {   // "Twincast": a ghost of the ball peels off to the side, casts its own small ring, and fades
+            const sf::Vector2f side{-f.b.y, f.b.x};
+            const float e = easeOut(clampf(u / 0.4f, 0.f, 1.f));
+            const sf::Vector2f g = f.a + side * (f.r * 2.2f * e);
+            draw::disc(t, g, f.r, withAlpha(f.color, 0.35f * fl), withAlpha(f.color, 0.08f * fl), {1.f, 1.f}, 20);
+            draw::ring(t, g, f.r, 1.5f * k, withAlpha(hot, 0.7f * fl));
+            draw::line(t, f.a, g, 1.f * k, withAlpha(hot, 0.3f * fl));
+            if (u > 0.35f) {
+                const float v = (u - 0.35f) / 0.65f;
+                draw::ring(t, g, f.r * (1.2f + 1.8f * easeOut(v)), 1.5f * k, withAlpha(hot, 0.7f * (1.f - v)));
+            }
             break;
         }
         case F::Shock: {   // Empower landing: a sharp ring and a star of spikes
@@ -3356,6 +3584,120 @@ void drawClassWorld(sf::RenderTarget& t, const World& world) {
     worldSummons(t, world);
     worldJesterToys(t, world);
     worldAlchemy(t, world);
+}
+
+bool drawFxSheet(sf::RenderTarget& t, int page, const sf::Font& font) {
+    using F = CommonWorld::Fx;
+    // kind, label, radius, life, b: 0 none, 1 a direction, 2 a point (offset), 3 card / coin data
+    struct Row { F::Kind kind; const char* name; float r; float life; int bMode; sf::Color c, c2; };
+    const sf::Color mage = theme::classMage, jes = theme::classJester, ass = theme::classAssassin, sum = theme::classSummoner,
+                    sho = theme::classShooter, sli = theme::classSlinger, fire = theme::elemFire, water = theme::elemWater;
+    const Row rows[] = {
+        {F::Hook, "Hook (ab)", 0.f, 0.6f, 2, theme::accent, sf::Color::White},
+        {F::Smite, "Smite (ab)", 14.f, 0.4f, 2, theme::accent, sf::Color::White},
+        {F::Warp, "Warp (ab)", 12.f, 0.5f, 2, theme::accent, sf::Color::White},
+        {F::Swap, "Swap (ab)", 0.f, 0.5f, 2, theme::accent, ass},
+        {F::Implode, "Implode", 40.f, 0.4f, 0, theme::accent, sf::Color::White},
+        {F::Shards, "Shards", 40.f, 0.4f, 0, theme::accent, sf::Color::White},
+        {F::Meteor, "Meteor (ab)", 40.f, 0.7f, 0, theme::accent, sf::Color::White},
+        {F::Afterimage, "Dash (ab)", 10.f, 0.4f, 1, theme::accent, sf::Color::White},
+        {F::Shock, "Empower (ab)", 36.f, 0.4f, 0, theme::accent, sf::Color::White},
+        {F::Slash, "Death sentence", 28.f, 0.4f, 0, ass, sf::Color::White},
+        {F::Clover, "Lucky break", 24.f, 0.5f, 0, jes, sf::Color::White},
+        {F::Petals, "Maelstrom", 40.f, 0.5f, 0, fire, water},
+        {F::Coins, "Jackpot coins", 40.f, 0.8f, 0, theme::puGolden, sf::Color::White},
+        {F::Reels, "Slot pair", 10.f, 0.6f, 4, jes, sf::Color::White},
+        {F::Boomerang, "Homecoming", 40.f, 0.45f, 0, sli, sf::Color::White},
+        {F::Bastion, "Last line", 50.f, 0.7f, 0, theme::core, sf::Color::White},
+        {F::Glyph, "Sigil", 40.f, 0.45f, 0, mage, sf::Color::White},
+        {F::Cracks, "Titan quake", 50.f, 0.8f, 0, theme::core, sf::Color::White},
+        {F::Dust, "Heavy landing", 40.f, 0.5f, 0, theme::core, sf::Color::White},
+        {F::Clock, "Time stop", 40.f, 0.8f, 0, mage, sf::Color::White},
+        {F::Echo, "Spell chorus", 30.f, 0.6f, 0, mage, sf::Color::White},
+        {F::Star, "Grand reaction", 50.f, 0.6f, 0, fire, water},
+        {F::Hexshield, "Ward ring", 26.f, 0.5f, 2, theme::core, sf::Color::White},
+        {F::Link, "Fission", 0.f, 0.35f, 2, theme::elemPoison, sf::Color::White},
+        {F::Sonic, "Mega Striker", 40.f, 0.35f, 1, theme::ballFast, sf::Color::White},
+        {F::Rune, "Ancient nova", 40.f, 0.45f, 0, mage, sf::Color::White},
+        {F::Spokes, "Lead storm", 30.f, 0.4f, 0, sho, sf::Color::White},
+        {F::Pellets, "Frag rounds", 30.f, 0.25f, 0, sho, sf::Color::White},
+        {F::Smoke, "Smoke bomb", 40.f, 0.8f, 0, ass, sf::Color::White},
+        {F::Wisps, "Necromancer", 30.f, 0.6f, 0, sum, sf::Color::White},
+        {F::Pillar, "Martyr", 22.f, 0.6f, 0, sum, sf::Color::White},
+        {F::Blast, "Bomber", 36.f, 0.45f, 0, fire, sf::Color::White},
+        {F::Fuse, "Jester bomb", 36.f, 0.45f, 0, fire, sf::Color::White},
+        {F::Confetti, "Jester jackpot", 44.f, 0.9f, 0, theme::puGolden, sf::Color::White},
+        {F::Cards, "Sleight", 24.f, 0.5f, 0, jes, sf::Color::White},
+        {F::Arrow, "Ambush", 30.f, 0.4f, 1, sli, sf::Color::White},
+        {F::Rise, "Golem rises", 30.f, 0.5f, 0, sum, sf::Color::White},
+        {F::Slam, "Golem slam", 40.f, 0.4f, 0, sum, sf::Color::White},
+        {F::Spiral, "Great spirit", 40.f, 0.6f, 0, sum, sf::Color::White},
+        {F::Collapse, "Black hole", 40.f, 0.5f, 0, theme::accent, sf::Color::White},
+        {F::Sight, "Seeker", 10.f, 0.3f, 2, theme::accent, sf::Color::White},
+        {F::Ping, "Ping-pong", 10.f, 0.35f, 1, theme::accent, sf::Color::White},
+        {F::Beckon, "Beckon", 10.f, 0.4f, 2, theme::accent, sf::Color::White},
+        {F::Mana, "Mana spring", 30.f, 0.5f, 0, mage, sf::Color::White},
+        {F::Leap, "Conflux", 0.f, 0.4f, 2, fire, water},
+        {F::Saturate, "Saturate", 30.f, 0.5f, 0, fire, water},
+        {F::Wild, "Wild magic", 26.f, 0.5f, 0, jes, sf::Color::White},
+        {F::Chrono, "Chronomancy", 50.f, 0.9f, 0, mage, sf::Color::White},
+        {F::Scythe, "Reaper", 24.f, 0.3f, 1, ass, sf::Color::White},
+        {F::Streak, "Lightspeed", 10.f, 0.25f, 2, theme::accent, sf::Color::White},
+        {F::Drop, "Primal rain", 10.f, 0.4f, 0, water, sf::Color::White},
+        {F::Ion, "Ion cannon", 0.f, 0.22f, 2, sho, sf::Color::White},
+        {F::Card, "Jester card", 10.f, 1.1f, 3, jes, sf::Color::White},
+        {F::Frost, "Primal ice", 36.f, 0.8f, 0, theme::elemIce, sf::Color::White},
+        {F::Rubble, "Primal stone", 12.f, 0.5f, 0, theme::elemStone, sf::Color::White},
+        {F::Splash, "Primal poison", 30.f, 0.5f, 0, theme::elemPoison, sf::Color::White},
+        {F::Storm, "Primal electric", 12.f, 0.4f, 0, theme::elemElectric, sf::Color::White},
+        {F::Flip, "Coin flip", 5.f, 0.6f, 3, theme::puGolden, sf::Color::White},
+        {F::Execute, "Cull (new)", 14.f, 0.35f, 0, ass, sf::Color::White},
+        {F::Glint, "Backstab (new)", 13.f, 0.3f, 1, ass, sf::Color::White},
+        {F::Twin, "Twincast (new)", 9.f, 0.45f, 1, mage, sf::Color::White},
+    };
+    constexpr int kRows = static_cast<int>(sizeof(rows) / sizeof(rows[0]));
+    constexpr int kPerRow = 3, kRowsPerPage = 5, kPerPage = kPerRow * kRowsPerPage;
+    const int first = page * kPerPage;
+    if (first >= kRows) return false;
+    const float phases[3] = {0.12f, 0.4f, 0.75f};
+    const float cell = 118.f;
+    for (int n = 0; n < kPerPage && first + n < kRows; ++n) {
+        const Row& row = rows[first + n];
+        const float gx = 20.f + static_cast<float>(n % kPerRow) * (cell * 3.f + 54.f);
+        const float gy = 30.f + static_cast<float>(n / kPerRow) * (cell + 34.f);
+        sf::Text label(row.name, font, 15);
+        label.setFillColor(theme::textLo);
+        label.setPosition(gx, gy - 22.f);
+        t.draw(label);
+        for (int ph = 0; ph < 3; ++ph) {
+            const sf::Vector2f c{gx + cell * (static_cast<float>(ph) + 0.5f), gy + cell * 0.5f};
+            draw::box(t, {c.x - cell * 0.5f + 2.f, c.y - cell * 0.5f + 2.f, cell - 4.f, cell - 4.f}, 3.f,
+                      withAlpha(theme::bgDeep, 1.f), withAlpha(theme::bgDeep, 1.f), withAlpha(theme::arenaEdge, 0.4f), 1.f);
+            F f;
+            f.kind = row.kind;
+            f.r = row.r;
+            f.maxLife = row.life;
+            f.life = row.life * (1.f - phases[ph]);
+            f.color = row.c;
+            f.color2 = row.c2;
+            f.a = c;
+            switch (row.bMode) {
+                case 1: f.b = normalized(sf::Vector2f{1.f, -0.4f}, {1.f, 0.f}); break;
+                case 2: f.a = c + sf::Vector2f{-34.f, 22.f}; f.b = c + sf::Vector2f{34.f, -22.f}; break;
+                case 3: f.b = {0.f, 12.f}; if (row.kind == F::Flip) f.b = {1.f, 0.f}; break;
+                case 4: f.b = {0.f, 0.f}; break;
+                default: break;
+            }
+            if (row.kind == F::Smite) { f.a = c + sf::Vector2f{0.f, -60.f}; f.b = c + sf::Vector2f{0.f, 30.f}; }
+            if (row.kind == F::Hexshield) { f.a = c; f.b = c + sf::Vector2f{40.f, -10.f}; }
+            if (row.kind == F::Beckon) { f.a = c + sf::Vector2f{20.f, -10.f}; f.b = c + sf::Vector2f{-30.f, 20.f}; }
+            if (row.kind != F::Hook && row.kind != F::Link && row.kind != F::Leap && row.kind != F::Ion && row.kind != F::Swap &&
+                row.kind != F::Streak && row.kind != F::Sight && row.kind != F::Smite)   // a stand-in ball / enemy under it
+                draw::disc(t, c, 9.f, withAlpha(row.c, 0.55f), withAlpha(row.c, 0.25f), {1.f, 1.f}, 20);
+            drawFx(t, f, 1.f);
+        }
+    }
+    return true;
 }
 
 }  // namespace sb

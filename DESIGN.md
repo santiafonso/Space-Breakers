@@ -3171,3 +3171,163 @@ desde el centro. Las capturas 41 / 42 muestran cada motivo y las etapas.
     - *El inmortal:* no se le puede hacer daño hasta que matás 3 oleadas de
       enemigos, cada una más fuerte que la anterior.
 - **Tutorial:** hecho el 2026-10-04 (ver arriba).
+
+### 2026-10-10: la web se ensancha, puentes entre clases y épicos/legendarios más lejos
+- **Sigue siendo un círculo** (el usuario lo quiere redondo: `kStretchX` 1).
+  Zoom mínimo 0.2 (entra todo), arranca en 0.7; los nombres se leen desde zoom
+  0.5. Pasado el anillo de clases los anillos van cada 0.8 (las cadenas de items
+  son largas). Se sacó el rótulo "CLASSES" (ahí viven los puentes).
+- **Cada tipo de nodo, su forma:** perk = círculo, desbloqueo (habilidad,
+  elemento, power-up, credo, legendario suelto) = cuadrado, épicos de la clase =
+  hexágono con borde violeta, legendarios de la clase = estrella con aro dorado,
+  puente = círculo partido en los colores de sus dos clases
+  (`metaNodeKind`). La leyenda tiene una fila "kinds": pasar el mouse por una
+  forma ilumina todos los nodos de ese tipo y dice su nombre. La tarjeta del
+  nodo dice ruta y tipo.
+- **Épicos y legendarios de cada clase, más lejos:** 20 nodos nuevos
+  (`MetaEpic<Clase>` después de su lore, 3 prismas; `MetaLegend<Clase>` después
+  del épico, 5 prismas). Sin ellos, una tirada de esa clase no da Epic /
+  Legendary (`buildUpgradeCtx`). Partidas viejas (save v17): si ya tenías la
+  clase, los dos nodos vienen comprados.
+- **Puentes (10 nodos, `parent2`):** uno entre cada par de clases vecinas,
+  justo afuera del anillo de clases; se abre desde cualquiera de las dos. Dan
+  algo a las pelotas con cualquiera de las dos clases, el doble con ambas, 2
+  niveles, 16 cores: Follow-through (Striker-Slinger, primer golpe lanzado
+  +12%), Trick shot (Slinger-Shooter, +3% crítico), Lucky shot (Shooter-Jester,
+  crítico +0.2x), Gambit (Jester-Assassin, +3% golpe doble), Shades
+  (Assassin-Summoner, copias +15%), Kinship (Summoner-Support, invocaciones
+  +8%), Harmony (Support-Mage, recarga +5%), Spellbrew (Mage-Alchemist,
+  elementos +8%), Bedrock (Alchemist-Guardian, empuje +10% y +0.25 al núcleo
+  por rebote), Juggernaut (Guardian-Striker, +6% daño y velocidad máxima).
+
+### 2026-10-10: pasada de animaciones de items
+- **Hoja de contacto (dev):** `SB_FXSHEET=<dir> ./space_breakers` guarda
+  `fx_1.png..` con cada floritura de item/habilidad en tres momentos.
+- **Rehechas:** Death sentence (el tajo barre, el corte se abre y saltan
+  esquirlas), Lucky break (cuatro hojas de trébol de verdad y un destello),
+  par del tragamonedas (tres rodillos que giran y frenan uno por uno, dos con
+  el símbolo), Homecoming (un bumerán que sale en lazo y vuelve), Sleight
+  (cartitas de verdad en abanico que salen volando).
+- **Mejoradas:** Heavy landing (onda plana + polvo + piedritas), Spell chorus
+  (anillos con runas que giran), Fission (una gota del elemento salta en arco y
+  revienta), Frag rounds (perdigones con estela), Smoke bomb (pop + bocanadas
+  que ruedan), Bomber (lenguas de fuego y humo), Ambush (cheurones que
+  atraviesan sobre una línea), Mana spring (estelas hacia la pelota y un aro al
+  llenarse), Saturate (una gota de cada elemento entra en espiral y se juntan),
+  Wild magic (chispas de formas y colores con cola), Chronomancy (segundo anillo
+  al revés y marcas), Reaper (hoja con filo, lomo y estela).
+- **Nuevas (antes no se veía nada):** Cull (una X que se cierra sobre el
+  enemigo y un destello), Backstab (un destello de cuatro puntas donde entra la
+  daga), Twincast (un fantasma de la pelota se separa y lanza su aro).
+- Sin tocar (ya se leían bien): Hook, Smite, Warp, Swap, Meteor, Time stop,
+  Titan, Last line, Grand reaction, Ion cannon, carta del Jester, Primal, etc.
+
+### 2026-10-10 (b): los items se abren en la web, los dioses en un anillo de oro, enlaces cruzados
+- **Pool inicial y desbloqueos de items:** el nodo de una clase abre sus items
+  Common y Uncommon. Después, por clase: "<Clase> rares" (desde la clase, 14
+  cores), "<Clase> epics" (después del lore, 3 prismas), el primer Legendary con
+  su propio nodo que lleva su nombre (5 prismas) y el resto de los Legendary en
+  otro (6 prismas; el Guardian tiene uno solo, así que no lo tiene). Los nombres
+  y textos salen de las tablas de items (`metaNodeName` / `metaNodeEffect`,
+  `itemUnlockNode`): dicen exactamente qué items abren.
+- **Dioses en la web:** un nodo por dios (8 prismas), al final de la cadena de
+  legendarios de su clase, todos en un anillo exterior con un aro dorado. Se
+  dibujan como soles: rayos dorados que giran, el disco en el color de la clase y
+  su nombre siempre a la vista en dorado. Sin su nodo, el Shrine no deja
+  ascender a esa clase (`shrineAscends`).
+- **Saves viejos (v18):** si ya tenías la clase, sus raros, el segundo
+  legendario y su dios vienen comprados.
+- **Enlaces cruzados (`kMetaLinks`, punteados):** una segunda entrada a un nodo
+  desde una ruta vecina con el mismo tema; cualquiera de las dos puntas lo abre:
+  Sling -> Kinetics y -> Slinger (tiro y velocidad), Treasury -> Elite spoils
+  (oro), Keen instinct -> Hunters (caza), Covenant -> Quartermaster (elegir al
+  empezar), Bulwark pulse -> Singularity (atracción), Arc -> Static (rayo),
+  Ember -> Meteor (fuego del cielo), Stonewall -> Quarry (piedra).
+- La leyenda de formas suma el sol de los dioses; el nombre de la forma bajo el
+  mouse aparece en la cabecera del panel.
+
+### 2026-10-10 (c): web geométrica y constelaciones
+- **Grilla polar:** los anillos van cada medio paso (y de a uno pasado el anillo
+  de clases); cada anillo se corta en casillas parejas, múltiplo de 12 (así todos
+  comparten los rayos), y cada nodo se apoya en una (`kSlotGap`, en `webAngle`).
+- **Constelaciones:** dos nodos vecinos en el mismo anillo (a menos de
+  `kConstellationReach`) se unen con una línea finita: apenas visible de entrada,
+  en el color de la ruta si tenés uno, y blanca con una estrellita titilando en
+  el medio cuando tenés los dos.
+- **8 enlaces cruzados más (17 en total):** Channel -> Charged (carga), Split ->
+  Twins (copias), Regen -> Tide (agua que cura), Damper -> Frost (frenar), Heft ->
+  Mass (peso), Velocity -> Sling (velocidad), Muster -> Legion (más pelotas),
+  Fool's luck -> Loaded dice (suerte).
+- **Menos huecos (2026-10-10 d):** el anillo de clases pasa a 4.5 (lo de adentro
+  respira), el segundo Legendary cuelga de los épicos al lado del primero (ya no
+  en fila) y el dios del primer Legendary: las cadenas de afuera son un paso más
+  cortas y se abren en horquilla; los dioses quedan a 0.8 del último anillo;
+  rutas chicas reservan menos lugar (`kRouteMinTips` 4); zoom mínimo 0.24 (la web
+  entera llena la pantalla).
+
+### 2026-10-12: la web alejada respira, nodos en las líneas largas
+- **Alejado no se pisa:** pasando zoom ~0.7 los nodos se achican al ritmo del
+  layout (`nodeScale`, piso 0.36 en vez de 0.6); casillas de la grilla un poco
+  más anchas (`kSlotGap` 0.5); los puntitos de nivel escalan y se esconden bajo
+  zoom 0.4.
+- **Líneas más suaves:** ruta ganada ~0.42 de opacidad (era 0.75), abierta 0.24,
+  cerrada 0.12; constelaciones y enlaces cruzados bajan igual.
+- **12 nodos nuevos en las líneas más largas:**
+  - Camino al Slinger (era una sola línea de 5.6 anillos): Calling -> **Grip**
+    (atrapás desde +6% más lejos por nivel, 2 niveles) -> **Wind-up** (primer golpe
+    lanzado +6% por nivel, 2 niveles) -> Slinger.
+  - **<Clase> mastery** (una por clase, 3 niveles, 30 cores): entre su primer
+    Legendary y su dios, a mitad de camino. Los dos mini stats propios de la clase
+    (`cfg::role`) crecen +50% por nivel (x2.5 al máximo). El dios ahora cuelga de
+    la maestría; los dioses ya comprados siguen comprados.
+- **Puentes exteriores (b):** 10 nodos más, uno entre cada par de clases vecinas
+  allá afuera, a la altura de sus legendarios (cuelgan del primer Legendary de
+  cada una, se abren desde cualquiera de los dos). Dan lo mismo que el puente de
+  adentro del mismo par y se suman: Hurl (Follow-through), Deadeye (Trick shot),
+  Jackpot (Lucky shot), Double cross (Gambit), Phantoms (Shades), Fellowship
+  (Kinship), Resonance (Harmony), Transmute (Spellbrew), Earthwork (Bedrock),
+  Colossus (Juggernaut). 2 niveles, 36 cores. Sirven sobre todo para que el
+  borde de la web no se vea vacío.
+- **Enlaces cruzados más limpios:** en vez de rayitas, puntitos chicos parejos
+  que frenan antes de cada nodo.
+
+### 2026-10-12: el combo de daño es una barra
+- **Sube mucho más lento y sin saltos:** cada golpe suma un poco (30 golpes por
+  +0.5x, antes 6); tope x5 a los 240 golpes (Overcharge lo duplica). El
+  multiplicador es continuo (`World::comboLevel`), los "tiers" quedan como marcas
+  para el oro por kill, el sonido y el calor del fondo.
+- **Se vacía de a poco:** 2.4 s sin golpear y empieza a drenar 18 golpes por
+  segundo hasta el próximo golpe (antes caía un tier entero de golpe).
+- **HUD:** arriba a la izquierda, "x2.6" y una barra que se llena (azul -> dorado
+  -> brasa), una marca cada +0.5x, la punta brilla y da un pop al cruzar una
+  marca, una mecha finita abajo se consume mientras no pegás; sin mecha la barra
+  titila y baja; al tope un brillo la recorre.
+- Ojo: el oro por kill también escala con el tier del combo, así que baja un poco.
+- **Se reinicia en cada pelea** (`World::resetCombo` en `App::startWave`): todas arrancan en x1, también los jefes.
+
+### 2026-10-12: Ascensión (niveles de desafío)
+- **Cómo se abre:** ganá una run en tu nivel más alto y se abre el siguiente (hasta
+  10). Una partida que ya tenía runs ganadas arranca con el nivel 1 abierto.
+- **Dónde se elige:** en la web, panel de abajo a la derecha: fila "Ascension N"
+  (clic sube, vuelve a 0), solo si ya abriste alguno. Funciona encima de Normal o
+  Hard. El hover lista todas las reglas activas y lo que paga.
+- **Paga:** cores x(1 + 0.15 x nivel); ganar en 5+ da +1 prisma.
+- **Las reglas** (cada nivel suma la suya a las de abajo; números en `cfg::asc`,
+  textos en `progression/Ascension.hpp`):
+  1. élites +25% vida y segundo Brute desde el acto 1
+  2. sin reparación gratis antes de cada pelea
+  3. enemigos +10% velocidad
+  4. el Descanso repara la mitad y la tienda cuesta +25%
+  5. jefes cambian de fase antes (75% / 45%) y se enfurecen más (x1.75)
+  6. cada pelea élite tiene un rasgo: Armored (-30% daño recibido), Swift (+30%
+     velocidad), Regenerating (3% vida/s), Vengeful (+50% daño al core)
+  7. el combo se vacía el doble de rápido
+  8. las elecciones dan una carta menos (2)
+  9. cada jefe tiene una regla: Thick hide (golpes de pelota -60%), Warded (todo
+     lo que no sea golpe de pelota -60%), Hex (cada 11 s congela 3 s tu pelota más
+     fuerte; nunca la única)
+  10. todo +15% vida y el jefe final con dos reglas
+- **HUD:** "asc N" junto al acto; el rasgo del élite y las reglas del jefe al lado
+  de su nombre (hover: qué hacen). La pelota congelada por Hex lleva un aro violeta
+  que se consume.
+- **Pendiente:** un sexto jefe para el nivel 10 (por ahora "todo +15% y dos reglas").

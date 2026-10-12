@@ -12,7 +12,7 @@ namespace sb {
 
 namespace {
 constexpr int kRunVersion = 1;   // run.txt layout; a different one is dropped, not misread
-constexpr int kSaveVersion = 16;  // v16: the web became class routes (layout only), Calling = 4th first-ability card, route perks + ability unlocks appended (86 nodes); v15: root Squad -> Calling (refund), class nodes appended (58 nodes); v14: snd.* sound mix; v13: appended Oath..Last stand (51 nodes); append-only since v9
+constexpr int kSaveVersion = 18;  // v18: Rares / 2nd Legendary / gods on the web (grandfathered for owned classes); v17: epic / legendary gates per class + bridges appended (grandfathered for owned classes); v16: the web became class routes (layout only), Calling = 4th first-ability card, route perks + ability unlocks appended (86 nodes); v15: root Squad -> Calling (refund), class nodes appended (58 nodes); v14: snd.* sound mix; v13: appended Oath..Last stand (51 nodes); append-only since v9
 }  // namespace
 
 bool hasSavedGame(const std::string& path) {
@@ -45,6 +45,7 @@ bool saveGame(const std::string& path, const GameData& d) {
         f << "snd.cat " << i << ' ' << m.sound.vol[i] << ' ' << m.sound.style[i] << '\n';
     f << "fullscreen " << (m.fullscreen ? 1 : 0) << '\n';
     f << "hard " << (m.hardMode ? 1 : 0) << '\n';
+    f << "asc " << m.ascMax << ' ' << m.ascSel << '\n';
     f << "hints " << m.hints << '\n';
     f << "stat.enemiesKilled " << m.stats.enemiesKilled << '\n';
     f << "stat.coresEarned " << m.stats.coresEarned << '\n';
@@ -65,6 +66,7 @@ bool loadGame(const std::string& path, GameData& d) {
     MetaState& m = d.meta;
     bool sawAnything = false;
     int fileVersion = 0;
+    bool sawAsc = false;   // an "asc" line (2026-10-12+)
     std::string line;
     while (std::getline(f, line)) {
         std::istringstream ls(line);
@@ -107,6 +109,12 @@ bool loadGame(const std::string& path, GameData& d) {
         }
         else if (key == "fullscreen") { int v = 0; ls >> v; m.fullscreen = v != 0; }
         else if (key == "hard") { int v = 0; ls >> v; m.hardMode = v != 0; }
+        else if (key == "asc") {
+            sawAsc = true;
+            ls >> m.ascMax >> m.ascSel;
+            m.ascMax = std::clamp(m.ascMax, 0, cfg::asc::maxLevel);
+            m.ascSel = std::clamp(m.ascSel, 0, m.ascMax);
+        }
         else if (key == "stat.enemiesKilled") ls >> m.stats.enemiesKilled;
         else if (key == "stat.coresEarned") ls >> m.stats.coresEarned;
         else if (key == "stat.bestWave") ls >> m.stats.bestWave;
@@ -118,11 +126,34 @@ bool loadGame(const std::string& path, GameData& d) {
         else if (key == "stat.timePlayed") ls >> m.stats.timePlayed;
         // "version", old run.* / ball / stat.lifetimeScrap lines: ignored.
     }
+    // Ascension came in 2026-10-12: a save that already won a run opens level 1.
+    if (!sawAsc && m.stats.wins > 0) {
+        m.ascMax = 1;
+        m.ascSel = 1;
+    }
 
     // v15: the root "Squad" (+1 starting ball, 2 levels) became "Calling" (1
     // level). Pay back the cores spent on levels past the first.
     if (fileVersion < 15)
         for (int lvl = 1; lvl < m.unlock[MetaCalling]; ++lvl) m.cores += metaUnlockCost(MetaCalling, lvl);
+    // v17: a class's epics and legendaries got their own nodes; a class you
+    // already had keeps rolling them.
+    if (fileVersion < 17)
+        for (int t = 1; t <= 10; ++t) {
+            const ItemTag tag = static_cast<ItemTag>(t);
+            if (const int n = classUnlockNode(tag); n >= 0 && m.unlock[n] > 0) {
+                m.unlock[epicGateNode(tag)] = 1;
+                m.unlock[legendGateNode(tag)] = 1;
+            }
+        }
+    // v18: Rares, the second Legendary and the god got their own nodes too.
+    if (fileVersion < 18)
+        for (int t = 1; t <= 10; ++t)
+            if (const int n = classUnlockNode(static_cast<ItemTag>(t)); n >= 0 && m.unlock[n] > 0) {
+                m.unlock[MetaRareStriker + t - 1] = 1;
+                if (!metaNodeRetired(MetaLegend2Striker + t - 1)) m.unlock[MetaLegend2Striker + t - 1] = 1;
+                m.unlock[MetaGodStriker + t - 1] = 1;
+            }
     for (int i = 0; i < MetaUnlockCount; ++i) {
         if (m.unlock[i] < 0) m.unlock[i] = 0;
         if (m.unlock[i] > metaUnlockDef(i).maxLevel) m.unlock[i] = metaUnlockDef(i).maxLevel;
@@ -153,6 +184,7 @@ bool saveRun(const std::string& path, const RunState& r) {
         if (!f) return false;
         f << "run.version " << kRunVersion << '\n';
         f << "run.hard " << (r.hard ? 1 : 0) << '\n';
+        f << "run.asc " << r.ascension << '\n';
         f << "run.tutorial " << (r.tutorial ? 1 : 0) << '\n';
         f << "run.plating " << r.platingHp << '\n';
         f << "run.ascend " << r.ascensions << ' ' << r.poolOut << ' ' << r.poolIn << '\n';
@@ -230,6 +262,7 @@ bool loadRun(const std::string& path, RunState& out) {
         if (!(ls >> key)) continue;
         if (key == "run.version") ls >> version;
         else if (key == "run.hard") { int v = 0; ls >> v; r.hard = v != 0; }
+        else if (key == "run.asc") ls >> r.ascension;
         else if (key == "run.tutorial") { int v = 0; ls >> v; r.tutorial = v != 0; }
         else if (key == "run.plating") ls >> r.platingHp;
         else if (key == "run.ascend") ls >> r.ascensions >> r.poolOut >> r.poolIn;

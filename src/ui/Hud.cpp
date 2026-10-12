@@ -38,7 +38,9 @@ void Hud::update(float dt, int act, int stage, int stages, int enemiesLeft, floa
     comboMul_ = comboMultiplier;
     effect_ = effect;
 
-    comboPop_ *= std::exp(-7.f * dt);
+    comboPop_ *= std::exp(-5.f * dt);
+    time_ += dt;
+    comboShown_ += (comboLevel_ - comboShown_) * (1.f - std::exp(-(comboLevel_ > comboShown_ ? 14.f : 6.f) * dt));
     goldPop_ *= std::exp(-9.f * dt);
     goldShown_ += (static_cast<float>(gold_) - goldShown_) * (1.f - std::exp(-8.f * dt));
     if (std::fabs(static_cast<float>(gold_) - goldShown_) < 0.5f) goldShown_ = static_cast<float>(gold_);
@@ -49,9 +51,9 @@ void Hud::update(float dt, int act, int stage, int stages, int enemiesLeft, floa
 bool Hud::tooltipAt(sf::Vector2f m, std::string& title, std::string& desc, sf::Color& color) const {
     const float mg = theme::margin, band = cfg::app::arenaBand;
     color = theme::textHi;
-    if (comboMul_ > 1.001f && sf::FloatRect(mg - 4.f, 0.f, 130.f, band).contains(m)) {
+    if (comboShown_ > 0.01f && sf::FloatRect(mg - 4.f, 0.f, 230.f, band).contains(m)) {
         title = "Damage combo";
-        desc = "chain hits without a pause and every ball hits harder; it fades if you stop hitting";
+        desc = "every hit fills the bar a little and every ball hits harder (each mark is +0.5x); stop hitting and the line under it runs out, then the bar drains";
         color = theme::accent;
         return true;
     }
@@ -73,11 +75,14 @@ bool Hud::tooltipAt(sf::Vector2f m, std::string& title, std::string& desc, sf::C
                           : (eliteWave_ ? "Elite fight" : "Stage " + std::to_string(stage_) + " of " + std::to_string(stages_));
         if (bossWave_) {
             desc = std::string(bossDesc(bossKind_)) + ".  The red bar is its health; at each notch it changes how it fights.";
+            for (unsigned r : kBossRules)
+                if (bossRules_ & r) desc += std::string("  ") + bossRuleName(r) + ": " + bossRuleDesc(r) + ".";
             return true;
         }
         if (eliteWave_) {
             desc = "tougher and more enemies - clear it for extra gold and an item pick (items only come from elites "
                    "and shops). " + std::to_string(enemiesLeft_) + " left.";
+            if (trait_ != EliteTrait::None) desc += std::string("  ") + eliteTraitName(trait_) + ": " + eliteTraitDesc(trait_) + ".";
             return true;
         }
         desc = std::to_string(enemiesLeft_) + (enemiesLeft_ == 1 ? " enemy" : " enemies") +
@@ -134,22 +139,54 @@ void Hud::draw(sf::RenderWindow& window) const {
     const float mg = theme::margin, band = cfg::app::arenaBand;
     const float cy = band * 0.5f;
 
-    // Damage-combo chip, top-left: a bracketed readout.
-    if (comboMul_ > 1.001f) {
-        const sf::FloatRect chip{mg - 4.f, cy - 13.f, 118.f, 26.f};
-        const float heat = clampf((comboMul_ - 1.f) / 2.f, 0.f, 1.f);
-        draw::box(window, chip, 0.f, withAlpha(theme::accent, 0.05f + 0.06f * heat), withAlpha(theme::accent, 0.f));
-        draw::brackets(window, chip, 6.f, 1.5f, withAlpha(theme::accent, 0.55f + 0.45f * comboPop_));
-        drawLabel(window, *font_, "dmg", 11, {chip.left + 10.f, cy}, withAlpha(theme::accent, 0.7f), -1);
+    // Damage combo, top-left: "x2.3" and a bar that fills a little with
+    // every hit, cool blue to gold to ember as it heats up, a tick at every
+    // +0.5x. Under it a thin fuse burns down while you don't hit; when it's
+    // out the bar drains (and flickers).
+    if (comboShown_ > 0.01f) {
+        const float cap = std::max(1.f, comboCap_);
+        const float frac = clampf(comboShown_ / cap, 0.f, 1.f);
+        const bool full = comboLevel_ >= cap - 0.001f;
+        const bool draining = comboFuse_ <= 0.f;
+        const sf::Color col = frac < 0.5f ? lerpColor(theme::accent, theme::puGolden, frac * 2.f)
+                                          : lerpColor(theme::puGolden, theme::ember, (frac - 0.5f) * 2.f);
+        const float flicker = draining ? 0.75f + 0.25f * std::sin(time_ * 30.f) : 1.f;
+
         char val[16];
-        std::snprintf(val, sizeof(val), "x%.1f", comboMul_);
-        sf::Text combo = makeText(*font_, val, 20, theme::accent);
-        const sf::FloatRect cb = combo.getLocalBounds();
-        combo.setOrigin(cb.left, cb.top + cb.height * 0.5f);
-        const float cs = 1.f + 0.22f * comboPop_;
-        combo.setScale(cs, cs);
-        combo.setPosition(chip.left + 50.f, std::round(cy));
-        window.draw(combo);
+        std::snprintf(val, sizeof(val), "x%.1f", 1.f + comboShown_ * cfg::combo::multiplierPerTier);
+        sf::Text num = makeText(*font_, val, 20, withAlpha(lerpColor(col, sf::Color::White, 0.35f * comboPop_), flicker));
+        const sf::FloatRect nb = num.getLocalBounds();
+        num.setOrigin(nb.left, nb.top + nb.height * 0.5f);
+        const float ns = 1.f + 0.3f * comboPop_;
+        num.setScale(ns, ns);
+        num.setPosition(mg, std::round(cy - 1.f));
+        window.draw(num);
+
+        const float bx = mg + 62.f, bw = 150.f, bh = 6.f, by = std::round(cy - bh * 0.5f - 1.f);
+        const float fw = bw * frac;
+        draw::box(window, {bx, by, bw, bh}, 0.f, withAlpha(theme::textDim, 0.18f), withAlpha(theme::textDim, 0.12f));
+        if (fw > 0.5f) {
+            draw::box(window, {bx, by, fw, bh}, 0.f, withAlpha(lerpColor(col, sf::Color::White, 0.25f), 0.95f * flicker),
+                      withAlpha(col, 0.8f * flicker));
+            const sf::Vector2f head{bx + fw, by + bh * 0.5f};
+            draw::glow(window, head, 10.f + 8.f * frac + 14.f * comboPop_, col, (0.35f + 0.5f * comboPop_) * flicker);
+            draw::line(window, {head.x, by - 2.f}, {head.x, by + bh + 2.f}, 2.f, withAlpha(sf::Color::White, 0.85f * flicker));
+        }
+        if (full) {   // at the cap a bright band sweeps along it
+            const float sx = bx + std::fmod(time_ * 1.3f, 1.f) * (bw + 30.f) - 15.f;
+            const float l = std::max(bx, sx - 12.f), r = std::min(bx + bw, sx + 12.f);
+            if (r > l) draw::box(window, {l, by, r - l, bh}, 0.f, withAlpha(sf::Color::White, 0.55f), withAlpha(sf::Color::White, 0.25f));
+            draw::glow(window, {bx + bw * 0.5f, by + bh * 0.5f}, bw * 0.5f, col, 0.12f + 0.06f * std::sin(time_ * 5.f));
+        }
+        for (int k = 1; k < static_cast<int>(cap); ++k) {   // a mark at every +0.5x
+            const float tx = std::round(bx + bw * static_cast<float>(k) / cap);
+            const bool passed = comboShown_ >= static_cast<float>(k);
+            draw::line(window, {tx, by - (passed ? 1.f : 0.f)}, {tx, by + bh + (passed ? 1.f : 0.f)}, 1.f,
+                       passed ? withAlpha(theme::bg, 0.7f) : withAlpha(theme::textDim, 0.45f));
+        }
+        if (comboFuse_ > 0.f)   // the fuse
+            draw::line(window, {bx, by + bh + 4.f}, {bx + bw * comboFuse_, by + bh + 4.f}, 1.f,
+                       withAlpha(col, 0.25f + 0.35f * comboFuse_));
     }
 
     // Gold, top-right: the one run number worth watching mid-fight.
@@ -161,15 +198,21 @@ void Hud::draw(sf::RenderWindow& window) const {
     // A boss shows its name and its health instead, with a notch where it
     // enrages.
     {
-        char stage[32];
+        std::string stage;
         if (bossWave_) {
-            std::string n = bossName(bossKind_);
-            for (char& ch : n) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
-            std::snprintf(stage, sizeof(stage), "%s", n.c_str());
+            stage = bossName(bossKind_);
+            for (char& ch : stage) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+            for (unsigned r : kBossRules)   // Ascension 9: its rules
+                if (bossRules_ & r) stage += std::string("  ") + bossRuleName(r);
         }
-        else if (eliteWave_) std::snprintf(stage, sizeof(stage), "elite  %d / %d", stage_, stages_);
-        else std::snprintf(stage, sizeof(stage), "stage %d / %d", stage_, stages_);
-        const std::string act = "act " + std::to_string(act_) + (hard_ ? "  hard" : "");
+        else if (eliteWave_) {
+            stage = "elite";
+            if (trait_ != EliteTrait::None) stage += std::string(" ") + eliteTraitName(trait_);   // Ascension 6
+            stage += "  " + std::to_string(stage_) + " / " + std::to_string(stages_);
+        }
+        else stage = "stage " + std::to_string(stage_) + " / " + std::to_string(stages_);
+        const std::string act = "act " + std::to_string(act_) + (hard_ ? "  hard" : "") +
+                                (asc_ > 0 ? "  asc " + std::to_string(asc_) : "");
         const sf::Color stCol = bossWave_ ? theme::coreLow : (eliteWave_ ? theme::ember : theme::textHi);
         const bool boss = bossWave_ && bossFrac_ >= 0.f;
         const float aw = makeLabel(*font_, act, 13, theme::textLo).getLocalBounds().width;
@@ -181,7 +224,7 @@ void Hud::draw(sf::RenderWindow& window) const {
         const float x = x0 + aw + gap + sw + gap, y = std::round(cy - barH * 0.5f);
         if (boss) {
             gauge(window, x, y, barW, barH, bossFrac_, theme::coreLow, 0.95f, 10);
-            for (float at : cfg::boss::stageAt) {   // a notch at each phase change
+            for (float at : asc_ >= 5 ? cfg::asc::stageAt : cfg::boss::stageAt) {   // a notch at each phase change
                 const float nx = std::round(x + barW * at);
                 draw::line(window, {nx, y - 4.f}, {nx, y + barH + 4.f}, 2.f, withAlpha(theme::textHi, 0.6f));
             }

@@ -741,7 +741,8 @@ struct CommonWorld {
                     Star, Hexshield, Link, Sonic, Rune, Spokes, Pellets, Smoke, Wisps, Pillar, Blast, Fuse,
                     Confetti, Cards, Arrow, Rise, Slam, Spiral, Collapse, Sight, Ping, Beckon,
                     Mana, Leap, Saturate, Wild, Chrono, Scythe, Streak,
-                    Breath, Swath, Frost, Rubble, Splash, Storm, Drop, Boulder, Ion, Card, Flip };
+                    Breath, Swath, Frost, Rubble, Splash, Storm, Drop, Boulder, Ion, Card, Flip,
+                    Execute, Glint, Twin };
         Kind kind = Shock;
         sf::Vector2f a, b;     // from / to (a hook's ball / its head; a swap's two ends...)
         float life = 0.f, maxLife = 1.f, r = 0.f;
