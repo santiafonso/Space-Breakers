@@ -3049,6 +3049,80 @@ int App::runTutorialSim(int trials) {
     return 0;
 }
 
+// SB_SHOWCASE=<dir>: a busy fight with a strong squad, saved frame by frame
+// (30 fps) for the itch page's GIF and cover (dev; tools/showcase_gif.py).
+int App::runShowcase(const std::string& dir) {
+    using K = UpgradeKind;
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+    savePath_ = dir + "/showcase_save.txt";   // never touch the real save
+    snapInvuln_ = true;
+    data_.meta.unlock[MetaCalling] = 1;
+    newRun();
+    chooseAbility(0);
+    RunState& r = data_.run;
+    r.balls.assign(5, BallLoadout{});
+    auto put = [](BallLoadout& L, int slot, K k, int lvl) { L.setSlot(slot, static_cast<int>(k), lvl); };
+    put(r.balls[0], kSlotType, K::ElemFire, 2);
+    put(r.balls[0], 0, K::Cleave, 2);
+    put(r.balls[0], 1, K::Crit, 2);
+    put(r.balls[0], 2, K::Tesla, 2);
+    put(r.balls[0], 3, K::Bomber, 2);
+    put(r.balls[0], kSlotAbility, K::AbilityDash, 2);
+    {
+        BallLoadout& L = r.balls[1];
+        L.itemSlots = kBallSlots;
+        const K tk[6] = {K::Railgun, K::Seeker, K::SpellChorus, K::Chronomancy, K::Minigun, K::IonCannon};
+        for (int sl = 0; sl < 6; ++sl) { L.gear[sl] = static_cast<int>(tk[sl]); L.gearLvl[sl] = 1; }
+    }
+    put(r.balls[2], kSlotType, K::ElemElectric, 2);
+    put(r.balls[2], 0, K::Storm, 2);
+    put(r.balls[2], kSlotAbility, K::AbilityMissile, 3);
+    {
+        BallLoadout& O = r.balls[3];
+        O.ascendedFrom = static_cast<int>(ItemTag::Mage);
+        O.itemSlots = kBallSlots;
+        const K ok[4] = {K::Huginn, K::Muninn, K::Gungnir, K::Draupnir};
+        for (int sl = 0; sl < 4; ++sl) { O.gear[sl] = static_cast<int>(ok[sl]); O.gearLvl[sl] = 1; }
+        O.ability[0] = static_cast<int>(K::AbilityNova); O.abilityLvl[0] = 2;
+        O.ability[1] = static_cast<int>(K::AbilityArc);  O.abilityLvl[1] = 2;
+    }
+    put(r.balls[4], kSlotType, K::ElemIce, 2);
+    put(r.balls[4], 0, K::Rampart, 1);
+    put(r.balls[4], 1, K::Bumper, 2);
+    put(r.balls[4], 2, K::Glutton, 1);
+    r.gold = 342;
+    rememberClasses();
+    syncWorldBalls();
+    for (int i = 0; i < static_cast<int>(r.map.nodes.size()); ++i)
+        if (mapNodeOpen(i)) { travelTo(i); break; }
+    world_.devSetInvuln(true);
+    world_.startWave(6, params(), false);
+    auto crowd = [this](int f) {   // a steady stream, so the arena is never empty or swamped
+        world_.devSpawn(EnemyKind::Grunt, 5);
+        if (f % 3 == 0) world_.devSpawn(EnemyKind::Runner, 2);
+        if (f % 4 == 1) world_.devSpawn(EnemyKind::Shielded, 1);
+        if (f % 5 == 2) world_.devSpawn(EnemyKind::Splitter, 1);
+        if (f % 6 == 3) world_.devSpawn(EnemyKind::Tank, 1);
+    };
+    for (int i = 0; i < 360; ++i) {   // launched and into the stream
+        if (i % 24 == 0) crowd(i / 24);
+        update(1.f / 60.f);
+    }
+    world_.devSetCombo(140.f);
+    const int frames = std::getenv("SB_SHOWCASE_FRAMES") ? std::atoi(std::getenv("SB_SHOWCASE_FRAMES")) : 300;
+    char name[32];
+    for (int f = 0; f < frames; ++f) {
+        if (f % 12 == 0) crowd(f / 12);
+        update(1.f / 60.f);
+        update(1.f / 60.f);
+        std::snprintf(name, sizeof name, "/f%04d.png", f);
+        capturePath_ = dir + name;
+        render();
+    }
+    return 0;
+}
+
 int App::runSnapshots(const std::string& dir) {
     std::error_code ec;
     std::filesystem::create_directories(dir, ec);
@@ -3970,6 +4044,7 @@ int App::runSnapshots(const std::string& dir) {
 
 int App::run() {
     if (const char* snap = std::getenv("SB_SNAPSHOT"); snap && *snap) return runSnapshots(snap);
+    if (const char* show = std::getenv("SB_SHOWCASE"); show && *show) return runShowcase(show);
     if (const char* sheet = std::getenv("SB_FXSHEET"); sheet && *sheet) {   // dev: every flourish, side by side
         sf::RenderTexture rt;
         rt.create(1280, 800);

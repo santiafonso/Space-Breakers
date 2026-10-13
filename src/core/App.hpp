@@ -334,6 +334,7 @@ private:
     // Dev "photo mode" (SB_SNAPSHOT=<dir>): stage every screen, save a PNG of
     // each and quit - a way to look at the UI without playing.
     int runSnapshots(const std::string& dir);
+    int runShowcase(const std::string& dir);   // SB_SHOWCASE: frames of a busy fight for the itch GIF (dev)
     int runTutorialSim(int trials);   // SB_TUTSIM: the tutorial's fights back to back, how often the core holds (dev)
     int runBalance(int waves);   // SB_BALANCE: each class at its best against its god (dev)
     void snapFrame(const std::string& file);
