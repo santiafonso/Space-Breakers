@@ -29,11 +29,6 @@ calm.mp3    "It's not Undertale 2" by PaulinusDavis - CC0
 fight5.ogg  "Soul Ripper" by Alexandr Zhelanov - CC-BY 4.0
             https://opengameart.org/node/120856
 
-menu.ogg    "Cosmic Menu" - source to be confirmed.
-fight1.ogg  "Pinball Royale" - source to be confirmed (not played right now).
-
-TODO: confirm the exact source page and license of menu.ogg and fight1.ogg.
-
 menu_layers/*.ogg  the menu's layered song: built from "Tension Based Loops"
             by VividReality - CC-BY 3.0 - https://opengameart.org/node/11614
             (its notes re-played on FluidR3 GM instruments, plus new pad,

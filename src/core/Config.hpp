@@ -782,6 +782,7 @@ inline constexpr float shotSpeed = 150.f;        // px/s (x the arena scale)
 inline constexpr float shotRadius = 10.f;
 inline constexpr float shotDamage = 5.f;         // core hp
 inline constexpr float shotLife = 16.f;
+inline constexpr float shotTurn = 0.6f;          // rad/s an orb bends toward the core (spread shots curve in)
 inline constexpr float partShotEvery = 7.f;      // a pillar / anchor fires this often
 inline constexpr float wardenShotEvery = 6.f;
 inline constexpr int   wardenShots[2] = {3, 5};  // a fan, phase 2 / 3

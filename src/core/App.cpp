@@ -73,14 +73,11 @@ App::App() : window_(kLogical()), world_({kLogical().x, kLogical().y - 2.f * cfg
     savePath_ = (exeDir() / "saves" / "save.txt").string();
 
     // Lato Bold for the UI, Lato Black for titles (Widgets picks it for big
-    // text); the old Arial is the fallback.
+    // text).
     const std::string body = findAsset("fonts/Lato-Bold.ttf");
-    if (!(!body.empty() && font_.loadFromFile(body))) {
-        const std::string fallback = findAsset("arial.ttf");
-        if (fallback.empty() || !font_.loadFromFile(fallback)) {
-            std::cerr << "Space-Breakers: could not load a font from assets/ (run from the project root)\n";
-            std::exit(1);
-        }
+    if (body.empty() || !font_.loadFromFile(body)) {
+        std::cerr << "Space-Breakers: could not load a font from assets/ (run from the project root)\n";
+        std::exit(1);
     }
     if (const std::string title = findAsset("fonts/Lato-Black.ttf");
         !title.empty() && titleFont_.loadFromFile(title))
@@ -102,8 +99,6 @@ App::App() : window_(kLogical()), world_({kLogical().x, kLogical().y - 2.f * cfg
     // it), so a class bought there is heard coming in. Its old loops (web.ogg,
     // calm.mp3) are out for now.
     audio_.addMusic(Audio::Track::Run, findAsset("music/map.ogg"), 1.17f, {0.f, 112.5f, 4.f});
-    // Out for now (the user is trying the others): Pinball Royale.
-    // audio_.addMusic(Audio::Track::Run, findAsset("music/fight1.ogg"), 1.08f, {0.3f, 242.f, 4.f});
     audio_.addMusic(Audio::Track::Run, findAsset("music/fight2.mp3"), 0.76f);
     audio_.addMusic(Audio::Track::Run, findAsset("music/fight3.mp3"), 0.67f);
     // Neon Action ends in a ring-out and 3 s of silence: loop before it.

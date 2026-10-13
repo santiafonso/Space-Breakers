@@ -1,6 +1,7 @@
 #include "sim/World.hpp"
 
 #include <algorithm>
+#include <bitset>
 #include <cmath>
 
 #include "sim/Collision.hpp"
@@ -524,7 +525,7 @@ void World::ascendBoss(bool last) {
     }
     if (asc_ >= 9) {
         const int n = asc_ >= 10 && last ? 2 : 1;
-        while (static_cast<int>(__builtin_popcount(bossRules_)) < n)
+        while (static_cast<int>(std::bitset<32>(bossRules_).count()) < n)
             bossRules_ |= kBossRules[rng_.irange(0, 2)];
     }
 }
@@ -2728,6 +2729,15 @@ void World::fireShots(sf::Vector2f from, int n, float spread) {
 void World::updateShots(float dt, const WorldParams& p, FrameEvents& ev) {
     for (auto it = shots_.begin(); it != shots_.end();) {
         Shot& s = *it;
+        // Bend toward the core, a little each frame: a spread fans out and
+        // curves back in instead of flying off to a wall.
+        const float want = std::atan2(core_.pos.y - s.pos.y, core_.pos.x - s.pos.x);
+        const float have = std::atan2(s.vel.y, s.vel.x);
+        float turn = std::remainder(want - have, 2.f * kPi);
+        const float step = cfg::boss::shotTurn * dt;
+        turn = std::clamp(turn, -step, step);
+        const float c = std::cos(turn), sn = std::sin(turn);
+        s.vel = {s.vel.x * c - s.vel.y * sn, s.vel.x * sn + s.vel.y * c};
         s.pos += s.vel * dt;
         s.life -= dt;
         bool gone = s.life <= 0.f;
