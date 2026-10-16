@@ -663,6 +663,7 @@ void App::replaceStack(ScreenId id) {
         data_.run = RunState{};
         endlessNextT_ = -1.f;
     }
+    setAiming(false);   // a throw in hand doesn't outlive its screen
     stack_.clear();
     stack_.push_back(makeScreen(id));
     fade_ = 1.f;
@@ -2726,6 +2727,10 @@ void App::update(float frameDt) {
         stack_.back()->update(*this, frameDt, peek_.open ? sf::Vector2f{-1e6f, -1e6f} : mouse);
         stack_.back()->advanceIntro(frameDt);
     }
+    // The play screen lets go of a throw above; an aim still on with the button
+    // up is one nobody holds (the screen it began on was replaced), and it would
+    // keep the cursor hidden until Esc.
+    if (aiming_ && !sf::Mouse::isButtonPressed(sf::Mouse::Left)) setAiming(false);
     updateHints(frameDt);
 
     if (simulating() && !stack_.back()->frozen()) {

@@ -10,7 +10,10 @@ Window::Window(sf::Vector2f logicalSize)
 
 void Window::applyVideoMode(bool fullscreen) {
     if (fullscreen) {
-        win_.create(sf::VideoMode::getDesktopMode(), "Space-Breakers", sf::Style::Fullscreen);
+        // Borderless at desktop size, not exclusive fullscreen: screen recorders
+        // (OBS and the like) capture black from an exclusive window.
+        win_.create(sf::VideoMode::getDesktopMode(), "Space-Breakers", sf::Style::None);
+        win_.setPosition({0, 0});
     } else {
         const sf::VideoMode d = sf::VideoMode::getDesktopMode();
         const unsigned w = std::min<unsigned>(static_cast<unsigned>(logical_.x), d.width);
