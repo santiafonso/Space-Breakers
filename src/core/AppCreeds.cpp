@@ -510,8 +510,8 @@ void App::rollShopOffers() {
     r.shopSold.assign(r.shopOffers.size(), false);
 }
 
-// Rerolls: as many as you can pay for, each much dearer than the last
-// (cfg::gold::rerollGrowth); "Merchant" makes the first one per level free.
+// Rerolls: cfg::gold::rerollsPerVisit per visit, each dearer than the last
+// (cfg::gold::rerollGrowth); "Merchant" adds one per level, free and first.
 int App::shopRerollPrice() const {
     if (shopFreeRerolls() > 0) return 0;
     const int paid = data_.run.shopRerolls - data_.meta.unlock[MetaMerchant];
@@ -521,11 +521,14 @@ int App::shopRerollPrice() const {
 
 // Selling is one item per visit (+1 per "Haggler" level).
 int App::shopFreeRerolls() const { return std::max(0, data_.meta.unlock[MetaMerchant] - data_.run.shopRerolls); }
+int App::shopRerollsLeft() const {
+    return std::max(0, cfg::gold::rerollsPerVisit + data_.meta.unlock[MetaMerchant] - data_.run.shopRerolls);
+}
 int App::shopSellsLeft() const { return std::max(0, 1 + data_.meta.unlock[MetaHaggler] - data_.run.shopSells); }
 
 void App::rerollShop() {
     RunState& r = data_.run;
-    if (r.gold < shopRerollPrice()) return;
+    if (shopRerollsLeft() <= 0 || r.gold < shopRerollPrice()) return;
     r.gold -= shopRerollPrice();
     ++r.shopRerolls;
     rollShopOffers();

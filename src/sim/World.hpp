@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <optional>
 #include <vector>
 
@@ -166,6 +167,7 @@ public:
     static constexpr int kCoreHitByShot = -3;
     int lastCoreHitBy() const { return lastCoreHitBy_; }
     int wave() const { return wave_; }
+    void forceArenaAct(int act) { arenaAct_ = act; }   // dev endless: 0 = the wave's own act
     // What's left of the fight for the HUD: still to come + alive, not
     // counting a Splitter's shards (it counts as one, done once it splits -
     // so the count never climbs back up).
@@ -243,10 +245,14 @@ private:
     void updateCasters(float dt, const WorldParams& p, FrameEvents& ev);   // beams on the core
     void coreLoses(float hp, const WorldParams& p, FrameEvents& ev);       // hard / creed scaling, Phoenix, the end
     EnemyKind rollEnemyKind();        // weighted by wave (kinds phase in) and elite
-    static void setEnemyKind(Enemy& e, EnemyKind k, float hp, float speed);
+    void setEnemyKind(Enemy& e, EnemyKind k, float hp, float speed) const;   // (const: reads the field size)
     static bool shieldBlocks(const Enemy& e, sf::Vector2f from, sf::Vector2f corePos);
     void carryBalls(const WorldParams& p);   // keep balls in place across a wave change
-    sf::Vector2f wideArenaSize() const;      // the pulled-back arena used from the boss wave on
+    sf::Vector2f wideArenaSize(int act) const;   // the pulled-back arena used from the boss wave on (cfg::boss::actArenaScale)
+    // How much wider than the base wide arena this act's field is (1 up to act 2):
+    // enemies come that much faster and in that many more, and grow by half of it.
+    float fieldMul() const { return std::max(1.f, arenaScale() / cfg::boss::arenaScaleX); }
+    float fieldRadiusMul() const { return 1.f + (fieldMul() - 1.f) * cfg::boss::enemyRadiusFieldFrac; }
     void updateCoreSlide(float dt);          // ease the core left -> centre entering wave 11
     void advanceCombo(float dt, const WorldParams& p);
     void advanceLeash(Ball& b, float dt, const WorldParams& p, FrameEvents& ev);   // "Leash": the spin on its rope
@@ -535,6 +541,8 @@ private:
     float packTimer_ = 0.f;   // a boss fight: to the next pack of small enemies (cfg::boss::pack*)
     int nextEnemyId_ = 1;     // Enemy::id source
     float waveHpMul_ = 1.f;   // Elite wave: enemy HP multiplier
+    float stragglerT_ = 0.f;  // s the wave has been down to one enemy (updateEnemies)
+    int arenaAct_ = 0;        // dev endless: the act whose arena the wide waves use (0 = the wave's own)
     float launchT_ = 0.f;                    // >0: the balls whirl around the core (cfg::ball::launch*)
     float launchAng_ = 0.f;                  // the whirl's current angle
     sf::Vector2f launchCentre_{0.f, 0.f};    // the ring's centre (the core, nudged off a wall)

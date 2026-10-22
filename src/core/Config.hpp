@@ -696,11 +696,13 @@ inline constexpr int maxItemLevel = 3;     // forge cap
 // selling an item back, and the forge as a paid service.
 inline constexpr float saleOff = 0.40f;    // the sale offer costs this much less ("Merchant" deepens it)
 inline constexpr int mysteryPrice = 55;    // a pick rolled at elite odds, revealed on purchase
-// Shop reroll: as many as you can pay for, each dearer than the last:
-// rerollBase * rerollGrowth^n (15, 26, 43, 74, 125, 213 ...). "Merchant": the
-// first one per level at each shop is free.
-inline constexpr int rerollBase = 15;
-inline constexpr float rerollGrowth = 1.7f;
+// Shop reroll: a few per visit, each dearer than the last: rerollBase *
+// rerollGrowth^n (25, 50). "Merchant": one more per level, and those come first
+// and free. (Until 2026-10-22: as many as you could pay, from 15 at x1.7 - the
+// shop was too strong.)
+inline constexpr int rerollBase = 25;
+inline constexpr float rerollGrowth = 2.f;
+inline constexpr int rerollsPerVisit = 2;
 inline constexpr float sellFrac = 0.45f;   // selling an item pays this of its tier price, x its level
 inline constexpr int forgeServicePrice = 45;   // level up an item without a Forge node
 inline constexpr int forgePoints = 2;          // a forge visit: common/uncommon 1, rare/epic 1 but only first, legendary 2
@@ -711,6 +713,12 @@ inline constexpr int forgePointGold = 20;      // a forge point nothing can take
 namespace boss {
 inline constexpr float arenaScaleX = 2.35f;   // boss arena vs the normal one (camera pulls way back; 1.95 till 2026-10-07)
 inline constexpr float arenaScaleY = 1.75f;   // (1.45 till 2026-10-07)
+// The camera pulls further back act by act (2026-10-22): more enemies on screen,
+// more ground for the balls. Per act (act 1: only its boss); arenaScaleX above
+// is the base the extra is measured from (World::fieldMul).
+inline constexpr float actArenaScale[5] = {2.35f, 2.35f, 2.75f, 3.15f, 3.55f};   // (2.6 / 2.85 / 3.1 at first: too subtle)
+inline constexpr float enemyRadiusFieldFrac = 0.5f;   // enemies / bosses grow this share of the extra (as balls do)
+inline constexpr float enemyCountFieldFrac = 0.6f;    // ...and come in this share of it more (act 5: +31%)
 inline constexpr float coreMarginX = 250.f;   // core sits this far from the left wall (room for the opening whirl)
 // The wide arena (boss wave on) is framed by a pulled-back camera. Ball speeds
 // scale with it so they look and bounce the same on screen; radius grows by
@@ -862,6 +870,9 @@ inline constexpr float spawnInterval = 0.85f;      // cadence on the early waves
 inline constexpr float spawnIntervalMin = 0.28f;   // ...tightening to this by spawnMinWave (denser, not a trickle)
 inline constexpr int spawnMinWave = 30;
 inline constexpr float introDelay = 1.15f;   // calm beat before the first enemy of a wave
+// A wave must always end (2026-10-22: "sometimes an enemy is left alive and won't die").
+inline constexpr float enterGrace = 4.f;      // s an enemy has to walk in from the edge; after that it's kept inside
+inline constexpr float stragglerTime = 15.f;  // s with one enemy left and nothing spawning: it heads straight for the core
 inline constexpr float hpBase = 3.5f;
 inline constexpr float act1HpMul = 0.75f;     // act 1 (2026-10-12): softer while the squad has almost no items...
 inline constexpr float act1BossHpMul = 0.8f;  // ...and its boss

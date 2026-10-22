@@ -100,6 +100,10 @@ inline const sf::Color classArtemisa = classSlinger;
 inline const sf::Color ability = soften({120, 216, 255});   // ability picks and slots
 inline const sf::Color bulletTime = soften({110, 232, 140});   // the E bullet-time gauge
 inline const sf::Color pact = soften({206, 74, 146});       // pacts and the Altar: a gift with a price
+// Each act's colour (2026-10-22): its sky, a tint on the arena and its grid.
+inline const sf::Color actTint[5] = {soften({84, 130, 255}), soften({70, 200, 186}), soften({160, 110, 255}),
+                                     soften({232, 104, 72}), soften({240, 200, 110})};
+inline sf::Color actColor(int act) { return actTint[(act < 1 ? 1 : act > 5 ? 5 : act) - 1]; }
 
 // Layout / type - room to breathe: few things on screen, none of them tiny
 inline constexpr float margin = 30.f;

@@ -5,6 +5,8 @@
 #include <SFML/Graphics.hpp>
 
 #include "progression/Creeds.hpp"
+#include "progression/Pacts.hpp"
+#include "ui/Icons.hpp"
 #include "ui/Screen.hpp"
 
 namespace sb {
@@ -45,6 +47,9 @@ float ruleFootHeight(const sf::Font& f, sf::FloatRect r, const std::string& text
 
 // Archetype colour: the creed cards, chips and the web's Creeds branch share it.
 sf::Color creedColor(CreedArchetype a);
+// Each creed's / pact's emblem: on its card, its chip and its row in TAB.
+Glyph creedGlyph(CreedId c);
+Glyph pactGlyph(PactId p);
 
 // A row of chips naming the run's creeds at `pos` (its left edge, or its centre
 // when `centered`). Hovering a chip shows what the creed does when `tips`.

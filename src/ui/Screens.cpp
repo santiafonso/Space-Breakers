@@ -1677,8 +1677,8 @@ void PlayScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
             app.audio().uiClick();
             return;
         }
-        if (r3.contains(app.uiMouse())) {   // the other arena, from this wave
-            app.endlessWide = !app.endlessWide;
+        if (r3.contains(app.uiMouse())) {   // the next act's arena, from this wave
+            app.endlessArena = app.endlessArena % cfg::run::acts + 1;
             app.endlessWave();
             app.audio().uiClick();
             return;
@@ -1862,7 +1862,10 @@ void PlayScreen::draw(App& app, sf::RenderWindow& w) {
         drawCentered(w, app.font(), "+" + std::to_string(cfg::app::endlessCrowd) + " enemies", theme::fsSmall,
                      {r.left + r.width * 0.5f, r.top + r.height * 0.5f - 1.f}, hot ? theme::textHi : theme::textLo);
         const char* more[2] = {"+20 tough (x8 HP)", nullptr};
-        const std::string arena = app.endlessWide ? "Arena: wide (acts 2+)" : "Arena: act 1";
+        char arenaBuf[48];
+        std::snprintf(arenaBuf, sizeof(arenaBuf), "Arena: act %d (x%.2f)", app.endlessArena,
+                      app.endlessArena >= 2 ? static_cast<double>(cfg::boss::actArenaScale[app.endlessArena - 1]) : 1.0);
+        const std::string arena = arenaBuf;
         for (int i = 0; i < 2; ++i) {
             const sf::FloatRect q{r.left, r.top + 36.f * static_cast<float>(i + 1), r.width, r.height};
             const bool h = q.contains(app.uiMouse());
@@ -2209,15 +2212,33 @@ void drawLoadoutOverlay(App& app, sf::RenderWindow& w, bool paused, const TabPee
         }
     }
 
-    // ---- side column: relics, then creeds - each section only when it has any
+    // ---- side column: relics, creeds, pacts - each section only when it has
+    // any, one row each (its emblem and name); what it does on hover. The panel
+    // grows to hold them all (2026-10-22: creeds used to spill out below it).
     const std::vector<UpgradeKind> relics = runRelics(r.mods);
     const UpgradeKind* hotRelic = nullptr;
-    bool creedTip = false;
+    struct RuleRow { std::string title, desc; sf::Color col; Glyph glyph; };
+    std::vector<RuleRow> creedRows, pactRows;
+    for (int id : r.creeds) {
+        const CreedDef& d = creedDef(static_cast<CreedId>(id));
+        creedRows.push_back({d.name, std::string("+ ") + d.gain + ".\n\n- " + d.cost + ".\n\npairs well with: " + d.synergy,
+                             creedColor(d.archetype), creedGlyph(static_cast<CreedId>(id))});
+    }
+    for (int id : r.pacts) {
+        const PactDef& d = pactDef(static_cast<PactId>(id));
+        pactRows.push_back({d.name, std::string("+ ") + d.gain + ".\n\n- " + d.cost + ".\n\npairs well with: " + d.synergy,
+                            theme::pact, pactGlyph(static_cast<PactId>(id))});
+    }
+    const RuleRow* hotRule = nullptr;
+    const char* hotRuleKind = "";
     if (lay.side) {
+        constexpr float kRelicStep = 30.f, kHeadStep = 26.f, kSectionGap = 12.f;
+        float need = 20.f;   // the column's height, section by section
+        for (std::size_t n : {relics.size(), creedRows.size(), pactRows.size()})
+            if (n > 0) need += kHeadStep + kRelicStep * static_cast<float>(n) + kSectionGap;
         const float colTop = rowY - kPanelH * 0.5f;
-        draw::panel(w, {sideX, colTop, kSideW, kPanelH}, theme::puGolden, 0.9f);
+        draw::panel(w, {sideX, colTop, kSideW, std::max(kPanelH, need)}, theme::puGolden, 0.9f);
         float y = colTop + 20.f;
-        constexpr float kRelicStep = 30.f;
         if (!relics.empty()) {
             drawLabel(w, app.font(), "relics", 12, {sideX + 14.f, y}, withAlpha(theme::puGolden, 0.8f), -1);
             y += 26.f;
@@ -2237,12 +2258,33 @@ void drawLoadoutOverlay(App& app, sf::RenderWindow& w, bool paused, const TabPee
             w.draw(t);
             y += kRelicStep;
         }
-        if (!r.creeds.empty()) {
-            if (!relics.empty()) y += 12.f;
-            drawLabel(w, app.font(), "creeds", 12, {sideX + 14.f, y}, withAlpha(sf::Color(226, 70, 84), 0.9f), -1);
-            y += 18.f;
-            creedTip = drawCreedStrip(app, w, {sideX + 12.f, y}, false, um, !dragging);
-        }
+        auto rules = [&](const std::vector<RuleRow>& rows, const char* label, sf::Color head, const char* kind) {
+            if (rows.empty()) return;
+            if (y > colTop + 21.f) y += kSectionGap;
+            drawLabel(w, app.font(), label, 12, {sideX + 14.f, y}, withAlpha(head, 0.9f), -1);
+            y += kHeadStep;
+            for (const RuleRow& rr : rows) {
+                const sf::FloatRect row{sideX + 8.f, y - kRelicStep * 0.5f, kSideW - 16.f, kRelicStep};
+                const bool hot = !dragging && row.contains(um);
+                if (hot) {
+                    hotRule = &rr;
+                    hotRuleKind = kind;
+                    draw::box(w, row, 0.f, withAlpha(rr.col, 0.12f), withAlpha(rr.col, 0.03f));
+                }
+                draw::disc(w, {sideX + 20.f, y}, 11.f, withAlpha(lerpColor(theme::bg, rr.col, 0.3f), 0.95f),
+                           withAlpha(lerpColor(theme::bg, rr.col, 0.12f), 0.95f), {1.f, 1.f}, 24);
+                draw::ring(w, {sideX + 20.f, y}, 11.f, 1.f, withAlpha(rr.col, 0.8f));
+                drawGlyph(w, rr.glyph, {sideX + 20.f, y}, 7.f, lerpColor(rr.col, sf::Color::White, 0.4f));
+                sf::Text t = makeText(app.font(), rr.title, theme::fsSmall, hot ? theme::textHi : lerpColor(rr.col, theme::textHi, 0.35f));
+                const sf::FloatRect tb = t.getLocalBounds();
+                t.setOrigin(tb.left, tb.top + tb.height * 0.5f);
+                t.setPosition(std::round(sideX + 38.f), std::round(y));
+                w.draw(t);
+                y += kRelicStep;
+            }
+        };
+        rules(creedRows, "creeds", sf::Color(226, 70, 84), "creed");
+        rules(pactRows, "pacts", theme::pact, "pact");
     }
     if (dragging) {   // the chip in hand, over everything; no hover help meanwhile
         const BallLoadout& L = r.balls[static_cast<std::size_t>(peek.dragBall)];
@@ -2258,7 +2300,10 @@ void drawLoadoutOverlay(App& app, sf::RenderWindow& w, bool paused, const TabPee
                      pickColor(k));
         return;
     }
-    if (creedTip) return;
+    if (hotRule) {
+        drawTooltip(w, app.font(), um, s, hotRule->title + "  -  " + hotRuleKind, hotRule->desc, hotRule->col);
+        return;
+    }
 
     // Hover help on the panels and the relics.
     for (int i = 0; i < n; ++i) {

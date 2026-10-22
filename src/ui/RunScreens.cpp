@@ -1062,10 +1062,12 @@ void ShopScreen::draw(App& app, sf::RenderWindow& w) {
                                                      : "Sell an item",
                    theme::puGolden, hover_ == 100 ? 1.f : 0.f, true);
     if (const sf::FloatRect br = buttonRect(app, 1); br.width > 0.f)
-        drawButton(w, f, br, app.shopRerollPrice() == 0 ? std::string("Reroll (R)  -  free")
-                                                        : "Reroll (R)  -  " + std::to_string(app.shopRerollPrice()) + "g",
+        drawButton(w, f, br, app.shopRerollsLeft() <= 0 ? std::string("No rerolls left")
+                             : (app.shopRerollPrice() == 0 ? std::string("Reroll (R)  -  free")
+                                                           : "Reroll (R)  -  " + std::to_string(app.shopRerollPrice()) + "g") +
+                                   "  (" + std::to_string(app.shopRerollsLeft()) + ")",
                    theme::puSurge,
-                   hover_ == 101 ? 1.f : 0.f, g >= app.shopRerollPrice());
+                   hover_ == 101 ? 1.f : 0.f, app.shopRerollsLeft() > 0 && g >= app.shopRerollPrice());
     drawButton(w, f, buttonRect(app, 2), "Leave", theme::accent, hover_ == 102 ? 1.f : 0.f, true);
 
     // Hover help.

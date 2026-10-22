@@ -161,6 +161,7 @@ public:
     int shopOfferPrice(int i) const;    // what offer i costs right now (sale / prepaid applied)
     int shopRerollPrice() const;
     int shopFreeRerolls() const;        // free rerolls this visit still has ("Merchant": 1 per level)
+    int shopRerollsLeft() const;        // rerolls this visit still has (cfg::gold::rerollsPerVisit + Merchant)
     int shopSellsLeft() const;          // items this visit may still buy back (1, +1 per "Haggler" level)
     void rerollShop();
     int saleOffPercent() const;
@@ -459,7 +460,7 @@ private:
     void restRepair();
     float endlessNextT_ = -1.f;   // dev endless: s to the next wave (-1 = a wave is on)
 public:
-    bool endlessWide = true;      // dev endless: the wide arena (acts 2+; the default) or act 1's
+    int endlessArena = 2;         // dev endless: the arena of this act (1: act 1's, 2-5: cfg::boss::actArenaScale)
     void endlessWave();           // dev endless: start data_.run.wave in the arena chosen
 private:
     MetaState endlessMeta_;       // ...the real progress, put back untouched when it ends

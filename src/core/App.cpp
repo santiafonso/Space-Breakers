@@ -893,7 +893,9 @@ void App::newRun() {
 // out; nothing here is written to disk.
 void App::endlessWave() {
     const int w = std::max(1, data_.run.wave);
-    if (endlessWide) world_.startPostBossWave(w, params(), false);   // the wide arena, core in the middle
+    data_.run.map.act = endlessArena;   // its sky and colour
+    world_.forceArenaAct(endlessArena >= 2 ? endlessArena : 0);
+    if (endlessArena >= 2) world_.startPostBossWave(w, params(), false);   // that act's wide arena, core in the middle
     else world_.startWave(w, params(), false);
 }
 
@@ -2759,7 +2761,8 @@ void App::update(float frameDt) {
     // Each act has a pool of songs that take turns (Audio::setPool), so a long
     // act isn't one song on repeat. Run loops: 0 map, 1 fight2, 2 fight3,
     // 3 fight4, 4 fight5 (see addMusic above); lighter early, heavier late.
-    static const std::vector<int> kActPool[] = {{0, 1, 2}, {1, 3, 2}, {2, 3, 4}, {3, 4, 1}, {4, 3, 2}};
+    // Since 2026-10-22 one song per act (Santi): the act is its music.
+    static const std::vector<int> kActPool[] = {{0}, {1}, {2}, {3}, {4}};
     const int act = std::clamp(data_.run.map.act, 1, 5);
     const bool onWeb = std::any_of(stack_.begin(), stack_.end(), [](const std::unique_ptr<Screen>& sc) {
         return dynamic_cast<const LoadoutScreen*>(sc.get()) != nullptr;
@@ -2952,8 +2955,13 @@ void App::update(float frameDt) {
 void App::render() {
     sf::RenderWindow& w = window_.handle();
     window_.useUiView();
-    w.clear(theme::bg);
+    const int act = data_.run.active ? std::clamp(data_.run.map.act, 1, cfg::run::acts) : 0;
+    w.clear(act > 0 ? lerpColor(theme::bg, theme::actColor(act), 0.08f) : theme::bg);
     backdrop::draw(w, size());
+    if (act > 0) {   // the act's sky: the run travels (2026-10-22)
+        static const sf::Clock skyClock;
+        drawActSky(w, size(), act, theme::actColor(act), skyClock.getElapsedTime().asSeconds(), 0.55f);
+    }
     const sf::FloatRect arena = arenaRect();
     if (heat_ > 0.01f) {   // warm tint over the arena (not the letterbox bars)
         sf::RectangleShape hot({arena.width, arena.height});
@@ -4007,9 +4015,23 @@ int App::runSnapshots(const std::string& dir) {
         for (int i = 0; i < 30; ++i) update(1.f / 60.f);
         capturePath_ = d + "32_play_seven.png";
         render();
+        // Each act's look (2026-10-22): its camera, sky and core - a fight a few
+        // seconds in, then its map.
+        const int wave = rr.wave;
+        for (int a = 1; a <= cfg::run::acts; ++a) {
+            rr.map.act = a;
+            startWaveAt((a - 1) * cfg::run::bossWave + 5, false);
+            for (int i = 0; i < 300; ++i) update(1.f / 60.f);
+            capturePath_ = d + "40_act" + std::to_string(a) + "_fight.png";
+            render();
+            openMap();
+            snapFrame(d + "41_act" + std::to_string(a) + "_map.png");
+            back();
+        }
         rr.balls = balls;
         rr.gold = gold;
         rr.map.act = act;
+        startWaveAt(std::max(1, wave), false);
         syncWorldBalls();
     }
     grantPact(PactId::Juggler);

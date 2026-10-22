@@ -182,20 +182,20 @@ void brokenPlanets(sf::RenderTarget& w, sf::Vector2f g, float t, float a) {   //
     }
 }
 
-void blackHole(sf::RenderTarget& w, sf::Vector2f g, float t, float a) {   // a dark heart with a glowing disc
-    const sf::Vector2f c = anywhere(g, 211.f);
+void blackHoleAt(sf::RenderTarget& w, sf::Vector2f c, float t, float a, float s) {   // a dark heart with a glowing disc, s x its size
     for (int i = 0; i < 90; ++i) {   // the accretion disc, flattened, streaming round
         const float fi = static_cast<float>(i);
         const float an = t * (1.5f - 0.8f * h01(fi)) + fi * 0.37f;
         const float rr = 20.f + 34.f * h01(fi * 2.3f);
-        const sf::Vector2f q{std::cos(an) * rr, std::sin(an) * rr * 0.3f};
-        draw::disc(w, c + q, 1.2f, sf::Color(255, 190, 120, static_cast<sf::Uint8>(160 * a * (1.f - (rr - 20.f) / 40.f))),
+        const sf::Vector2f q{std::cos(an) * rr * s, std::sin(an) * rr * s * 0.3f};
+        draw::disc(w, c + q, 1.2f * std::sqrt(s), sf::Color(255, 190, 120, static_cast<sf::Uint8>(160 * a * (1.f - (rr - 20.f) / 40.f))),
                    sf::Color(255, 190, 120, 0), {1.f, 1.f}, 5);
     }
-    draw::glow(w, c, 40.f, sf::Color(255, 170, 100), 0.18f * a);
-    draw::disc(w, c, 13.f, sf::Color(0, 0, 0, static_cast<sf::Uint8>(255 * a)), sf::Color(0, 0, 0, static_cast<sf::Uint8>(255 * a)), {1.f, 1.f}, 24);
-    draw::ring(w, c, 14.f, 1.5f, sf::Color(255, 220, 170, static_cast<sf::Uint8>(200 * a)));
+    draw::glow(w, c, 40.f * s, sf::Color(255, 170, 100), 0.18f * a);
+    draw::disc(w, c, 13.f * s, sf::Color(0, 0, 0, static_cast<sf::Uint8>(255 * a)), sf::Color(0, 0, 0, static_cast<sf::Uint8>(255 * a)), {1.f, 1.f}, 24);
+    draw::ring(w, c, 14.f * s, 1.5f * std::sqrt(s), sf::Color(255, 220, 170, static_cast<sf::Uint8>(200 * a)));
 }
+void blackHole(sf::RenderTarget& w, sf::Vector2f g, float t, float a) { blackHoleAt(w, anywhere(g, 211.f), t, a, 1.f); }
 
 // ---- one motif per class -----------------------------------------------------
 
@@ -432,6 +432,39 @@ void drawWebSkyStage(sf::RenderTarget& w, sf::Vector2f size, int classes, float 
     }
     w.setView(sf::View(g * 0.5f, g));   // the whole galaxy, to see where everything is
     galaxy(w, g, classes, col, on, t, 1.f);
+    w.setView(keep);
+}
+
+// One sky per act (2026-10-22): the run travels - home under the milky way, then
+// twin stars and a teal spiral, a violet galaxy and a pulsar, planets breaking
+// up under red supernovae, and last a black hole. Dim: the balls stay the focus.
+void drawActSky(sf::RenderTarget& w, sf::Vector2f size, int act, sf::Color tint, float t, float a) {
+    if (a <= 0.01f) return;
+    const sf::View keep = w.getView();
+    const sf::Vector2f g = size * kGalaxy;
+    w.setView(sf::View(g * 0.5f, size));   // the part on screen at rest
+    draw::glow(w, inView(g, 0.5f, 0.5f), size.x * 0.75f, tint, 0.12f * a);   // the act's colour, a wash
+    stars(w, g, act == 1 ? 200 : 150, t, a);
+    switch (act) {
+        case 1: milkyWay(w, g, t, 0.8f * a); break;
+        case 2:
+            twinStars(w, g, t, a);
+            spiralGalaxy(w, inView(g, 0.78f, 0.28f), size.y * 0.22f, 0.45f, t * 0.02f, tint, 0.8f * a);
+            break;
+        case 3:
+            spiralGalaxy(w, inView(g, 0.24f, 0.68f), size.y * 0.32f, 0.5f, -t * 0.015f, tint, a);
+            pulsar(w, g, t, a);
+            break;
+        case 4:
+            brokenPlanets(w, g, t, a);
+            supernovae(w, g, t, 0.7f * a);
+            draw::glow(w, inView(g, 0.85f, 0.8f), size.y * 0.5f, tint, 0.1f * a);   // a red giant's light at the edge
+            break;
+        default:
+            blackHoleAt(w, inView(g, 0.9f, 0.14f), t, 0.7f * a, 2.f);   // far off in a corner: scenery, not a hazard
+            draw::glow(w, inView(g, 0.9f, 0.14f), size.y * 0.45f, tint, 0.08f * a);
+            break;
+    }
     w.setView(keep);
 }
 

@@ -11,7 +11,7 @@ public:
     void draw(sf::RenderWindow& window, const World& world) const;
 
 private:
-    void drawCore(sf::RenderWindow& window, const Core& c) const;
+    void drawCore(sf::RenderWindow& window, const Core& c, int act) const;   // its inner form changes with the act
     void drawBoss(sf::RenderWindow& window, const Boss& b, sf::Vector2f corePos) const;
     void drawEnemy(sf::RenderWindow& window, const Enemy& e, sf::Vector2f corePos) const;
     void drawWave(sf::RenderWindow& window, const Wave& w, float arenaScale) const;

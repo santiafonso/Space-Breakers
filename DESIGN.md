@@ -3000,6 +3000,16 @@ desde el centro. Las capturas 41 / 42 muestran cada motivo y las etapas.
 ### Anotado para después (el usuario lo pidió así)
 
 - ~~Hitstop con muchas bajas~~: hecho el 2026-10-21 (enfriamiento entre congeladas, ver §11).
+- **Sistema de misiones (2026-10-22, idea de Santi):** misiones que desbloquean cosas
+  (ganar con X, ascender un dios de Y, terminar un acto sin daño...). Puede ir junto con
+  la historia y las rutas con finales.
+- **Un compositor clásico por acto (2026-10-22, idea de Santi):** la run viaja por las
+  épocas y la música sube con ella: barroco (Vivaldi "Verano" presto / Bach), Mozart,
+  Beethoven, romántico (Wagner "Cabalgata", Chaikovski) y Holst "Marte" para el acto 5
+  (los planetas: espacio). Las obras son de dominio público, las grabaciones no: usar
+  grabaciones CC0 / dominio público (Musopen) o re-tocarlas desde MIDI como las capas
+  del menú, que además permite cortarlas en loops limpios. Evitar Orff (Carmina Burana) y
+  Stravinsky: siguen con derechos.
 - **El juego por etapas (2026-10-06, el usuario lo quiere más adelante):** se
   desbloquea de a partes: primero las habilidades, después Q / E / F, después
   aparecen los pactos, después las ascensiones. Sin desbloquear las etapas
@@ -3686,3 +3696,90 @@ desde el centro. Las capturas 41 / 42 muestran cada motivo y las etapas.
   clave ("Spring core" sale dorado entero). Los títulos de las cartas de ítem y de
   reliquia, y el título del tooltip de un slot, van en el color de lo que son
   (`nameColor`).
+
+### 2026-10-22: la cámara se aleja por acto y cada acto tiene su cara
+
+- Santi: "que se aleje cada vez más la cámara para afrontar más enemigos en pantalla y
+  que las pelotas tengan que abarcar más terreno; le falta dinamismo entre actos, que el
+  core sea distinto o el mapa".
+- **Arena por acto** (`cfg::boss::actArenaScale` = 2.35 / 2.35 / 2.75 / 3.15 / 3.55 — al
+  principio 2.6 / 2.85 / 3.1, pero Santi no notaba el cambio; la cantidad de enemigos crece
+  solo el 60% del extra, `enemyCountFieldFrac`: acto 5 +31%;
+  `World::wideArenaSize(act)`): el acto 1 sigue en x1 hasta su jefe. Las pelotas ya
+  escalaban con la arena. Para que el campo más grande no vuelva la pelea más lenta:
+  `World::fieldMul` (arena / 2.35, 1 hasta el acto 2, 1.32 en el 5) multiplica la
+  velocidad de los enemigos (llegan al núcleo en el mismo tiempo) y la **cantidad**
+  (después del tope de 120: acto 3 +11%, 4 +21%, 5 +32%). Enemigos y jefes crecen la mitad
+  de ese extra (`enemyRadiusFieldFrac`) para no quedar como puntitos.
+- **Cielo por acto** (`drawActSky` en `ui/WebSky.cpp`, desde `App::render`, detrás de la
+  pelea y del mapa): acto 1 vía láctea; 2 estrellas dobles y una espiral verde agua; 3
+  espiral violeta y un púlsar; 4 planetas rompiéndose y supernovas en rojo; 5 un agujero
+  negro lejos en una esquina, dorado. Tenue, con un lavado del color del acto.
+- **Paleta por acto** (`theme::actTint` / `actColor`): tiñe el fondo y la grilla de radar.
+- **Núcleo por acto** (`WorldRenderer::drawCore`): acto 1 las tres aspas de siempre, 2
+  cáscara hexagonal, 3 dos anillos de nodos girando al revés, 4 corona de púas, 5
+  estrella de cuatro puntas que late. El color sigue siendo la vida.
+- Capturas: `40_act1..5_fight.png` y `41_act1..5_map.png` en `SB_SNAPSHOT`.
+  `SB_BALANCE=40`: Mega Striker 925 bajas, Hermes 2119 (x2.3).
+
+### 2026-10-22: una canción por acto
+
+- Santi prefiere que la música sea del acto, no una rotación. `kActPool` (App, update del
+  audio) pasa de 3 temas que se turnan por acto a uno fijo: acto 1 map.ogg, 2 fight2
+  (Tower Defense Theme), 3 fight3 (Space Dungeon), 4 fight4 (Neon Action), 5 fight5 (Soul
+  Ripper). Jefes igual que antes (boss / boss2 al enfurecerse).
+- Idea en charla (no hecha): cada acto un compositor clásico, en orden de época. Ver
+  "Anotado para después".
+
+### 2026-10-22: tienda con menos rerolls; música clásica para probar
+
+- **Tienda** (Santi: "está muy fuerte la tienda, muchos rerolls"): antes se podía rerollear
+  cuantas veces se pagara (15, 26, 43, 74...). Ahora 2 por visita
+  (`cfg::gold::rerollsPerVisit`), a 25 y 50 (`rerollBase` 25, `rerollGrowth` 2), +1 por
+  nivel de Merchant (gratis y primero, como antes). El botón muestra cuántos quedan y
+  dice "No rerolls left" al terminarse (`App::shopRerollsLeft`).
+- **Música clásica en las peleas** (Santi quiso probar cómo queda; **sacada el mismo día**:
+  "dejá la música como estaba antes" - vuelven los loops originales, uno por acto; sin la
+  opción ni los archivos. Lo que sigue queda como registro): Options > General >
+  "Fight music: Original | Classical" (`SoundSettings::classical`, se guarda como
+  `snd.classical`, viene en Classical). Un compositor por acto, avanzando en el tiempo:
+  Bach (Tocata y fuga), Mozart (Sinfonía 40), Beethoven (Quinta), Wagner (Cabalgata de las
+  valquirias), Holst (Marte). Jefe: Grieg "En la gruta del rey de la montaña" (crece con
+  la pelea) y el Dies irae del Réquiem de Mozart cuando se enfurece. Grabaciones de
+  dominio público de Wikimedia Commons (`assets/music/classical/`, `CREDITS.txt`),
+  niveladas al volumen de los loops originales; cada loop corta antes del silencio final.
+
+### 2026-10-22: una oleada siempre termina
+
+- Santi: "hay veces que queda un enemigo con vida y no muere". Causas posibles, todas cubiertas en
+  `World::updateEnemies`:
+  - **Plaga de Nergal**: un infectado que ya no tenía enemigos sanos a quien perseguir se
+    alejaba del núcleo y podía salir de la arena, fuera del alcance de las pelotas. Ahora
+    vuelve al núcleo (rebota en él, no lo ataca).
+  - **Fuera de la arena**: un empujón (F, Guardian), la deriva de un aturdimiento o un tirón
+    podía dejarlo pasado de una pared. Pasados `cfg::wave::enterGrace` (4 s) desde que
+    apareció, un enemigo queda siempre dentro de la arena.
+  - **Último enemigo**: si queda uno solo y no viene nadie más durante
+    `cfg::wave::stragglerTime` (15 s), deja de esperar a distancia (Caster) o de
+    zigzaguear y va directo al núcleo (`stragglerT_`).
+  - **NaN**: un enemigo con vida o posición inválida muere en vez de trabar la oleada.
+
+### 2026-10-22: creencias y pactos con su emblema; TAB ordenado
+
+- Santi: "que los creeds aparezcan con el dibujo que lo representa, y que en el TAB estén
+  bien encuadrados y con la descripción bien".
+- Cada chip de creencia o pacto (abajo a la derecha en la pelea, el mapa, el Altar, la
+  tienda) lleva el emblema de su carta a la izquierda del nombre (`drawCreedStrip`;
+  `creedGlyph` / `pactGlyph` ahora son públicos en `ui/CreedScreen.hpp`).
+- TAB, columna derecha (`drawLoadoutOverlay`): reliquias, creencias y pactos en secciones,
+  una fila por cada uno con su emblema en un disco de su color y su nombre, como las
+  reliquias. Antes las creencias eran una fila de chips que se salía del panel por abajo.
+  El panel crece para que entre todo. Al pasar el mouse: lo que da, lo que cuesta y con qué
+  combina, en párrafos y con los colores de texto.
+
+### 2026-10-22: endless (dev) con la arena de cada acto
+
+- El botón de arena del modo endless (`SB_DEV`) recorre los cinco actos: acto 1 (x1) y los
+  tamaños de `cfg::boss::actArenaScale` del 2 al 5, con el cielo de ese acto
+  (`App::endlessArena`, `World::forceArenaAct`; una run normal lo vuelve a 0 en
+  `World::startRun`).

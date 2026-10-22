@@ -66,7 +66,7 @@ void PactScreen::update(App& app, float dt, sf::Vector2f mouse) {
 }
 
 // Each pact's emblem on its card.
-static Glyph pactGlyph(PactId p) {
+Glyph pactGlyph(PactId p) {
     switch (p) {
         case PactId::Lead:        return Glyph::Rock;
         case PactId::QuickHands:  return Glyph::Combo;

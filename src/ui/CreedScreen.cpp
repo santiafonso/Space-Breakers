@@ -196,7 +196,7 @@ void CreedScreen::update(App& app, float dt, sf::Vector2f mouse) {
 }
 
 // Each creed's emblem on its card.
-static Glyph creedGlyph(CreedId c) {
+Glyph creedGlyph(CreedId c) {
     switch (c) {
         case CreedId::HotHands:   return Glyph::Flame;
         case CreedId::Nova:       return Glyph::Blast;
@@ -281,11 +281,15 @@ void CreedScreen::draw(App& app, sf::RenderWindow& w) {
 
 // ================================================================ chips
 
+namespace {
+constexpr float kChipIcon = 16.f;   // a chip's emblem, left of its name, and the gap after it
+}
+
 float creedStripWidth(App& app) {
     constexpr float kPad = 9.f, kGap = 6.f;
     float total = -kGap;
     auto add = [&](const char* name) {
-        total += makeText(app.font(), name, theme::fsSmall, theme::textHi).getLocalBounds().width + 2.f * kPad + kGap;
+        total += makeText(app.font(), name, theme::fsSmall, theme::textHi).getLocalBounds().width + 2.f * kPad + kChipIcon + kGap;
     };
     for (int id : app.data().run.creeds) add(creedDef(static_cast<CreedId>(id)).name);
     for (int id : app.data().run.pacts) add(pactDef(static_cast<PactId>(id)).name);
@@ -294,16 +298,16 @@ float creedStripWidth(App& app) {
 
 bool drawCreedStrip(App& app, sf::RenderWindow& w, sf::Vector2f pos, bool centered, sf::Vector2f mouse, bool tips) {
     // The run's creeds, then its pacts (in the pact colour).
-    struct Chip { std::string name, tipTitle, tip; sf::Color col; };
+    struct Chip { std::string name, tipTitle, tip; sf::Color col; Glyph glyph; };
     std::vector<Chip> chips;
     for (int id : app.data().run.creeds) {
         const CreedDef& d = creedDef(static_cast<CreedId>(id));
-        chips.push_back({d.name, std::string("Creed: ") + d.name, creedTip(d), creedColor(d.archetype)});
+        chips.push_back({d.name, std::string("Creed: ") + d.name, creedTip(d), creedColor(d.archetype), creedGlyph(static_cast<CreedId>(id))});
     }
     for (int id : app.data().run.pacts) {
         const PactDef& d = pactDef(static_cast<PactId>(id));
         chips.push_back({d.name, std::string("Pact: ") + d.name, std::string("+ ") + d.gain + ".   - " + d.cost + ".",
-                         theme::pact});
+                         theme::pact, pactGlyph(static_cast<PactId>(id))});
     }
     if (chips.empty()) return false;
     const sf::Font& f = app.font();
@@ -312,7 +316,7 @@ bool drawCreedStrip(App& app, sf::RenderWindow& w, sf::Vector2f pos, bool center
     float total = 0.f;
     for (const Chip& c : chips) {
         sf::Text t = makeText(f, c.name, theme::fsSmall, theme::textHi);
-        widths.push_back(t.getLocalBounds().width + 2.f * kPad);
+        widths.push_back(t.getLocalBounds().width + 2.f * kPad + kChipIcon);
         total += widths.back() + kGap;
     }
     total -= kGap;
@@ -325,7 +329,8 @@ bool drawCreedStrip(App& app, sf::RenderWindow& w, sf::Vector2f pos, bool center
         if (h) hot = static_cast<int>(i);
         draw::box(w, r, theme::corner, withAlpha(lerpColor(theme::bg, col, h ? 0.4f : 0.24f), 0.95f),
                   withAlpha(lerpColor(theme::bg, col, 0.08f), 0.95f), withAlpha(col, h ? 0.95f : 0.6f), 1.f);
-        drawCentered(w, f, chips[i].name, theme::fsSmall, {r.left + r.width * 0.5f, r.top + kH * 0.5f - 1.f}, theme::textHi);
+        drawGlyph(w, chips[i].glyph, {r.left + kPad + 6.f, r.top + kH * 0.5f}, 6.5f, lerpColor(col, sf::Color::White, 0.45f));
+        drawCentered(w, f, chips[i].name, theme::fsSmall, {r.left + (r.width + kChipIcon) * 0.5f, r.top + kH * 0.5f - 1.f}, theme::textHi);
         x += widths[i] + kGap;
     }
     if (hot >= 0 && tips) {

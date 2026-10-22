@@ -97,7 +97,7 @@ void drawHunterLock(sf::RenderWindow& w, const Ball& b, const Enemy& e) {
 
 }  // namespace
 
-void WorldRenderer::drawCore(sf::RenderWindow& window, const Core& c) const {
+void WorldRenderer::drawCore(sf::RenderWindow& window, const Core& c, int act) const {
     const float frac = c.maxHp > 0.f ? clampf(c.hp / c.maxHp, 0.f, 1.f) : 0.f;
     const sf::Color tint = lerpColor(theme::coreLow, theme::core, frac);
     const float t = clockSeconds();
@@ -119,9 +119,61 @@ void WorldRenderer::drawCore(sf::RenderWindow& window, const Core& c) const {
         draw::line(window, c.pos + d * (c.radius + 15.f), c.pos + d * (c.radius + 15.f + len), 1.f,
                    withAlpha(tint, k % 9 == 0 ? 0.45f : 0.22f));
     }
-    for (int k = 0; k < 3; ++k) {
-        const float a = t * 0.8f + static_cast<float>(k) * 2.f * kPi / 3.f;
-        draw::ring(window, c.pos, c.radius * 0.62f, 2.5f, withAlpha(lighten(tint, 0.3f), 0.6f), a, a + 1.2f);
+    // Its inner form, one per act (2026-10-22) - the colour still tells its health.
+    const sf::Color vane = withAlpha(lighten(tint, 0.3f), 0.6f);
+    auto arcs = [&] {   // act 1: three vanes turning
+        for (int k = 0; k < 3; ++k) {
+            const float a = t * 0.8f + static_cast<float>(k) * 2.f * kPi / 3.f;
+            draw::ring(window, c.pos, c.radius * 0.62f, 2.5f, vane, a, a + 1.2f);
+        }
+    };
+    switch (act) {
+        case 2:   // a hexagonal shell, an inner one turning against it
+            draw::polygonOutline(window, c.pos, c.radius * 0.7f, 6, t * 0.5f, 2.5f, vane);
+            draw::polygonOutline(window, c.pos, c.radius * 0.46f, 6, -t * 0.8f, 1.5f, withAlpha(vane, 0.45f));
+            break;
+        case 3:   // two rings of nodes, counter-rotating
+            for (int k = 0; k < 6; ++k) {
+                const float a = t * 1.0f + static_cast<float>(k) * 2.f * kPi / 6.f;
+                draw::disc(window, c.pos + sf::Vector2f{std::cos(a), std::sin(a)} * (c.radius * 0.64f), c.radius * 0.075f,
+                           vane, withAlpha(tint, 0.3f), {1.f, 1.f}, 10);
+            }
+            for (int k = 0; k < 4; ++k) {
+                const float a = -t * 1.4f + static_cast<float>(k) * 2.f * kPi / 4.f;
+                draw::disc(window, c.pos + sf::Vector2f{std::cos(a), std::sin(a)} * (c.radius * 0.42f), c.radius * 0.06f,
+                           withAlpha(vane, 0.8f), withAlpha(tint, 0.2f), {1.f, 1.f}, 10);
+            }
+            draw::ring(window, c.pos, c.radius * 0.64f, 1.f, withAlpha(tint, 0.25f));
+            break;
+        case 4: {   // a crown of spikes round the dial, and the vanes
+            arcs();
+            const float spin = t * 0.1f;
+            for (int k = 0; k < 8; ++k) {
+                const float a = spin + static_cast<float>(k) * 2.f * kPi / 8.f;
+                const sf::Vector2f d{std::cos(a), std::sin(a)}, n{-d.y, d.x};
+                const sf::Vector2f base = c.pos + d * (c.radius + 24.f);
+                sf::ConvexShape sp(3);
+                sp.setPoint(0, base + n * 4.f);
+                sp.setPoint(1, base - n * 4.f);
+                sp.setPoint(2, base + d * 12.f);
+                sp.setFillColor(withAlpha(tint, 0.55f));
+                window.draw(sp);
+            }
+            break;
+        }
+        case 5: {   // a four-point star, beating
+            const float beat = 0.85f + 0.15f * std::sin(t * 3.f);
+            for (int k = 0; k < 4; ++k) {
+                const float a = kPi * 0.25f + static_cast<float>(k) * kPi * 0.5f;
+                const sf::Vector2f d{std::cos(a), std::sin(a)};
+                draw::line(window, c.pos, c.pos + d * (c.radius * 0.9f * beat), 3.f, vane);
+                draw::line(window, c.pos + d * (c.radius + 22.f), c.pos + d * (c.radius + 22.f + 16.f * beat), 2.f,
+                           withAlpha(tint, 0.5f));
+            }
+            draw::glow(window, c.pos, c.radius * 0.8f * beat, lighten(tint, 0.4f), 0.18f);
+            break;
+        }
+        default: arcs(); break;
     }
     draw::disc(window, c.pos, c.radius * 0.26f, withAlpha(lighten(tint, 0.7f), 0.95f), withAlpha(tint, 0.8f));
 }
@@ -557,7 +609,8 @@ void WorldRenderer::draw(sf::RenderWindow& window, const World& world) const {
     // coordinate system. Very faint - it's there to be felt, not read.
     const sf::Vector2f sz = world.size();
     const float as = world.arenaScale();
-    draw::radar(window, world.core().pos, length(sz) * 0.6f, 120.f * as, 12, theme::grid, 0.10f);
+    const int act = cfg::run::actOfWave(std::max(1, world.wave()));
+    draw::radar(window, world.core().pos, length(sz) * 0.6f, 120.f * as, 12, lerpColor(theme::grid, theme::actColor(act), 0.5f), 0.10f);
 
     for (const Wave& wv : world.waves()) drawWave(window, wv, as);
     for (const Obstacle& o : world.obstacles()) drawObstacle(window, o);
@@ -570,7 +623,7 @@ void WorldRenderer::draw(sf::RenderWindow& window, const World& world) const {
         draw::ring(window, q.pos, q.radius, 1.5f * as, withAlpha(c, 0.45f * a));
     }
     for (const BlackHole& h : world.blackHoles()) drawBlackHole(window, h);
-    drawCore(window, world.core());
+    drawCore(window, world.core(), act);
     {   // a guarded boss: a faint line to each part still standing
         const Boss& bs = world.boss();
         if (bs.alive && bs.guarded)

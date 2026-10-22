@@ -21,6 +21,9 @@ void drawWebSkyClass(sf::RenderTarget& w, sf::Vector2f size, int cls, float t);
 // The whole galaxy as it is with `classes` unlocked (the snapshot preview).
 void drawWebSkyStage(sf::RenderTarget& w, sf::Vector2f size, int classes, float t);
 
+// A run's sky for its act (1..5), over `size` (the UI canvas), in the act's tint.
+void drawActSky(sf::RenderTarget& w, sf::Vector2f size, int act, sf::Color tint, float t, float a);
+
 // How many classes the web has unlocked (the sky's level).
 int webSkyClasses(const int* unlock);
 
