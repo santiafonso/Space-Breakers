@@ -18,7 +18,7 @@ namespace {
 const char* hintText(App::Hint h) {
     switch (h) {
         case App::Hint::Throw:   return "click a ball: it flies at the enemy nearest the core";
-        case App::Hint::Aim:     return "hold a ball and pull back to aim it, like a slingshot";
+        case App::Hint::Aim:     return "hold a ball and pull back to aim it, like a slingshot: the further you pull, the harder it flies";
         case App::Hint::Volley:  return "Q: every free ball at once";
         case App::Hint::Bullet:  return "hold E: time slows while the green ring lasts";
         case App::Hint::Repulse: return "F: a shockwave pushes the enemies off the core";
@@ -50,6 +50,7 @@ void App::hintDone(Hint h) {
 }
 
 void App::updateHints(float dt) {
+    if (lesson_ >= 0 || drill_) return;   // a tutorial lesson card or the drill is up: the hint waits (AppLessons.cpp)
     // The hint this moment wants: the first one not done yet that fits the
     // screen on top - a live fight or the map.
     auto first = [&](std::initializer_list<Hint> hs) {
@@ -112,7 +113,7 @@ void App::updateHints(float dt) {
 }
 
 void App::drawHint(sf::RenderWindow& w) const {
-    if (hint_ < 0 || hintA_ <= 0.01f) return;
+    if (hint_ < 0 || hintA_ <= 0.01f || lesson_ >= 0 || drill_) return;
     // Centred in the bottom band; a soft breathing so the eye finds it.
     const sf::Vector2f s = size();
     const float pulse = 0.85f + 0.15f * std::sin(hintT_ * 3.f);

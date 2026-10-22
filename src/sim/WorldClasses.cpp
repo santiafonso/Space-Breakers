@@ -31,7 +31,7 @@ template <> struct ClassHooks<BallRole::Striker> : NoClassHooks {
         if (!b.isAscended(BallRole::Striker) || over <= 1.f) return;
         const float r = S::strikerShockRadius * std::min(over, S::strikerShockMaxScale);   // faster = wider (the hit already scales)
         w.areaDamage(e.pos, r, dmg * S::strikerShockFrac, &e);
-        w.itemFx(CommonWorld::Fx::Sonic, e.pos, r, theme::ballFast, 0.35f, normalized(b.vel, {1.f, 0.f}));
+        w.itemFx(CommonWorld::Fx::Sonic, e.pos, r, theme::ballFast, 0.45f, normalized(b.vel, {1.f, 0.f}));
     }
 };
 
@@ -175,7 +175,7 @@ float World::mageCastRate(const Ball& b) const {
                         std::max(0.f, b.mods.cls.common.archmage - 1.f) +
                         (b.hasRole(BallRole::Odin) ? cfg::odin::rate : 0.f) + b.mods.cls.odin.valknut;   // Odin's, in the same sum
     const float cap = cfg::ability::rateCap;
-    return 1.f + cap * bonus / (cap + bonus);   // diminishing: x(1 + 2B / (2 + B)), x3 at most
+    return (1.f + cap * bonus / (cap + bonus)) * creed_.castRate;   // diminishing: x(1 + 2B / (2 + B)), x3 at most; "Arcanist" x2 on top
 }
 
 // `count` missiles at the nearest enemies (spread over them, nearest first),

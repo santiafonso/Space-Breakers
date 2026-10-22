@@ -100,6 +100,8 @@ public:
     // ---- grab / throw: knock a ball off its orbit -------------------
     bool grabAt(sf::Vector2f point, float catchRadius);
     void setPointer(sf::Vector2f p) { pointer_ = p; hasPointer_ = true; }   // the play screen, every frame
+    void setSteer(bool on) { steer_ = on; }   // "Puppeteer" creed: the button is down (the play screen, every frame)
+    bool steering() const { return steer_ && creed_.puppeteer; }
     float heldCatch() const { return heldCatch_; }   // the grab just made: its catch reward (0 = none)
     float takeQRefund() { const float r = qRefund_; qRefund_ = 0.f; return r; }   // "Second wind"
     float commonPlating() const;   // "Plating": the core max hp the balls' items add
@@ -107,7 +109,7 @@ public:
     bool hasHeld() const { return grabbed_ != Grabbed::None; }
     Grabbed grabbedKind() const { return grabbed_; }
     void moveHeld(sf::Vector2f target, float dt);
-    void releaseHeld(sf::Vector2f throwVel);
+    void releaseHeld(sf::Vector2f throwVel, float pull = 0.f);   // pull: a slingshot's share of a full pull (0: a click)
     void cancelHeld();                 // let go without a throw: the ball resumes its old velocity
     int repulse();   // F: shove every enemy near the core away and stagger it; how many it hit
     // The player's target: click an enemy (or the boss) and every throw, ability,
@@ -504,9 +506,13 @@ private:
     float heldCatch_ = 0.f;                  // catch reward earned by this grab (0..catchBonusMax)
     float heldT_ = 0.f;                      // seconds the held ball has been held ("Hot Potato")
     sf::Vector2f pointer_{0.f, 0.f};         // your pointer in the arena ("Grip")
+    bool steer_ = false;                     // "Puppeteer": the button is down
+    float snowMul(const Ball& b, const WorldParams& p) const;   // "Snowball": size / damage x this
+    void creedSteer(Ball& b, float dt, const WorldParams& p);   // "Puppeteer"
     bool hasPointer_ = false;
     float trickLuck_ = 1.f;                  // "Trick shot": every chance x this while its hit resolves
     Ball* reactBall_ = nullptr;              // the ball whose hit is resolving (Alchemist reactions)
+    CreedRules creed_;                       // the run's creeds, from WorldParams (with pact_)
     PactRules pact_;                         // the run's pacts, from WorldParams (each step / wave start)
     float autoFlingTimer_ = 1.f;   // "Clockwork": time to its next throw
 
@@ -526,6 +532,7 @@ private:
     sf::Vector2f coreSlideTo_{0.f, 0.f};
     int toSpawn_ = 0;
     float spawnTimer_ = 0.f;
+    float packTimer_ = 0.f;   // a boss fight: to the next pack of small enemies (cfg::boss::pack*)
     int nextEnemyId_ = 1;     // Enemy::id source
     float waveHpMul_ = 1.f;   // Elite wave: enemy HP multiplier
     float launchT_ = 0.f;                    // >0: the balls whirl around the core (cfg::ball::launch*)
@@ -534,9 +541,11 @@ private:
     std::vector<sf::Vector2f> launchFrom_;   // where each ball was when it started (eases onto the ring)
     void updateLaunch(float dt, const WorldParams& p, FrameEvents& ev);
     void chargerShock(FrameEvents& ev);
+    void clearArena();   // a fight starts on a clean field (carryBalls)
     bool hard_ = false;       // hard mode (cfg::hard), from WorldParams at each wave start
     int asc_ = 0;             // Ascension level, likewise
     float easeHp_ = 1.f;      // WorldParams::enemyHpMul (the tutorial), likewise
+    bool actDepth_ = true;    // WorldParams::actDepth, likewise
     EliteTrait eliteTrait_ = EliteTrait::None;   // Ascension 6: the elite fight's trait
     unsigned bossRules_ = 0;  // Ascension 9: BossRule bits
     float hexT_ = 0.f;        // "Hex": to its next freeze

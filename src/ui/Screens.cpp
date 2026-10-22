@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <string>
 #include <vector>
 
@@ -19,6 +20,7 @@
 #include "render/Draw.hpp"
 #include "ui/CreedScreen.hpp"
 #include "ui/UiSound.hpp"
+#include "ui/Icons.hpp"
 #include "ui/Widgets.hpp"
 
 namespace sb {
@@ -68,7 +70,7 @@ constexpr float kClassR = 22.f;       // a class node: bigger, with an outer rin
 constexpr float kRootR = 26.f;        // centre node radius
 constexpr float kWebCenterY = 0.53f;  // * size.y
 constexpr int   kBackRings = 7;       // faint rings drawn behind the web
-constexpr float kZoomMin = 0.24f, kZoomMax = 1.6f;
+constexpr float kZoomMin = 0.2f, kZoomMax = 1.6f;   // (0.24 until 2026-10-20: the gods at the top hid under the title)
 constexpr float kZoomStart = 0.7f;    // the first visit: the centre and the routes around it
 constexpr float kPanKeySpeed = 620.f; // WASD, px/s
 // Node sizes follow the zoom, a little less than the layout does - but zoomed
@@ -89,17 +91,17 @@ float wrapDeg(float a) {   // into (-180, 180]
     return a;
 }
 
-constexpr int kRouteMinTips = 4;
-
 float webRing(int node);   // (below)
 bool isGodNode(int i);     // (below)
+bool isClassNodeId(int i); // (below)
 bool isMasteryNode(int i) { return i >= MetaMasteryStriker && i <= MetaMasteryAlchemist; }
 // The lattice (2026-10-10, the user: "que quede geométrico"): every ring is
 // cut into evenly spaced slots - a multiple of 12, so the rings share their
 // spokes - and every node sits on a slot. Neighbours one or two slots apart on
 // the same ring are joined by faint "constellation" lines (they light up when
 // you own both ends).
-constexpr float kSlotGap = 0.5f;    // the closest two nodes on a ring, in ring gaps
+constexpr float kSlotGap = 0.7f;    // the closest two nodes on a ring, in ring gaps (0.5 until 2026-10-20)
+constexpr float kMinNodeGap = 0.7f;  // ...and any two nodes at all (eased apart after the layout)
 constexpr float kConstellationReach = 2.7f;    // ring neighbours this close (in ring gaps, along the ring) get a line
 std::vector<std::pair<int, int>> g_constellation;
 
@@ -145,15 +147,9 @@ float webAngle(int node) {
             return tips[static_cast<std::size_t>(n)] = std::max(1, t);
         };
         count(0);
-        // a small route still gets room: every route counts as at least kRouteMinTips tips
-        {
-            int total = 0;
-            for (int c : kids[0]) {
-                tips[static_cast<std::size_t>(c)] = std::max(tips[static_cast<std::size_t>(c)], kRouteMinTips);
-                total += tips[static_cast<std::size_t>(c)];
-            }
-            tips[0] = std::max(1, total);
-        }
+        // Every route gets the same wedge, like the hours on a clock (2026-10-20, the
+        // user: "armónico, que se entienda a simple vista"); inside its wedge a
+        // route shares the room out by its tips as before.
         // children in their data order, clockwise from the top
         for (auto& v : kids)
             std::sort(v.begin(), v.end(), [](int x, int y) {
@@ -163,16 +159,16 @@ float webAngle(int node) {
             table[n] = from + span * 0.5f;
             float at = from;
             for (int c : kids[static_cast<std::size_t>(n)]) {
-                const float share = span * static_cast<float>(tips[static_cast<std::size_t>(c)]) /
-                                    static_cast<float>(tips[static_cast<std::size_t>(n)]);
+                const float share = n == 0 ? span / static_cast<float>(kids[0].size())
+                                           : span * static_cast<float>(tips[static_cast<std::size_t>(c)]) /
+                                                 static_cast<float>(tips[static_cast<std::size_t>(n)]);
                 place(c, at, share);
                 at += share;
             }
         };
         // the first route (Striker, at the top) is centred on 0
         const auto& top = kids[0];
-        const float first = top.empty() ? 0.f : 360.f * static_cast<float>(tips[static_cast<std::size_t>(top.front())]) /
-                                                     static_cast<float>(tips[0]);
+        const float first = top.empty() ? 0.f : 360.f / static_cast<float>(top.size());
         place(0, -first * 0.5f, 360.f);
         table[0] = 0.f;
         for (int i = 0; i < MetaUnlockCount; ++i)
@@ -230,6 +226,52 @@ float webAngle(int node) {
                 const float a = table[metaUnlockDef(ms).parent], b = table[godNode(static_cast<ItemTag>(t))];
                 table[ms] = a + wrapDeg(b - a) * 0.5f;
             }
+        // Breathing room (2026-10-20, the user: "siguen habiendo nodos muy
+        // pegados"): any two nodes still closer than kMinNodeGap ring gaps are
+        // eased apart sideways along their rings, a little at a time, so the
+        // rings and the routes' order stay as they are. Gods and the centre hold still.
+        {
+            std::vector<int> live;
+            for (int i = 1; i < MetaUnlockCount; ++i)
+                if (!metaNodeRetired(i)) live.push_back(i);
+            auto pos = [&](int i) {
+                const float r = webRing(i) + kInnerPad, a = table[i] * kPi / 180.f;
+                return sf::Vector2f{std::sin(a) * r * kStretchX, -std::cos(a) * r};
+            };
+            for (int pass = 0; pass < 300; ++pass) {
+                bool moved = false;
+                for (std::size_t x = 0; x < live.size(); ++x)
+                    for (std::size_t y = x + 1; y < live.size(); ++y) {
+                        const int i = live[x], j = live[y];
+                        const float dist = length(pos(i) - pos(j));
+                        // a class or god node is bigger: it wants more room round it
+                        const float want = kMinNodeGap + (isClassNodeId(i) || isGodNode(i) ? 0.12f : 0.f) +
+                                           (isClassNodeId(j) || isGodNode(j) ? 0.12f : 0.f);
+                        if (dist >= want) continue;
+                        const bool fi = isGodNode(i), fj = isGodNode(j);
+                        if (fi && fj) continue;
+                        float side = wrapDeg(table[j] - table[i]);
+                        if (std::fabs(side) < 1e-3f) side = i < j ? 1.f : -1.f;   // on one spoke: split them
+                        const float push = (want - dist) * 0.5f * (fi || fj ? 2.f : 1.f);   // the pair's share
+                        const float sgn = side > 0.f ? 1.f : -1.f;
+                        if (!fi) table[i] -= sgn * push / (webRing(i) + kInnerPad) * 180.f / kPi * 0.5f;
+                        if (!fj) table[j] += sgn * push / (webRing(j) + kInnerPad) * 180.f / kPi * 0.5f;
+                        moved = true;
+                    }
+                if (!moved) break;
+            }
+            if (std::getenv("SB_WEBGAP")) {   // (layout check: pairs still too close)
+                int tight = 0;
+                for (std::size_t x = 0; x < live.size(); ++x)
+                    for (std::size_t y = x + 1; y < live.size(); ++y)
+                        if (length(pos(live[x]) - pos(live[y])) < kMinNodeGap - 0.05f) {
+                            ++tight;
+                            std::fprintf(stderr, "tight: %s - %s %.2f\n", metaUnlockDef(live[x]).name, metaUnlockDef(live[y]).name,
+                                         length(pos(live[x]) - pos(live[y])));
+                        }
+                std::fprintf(stderr, "web: %d tight pairs\n", tight);
+            }
+        }
     }
     return table[node];
 }
@@ -409,16 +451,41 @@ const char* branchLabel(MetaBranch b) {
 
 // A frontier node's name, pushed outward from the web's centre so neighbours
 // on the same ring don't stack their labels.
+// This frame's nodes (centre, radius) and the names already placed: a name
+// goes where it misses both (2026-10-20: names along a straight route ran
+// into the next node).
+std::vector<std::pair<sf::Vector2f, float>> g_labelNodes;
+std::vector<sf::FloatRect> g_labelTaken;
+
 void drawOutward(sf::RenderWindow& w, const sf::Font& font, const std::string& str, sf::Vector2f p,
                  sf::Vector2f fromCentre, float r, sf::Color c) {
     sf::Text t = makeText(font, str, theme::fsSmall, c);
     const sf::FloatRect b = t.getLocalBounds();
-    const sf::Vector2f d = normalized(fromCentre, {0.f, 1.f});
     const sf::Vector2f half{b.width * 0.5f + 3.f, b.height * 0.5f + 3.f};
-    // distance from the node centre to the label centre along d, so the box clears the node
-    const float reach = r + 3.f + std::min(std::fabs(d.x) > 1e-3f ? half.x / std::fabs(d.x) : 1e9f,
-                                           std::fabs(d.y) > 1e-3f ? half.y / std::fabs(d.y) : 1e9f);
-    const sf::Vector2f at = p + d * reach;
+    // where the label's centre sits along d, so its box clears the node
+    auto spot = [&](sf::Vector2f d) {
+        const float reach = r + 3.f + std::min(std::fabs(d.x) > 1e-3f ? half.x / std::fabs(d.x) : 1e9f,
+                                               std::fabs(d.y) > 1e-3f ? half.y / std::fabs(d.y) : 1e9f);
+        return p + d * reach;
+    };
+    auto clear = [&](sf::Vector2f at) {
+        const sf::FloatRect box{at.x - half.x, at.y - half.y, half.x * 2.f, half.y * 2.f};
+        for (const auto& [q, qr] : g_labelNodes) {
+            if (length(q - p) < 1.f) continue;   // itself
+            const float cx = clampf(q.x, box.left, box.left + box.width), cy = clampf(q.y, box.top, box.top + box.height);
+            if (length(sf::Vector2f{cx, cy} - q) < qr + 2.f) return false;
+        }
+        for (const sf::FloatRect& o : g_labelTaken)
+            if (o.intersects(box)) return false;
+        return true;
+    };
+    // outward from the centre first, then under, over, and to either side
+    const sf::Vector2f out = normalized(fromCentre, {0.f, 1.f});
+    const sf::Vector2f tries[] = {out, {0.f, 1.f}, {0.f, -1.f}, {1.f, 0.f}, {-1.f, 0.f}};
+    sf::Vector2f at = spot(out);
+    for (const sf::Vector2f& d : tries)
+        if (const sf::Vector2f a = spot(d); clear(a)) { at = a; break; }
+    g_labelTaken.push_back({at.x - half.x, at.y - half.y, half.x * 2.f, half.y * 2.f});
     t.setOrigin(b.left + b.width * 0.5f, b.top + b.height * 0.5f);
     t.setPosition(std::round(at.x), std::round(at.y));
     w.draw(t);
@@ -551,7 +618,10 @@ void LoadoutScreen::rebuild(App& app) {
     const sf::Vector2f s = app.size();
     menu_.init(app.font(), theme::fsItem, s.y * 0.050f);
     // The Ascension row shows once a won run has opened level 1.
-    std::vector<Menu::Item> items{{"Start run", true}, {app.data().meta.hardMode ? "Mode: Hard" : "Mode: Normal", true}};
+    // Hard mode opens once a run gets past act 1; till then the row says how.
+    const bool hardOpen = app.hardUnlocked();
+    std::vector<Menu::Item> items{{"Start run", true},
+                                  {!hardOpen ? "Hard: beat act 1" : app.data().meta.hardMode ? "Mode: Hard" : "Mode: Normal", hardOpen}};
     if (app.data().meta.ascMax > 0) items.push_back({"Ascension " + std::to_string(app.data().meta.ascSel), true});
     items.push_back({"Back", true});
     menu_.setItems(items);
@@ -576,6 +646,10 @@ void LoadoutScreen::onEnter(App& app) {
         selNode_ = g_webView.sel;
     } else {
         zoom_ = kZoomStart;
+        pan_ = panFor(app, 0, zoom_);
+    }
+    if (const char* z = std::getenv("SB_SHOWCASE_WEBZOOM"); z && *z) {   // dev: SB_SHOWCASE films the whole web
+        zoom_ = clampf(static_cast<float>(std::atof(z)), kZoomMin, kZoomMax);
         pan_ = panFor(app, 0, zoom_);
     }
     zoomT_ = zoom_;
@@ -913,9 +987,7 @@ void LoadoutScreen::drawInfoCard(App& app, sf::RenderWindow& w, int node) const 
     drawLabel(w, app.font(), "what it gives", 10, {o.x + 16.f, y + 6.f}, theme::textDim, -1);
     y += 16.f;
     for (const std::string& dl : lines) {
-        sf::Text t = makeText(app.font(), dl, theme::fsBody, theme::textHi);
-        t.setPosition(o.x + 16.f, y);
-        w.draw(t);
+        drawRichText(w, app.font(), dl, theme::fsBody, {o.x + 16.f, y}, lerpColor(theme::textHi, theme::textLo, 0.3f));
         y += kBodyStep;
     }
     y += 14.f;
@@ -1032,7 +1104,7 @@ void LoadoutScreen::draw(App& app, sf::RenderWindow& w) {
     }
 
     // The constellations: close neighbours on a ring, joined by hairlines -
-    // barely there until you own both ends, then a soft line in their colours.
+    // hidden until you own one end, then a soft line in their colours.
     for (const auto& [ca, cb] : g_constellation) {
         if (!webVisible(ca, m.unlock) || !webVisible(cb, m.unlock)) continue;
         const float la = clampf(introPop(it, 0.2f + 0.05f * nodeRing(ca), 0.3f), 0.f, 1.f);
@@ -1042,6 +1114,9 @@ void LoadoutScreen::draw(App& app, sf::RenderWindow& w) {
         const float th = nodeScale(zoom_);
         const sf::Vector2f a = nodePos(app, ca), b = nodePos(app, cb);
         const bool half = !lit && (m.unlock[ca] > 0 || m.unlock[cb] > 0);
+        // (2026-10-20: the web reads simpler - a line nobody owns isn't drawn,
+        // and a half-owned one only up close)
+        if (!lit && (!half || zoom_ < 0.5f)) continue;
         drawLink(w, a, b, std::max(1.f, (lit ? 1.8f : 1.2f) * th),
                  lit ? withAlpha(lerpColor(col, sf::Color::White, 0.6f), 0.35f * la)
                      : withAlpha(half ? col : theme::arenaEdge, (half ? 0.16f : 0.10f) * la));
@@ -1078,6 +1153,13 @@ void LoadoutScreen::draw(App& app, sf::RenderWindow& w) {
         for (int k = 0; k <= n; ++k)
             drawDot(w, from + dir * (L * static_cast<float>(k) / static_cast<float>(n)), (lit ? 1.5f : 1.1f) * th, dc);
     }
+
+    g_labelNodes.clear();   // where the names may not go (drawOutward)
+    g_labelTaken.clear();
+    for (int i = 0; i < MetaUnlockCount; ++i)
+        if (webVisible(i, m.unlock))
+            g_labelNodes.push_back({nodePos(app, i), (i == 0 ? kRootR : isGodNode(i) ? kGodR : isClassNode(i) ? kClassR : kNodeR) *
+                                                         nodeScale(zoom_)});
 
     // Nodes. Only the one under the cursor / keyboard selection lights up.
     for (int i = 0; i < MetaUnlockCount; ++i) {
@@ -1250,6 +1332,11 @@ void LoadoutScreen::draw(App& app, sf::RenderWindow& w) {
             const sf::Vector2f side{-out.y, out.x};
             // beside the node (across its route), on the side away from the web's middle line
             const sf::Vector2f at = p + side * ((r + 30.f * ns) * (side.x >= 0.f ? 1.f : -1.f)) + out * 6.f;
+            {   // a dark plate under it, so it reads over the nodes behind
+                const sf::FloatRect tb = makeLabel(app.font(), d.name, 12, sf::Color::White).getLocalBounds();
+                draw::box(w, {std::round(at.x - tb.width * 0.5f - 7.f), std::round(at.y - 10.f), tb.width + 14.f, 20.f}, 3.f,
+                          withAlpha(theme::bg, 0.78f * na), withAlpha(theme::bg, 0.78f * na));
+            }
             drawLabel(w, app.font(), d.name, 12, at,
                       withAlpha(owned ? col : avail ? lerpColor(col, theme::textLo, 0.4f) : theme::textDim, na), 0);
         }
@@ -1463,6 +1550,7 @@ void PlayScreen::onEnter(App&) {
 
 void PlayScreen::grab(App& app, sf::Vector2f mouse) {
     // A click on an enemy (not on a ball) makes it the target; again clears it.
+    if (app.hasCreed(CreedId::Puppeteer)) return;   // "Puppeteer": the button steers (World::setSteer), it picks nothing
     bool onBall = false;
     for (const Ball& b : app.world().balls())
         onBall = onBall || length(b.pos - mouse) < b.radius + 10.f * app.world().arenaScale();
@@ -1512,6 +1600,11 @@ void PlayScreen::release(App& app) {
         commitAim(app);   // a fast pull that ended between frames still aims
     dragging_ = false;
     if (!aimCommitted_) {
+        if (app.drillOn() || app.hasCreed(CreedId::Sharpshooter)) {   // the drill / "Sharpshooter": only a pull throws
+            app.world().cancelHeld();
+            app.drillThrown(false);
+            return;
+        }
         // A click: the ball goes at the enemy nearest the core - the one about
         // to hurt it - through the same release as a hand-aimed throw. Nothing
         // to hit: let it carry on.
@@ -1542,7 +1635,9 @@ void PlayScreen::release(App& app) {
     }
     const float pw = clampf(len / (cfg::app::slingMaxPull * k), 0.f, 1.f);
     const sf::Vector2f v = pull / len * lerpf(cfg::app::slingMinSpeed, cfg::app::slingMaxSpeed, pw) * k * power;
-    app.world().releaseHeld(v);
+    app.world().releaseHeld(v, pw);
+    app.drillThrown(true);
+    if (pw >= cfg::app::slingFullPull) app.effects().flash(theme::puGolden, 0.18f);   // full power: a beat of gold
     app.hintDone(App::Hint::Throw);   // a slingshot throw counts for both
     app.hintDone(App::Hint::Aim);
     if (app.world().grabbedKind() == Grabbed::None) app.audio().thrown(clampf(length(v) / 900.f, 0.f, 1.f));
@@ -1597,6 +1692,7 @@ void PlayScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
 void PlayScreen::update(App& app, float dt, sf::Vector2f mouse) {
     worldMouse_ = mouse;
     app.world().setPointer(mouse);   // "Grip" bends balls toward it
+    app.world().setSteer(!peek_.open && app.hasFocus() && sf::Mouse::isButtonPressed(sf::Mouse::Left));   // "Puppeteer"
     sceneIn_ += dt;
     peek_.update(dt);
     app.setBulletHeld(!peek_.open && app.hasFocus() && sf::Keyboard::isKeyPressed(sf::Keyboard::E));
@@ -1644,6 +1740,15 @@ void PlayScreen::drawAim(App& app, sf::RenderWindow& w) const {
         w.draw(r);
     };
     seg(b->pos, worldMouse_, 2.f * as, withAlpha(theme::textLo, live ? 0.5f : 0.25f));   // the band
+    if (live) {   // the throw's strength: an arc round the ball that closes at a full pull
+        const sf::Color pc = withAlpha(lerpColor(theme::accent, theme::puGolden, k), 0.5f + 0.4f * k);
+        draw::ring(w, b->pos, b->radius + 7.f * as, 2.5f * as, pc, -kPi * 0.5f, -kPi * 0.5f + 2.f * kPi * k, 32);
+        if (k >= cfg::app::slingFullPull) {   // full power: a second, pulsing gold ring
+            const float pulse = 0.5f + 0.5f * std::sin(clock_ * 14.f);
+            draw::ring(w, b->pos, b->radius + (12.f + 3.f * pulse) * as, 2.f * as,
+                       withAlpha(theme::puGolden, 0.45f + 0.4f * pulse), 0.f, 2.f * kPi, 40);
+        }
+    }
     if (!live || !app.aimGuide()) return;   // "Blind" pact: the band only
 
     const sf::Vector2f dir = pull / len;
@@ -1671,6 +1776,11 @@ void PlayScreen::draw(App& app, sf::RenderWindow& w) {
     drawCreedWorld(app, w);   // Hunters tethers, Living Core overcharge
     app.effects().drawRings(w);
     if (dragging_ && aimCommitted_) drawAim(app, w);
+    if (app.world().steering()) {   // "Puppeteer": where the balls are being pulled
+        const float k = app.world().arenaScale();
+        const float pulse = 0.5f + 0.5f * std::sin(clock_ * 6.f);
+        draw::ring(w, worldMouse_, (16.f + 4.f * pulse) * k, 2.f * k, withAlpha(theme::classSlinger, 0.55f));
+    }
     if (const auto at = app.world().focusPos()) {   // the player's target: a slow-turning sight
         const float k = app.world().arenaScale();
         const float rr = (app.world().focusIsBoss() ? app.world().boss().radius : app.world().focusEnemy()->radius) +
@@ -1797,7 +1907,7 @@ void PlayScreen::draw(App& app, sf::RenderWindow& w) {
                         theme::core);
         } else if (tally.contains(um)) {
             drawTooltip(w, app.font(), um, s, "Your balls",
-                        "click one to throw it at the enemy nearest the core, or press and pull back to aim. TAB shows each ball's classes, items, type, abilities and modifiers (the fight pauses).");
+                        "click one to throw it at the enemy nearest the core, or press and pull back to aim (further = harder). TAB shows each ball's classes, items, type, abilities and modifiers (the fight pauses).");
         }
     }
 
@@ -2058,6 +2168,47 @@ void drawLoadoutOverlay(App& app, sf::RenderWindow& w, bool paused, const TabPee
         }
     }
 
+    // ---- under the balls: the squad's traits that have a ball - the name lit once
+    // it's on, a pip per ball up to its top level; what it does on hover.
+    int hotTrait = -1;
+    int traits[kTraitCount];
+    teamTraitCounts(r.balls, traits);
+    {
+        constexpr float kGap = 26.f, kPip = 10.f, kChipH = 26.f;
+        const int top = cfg::team::traitAt[1];
+        float widths[kTraitCount] = {};
+        float total = 0.f;
+        for (int t = 0; t < kTraitCount; ++t) {
+            if (traits[t] == 0) continue;
+            widths[t] = makeLabel(app.font(), traitName(static_cast<Trait>(t)), theme::fsSmall, theme::textHi).getLocalBounds().width +
+                        10.f + kPip * static_cast<float>(top) + 16.f;
+            total += widths[t] + (total > 0.f ? kGap : 0.f);
+        }
+        float x = rowCx - total * 0.5f;
+        const float y = rowY + kPanelH * 0.5f + 34.f;
+        for (int t = 0; t < kTraitCount; ++t) {
+            if (traits[t] == 0) continue;
+            const auto tr = static_cast<Trait>(t);
+            const int tier = traitTier(traits[t]);
+            const sf::Color tc = traitColor(tr);
+            const sf::FloatRect chip{x, y - kChipH * 0.5f, widths[t], kChipH};
+            const bool hot = !dragging && chip.contains(um);
+            if (hot) hotTrait = t;
+            if (tier > 0 || hot)
+                draw::box(w, chip, theme::corner, withAlpha(tc, hot ? 0.16f : 0.08f), withAlpha(tc, 0.02f),
+                          withAlpha(tc, tier > 0 ? 0.55f : 0.3f), 1.f);
+            drawLabel(w, app.font(), traitName(tr), theme::fsSmall, {x + 8.f, y},
+                      tier > 0 ? tc : withAlpha(theme::textLo, 0.75f), -1);
+            for (int p = 0; p < top; ++p) {
+                const bool on = p < traits[t];
+                const sf::Vector2f pc{x + widths[t] - 12.f - static_cast<float>(top - 1 - p) * kPip, y};
+                const sf::Color pcol = on ? (tier > 0 ? tc : theme::textLo) : theme::arenaEdge;
+                draw::polygon(w, pc, on ? 3.6f : 2.6f, 4, 0.f, withAlpha(pcol, 0.95f), withAlpha(pcol, 0.95f));
+            }
+            x += widths[t] + kGap;
+        }
+    }
+
     // ---- side column: relics, then creeds - each section only when it has any
     const std::vector<UpgradeKind> relics = runRelics(r.mods);
     const UpgradeKind* hotRelic = nullptr;
@@ -2066,7 +2217,7 @@ void drawLoadoutOverlay(App& app, sf::RenderWindow& w, bool paused, const TabPee
         const float colTop = rowY - kPanelH * 0.5f;
         draw::panel(w, {sideX, colTop, kSideW, kPanelH}, theme::puGolden, 0.9f);
         float y = colTop + 20.f;
-        constexpr float kRelicStep = 22.f;
+        constexpr float kRelicStep = 30.f;
         if (!relics.empty()) {
             drawLabel(w, app.font(), "relics", 12, {sideX + 14.f, y}, withAlpha(theme::puGolden, 0.8f), -1);
             y += 26.f;
@@ -2078,11 +2229,11 @@ void drawLoadoutOverlay(App& app, sf::RenderWindow& w, bool paused, const TabPee
                 hotRelic = &k;
                 draw::box(w, row, 0.f, withAlpha(theme::puGolden, 0.10f), withAlpha(theme::puGolden, 0.03f));
             }
-            drawKindMark(w, UpgradeCat::Relic, {sideX + 14.f, y}, 3.5f, tierColor(upgradeTier(k)));   // relic = circle, lit by rarity
+            drawIcon(w, k, {sideX + 20.f, y}, 11.f);
             sf::Text t = makeText(app.font(), upgradeInfo(k).title, theme::fsSmall, hot ? theme::textHi : theme::puGolden);
             const sf::FloatRect tb = t.getLocalBounds();
             t.setOrigin(tb.left, tb.top + tb.height * 0.5f);
-            t.setPosition(std::round(sideX + 22.f), std::round(y));
+            t.setPosition(std::round(sideX + 38.f), std::round(y));
             w.draw(t);
             y += kRelicStep;
         }
@@ -2117,9 +2268,21 @@ void drawLoadoutOverlay(App& app, sf::RenderWindow& w, bool paused, const TabPee
         if (part >= 0 && loadoutTooltip(L, part, tt, td)) {
             std::string st;
             const float g = loadoutGrowth(L, part, st);
-            drawTooltip(w, app.font(), um, s, tt, td, theme::textHi, g, st);
+            const int kind = part < kLoadoutSlots ? L.kindAt(part) : -1;
+            drawTooltip(w, app.font(), um, s, tt, td, kind >= 0 ? nameColor(static_cast<UpgradeKind>(kind)) : theme::textHi, g, st);
             return;
         }
+    }
+    if (hotTrait >= 0) {
+        const auto tr = static_cast<Trait>(hotTrait);
+        const int n = traits[hotTrait];
+        drawTooltip(w, app.font(), um, s,
+                    std::string(traitName(tr)) + "  -  " + std::to_string(n) + (n == 1 ? " ball" : " balls"),
+                    std::to_string(cfg::team::traitAt[0]) + " balls: " + traitDesc(tr, 1) + ".  " +
+                        std::to_string(cfg::team::traitAt[1]) + " balls: " + traitDesc(tr, 2) + ".  From " +
+                        traitClasses(tr) + " (2 items of the class).",
+                    traitColor(tr));
+        return;
     }
     if (hotRelic)
         drawTooltip(w, app.font(), um, s, std::string(upgradeInfo(*hotRelic).title) + "  -  relic",
@@ -2373,7 +2536,7 @@ void HowToScreen::draw(App& app, sf::RenderWindow& w) {
 
     const std::array<const char*, 10> lines = {{
         "Enemies march on the core at the centre. Keep it alive.",
-        "Click a ball to throw it at the enemy nearest the core; press and pull back to aim it.",
+        "Click a ball to throw it at the enemy nearest the core; press and pull back to aim it, further for a harder throw.",
         "Click an enemy to target it: throws, Q and every ability go for it.",
         "Q throws every ball at the enemy nearest to it, faster than a click.",
         "From act 2: hold E for bullet time (a gauge that refills). From act 4: F makes the core repulse.",

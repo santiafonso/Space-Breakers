@@ -359,7 +359,7 @@ bool App::anyItemOfTier(Tier t) const {
         const auto k = static_cast<UpgradeKind>(i);
         if (upgradeCat(k) != UpgradeCat::Item || upgradeTier(k) != t || c.isLocked(k)) continue;
         for (const BallLoadout& L : data_.run.balls)
-            if (upgradeFitsBall(k, L)) return true;
+            if (fitsSquad(k, L)) return true;
     }
     return false;
 }
@@ -371,9 +371,9 @@ int App::randomItemOfTier(Tier t, const BallLoadout* fits) {
         const auto k = static_cast<UpgradeKind>(i);
         if (upgradeCat(k) != UpgradeCat::Item || upgradeTier(k) != t || c.isLocked(k)) continue;
         bool ok = false;
-        if (fits) ok = upgradeFitsBall(k, *fits);
+        if (fits) ok = fitsSquad(k, *fits);
         else
-            for (const BallLoadout& L : data_.run.balls) ok = ok || upgradeFitsBall(k, L);
+            for (const BallLoadout& L : data_.run.balls) ok = ok || fitsSquad(k, L);
         if (ok) pool.push_back(i);
     }
     if (pool.empty()) return -1;

@@ -6,12 +6,16 @@
 #include <utility>
 
 #include "progression/Offers.hpp"
+#include "progression/RunMap.hpp"
 #include "render/WorldRenderer.hpp"
 #include "ui/Menu.hpp"
 #include "ui/MenuBackdrop.hpp"
 #include "ui/Screen.hpp"
 
 namespace sb {
+
+// A map stop's mark, as on the map (the tutorial's lessons show them too).
+void drawMapNode(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f p, MapNodeType t, float r, float alpha);
 
 // Main menu: start playing, stats, how-to, quit.
 class MenuScreen : public Screen {
@@ -188,8 +192,13 @@ public:
 private:
     void targetAt(App& app, sf::Vector2f mouse, int& ball, int& slot) const;
     static sf::FloatRect backRect(sf::Vector2f s);   // "Back": undo the pick's target step (bottom centre)
+    int replacedSlot(App& app, int ball, int slot) const;   // the full slot this pick would empty, or -1
+    void pick(App& app, int ball, int slot);   // place it, or ask first if it throws something out
     int hoverBall_ = -1;
     int hoverSlot_ = -1;
+    int askBall_ = -1;   // >= 0: "Replace X?" is up, for this ball / slot
+    int askSlot_ = -1;
+    int askHover_ = -1;  // 0: Replace, 1: Keep it
     sf::Vector2f mouse_;
 };
 

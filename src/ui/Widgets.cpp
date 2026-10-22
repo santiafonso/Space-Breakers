@@ -1,10 +1,13 @@
 #include "ui/Widgets.hpp"
+#include "ui/Icons.hpp"
+#include "ui/CreedScreen.hpp"
 
 #include "render/ClassRender.hpp"
 #include "render/Draw.hpp"
 #include "core/ConfigClasses.hpp"
 
 #include <algorithm>
+#include <unordered_map>
 #include <array>
 #include <cctype>
 #include <cmath>
@@ -89,6 +92,195 @@ void drawCentered(sf::RenderWindow& window, const sf::Font& font, const std::str
     centerOrigin(t);
     t.setPosition(std::round(pos.x), std::round(pos.y));
     window.draw(t);
+}
+
+// ---- rich text (2026-10-22): what each word in a description is about, by colour
+
+namespace {
+
+struct Keyword { const char* word; sf::Color color; };
+
+// One colour per idea, the same on every card, tooltip and web node. Class names
+// take their class colour (keywordColor); numbers are lit white.
+const sf::Color kwCrit{240, 96, 104}, kwDamage{255, 156, 90}, kwSpeed{240, 206, 96}, kwSize{96, 156, 255},
+    kwControl{186, 160, 255}, kwSummon{150, 226, 120};
+
+const std::vector<Keyword>& keywords() {
+    static const std::vector<Keyword> k = [] {
+        std::vector<Keyword> v;
+        auto add = [&](sf::Color c, std::initializer_list<const char*> ws) {
+            for (const char* w : ws) v.push_back({w, c});
+        };
+        add(kwCrit, {"crit", "crits", "critical", "critically"});
+        add(kwDamage, {"damage", "hit", "hits", "harder", "strike", "strikes", "stab", "stabs", "slam", "slams",
+                       "burst", "bursts", "blast", "blasts", "explodes", "explosion", "pierce", "pierces", "piercing"});
+        add(kwSpeed, {"speed", "fast", "faster", "fastest", "quick", "quicker", "cruise", "swift", "velocity"});
+        add(kwSize, {"size", "big", "bigger", "biggest", "large", "larger", "grow", "grows", "growth", "wide", "wider",
+                     "radius", "huge", "giant", "reach"});
+        add(kwControl, {"slow", "slows", "slowed", "slower", "stun", "stuns", "stunned", "stagger", "staggers",
+                        "staggered", "knock", "knocks", "knockback", "shove", "shoves", "pull", "pulls", "push",
+                        "pushes", "mark", "marks", "marked"});
+        add(theme::ability, {"ability", "abilities", "cast", "casts", "cooldown", "cooldowns", "recharge",
+                             "recharges", "charge", "charges"});
+        add(kwSummon, {"summon", "summons", "sprite", "spriteling", "spritelings", "turret", "turrets", "totem",
+                       "totems", "golem", "golems", "wisp", "wisps", "dragon", "dragons", "minion", "minions"});
+        add(theme::core, {"core", "heal", "heals", "healed", "repair", "repairs", "health", "hp", "shield",
+                          "shields", "regen"});
+        add(theme::puGolden, {"gold", "coin", "coins", "cores", "price", "prices", "sell"});
+        add(theme::puOverdrive, {"combo"});
+        add(lerpColor(theme::elemFire, sf::Color::White, 0.2f), {"fire", "burn", "burns", "burning", "flame", "flames", "lava"});
+        add(theme::venom, {"poison", "poisoned", "poisons", "venom", "toxic"});
+        add(lerpColor(theme::elemWater, sf::Color::White, 0.2f), {"water", "wave", "waves", "wet", "rain"});
+        add(lerpColor(theme::elemIce, sf::Color::White, 0.2f), {"ice", "frost", "freeze", "freezes", "frozen", "chill", "chilled"});
+        add(lerpColor(theme::elemStone, sf::Color::White, 0.2f), {"stone", "boulder", "boulders", "quake", "earth", "mud"});
+        add(lerpColor(theme::elemElectric, sf::Color::White, 0.25f), {"electric", "zap", "zaps", "lightning", "shock", "chain", "chains"});
+        add(theme::plagueEdge, {"plague", "infect", "infects", "infected"});
+        return v;
+    }();
+    return k;
+}
+
+// "Split shot" / "Hand-off" / "777" -> "split shot" / "hand off" / "777": lower
+// case, words split on anything that isn't a letter or a digit.
+std::string normName(const std::string& s) {
+    std::string out;
+    bool gap = false;
+    for (char ch : s) {
+        const unsigned char c = static_cast<unsigned char>(ch);
+        if (std::isalnum(c)) {
+            if (gap && !out.empty()) out += ' ';
+            out += static_cast<char>(std::tolower(c));
+            gap = false;
+        } else {
+            gap = true;
+        }
+    }
+    return out;
+}
+
+// Every named thing a description may point at, in its own colour: items (their
+// class), elements, abilities, relics, modifiers, ascended forms, creeds, pacts.
+const std::unordered_map<std::string, sf::Color>& namedThings() {
+    static const std::unordered_map<std::string, sf::Color> m = [] {
+        std::unordered_map<std::string, sf::Color> v;
+        for (int i = 0; i < kUpgradeKindCount; ++i) {
+            const auto k = static_cast<UpgradeKind>(i);
+            const std::string n = normName(upgradeInfo(k).title);
+            if (!n.empty() && upgradeCat(k) != UpgradeCat::NewBall) v.emplace(n, nameColor(k));
+        }
+        for (int i = 1; i < kBallRoleCount; ++i)
+            if (const char* a = ascendedName(static_cast<BallRole>(i)); a && *a)
+                v.emplace(normName(a), tagColor(static_cast<ItemTag>(i)));
+        for (int i = 0; i < kCreedCount; ++i) {
+            const CreedDef& d = creedDef(static_cast<CreedId>(i));
+            v.emplace(normName(d.name), lerpColor(creedColor(d.archetype), theme::textHi, 0.2f));
+        }
+        for (int i = 0; i < kPactCount; ++i)
+            v.emplace(normName(pactDef(static_cast<PactId>(i)).name), lerpColor(theme::pact, theme::textHi, 0.25f));
+        return v;
+    }();
+    return m;
+}
+
+bool isWordChar(const std::string& s, std::size_t i) {
+    const unsigned char c = static_cast<unsigned char>(s[i]);
+    if (std::isalnum(c) || c == '%' || c == '\'') return true;
+    if (c == '+' || c == '-') return i + 1 < s.size() && std::isdigit(static_cast<unsigned char>(s[i + 1]));   // "+25%", "-10%"
+    if (c == '.') return i > 0 && i + 1 < s.size() && std::isdigit(static_cast<unsigned char>(s[i - 1])) &&
+                         std::isdigit(static_cast<unsigned char>(s[i + 1]));                                    // "1.5"
+    return false;
+}
+
+}  // namespace
+
+sf::Color nameColor(UpgradeKind k) {
+    switch (upgradeCat(k)) {
+        case UpgradeCat::Relic:    return theme::puGolden;
+        case UpgradeCat::Modifier: return lerpColor(theme::ballMid, theme::textHi, 0.15f);
+        case UpgradeCat::Item:     return lerpColor(iconColor(k), theme::textHi, 0.2f);
+        default:                   return iconColor(k);
+    }
+}
+
+bool keywordColor(const std::string& word, sf::Color& out) {
+    std::string w;
+    bool digit = false;
+    for (char ch : word) {
+        digit = digit || std::isdigit(static_cast<unsigned char>(ch));
+        w += static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+    }
+    if (digit) { out = theme::textHi; return true; }   // "+25%", "x2", "3 s"
+    if (w.size() > 2 && w.compare(w.size() - 2, 2, "'s") == 0) w.resize(w.size() - 2);   // "Striker's"
+    for (const Keyword& k : keywords())
+        if (w == k.word) { out = k.color; return true; }
+    for (int i = 1; i < kBallRoleCount; ++i) {   // a class by name: its colour
+        std::string name = roleName(static_cast<BallRole>(i));
+        for (char& ch : name) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+        if (w == name || w == name + "s") { out = tagColor(static_cast<ItemTag>(i)); return true; }
+    }
+    return false;
+}
+
+void drawRichText(sf::RenderTarget& t, const sf::Font& font, const std::string& line, unsigned size,
+                  sf::Vector2f pos, sf::Color base, int align) {
+    sf::Text full = makeText(font, line, size, base);
+    sf::Vector2f at = pos;
+    if (align == 0) {   // as centerOrigin would
+        const sf::FloatRect b = full.getLocalBounds();
+        at -= sf::Vector2f{b.left + b.width / 2.f, b.top + b.height / 2.f};
+    }
+    full.setPosition(std::round(at.x), std::round(at.y));
+    // runs of one colour: a keyword, or everything between keywords
+    std::size_t i = 0, runStart = 0;
+    sf::Color runCol = base;
+    auto flush = [&](std::size_t end) {
+        if (end <= runStart) return;
+        sf::Text seg = makeText(font, line.substr(runStart, end - runStart), size, runCol);
+        const sf::Vector2f p = full.findCharacterPos(runStart);
+        seg.setPosition(std::round(p.x), std::round(full.getPosition().y));
+        t.draw(seg);
+    };
+    // the words, then: a name (up to 4 words, capitalised in the text) before a keyword
+    struct Tok { std::size_t a, b; };
+    std::vector<Tok> toks;
+    while (i < line.size()) {
+        std::size_t j = i;
+        while (j < line.size() && isWordChar(line, j)) ++j;
+        if (j == i) { ++i; continue; }
+        toks.push_back({i, j});
+        i = j;
+    }
+    const auto& names = namedThings();
+    auto paint = [&](std::size_t a, sf::Color c) {
+        const sf::Color want = withAlpha(c, static_cast<float>(base.a) / 255.f);
+        if (want == runCol) return;
+        flush(a);
+        runStart = a;
+        runCol = want;
+    };
+    for (std::size_t ti = 0; ti < toks.size();) {
+        const unsigned char first = static_cast<unsigned char>(line[toks[ti].a]);
+        std::size_t used = 0;
+        if (std::isupper(first) || std::isdigit(first)) {
+            for (std::size_t n = std::min<std::size_t>(4, toks.size() - ti); n >= 1 && used == 0; --n) {
+                bool joined = true;   // the words of a name sit a space or a hyphen apart
+                for (std::size_t q = ti; q + 1 < ti + n && joined; ++q)
+                    joined = toks[q + 1].a - toks[q].b == 1 && (line[toks[q].b] == ' ' || line[toks[q].b] == '-');
+                if (!joined) continue;
+                const auto it = names.find(normName(line.substr(toks[ti].a, toks[ti + n - 1].b - toks[ti].a)));
+                if (it == names.end()) continue;
+                paint(toks[ti].a, it->second);
+                paint(toks[ti + n - 1].b, base);
+                used = n;
+            }
+        }
+        if (used > 0) { ti += used; continue; }
+        sf::Color kc;
+        paint(toks[ti].a, keywordColor(line.substr(toks[ti].a, toks[ti].b - toks[ti].a), kc) ? kc : base);
+        paint(toks[ti].b, base);
+        ++ti;
+    }
+    flush(line.size());
 }
 
 float introPop(float elapsed, float delay, float dur) {
@@ -201,18 +393,22 @@ sf::Vector2f panelCenter(sf::Vector2f size, int i, int n, float cy, float cx) {
     return {x0 + static_cast<float>(i) * (kPanelW + kPanelGap), cy};
 }
 
-// An Alchemist's second element: a small hexagon tucked left of the type slot
-// (inside the panel, so the pointer reaches it).
-sf::Vector2f extraElementPos(sf::Vector2f typeCentre, float typeR, int i) {
-    return {typeCentre.x - typeR - 8.f, typeCentre.y - typeR * 0.55f + 13.f * static_cast<float>(i - 1)};
+// An Alchemist's other elements: small hexagons in a row under the type slot,
+// where its name would be (inside the panel, so the pointer reaches them).
+sf::Vector2f extraElementPos(sf::Vector2f typeCentre, float typeR, int i, int n) {
+    return {typeCentre.x + (static_cast<float>(i - 1) - static_cast<float>(n - 1) * 0.5f) * kExtraStep,
+            typeCentre.y + typeR + 12.f};
 }
 
 bool extraElementAt(sf::Vector2f c, sf::Vector2f m, const BallLoadout& L) {
     Element els[kMaxElements];
-    if (L.elements(els) < 2) return false;
+    const int ne = L.elements(els);
+    if (ne < 2) return false;
     const sf::FloatRect tr = slotRect(c, kSlotType, L);
     const sf::Vector2f pc{tr.left + tr.width * 0.5f, tr.top + tr.height * 0.5f};
-    return length(m - extraElementPos(pc, tr.width * 0.5f, 1)) < 9.f;
+    for (int i = 1; i < ne; ++i)
+        if (length(m - extraElementPos(pc, tr.width * 0.5f, i, ne - 1)) < 9.f) return true;
+    return false;
 }
 
 int abilityBoxes(const BallLoadout& L) {
@@ -242,14 +438,16 @@ sf::FloatRect slotRect(sf::Vector2f c, int slot, const BallLoadout& L) {
         return {c.x - 58.f - r, hy - r, 2.f * r, 2.f * r};
     }
     if (isAbilitySlot(slot)) {   // a diamond right of the ball; a Mage's other abilities small beside it
-        (void)L;
         const int i = slot - kSlotAbility;
         if (i == 0) {
             const float r = 16.f;
             return {c.x + 58.f - r, hy - r, 2.f * r, 2.f * r};
         }
-        const float r = 6.f;   // stacked just right of the diamond - inside the panel, so the pointer can reach them
-        const sf::Vector2f q{c.x + 58.f + 16.f + r, hy - 8.f + 15.f * static_cast<float>(i - 1)};
+        // in a row under the diamond, where its name would be (as an Alchemist's elements)
+        const float r = 6.f;
+        const int n = abilityBoxes(L) - 1;
+        const sf::Vector2f q{c.x + 58.f + (static_cast<float>(i - 1) - static_cast<float>(n - 1) * 0.5f) * kExtraStep,
+                             hy + 16.f * 1.15f + 11.f};
         return {q.x - r, q.y - r, 2.f * r, 2.f * r};
     }
     return {};
@@ -297,6 +495,17 @@ sf::Color tagColor(ItemTag t) {
     const sf::Color c = roleColor(tagRole(t));   // ItemTag::None -> Normal: grey
     if (t == ItemTag::None) return c;
     return isGod(t) ? lerpColor(c, sf::Color::White, 0.3f) : lerpColor(c, sf::Color(110, 114, 128), 0.3f);
+}
+
+sf::Color traitColor(Trait t) {
+    switch (t) {
+        case Trait::Impact:    return theme::ember;
+        case Trait::Swift:     return theme::accent;
+        case Trait::Arcane:    return theme::puSurge;
+        case Trait::Elemental: return theme::venom;
+        case Trait::Squad:     return theme::core;
+    }
+    return theme::textLo;
 }
 
 // Rarity is a brightness ramp, not a hue - dim grey up to white, and only a
@@ -347,6 +556,31 @@ void drawKindMark(sf::RenderTarget& w, UpgradeCat cat, sf::Vector2f pos, float s
     }
 }
 
+namespace {
+
+// Would this card make (2nd item of the tag) or ascend (4th) a ball? A copy it
+// already has only levels up, so that doesn't count. "" when neither.
+std::string classMarkText(UpgradeKind k, const std::vector<BallLoadout>& balls) {
+    const ItemTag t = itemTag(k);
+    if (t == ItemTag::None) return "";
+    int best = 0;   // 1 = makes the class, 2 = ascends
+    for (int b = 0; b < static_cast<int>(balls.size()); ++b) {
+        const BallLoadout& L = balls[static_cast<std::size_t>(b)];
+        if (!upgradeFitsTeam(k, balls, b) || upgradeLevelsUp(k, L)) continue;
+        bool free = false;
+        for (int i = 0; i < L.itemSlots; ++i) free = free || L.gear[i] < 0;
+        if (!free) continue;
+        const int n = L.tagCount(t);
+        if (n == 3) best = 2;
+        else if (n == 1) best = std::max(best, 1);
+    }
+    if (best == 0) return "";
+    const BallRole role = tagRole(t);
+    return best == 2 ? std::string("ascends: ") + ascendedName(role) : std::string("makes a ") + roleName(role);
+}
+
+}  // namespace
+
 void drawPickCard(sf::RenderWindow& w, const sf::Font& font, sf::FloatRect r, UpgradeKind k,
                   const std::vector<BallLoadout>& balls, const PickCardStyle& st) {
     const float a = st.alpha;
@@ -366,16 +600,11 @@ void drawPickCard(sf::RenderWindow& w, const sf::Font& font, sf::FloatRect r, Up
         draw::box(w, {r.left + 1.f, r.top + 3.f, r.width - 2.f, r.height * 0.5f}, 0.f, withAlpha(kc, 0.07f * a),
                   withAlpha(kc, 0.f));
     }
-    // What it is.
-    // What it is: its kind's mark (and name, unless a shelf header says it).
-    const std::string what = upgradeCatName(cat);
-    const sf::Color kindCol = withAlpha(lerpColor(theme::textLo, catColor(cat), 0.6f), a);
-    float whatX = r.left + pad;
-    if (st.showWhat) {
-        drawKindMark(w, cat, {whatX + 4.f, top}, 4.5f, kindCol);
-        drawLabel(w, font, what, 12, {whatX + 14.f, top}, kindCol, -1);
-    }
-    // How rare: pips, filled up to the tier, and the tier's name when it fits.
+    // Resting, a card is its icon, name and class; under the pointer the icon
+    // gives way and what it does takes its place.
+    const float hv = clampf(st.hover, 0.f, 1.f);
+    const float h = hv * hv * (3.f - 2.f * hv);
+    // How rare: its name and pips, filled up to the tier.
     const sf::Color tc = tierColor(tier);
     const int rank = static_cast<int>(tier);
     constexpr float kPip = 10.f;
@@ -386,44 +615,25 @@ void drawPickCard(sf::RenderWindow& w, const sf::Font& font, sf::FloatRect r, Up
         draw::polygon(w, {x, top}, on ? 4.5f : 3.5f, 4, 0.f, withAlpha(pc, a), withAlpha(pc, a));
         x -= kPip;
     }
-    if (!st.showWhat) {
-        drawLabel(w, font, tierName(tier), 12, {r.left + pad, top}, withAlpha(tc, a), -1);
-    } else {
-        const float whatW = makeLabel(font, what, 12, theme::textLo).getLocalBounds().width + 14.f;
-        const float wordW = makeLabel(font, tierName(tier), 12, tc).getLocalBounds().width;
-        if (whatW + wordW + 5.f * kPip + 2.f * pad + 12.f < r.width)
-            drawLabel(w, font, tierName(tier), 12, {x - 2.f, top}, withAlpha(tc, a), 1);
-    }
+    drawLabel(w, font, tierName(tier), 12, {r.left + pad, top}, withAlpha(tc, a), -1);
+
+    const float cx = r.left + r.width * 0.5f;
+    if (h < 0.99f) drawIcon(w, k, {cx, r.top + 68.f - 18.f * h}, 25.f * clampf(st.pop, 0.f, 1.1f), a * (1.f - h));
 
     // The name.
-    const int es = elementItemSlot(k);
     const unsigned ts = r.width > 230.f ? theme::fsItem : theme::fsHeading;
     sf::Color titleCol = theme::textHi;
-    if (es >= 0) titleCol = elementColor(static_cast<Element>(es + 1));
-    if (cat == UpgradeCat::Ability) titleCol = theme::ability;
+    if (cat == UpgradeCat::Element || cat == UpgradeCat::Ability) titleCol = iconColor(k);
+    else if (tag != ItemTag::None || cat == UpgradeCat::Relic) titleCol = lerpColor(nameColor(k), theme::textHi, 0.3f);
     sf::Text title = makeText(font, info.title, ts, withAlpha(titleCol, a));
     centerOrigin(title);
     const float sc = clampf(st.pop, 0.f, 1.1f);
     title.setScale(sc, sc);
-    title.setPosition(std::round(r.left + r.width * 0.5f), std::round(r.top + 54.f));
-    // The kind's shape round the name, as on the ball's panel: an ability sits
-    // in cyan brackets, an element in a pill of its colour.
-    if (cat == UpgradeCat::Ability || cat == UpgradeCat::Element) {
-        const sf::FloatRect tb = title.getGlobalBounds();
-        const sf::FloatRect box{tb.left - 14.f, tb.top - 8.f, tb.width + 28.f, tb.height + 16.f};
-        if (cat == UpgradeCat::Ability) {
-            draw::brackets(w, box, 8.f, 2.f, withAlpha(theme::ability, 0.85f * a));
-        } else {
-            const sf::Color pc = elementColor(static_cast<Element>(es + 1));
-            draw::box(w, box, box.height * 0.5f, withAlpha(pc, 0.16f * a), withAlpha(pc, 0.06f * a),
-                      withAlpha(pc, 0.8f * a), 1.5f);
-        }
-    }
+    title.setPosition(std::round(cx), std::round(r.top + 116.f - 62.f * h));
     w.draw(title);
 
     // Which class: a solid badge.
-    float y = r.top + 86.f;
-    const float cx = r.left + r.width * 0.5f;
+    float y = r.top + 146.f - 60.f * h;
     if (tag != ItemTag::None) {
         const sf::Color cc = tagColor(tag);
         const std::string name = itemTagName(tag);
@@ -438,17 +648,41 @@ void drawPickCard(sf::RenderWindow& w, const sf::Font& font, sf::FloatRect r, Up
         drawLabel(w, font, st.note, 12, {cx, y}, withAlpha(theme::accent, a));
         y += 22.f;
     }
+    // The squad's class cap: no ball can take it (2026-10-22).
+    if (cat == UpgradeCat::Item && tag != ItemTag::None && !isGod(tag) && !balls.empty()) {
+        bool any = false;
+        for (int b = 0; b < static_cast<int>(balls.size()) && !any; ++b) any = classCapFits(k, balls, b);
+        if (!any) {
+            drawLabel(w, font, std::string(itemTagName(tag)) + " is on " + std::to_string(cfg::team::classCap) + " balls already",
+                      10, {cx, y}, withAlpha(theme::coreLow, a));
+            y += 20.f;
+        }
+    }
+    // Would it make or ascend a class? An outlined chip in the class colour,
+    // inside the card under the badge (it used to hang off the bottom edge).
+    if (const std::string mark = st.classMark ? classMarkText(k, balls) : std::string(); !mark.empty()) {
+        const sf::Color col = tagColor(tag);
+        const float cw = makeLabel(font, mark, 10, col).getLocalBounds().width + 20.f;
+        const sf::FloatRect chip{cx - cw * 0.5f, y - 9.f, cw, 18.f};
+        draw::box(w, chip, theme::corner, withAlpha(lerpColor(theme::bgDeep, col, 0.25f), 0.97f * a),
+                  withAlpha(theme::bgDeep, 0.97f * a), withAlpha(col, 0.85f * a), 1.f);
+        drawLabel(w, font, mark, 10, {cx, y}, withAlpha(lerpColor(col, sf::Color::White, 0.15f), a));
+        y += 24.f;
+    }
 
-    // What it does.
+    // What it does: only under the pointer - first the class's squad traits.
+    if (h < 0.01f) return;
     const float lineH = 18.f;
     y += 4.f;
+    if (Trait ta, tb; tag != ItemTag::None && traitsOf(isGod(tag) ? baseOf(tag) : tag, ta, tb)) {
+        const std::string tl = std::string(traitName(ta)) + "  +  " + traitName(tb);
+        drawLabel(w, font, tl, 10, {cx, y}, withAlpha(theme::textLo, 0.8f * a * h));
+        y += lineH;
+    }
     const float bottom = r.top + r.height - st.bottomReserve - 6.f;
     for (const std::string& l : wrapText(font, info.desc, theme::fsSmall, r.width - 28.f)) {
         if (y > bottom) break;
-        sf::Text t = makeText(font, l, theme::fsSmall, withAlpha(theme::textLo, a));
-        centerOrigin(t);
-        t.setPosition(std::round(cx), std::round(y));
-        w.draw(t);
+        drawRichText(w, font, l, theme::fsSmall, {cx, y}, withAlpha(theme::textLo, a * h), 0);
         y += lineH;
     }
 }
@@ -463,30 +697,8 @@ void drawClassCardMark(sf::RenderWindow& w, const sf::Font& font, sf::FloatRect 
               withAlpha(col, 0.03f * alpha));
     draw::box(w, {r.left, r.top + 6.f, 7.f, r.height - 6.f}, 0.f, withAlpha(col, 0.95f * alpha),
               withAlpha(col, 0.7f * alpha));
-
-    // Would it make (2nd item of the tag) or ascend (4th) a ball? A copy it
-    // already has only levels up, so that doesn't count.
-    int best = 0;   // 1 = makes the class, 2 = ascends
-    for (const BallLoadout& L : balls) {
-        if (!upgradeFitsBall(k, L) || upgradeLevelsUp(k, L)) continue;
-        bool free = false;
-        for (int i = 0; i < L.itemSlots; ++i) free = free || L.gear[i] < 0;
-        if (!free) continue;
-        const int n = L.tagCount(t);
-        if (n == 3) best = 2;
-        else if (n == 1) best = std::max(best, 1);
-    }
-    if (best == 0) return;
-    const BallRole role = tagRole(t);
-    const std::string text = best == 2 ? std::string("ascends: ") + ascendedName(role)
-                                       : std::string("makes a ") + roleName(role);
-    const sf::Text probe = makeLabel(font, text, 10, col);
-    const float cw = probe.getLocalBounds().width + 22.f;
-    const sf::FloatRect chip{r.left + r.width * 0.5f - cw * 0.5f, r.top + r.height - 6.f, cw, 19.f};
-    draw::box(w, chip, theme::corner, withAlpha(lerpColor(theme::bgDeep, col, 0.25f), 0.97f * alpha),
-              withAlpha(theme::bgDeep, 0.97f * alpha), withAlpha(col, 0.85f * alpha), 1.f);
-    drawLabel(w, font, text, 10, {chip.left + chip.width * 0.5f, chip.top + chip.height * 0.5f},
-              withAlpha(lerpColor(col, sf::Color::White, 0.15f), alpha));
+    (void)font;   // (its "makes a" chip moved inside the card: drawPickCard)
+    (void)balls;
 }
 
 sf::Color catColor(UpgradeCat c) {
@@ -605,17 +817,26 @@ void drawLoadoutPanel(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f c,
                 draw::polygonOutline(w, pc, r, 6, kHexRot, 2.f,
                                      withAlpha(lerpColor(ecol, sf::Color::White, 0.2f), (0.9f + 0.1f * lit) * sa));
             }
+            {   // what the element does, drawn; its level small at the corner
+                const sf::Color ink = withAlpha(lerpColor(ecol, sf::Color::White, 0.55f), sa);
+                const Glyph g = plague ? Glyph::Skull
+                                       : glyphOf(static_cast<UpgradeKind>(static_cast<int>(UpgradeKind::ElemFire) +
+                                                                          static_cast<int>(L.element()) - 1));
+                drawGlyph(w, g, pc, r * 0.55f, plague ? withAlpha(theme::plagueEdge, sa) : ink);
+            }
             if (L.levelAt(s) > 1)
-                drawCentered(w, font, std::to_string(L.levelAt(s)), 12, {pc.x, pc.y - 1.f}, withAlpha(theme::textHi, sa));
-            sf::Text nm = makeText(font, elementName(L.element()), 12, withAlpha(plague ? theme::plagueEdge : ecol, sa));
-            centerOrigin(nm);
-            nm.setPosition(std::round(pc.x), std::round(pc.y + r + 12.f));
-            w.draw(nm);
-            Element els[kMaxElements];   // an Alchemist's other elements: small hexagons beside it
+                drawCentered(w, font, std::to_string(L.levelAt(s)), 10, {pc.x + r * 0.95f, pc.y - r * 0.8f}, withAlpha(theme::textHi, sa));
+            Element els[kMaxElements];   // an Alchemist's other elements: small hexagons under it, in its name's place
             const int ne = L.elements(els);
+            if (ne < 2) {
+                sf::Text nm = makeText(font, elementName(L.element()), 12, withAlpha(plague ? theme::plagueEdge : ecol, sa));
+                centerOrigin(nm);
+                nm.setPosition(std::round(pc.x), std::round(pc.y + r + 12.f));
+                w.draw(nm);
+            }
             for (int i = 1; i < ne; ++i) {
                 const sf::Color c2 = elementColor(els[i]);
-                const sf::Vector2f q = extraElementPos(pc, r, i);
+                const sf::Vector2f q = extraElementPos(pc, r, i, ne - 1);
                 draw::polygon(w, q, 6.f, 6, kHexRot, withAlpha(lerpColor(c2, theme::bgDeep, 0.3f), 0.95f * sa),
                               withAlpha(lerpColor(c2, theme::bgDeep, 0.55f), 0.95f * sa));
                 draw::polygonOutline(w, q, 6.f, 6, kHexRot, 1.2f, withAlpha(c2, 0.95f * sa));
@@ -635,13 +856,17 @@ void drawLoadoutPanel(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f c,
                           withAlpha(lerpColor(theme::ability, theme::bgDeep, 0.65f), 0.95f * sa));
             draw::polygonOutline(w, pc, r * 1.15f, 4, 0.f, 2.f,
                                  withAlpha(lerpColor(theme::ability, sf::Color::White, 0.25f), (0.9f + 0.1f * lit) * sa));
+            drawGlyph(w, glyphOf(static_cast<UpgradeKind>(kind)), pc, r * 0.6f,
+                      withAlpha(lerpColor(theme::ability, sf::Color::White, 0.55f), sa));
             if (L.levelAt(s) > 1 && r > 8.f)
-                drawCentered(w, font, std::to_string(L.levelAt(s)), 12u, {pc.x, pc.y - 1.f}, withAlpha(theme::textHi, sa));
-            if (s == kSlotAbility) {   // the main one's name under it - a long one ("Magic missile") in smaller type
+                drawCentered(w, font, std::to_string(L.levelAt(s)), 10u, {pc.x + r * 1.05f, pc.y - r * 0.85f}, withAlpha(theme::textHi, sa));
+            // The main one's name under it - a long one ("Magic missile") in smaller type, kept
+            // inside the panel; a Mage's other abilities take that row instead.
+            if (s == kSlotAbility && abilityBoxes(L) < 2) {
                 for (unsigned fs : {12u, 11u, 10u, 9u}) {
                     sf::Text nm = makeText(font, upgradeInfo(static_cast<UpgradeKind>(kind)).title, fs,
                                            withAlpha(theme::ability, sa));
-                    if (nm.getLocalBounds().width >= 76.f && fs > 9u) continue;
+                    if (nm.getLocalBounds().width >= 2.f * (kPanelW * 0.5f - 58.f) - 6.f && fs > 9u) continue;
                     centerOrigin(nm);
                     nm.setPosition(std::round(pc.x), std::round(pc.y + r * 1.15f + 11.f));
                     w.draw(nm);
@@ -677,15 +902,23 @@ void drawLoadoutPanel(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f c,
         const sf::Color tcol = tierColor(upgradeTier(k));
         const bool narrow = sr.width < 120.f;   // an expanded ball's two columns: a tighter rarity mark
         float px = sr.left + sr.width - (narrow ? 5.f : 7.f);
-        for (int p = 0; p <= rank; ++p) {
-            draw::polygon(w, {px, narrow ? sr.top + 6.f : cy}, narrow ? 2.f : 2.6f, 4, 0.f, withAlpha(tcol, sa), withAlpha(tcol, sa));
+        for (int p = 0; p <= rank; ++p) {   // (narrow: along the bottom edge, clear of the name)
+            draw::polygon(w, {px, narrow ? sr.top + sr.height - 4.f : cy}, narrow ? 1.8f : 2.6f, 4, 0.f, withAlpha(tcol, sa), withAlpha(tcol, sa));
             px -= narrow ? 4.5f : 6.f;
         }
         if (narrow) px = sr.left + sr.width - 3.f;   // (the pips sit in the corner: the name gets the width)
         std::string t = upgradeInfo(k).title;
         if (L.levelAt(s) > 1) t += (sr.width > 90.f ? "  Lv" : " ") + std::to_string(L.levelAt(s));
-        const float textL = sr.left + 5.f, textR = px + 2.f;   // between the spine and the pips
-        drawCentered(w, font, t, size, {(textL + textR) * 0.5f, cy - 1.f}, withAlpha(theme::textHi, sa));
+        // what it does, drawn, just past the spine
+        const float gr = std::min(sr.height * 0.3f, narrow ? 5.5f : 9.f);
+        drawGlyph(w, glyphOf(k), {sr.left + 6.f + gr + 2.f, cy}, gr, withAlpha(lerpColor(cc, sf::Color::White, 0.45f), sa));
+        const float textL = sr.left + 6.f + 2.f * gr + 4.f, textR = px + 2.f;   // between the glyph and the pips
+        // the name, as large as fits between them - never over the glyph
+        unsigned fs = size;
+        while (fs > 9u && makeText(font, t, fs, theme::textHi).getLocalBounds().width > textR - textL - 2.f) --fs;
+        while (t.size() > 3 && makeText(font, t, fs, theme::textHi).getLocalBounds().width > textR - textL - 2.f)
+            t = t.substr(0, t.size() - 2) + ".";
+        drawCentered(w, font, t, fs, {(textL + textR) * 0.5f, cy - 1.f}, withAlpha(theme::textHi, sa));
     };
     for (int i = 0; i < L.itemSlots; ++i) slotBox(i, "empty", false);
     slotBox(kSlotType, "type", false);
@@ -863,9 +1096,7 @@ void drawTooltip(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f mouse, 
     float ly = y + pad + 22.f;
     for (const std::string& l : lines) {
         if (l.empty()) { ly += lineH * 0.5f; continue; }
-        sf::Text d = makeText(font, l, theme::fsSmall, theme::textLo);
-        d.setPosition(std::round(x + pad), std::round(ly));
-        w.draw(d);
+        drawRichText(w, font, l, theme::fsSmall, {x + pad, ly}, theme::textLo);
         ly += lineH;
     }
     if (meter >= 0.f) {   // growth: its stage, and a bar to adult with a notch at each stage

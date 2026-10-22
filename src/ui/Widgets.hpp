@@ -6,6 +6,7 @@
 #include "core/Math.hpp"
 #include "core/Theme.hpp"
 #include "progression/GameData.hpp"
+#include "progression/Traits.hpp"
 
 namespace sb {
 
@@ -14,6 +15,15 @@ namespace sb {
 void setTitleFont(const sf::Font* font);
 sf::Text makeText(const sf::Font& font, const std::string& str, unsigned size, sf::Color color);
 void centerOrigin(sf::Text& t);
+
+// Rich text (2026-10-22): `line` with its keywords in their colours - crit red,
+// size blue, speed yellow, damage orange, abilities, elements, classes in theirs,
+// numbers lit - the rest in `base` (its alpha for all). align -1: `pos` is where a
+// plain text's position would be; 0: its centre, as centerOrigin.
+void drawRichText(sf::RenderTarget& t, const sf::Font& font, const std::string& line, unsigned size,
+                  sf::Vector2f pos, sf::Color base, int align = -1);
+bool keywordColor(const std::string& word, sf::Color& out);   // a word's colour, false = none
+sf::Color nameColor(UpgradeKind k);   // a pick's name in text: its class, element, ability, relic colour
 
 // The console's small caption style: uppercase, letter-spaced. Use for
 // kickers, units and section headers - never for body text.
@@ -64,6 +74,7 @@ inline constexpr float kPanelH = 272.f;
 inline constexpr float kPanelGap = 16.f;
 inline constexpr float kSlotH = 26.f;
 inline constexpr float kSlotStep = 31.f;
+inline constexpr float kExtraStep = 17.f;   // an Alchemist's / Mage's extra elements / abilities: their row's spacing
 inline constexpr float kPanelHeadY = 32.f;     // header row (type / ball / abilities), from the panel top
 inline constexpr float kPanelItemsTop = 118.f; // first item slot's centre, from the panel top
 
@@ -78,11 +89,12 @@ sf::Vector2f panelCenter(sf::Vector2f size, int i, int n, float cy, float cx = -
 // panel. The ability row splits into abilityBoxes(L) boxes.
 sf::FloatRect slotRect(sf::Vector2f panelCentre, int slot, const BallLoadout& L);
 int abilityBoxes(const BallLoadout& L);   // open ability slots + any filled closed ones
-sf::Vector2f extraElementPos(sf::Vector2f typeCentre, float typeR, int i);   // an Alchemist's i-th extra element
+sf::Vector2f extraElementPos(sf::Vector2f typeCentre, float typeR, int i, int n);   // an Alchemist's i-th of n extra elements
 bool extraElementAt(sf::Vector2f panelCentre, sf::Vector2f mouse, const BallLoadout& L);   // over its 2nd element?
 std::string modifierLine(const BallLoadout& L, const sf::Font* font = nullptr, unsigned size = 11, float maxW = 0.f);
 sf::Color catColor(UpgradeCat c);
 sf::Color tagColor(ItemTag t);   // a class's colour (its items, its name)
+sf::Color traitColor(Trait t);   // a squad trait's colour (TAB, the label when it turns on)
 sf::Color tierColor(Tier t);     // Common grey .. Legendary gold
 // A pick's card frame: dark glass lit from the top by the tier colour, a tier
 // band along the top edge and corner brackets; Epic / Legendary get a second
@@ -93,7 +105,7 @@ void drawTierFrame(sf::RenderWindow& w, sf::FloatRect r, Tier t, float hover, fl
 // A class item's card, over its tier frame: a class-coloured spine down the
 // left edge and a faint wash of the class colour - a class is what's worth
 // chasing, so its cards read louder than an element's. When taking it would
-// give some ball its class (or ascend it), a chip on the bottom edge says so
+// give some ball its class (or ascend it), drawPickCard puts a chip under the badge
 // ("MAKES A STRIKER" / "ASCENDS: MEGA STRIKER"). No-op for untagged picks.
 void drawClassCardMark(sf::RenderWindow& w, const sf::Font& font, sf::FloatRect r, UpgradeKind k,
                        const std::vector<BallLoadout>& balls, float alpha);

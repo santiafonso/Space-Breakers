@@ -12,6 +12,7 @@
 #include "render/Draw.hpp"
 #include "ui/CreedScreen.hpp"
 #include "ui/UiSound.hpp"
+#include "ui/Icons.hpp"
 #include "ui/Widgets.hpp"
 
 namespace sb {
@@ -64,6 +65,31 @@ void PactScreen::update(App& app, float dt, sf::Vector2f mouse) {
     uisound::hover(this, c >= 0 ? c : (leaveRect(app).contains(mouse) ? 10 : -1));
 }
 
+// Each pact's emblem on its card.
+static Glyph pactGlyph(PactId p) {
+    switch (p) {
+        case PactId::Lead:        return Glyph::Rock;
+        case PactId::QuickHands:  return Glyph::Combo;
+        case PactId::HeavyArm:    return Glyph::Sling;
+        case PactId::GlassEdge:   return Glyph::Crit;
+        case PactId::Stillness:   return Glyph::Clock;
+        case PactId::Overflow:    return Glyph::Plus;
+        case PactId::Tiny:        return Glyph::Burst;
+        case PactId::Colossus:    return Glyph::Size;
+        case PactId::HotPotato:   return Glyph::Flame;
+        case PactId::Juggler:     return Glyph::Bounce;
+        case PactId::VoidWalls:   return Glyph::Ghost;
+        case PactId::AnchorWalls: return Glyph::Magnet;
+        case PactId::LastBreath:  return Glyph::Heal;
+        case PactId::Mirror:      return Glyph::Twin;
+        case PactId::Elemental:   return Glyph::Flask;
+        case PactId::Frenzy:      return Glyph::Speed;
+        case PactId::Blind:       return Glyph::Eye;
+        case PactId::Horde:       return Glyph::Skull;
+    }
+    return Glyph::Star;
+}
+
 void PactScreen::draw(App& app, sf::RenderWindow& w) {
     const sf::Vector2f s = app.size();
     const float it = intro();
@@ -89,7 +115,8 @@ void PactScreen::draw(App& app, sf::RenderWindow& w) {
         r.top += (1.f - a) * 50.f - 12.f * h;
         const float pulse = 0.5f + 0.5f * std::sin(clock_ * 1.8f + static_cast<float>(i) * 1.3f);
         drawRuleCard(w, f, r, col, a, h, pulse, std::to_string(i + 1) + "   PACT",
-                     d.needsHands ? "for runs where you grab balls" : "for any run", d.name, d.gain, d.cost);
+                     d.needsHands ? "for runs where you grab balls" : "for any run", d.name, d.gain, d.cost,
+                     static_cast<int>(pactGlyph(picks[static_cast<std::size_t>(i)])), ruleFootHeight(f, r, d.synergy));
     }
 
     {   // walk away: nothing gained, nothing lost
@@ -101,8 +128,11 @@ void PactScreen::draw(App& app, sf::RenderWindow& w) {
                      withAlpha(theme::textLo, a));
     }
 
-    if (const int c = cardAt(app, mouse_); c >= 0)
-        drawTooltip(w, f, mouse_, s, "Pairs well with", pactDef(picks[static_cast<std::size_t>(c)]).synergy, col);
+    if (const int c = cardAt(app, mouse_); c >= 0) {   // what it pairs with, at the foot of the open card
+        sf::FloatRect r = cardRect(app, c);
+        r.top -= 12.f * hover_[c];
+        drawRuleFoot(w, f, r, hover_[c], std::string(pactDef(picks[static_cast<std::size_t>(c)]).synergy), col);
+    }
 }
 
 }  // namespace sb

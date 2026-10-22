@@ -2999,6 +2999,7 @@ desde el centro. Las capturas 41 / 42 muestran cada motivo y las etapas.
 
 ### Anotado para después (el usuario lo pidió así)
 
+- ~~Hitstop con muchas bajas~~: hecho el 2026-10-21 (enfriamiento entre congeladas, ver §11).
 - **El juego por etapas (2026-10-06, el usuario lo quiere más adelante):** se
   desbloquea de a partes: primero las habilidades, después Q / E / F, después
   aparecen los pactos, después las ascensiones. Sin desbloquear las etapas
@@ -3469,3 +3470,219 @@ desde el centro. Las capturas 41 / 42 muestran cada motivo y las etapas.
   `metaNodeEffectFor`).
 - **SB_TUTSIM** simula siempre un jugador nuevo (web vacía): antes tomaba la web
   del save cargado y daba de más. Con web vacía: 51 de 60, 35% de core al final.
+
+### 2026-10-19: tutorial explícito, jefes con oleada, Normal más suave, opciones
+
+- **Tutorial con lecciones** (`src/core/AppLessons.cpp`): la primera vez que aparece
+  cada cosa en el tutorial, una tarjeta para el juego y explica: el mapa y qué es cada
+  parada (con sus íconos), proteger el núcleo, cómo mover las pelotas (click, honda,
+  Q), reclutar y clases, la élite, el primer ítem y TAB, el "?", la tienda y la pelea
+  final. Click / Espacio pasa de página. Las pistas de una línea siguen después, como
+  recordatorio. El "?" del tutorial ya no deja texto flotando encima de la tienda.
+- **Jefes mitad oleada** (`cfg::boss::hpMul` 0.6, `pack*`): todos los jefes con 60%
+  de la vida, y cada 7 s (más rápido enfurecidos) entra una tanda de enemigos chicos
+  (4 en el acto 1, +1 por acto; 35% Runners) además del goteo (ahora cada 1.4 s, tope 24).
+- **Normal escala menos** (`cfg::wave::hpGrowthNormal` 1.15 / `hpGrowthLateNormal`
+  1.035): x14 de vida a la oleada 20 en vez de x23, x40 al final en vez de x75. Difícil
+  mantiene la curva vieja. Afecta también a los jefes.
+- **Difícil se desbloquea al pasar el acto 1** (`App::hardUnlocked`: haber llegado a
+  la oleada 11 o ganado una run). Antes la fila dice "Hard: beat act 1", apagada.
+- **Fichas de pelota sin pisarse**: las habilidades / elementos extra (Mage, Alchemist)
+  van en fila debajo del rombo / hexágono, en lugar del nombre; los ítems de dioses (dos
+  columnas) ajustan el tamaño del nombre y los rombos de rareza van abajo; "Magic
+  missile" no se sale de la ficha; el chip "makes a ..." va dentro de la carta.
+- **Sinergias**: el pie "pairs well with" de credos y pactos es un bloque con su título;
+  si GAIN / COST son largos bajan de tamaño para no pisarlo.
+- **Opciones** en dos pestañas (General / Sound mix; TAB cambia): secciones Sound
+  (volumen + interruptor por fila), Display (pantalla completa) y Cards (Simple |
+  Detailed).
+- **Abandonar una run paga los cores** como perderla en esa oleada (sin prismas);
+  aparece "run abandoned: +N cores". Saltear el tutorial sigue pagando como ganarlo.
+
+### 2026-10-20: confirmar reemplazo, honda que pega más, ejercicio de agarrar
+
+- **"Replace X?"** (`EquipScreen::replacedSlot` / `pick`, `RunScreens.cpp`): poner una
+  carta, un regalo o una compra de la tienda en un casillero lleno (ítem, elemento o
+  habilidad) abre un cartel "Replace X? X Lv n is gone for good" con Replace / Keep it
+  (Enter / Esc / click derecho). Subir de nivel, casillero vacío o lugar para otro
+  elemento del Alquimista no preguntan. Snapshot `07b_equip_replace.png`.
+- **La honda pega más que el click**: tirar con honda arma el primer golpe (como la
+  atrapada) desde media tirada hasta x1.6 a tirada completa (`cfg::app::slingHitFrom`
+  0.5, `slingHitMax` 0.6, `World::releaseHeld(v, pull)`). A tirada completa
+  (`slingFullPull` 0.97) un segundo anillo dorado late y al soltar hay un destello
+  dorado. El click tira más flojo (`quickThrowPower` 0.65 -> 0.55, ~960 px/s); la Q
+  sube `volleySpeedMul` 1.4 -> 1.6 para quedar igual.
+- **Ejercicio de agarrar en el tutorial** (`App::drill_`, `AppLessons.cpp`): al cerrar
+  la tarjeta de la primera pelea, el tiempo se para, todo se oscurece salvo un hueco
+  sobre la pelota más cercana al núcleo con un anillo que se cierra sobre ella, y
+  "Grab the ball". Agarrada, el hueco se agranda para ver la honda: "Pull back... and
+  let go". Un click suelto no cuenta (la pelota se queda y pide tirar). Sólo una vez
+  por run; teclas bloqueadas salvo Esc. Snapshots `38g/38h_tutorial_drill*.png`.
+  Arranca recién cuando termina el giro de salida (`World::launching`): con el reloj
+  parado el giro no terminaba y no se podía agarrar nada (bug del primer playtest).
+- **Tarjetas del tutorial chicas** (pedido de Santi: "no tan exagerado, menos texto"):
+  un cuadro arriba a la derecha (340 px, debajo de la barra de estado), sin oscurecer la
+  pantalla, una página por lección con una o dos líneas cortas. El ejercicio usa el
+  mismo cuadro, en dorado.
+- **La web, pareja como un reloj** (`webAngle` en `Screens.cpp`): las 11 rutas tienen la
+  misma porción del círculo (antes cada una ocupaba según sus puntas: Jester, con 22
+  nodos, se comía la derecha y Striker / Slinger / Shooter quedaban apretados arriba con
+  los nombres pisados). Adentro de cada porción se reparte como antes. Así los rayos del
+  centro, las clases sobre su anillo, los puentes y los dioses quedan a distancias iguales.
+- **Menos ruido en la web**: las líneas de "constelación" entre vecinos no se dibujan
+  hasta tener uno de los dos extremos (y la mitad comprada sólo de cerca, zoom >= 0.5);
+  los nombres de clase llevan una placa oscura para leerse sobre los nodos de atrás.
+- **Nodos con aire** (`webAngle`, `kMinNodeGap` 0.7, `kSlotGap` 0.5 -> 0.7): después del
+  armado, una pasada separa de costado (a lo largo del anillo, sin cambiar de anillo)
+  cualquier par a menos de 0.7 anillos (0.82 si uno es clase o dios, 0.94 si los dos).
+  `SB_WEBGAP=1` lista en stderr los pares que siguen pegados (hoy: 0). Zoom mínimo 0.2
+  (antes 0.24): de lejos entra toda la web y Hermes ya no queda bajo el título.
+- **Nombres de la web sin pisarse** (`drawOutward`): cada nombre prueba hacia afuera,
+  abajo, arriba y a los costados, y usa el primer lugar que no toca otro nodo ni un
+  nombre ya puesto.
+- **Pelota redonda en la mano**: al agarrarla se le borra el aplaste del último rebote
+  (con la cámara lenta de apuntar tardaba en irse y se veía estirada).
+- **Tutorial: dos tarjetas más** - "What each card is" (ítem, habilidad, modificador,
+  elemento, una línea cada uno) la primera vez que hay cartas para elegir o comprar, y
+  "Give it to a ball" (dónde va cada tipo en la ficha de la pelota) la primera vez que
+  hay que ubicar algo.
+- **El "?" del tutorial es un encuentro de verdad**: en vez de regalar oro y volver al
+  mapa, abre "A stranger" con dos tratos reales, Scavenge (un ítem gratis) y Coin flip
+  (40 de oro, 50% de ganar 100), más "Walk away". Antes da los 50 de oro de siempre
+  (`cfg::tutorial::eventGold`), para poder probar la moneda y llegar a la tienda con algo.
+  La tarjeta del "?" dice "A stranger with deals. Take one, or walk away."
+- **Cuatro creeds nuevos** (16 en total; `progression/Creeds.hpp`, `cfg::creed`), con tres
+  estilos nuevos para que la elección reparta más (CASTER, MERCHANT, SLAYER). Todos se
+  ofrecen desde el principio (sin nodo de la web). Snapshot `10b_creed_new.png`.
+  - **Sharpshooter** (THROWER): una tirada completa de honda (anillo dorado) atraviesa
+    enemigos 1.2 s (`Ball::sharpT`) y su primer golpe pega x2 (0.4 encima del 0.6 de la
+    tirada completa). Costo: el click no tira (la pelota se queda) y la Q se recarga x2
+    más lento. No va con Hot Hands, Hunters ni Clockwork.
+  - **Arcanist** (CASTER): habilidades x2 de recarga (`mageCastRate` x `castRate`, por
+    encima del tope) y +1 casillero de habilidad en cada pelota (`BallLoadout::bonusAbility`,
+    lo pone `syncWorldBalls`, no se guarda). Costo: golpes por contacto x0.7 (sólo el
+    contacto, en `strike` y contra el jefe; las habilidades no).
+  - **Usurer** (MERCHANT): cada parada a la que viajás paga 15% de interés sobre tu oro
+    (tope 30) y la tienda sale 25% menos. Costo: una pelea común paga 30 de oro (+10 por
+    acto) en vez de la carta. No va con Loaded Dice (los dos reescriben el oro de pelea).
+  - **Giant Slayer** (SLAYER): x2 a jefes y a las peleas de élite, y el botín de élite
+    muestra una carta más. Costo: -25% en el resto de las peleas. Va como vida de los
+    enemigos (`bossHpMul` 0.5, `enemyHpMul` 0.5 en élite / 1.33 en el resto), así cuenta
+    cualquier fuente de daño.
+- **Dos creeds más** (18 en total), de la tanda que propuse y Santi eligió:
+  - **Puppeteer** (CONDUCTOR, estilo nuevo): con el botón apretado en cualquier lado,
+    cada pelota libre gira hacia el puntero (5.5 rad/s) y no vuela a menos de 1.35x su
+    crucero (`World::creedSteer`, `setSteer` desde PlayScreen; un anillo celeste marca el
+    puntero). Costo: no se agarra ni se tira (la Q sí); un click tampoco marca enemigos.
+    No va con Hunters, Clockwork, Hot Hands ni Sharpshooter.
+  - **Snowball** (BERSERKER): cada kill agranda la pelota que lo hizo y le sube el daño,
+    +3% por kill. Cada pelea arranca en x0.7 y el tope es x1.5 (Santi: "empiezan 30% menos
+    y pueden tener 50% más"). `Ball::snowKills`, `World::snowMul`, se reinicia en
+    `carryBalls`.
+
+### 2026-10-21: la pelea ya no se traba con muchas bajas
+
+- **Medido antes de tocar** (`SB_PROFILE`, abajo): en una pelea llena el dibujo cuesta
+  ~5 ms por cuadro y la simulación ~0.5 ms, sobra para 60 fps. Lo que trababa era el
+  hitstop: cada baja congelaba la pelea 0.035 s, y con muchas pelotas matando sin parar
+  la pelea estaba congelada en el **35-40% de los cuadros**.
+- **Las bajas congelan como mucho una vez cada 0.5 s** (`cfg::app::hitstopKillGap`,
+  `App::killStopCd_`, en `App::processEvents`): una baja suelta todavía pega, una
+  lluvia de bajas ya no frena todo. Golpe al núcleo y al jefe, igual que antes. En la
+  misma pelea: 7.5% de cuadros congelados.
+- El viñeteado del fondo se arma una sola vez (eran ~9000 vértices con senos y cosenos
+  por cuadro; `draw::vignette`).
+- Probado y descartado: vsync en vez del tope de 60 (`Window::applyVideoMode`). En esta
+  notebook (60 Hz, GNOME) los tiempos de cuadro salieron más irregulares (94 de 600
+  cuadros a más de 1.5 ms de 16.7, contra 37 con el tope). Si sigue sintiéndose a saltos,
+  lo que falta es interpolar el dibujo entre pasos de la simulación.
+- **`SB_PROFILE=1`** con `SB_SHOWCASE=<dir>`: la misma pelea sin guardar PNGs y sin tope de
+  fps; imprime cada 60 cuadros el promedio y máximo de update y render, y cuántos
+  cuadros congela el hitstop. `SB_SHOWCASE_CROWD=<n>` multiplica los enemigos,
+  `SB_SHOWCASE_BALLS=<n>` repite el equipo (hasta el tope de pelotas).
+
+### 2026-10-22: dificultad por profundidad dentro del acto
+
+- Santi: "aparte de ser dificultad por acto, que sea por nivel: un élite en la segunda
+  pelea no tiene que ser lo mismo que antes del jefe". Cada fila ya jugaba como una oleada
+  distinta, pero desde el acto 3 la curva casi no sube dentro del acto (vida x1.035 por
+  oleada, la cantidad toca el tope de 120 en la oleada ~29 y la velocidad su máximo en la
+  ~30), y el extra del élite (x1.6 vida, x1.3 cantidad) era igual en todo el acto.
+- **Rampa por profundidad** (`World::beginWave`): profundidad 0 en la primera oleada del
+  acto, 1 en la anterior al jefe. Vida x0.85 → x1.15 (`cfg::wave::depthHpRamp`) y cantidad
+  x0.88 → x1.12 (`depthCountRamp`, aplicada después del tope de 120, así también cambia en
+  los actos 4-5). Los élites suman otra rampa encima (`cfg::map::eliteDepthRamp`): el
+  primer élite del acto queda en ~x1.3 de vida, el de antes del jefe en ~x1.9 (antes x1.6
+  siempre). Centrado en el medio del acto: el acto en conjunto queda igual de difícil.
+- El tutorial no la usa (`WorldParams::actDepth`); los jefes tampoco.
+
+### 2026-10-22: onda del Mega Striker y arena limpia entre peleas
+
+- **Onda del Mega Striker** (`F::Sonic` en `render/ClassRender.cpp`): eran tres arcos finos
+  solo hacia adelante, aunque el golpe pega en todo el círculo. Ahora: destello en el
+  golpe, un frente que se abre hasta el radio que pega (con un relleno tenue detrás), un
+  arco blanco más grueso hacia donde iba la pelota, un eco y líneas tiradas hacia
+  adelante. Dura 0.45 s (antes 0.35).
+- **La arena arranca limpia cada pelea** (`World::clearArena`, desde `carryBalls`): los
+  charcos de piedra (lava, barro, polvo tóxico), las olas de agua, las runas de Leyline,
+  los pops del Jester, la estela del Support y las flechas y efectos de los dioses
+  quedaban de la pelea anterior. Además dos filas del mapa pueden jugar como la misma
+  oleada, y los dioses solo limpiaban cuando cambiaba el número de oleada (`wave !=
+  wave_`): ahora se fuerza. Los dragones de Tiamat y las Musas de Apolo siguen como antes.
+
+### 2026-10-22: rasgos de equipo y tope de 2 pelotas por clase
+
+- Santi: "cuando desbloqueás tu primera clase todas las pelotas van a ser de esa clase... 4
+  pelotas Slinger, todas con los mismos poderes, y podés llegar muy lejos con eso". Quiere
+  que armar el equipo sea una parte más compleja, con más sinergias.
+- **Tope de 2 pelotas por clase** (`cfg::team::classCap`, `classCapFits` /
+  `upgradeFitsTeam` en `progression/Offers.hpp`). Una pelota "está en" una clase desde su
+  primer ítem de esa clase (o si ascendió desde ella). Un ítem de clase entra solo en una
+  pelota que ya está en esa clase, o si hay menos de 2 otras. Vale en todos lados: cartas,
+  tienda, eventos, `autoTarget` y el arrastre en el TAB (`slotMoveTarget` cuenta el equipo
+  como quedaría después del cambio). Las tiradas no ofrecen ítems que no entran en ninguna
+  pelota. Si la carta igual aparece (tienda ya armada), dice "Striker is on 2 balls
+  already". Los equipos guardados que ya pasan el tope quedan como están.
+- **Rasgos** (`progression/Traits.hpp`): 5 rasgos, cada clase tiene 2, y cada par de rasgos
+  es exactamente una clase (cada rasgo lo comparten 4):
+  Striker Impact+Swift, Guardian Impact+Squad, Alchemist Impact+Elemental, Jester
+  Impact+Arcane, Assassin Swift+Arcane, Shooter Swift+Elemental, Slinger Swift+Squad, Mage
+  Arcane+Elemental, Support Arcane+Squad, Summoner Elemental+Squad.
+  Cuentan pelotas distintas (una pelota con dos clases que comparten un rasgo cuenta 1) con
+  la clase hecha (2 ítems); un dios cuenta como su clase. Con 2 pelotas se activa el nivel 1
+  y con 4 el nivel 2:
+  Impact golpes x1.10 / x1.25 (`damageMult`), Swift velocidad x1.08 / x1.16 (`cruiseMult`),
+  Arcane recarga x1.15 / x1.30 (`creed.castRate`), Elemental elementos x1.15 / x1.30
+  (`elemMult`), Squad el núcleo ignora 1 / 3 golpes al empezar cada pelea (`aegisHits`).
+  Todo entra por `App::foldTraits` (AppPacts.cpp) sobre parámetros que la simulación ya
+  lee: no hay código nuevo en `sim/`.
+- **Dónde se ve**: en el TAB, una tira debajo de las pelotas con los rasgos que tienen al
+  menos una pelota (encendido desde 2, un punto por pelota hasta 4, qué hace al pasar el
+  mouse). Cuando un rasgo se prende o sube aparece un cartel ("IMPACT 2 - every ball hits
+  +10%", en `announceClassGains`). En las cartas de ítem, al pasar el mouse, los dos
+  rasgos de su clase.
+- `SB_BALANCE` no cambia (una pelota con clase y el resto sin clase). `SB_TUTSIM=20`: 17 de
+  20 ganadas.
+
+### 2026-10-22: textos con color por idea
+
+- Santi: "metele más color a los textos, como el crítico en rojo, tamaño en azul... para
+  saber con colores qué hace cada cosa". `drawRichText` / `keywordColor` (`ui/Widgets.cpp`)
+  dibuja cada línea con sus palabras clave en su color, siempre el mismo en todos lados:
+  crítico rojo, daño/golpe naranja, velocidad amarillo, tamaño/radio azul, control
+  (slow, stun, stagger, knock, shove, pull, mark) lila, habilidades/recarga celeste (el
+  color de los slots de habilidad), invocaciones verde, núcleo/curación/vida verde agua,
+  oro dorado, combo rosa, cada elemento en el suyo, cada clase en el suyo, y los números
+  ("+25%", "x2", "3 s") en blanco.
+- Se usa en las descripciones de las cartas de ítem, los tooltips (TAB, reliquias,
+  rasgos), las habilidades, las creencias y los pactos (`paragraph` en CreedScreen), los
+  nodos de la web y la línea de la pantalla de equipar. Las palabras se agregan en la
+  lista `keywords()`.
+- **Nombres con color** (mismo día): los nombres de ítems (color de su clase), elementos,
+  habilidades, reliquias (dorado), modificadores, formas ascendidas ("Iron Guardian"),
+  creencias (color de su arquetipo) y pactos salen en su color dentro de cualquier
+  texto (`namedThings()`: frases de hasta 4 palabras, solo si empiezan con mayúscula, así
+  "split" suelto no se confunde con la habilidad Split). Un nombre gana sobre una palabra
+  clave ("Spring core" sale dorado entero). Los títulos de las cartas de ítem y de
+  reliquia, y el título del tooltip de un slot, van en el color de lo que son
+  (`nameColor`).

@@ -57,11 +57,25 @@ void App::foldCreeds(WorldParams& p) const {
                 p.creed.bloodlust = true;
                 p.creed.coreDamageMul *= P::bloodCoreDamage;
                 break;
+            case CreedId::Sharpshooter: p.creed.sharpshooter = true; break;   // (its costs: PlayScreen, playerMark)
+            case CreedId::Arcanist:   // (its extra ability slot: syncWorldBalls)
+                p.creed.castRate *= P::arcaneRate;
+                p.creed.contactMul *= P::arcaneContact;
+                break;
+            case CreedId::Usurer: break;
+            case CreedId::Puppeteer: p.creed.puppeteer = true; break;   // (the button: PlayScreen -> World::setSteer)
+            case CreedId::Snowball: p.creed.snowball = true; break;   // gold and the shop: travelTo, shopPrice, afterFightPick
+            case CreedId::GiantSlayer:   // as their health, so every kind of hit counts
+                p.bossHpMul *= P::slayerBossHp;
+                p.enemyHpMul *= data_.run.eliteWave ? P::slayerEliteHp : P::slayerPlainHp;
+                break;
         }
     }
 }
 
-bool App::canGrab() const { return !hasCreed(CreedId::Hunters) && !hasCreed(CreedId::Clockwork); }
+bool App::canGrab() const {
+    return !hasCreed(CreedId::Hunters) && !hasCreed(CreedId::Clockwork) && !hasCreed(CreedId::Puppeteer);
+}
 
 // "Beckon": of the balls ready to blink, the one with the most levels in it
 // (items, abilities, modifiers) goes; a tie is a coin flip.
@@ -271,7 +285,7 @@ int App::randomItemFor(const BallLoadout& b, Tier maxTier) {
     for (int i = 0; i < kUpgradeKindCount; ++i) {
         const auto k = static_cast<UpgradeKind>(i);
         if (upgradeCat(k) != UpgradeCat::Item || upgradeTier(k) > maxTier) continue;
-        if (c.isLocked(k) || !upgradeFitsBall(k, b)) continue;
+        if (c.isLocked(k) || !fitsSquad(k, b)) continue;
         if (k == UpgradeKind::Shatter && !c.elemUnlocked[3]) continue;   // needs ice
         pool.push_back(i);
     }
@@ -400,7 +414,7 @@ std::vector<UpgradeKind> App::starterPool(Tier want) {
             for (int i = 0; i < kUpgradeKindCount; ++i) {
                 const auto k = static_cast<UpgradeKind>(i);
                 if (upgradeCat(k) == UpgradeCat::Item && static_cast<int>(upgradeTier(k)) == t && upgradeEligible(k, c) &&
-                    upgradeFitsBall(k, r.balls[0]) && !r.balls[0].has(k))
+                    upgradeFitsTeam(k, r.balls, 0) && !r.balls[0].has(k))
                     tier.push_back(k);
             }
             for (int i = static_cast<int>(tier.size()) - 1; i > 0; --i)

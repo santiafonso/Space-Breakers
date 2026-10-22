@@ -498,8 +498,9 @@ void WorldRenderer::drawBall(sf::RenderWindow& window, const Ball& b,
 
     const float ax = std::fabs(b.squashAxis.x);
     const float ay = std::fabs(b.squashAxis.y);
-    const float along = 1.f - 0.32f * b.squash;
-    const float perpS = 1.f + 0.22f * b.squash;
+    const float squash = b.held ? 0.f : b.squash;   // held: round
+    const float along = 1.f - 0.32f * squash;
+    const float perpS = 1.f + 0.22f * squash;
     const sf::Vector2f sc{lerpf(perpS, along, ax), lerpf(perpS, along, ay)};
 
     const BallLook look = ballLook(b);

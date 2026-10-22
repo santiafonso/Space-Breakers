@@ -13,6 +13,7 @@
 #include "render/Draw.hpp"
 #include "ui/CreedScreen.hpp"
 #include "ui/UiSound.hpp"
+#include "ui/Icons.hpp"
 #include "ui/Widgets.hpp"
 
 namespace sb {
@@ -69,6 +70,34 @@ void EventScreen::update(App& app, float dt, sf::Vector2f mouse) {
     uisound::hover(this, c >= 0 ? c : (leaveRect(app).contains(mouse) ? 10 : -1));
 }
 
+// Each deal's emblem on its card.
+static Glyph eventGlyph(EventKind k) {
+    switch (k) {
+        case EventKind::Drifter:     return Glyph::Plus;
+        case EventKind::Smuggler:    return Glyph::Card;
+        case EventKind::BloodPrice:  return Glyph::Drop;
+        case EventKind::Tithe:       return Glyph::Shield;
+        case EventKind::Gamble:      return Glyph::Coin;
+        case EventKind::Smith:       return Glyph::Combo;
+        case EventKind::Barter:      return Glyph::Twin;
+        case EventKind::Mercenary:   return Glyph::Eye;
+        case EventKind::Gift:        return Glyph::Star;
+        case EventKind::Tome:        return Glyph::Rune;
+        case EventKind::BloodForge:  return Glyph::Flame;
+        case EventKind::Cocoon:      return Glyph::Clock;
+        case EventKind::DarkBargain: return Glyph::Skull;
+        case EventKind::FieldMedic:  return Glyph::Heal;
+        case EventKind::BloodRite:   return Glyph::Recharge;
+        case EventKind::Purify:      return Glyph::Ghost;
+        case EventKind::Scavenge:    return Glyph::Claw;
+        case EventKind::Rest:        return Glyph::Heal;
+        case EventKind::Temper:      return Glyph::Flame;
+        case EventKind::Ascend:      return Glyph::Star;
+        case EventKind::Expand:      return Glyph::Plus;
+    }
+    return Glyph::Star;
+}
+
 void EventScreen::draw(App& app, sf::RenderWindow& w) {
     const sf::Vector2f s = app.size();
     const float it = intro();
@@ -102,7 +131,8 @@ void EventScreen::draw(App& app, sf::RenderWindow& w) {
         if (k == EventKind::Rest && app.halfRepair()) gain = "the core is half repaired";
         if (k == EventKind::Rest && app.ironCoreAlive()) cost = "ends this act's Iron core";
         drawRuleCard(w, f, r, col, a, h, pulse, std::to_string(i + 1) + (rest || shrine ? "   CHOICE" : "   DEAL"),
-                     ok ? eventHint(k) : eventFree(k) ? "no ball can take it" : "not enough gold", eventName(k), gain, cost);
+                     ok ? eventHint(k) : eventFree(k) ? "no ball can take it" : "not enough gold", eventName(k), gain, cost,
+                     static_cast<int>(eventGlyph(k)));
     }
 
     {   // walk away: nothing gained, nothing lost

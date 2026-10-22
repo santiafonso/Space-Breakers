@@ -12,6 +12,28 @@ namespace sb {
 
 // ---------------------------------------------------------------- pacts: params
 
+// The squad's traits (2026-10-22): each one past cfg::team::traitAt balls, on
+// numbers the sim already reads.
+void App::foldTraits(WorldParams& p) const {
+    namespace T = cfg::team;
+    int counts[kTraitCount];
+    teamTraitCounts(data_.run.balls, counts);
+    for (int t = 0; t < kTraitCount; ++t) {
+        const int tier = traitTier(counts[t]);
+        if (tier == 0) continue;
+        const int i = tier - 1;
+        switch (static_cast<Trait>(t)) {
+            case Trait::Impact:    p.damageMult *= T::impactDamage[i]; break;
+            case Trait::Swift:     p.cruiseMult *= T::swiftCruise[i]; break;
+            case Trait::Arcane:    p.creed.castRate *= T::arcaneRate[i]; break;
+            case Trait::Elemental:
+                for (int e = 1; e < kElementCount; ++e) p.elemMult[e] *= T::elementalPower[i];
+                break;
+            case Trait::Squad:     p.aegisHits += T::squadAegis[i]; break;
+        }
+    }
+}
+
 void App::foldPacts(WorldParams& p) const {
     namespace P = cfg::pact;
     for (int raw : data_.run.pacts) {

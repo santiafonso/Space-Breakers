@@ -14,7 +14,7 @@ namespace sb {
 // WorldParams::creed (see sim/CreedRules.hpp); App folds the rest (damage,
 // cruise, luck, ball count) into the usual params.
 //
-// Order is free to change: creeds are never saved (a run is never resumed).
+// Creeds are saved by index (run.creeds): append new ones at the end, never reorder.
 
 enum class CreedId {
     HotHands,     // Thrower:   flings much faster and longer; idle balls slow
@@ -29,11 +29,18 @@ enum class CreedId {
     LoadedDice,   // Gambler:   +12 luck; fight gold is double or nothing
     Alchemy,      // Alchemist: random extra elements, self-reactions; weaker hits
     Bloodlust,    // Berserker: the combo never cools; core hits wipe it
+    // the second batch (2026-10-20)
+    Sharpshooter, // Thrower:   full pulls pierce and hit x2; a click doesn't throw, slower Q
+    Arcanist,     // Caster:    abilities recharge x2, one more ability slot; weaker contact
+    Usurer,       // Merchant:  interest on your gold, cheaper shop; plain fights pay gold, no card
+    GiantSlayer,  // Slayer:    x2 on bosses and elites, a 4th elite card; weaker on the rest
+    Puppeteer,    // Conductor: hold the button, every ball bends toward the pointer; no grabbing
+    Snowball,     // Berserker: kills grow a ball (to x1.5) each fight; it starts at x0.7
 };
-inline constexpr int kCreedCount = 12;
+inline constexpr int kCreedCount = 18;
 inline constexpr int kMaxCreeds = 2;   // one from the run start (Covenant) + one from the boss
 
-enum class CreedArchetype { Thrower, Spectator, FewMighty, Swarm, Core, Gambler, Alchemist, Berserker };
+enum class CreedArchetype { Thrower, Spectator, FewMighty, Swarm, Core, Gambler, Alchemist, Berserker, Caster, Merchant, Slayer, Conductor };
 
 struct CreedDef {
     const char* name;
@@ -54,6 +61,10 @@ inline const char* creedArchetypeName(CreedArchetype a) {
         case CreedArchetype::Gambler:   return "GAMBLER";
         case CreedArchetype::Alchemist: return "ALCHEMY";
         case CreedArchetype::Berserker: return "BERSERKER";
+        case CreedArchetype::Caster:    return "CASTER";
+        case CreedArchetype::Merchant:  return "MERCHANT";
+        case CreedArchetype::Slayer:    return "SLAYER";
+        case CreedArchetype::Conductor: return "CONDUCTOR";
     }
     return "";
 }
@@ -69,6 +80,10 @@ inline const char* creedArchetypeHint(CreedArchetype a) {
         case CreedArchetype::Gambler:   return "for runs that live on luck";
         case CreedArchetype::Alchemist: return "for runs built on element reactions";
         case CreedArchetype::Berserker: return "for runs that never stop hitting";
+        case CreedArchetype::Caster:    return "for runs built on abilities";
+        case CreedArchetype::Merchant:  return "for runs that live in the shop";
+        case CreedArchetype::Slayer:    return "for runs that hunt the big ones";
+        case CreedArchetype::Conductor: return "for runs where you steer, not throw";
     }
     return "";
 }
@@ -123,6 +138,30 @@ inline const CreedDef& creedDef(CreedId id) {
          "the damage combo never cools down on its own and climbs twice as fast",
          "anything reaching the core wipes the combo and hits the core 50% harder",
          "Overcharge, Golden bounce, fast balls, Guardian items", -1},
+        {"Sharpshooter", CreedArchetype::Thrower,
+         "a full slingshot pull (gold ring) goes through every enemy in its path for a moment, and its first hit lands x2",
+         "a click no longer throws a ball, and Q recharges twice as slowly",
+         "Slinger and Striker items, Wind-up, Steady hand, Railgun", -1},
+        {"Arcanist", CreedArchetype::Caster,
+         "abilities recharge twice as fast, and every ball gets one more ability slot",
+         "contact hits deal 30% less damage",
+         "Mage items, Overclock, Channel, Magic missile, Archive", -1},
+        {"Usurer", CreedArchetype::Merchant,
+         "every stop you travel to pays 15% interest on your gold (up to 30), and the shop is 25% cheaper",
+         "a plain fight pays gold instead of a card",
+         "Jester items, Interest, Haggler, Merchant, Treasury", -1},
+        {"Giant Slayer", CreedArchetype::Slayer,
+         "x2 damage on bosses and on elite fights, and elite spoils show one more card",
+         "25% less damage in every other fight",
+         "Assassin items, Executioner, Deathmark, Keen instinct", -1},
+        {"Puppeteer", CreedArchetype::Conductor,
+         "hold the mouse button anywhere: every ball curves toward the pointer and speeds up",
+         "you can no longer grab or throw balls (Q still works)",
+         "Pinball, Legion, Grip, Gravity well, many balls", -1},
+        {"Snowball", CreedArchetype::Berserker,
+         "every kill makes the ball that scored it bigger and harder-hitting, up to x1.5 by the end of a fight",
+         "every fight, each ball starts back at x0.7 size and damage",
+         "Glutton, Big ball, Piercing, Bomber, Duet", -1},
     };
     return defs[static_cast<int>(id)];
 }
@@ -130,11 +169,14 @@ inline const CreedDef& creedDef(CreedId id) {
 // Creeds that can't sit together in one run.
 inline bool creedsConflict(CreedId a, CreedId b) {
     auto pair = [&](CreedId x, CreedId y) { return (a == x && b == y) || (a == y && b == x); };
-    auto noGrab = [](CreedId p) { return p == CreedId::Hunters || p == CreedId::Clockwork; };
+    auto noGrab = [](CreedId p) { return p == CreedId::Hunters || p == CreedId::Clockwork || p == CreedId::Puppeteer; };
     if (a == b) return true;
     if (pair(CreedId::Duet, CreedId::Legion)) return true;          // two balls vs a swarm
     if ((a == CreedId::HotHands && noGrab(b)) || (b == CreedId::HotHands && noGrab(a))) return true;  // nothing to throw
     if (noGrab(a) && noGrab(b)) return true;                     // one hands-off rule is enough
+    if ((a == CreedId::Sharpshooter && noGrab(b)) || (b == CreedId::Sharpshooter && noGrab(a))) return true;  // nothing to aim
+    if (pair(CreedId::Sharpshooter, CreedId::HotHands)) return true;   // one thrower creed at a time
+    if (pair(CreedId::Usurer, CreedId::LoadedDice)) return true;       // both rewrite the fight's gold
     return false;
 }
 

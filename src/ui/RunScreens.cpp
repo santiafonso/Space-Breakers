@@ -147,6 +147,10 @@ void drawNode(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f p, MapNode
 
 }  // namespace
 
+void drawMapNode(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f p, MapNodeType t, float r, float alpha) {
+    drawNode(w, font, p, t, r, alpha, false);
+}
+
 // ================================================================ Equip
 
 namespace {
@@ -216,24 +220,78 @@ static const char* equipBackLabel(EquipSource src) {
     }
 }
 
+// "Replace X?": the card and its two buttons (Replace, Keep it).
+static sf::FloatRect askRect(sf::Vector2f s) { return {s.x * 0.5f - 230.f, s.y * 0.5f - 90.f, 460.f, 180.f}; }
+static sf::FloatRect askButton(sf::Vector2f s, int i) {
+    const sf::FloatRect r = askRect(s);
+    return {r.left + 30.f + static_cast<float>(i) * 210.f, r.top + r.height - 58.f, 190.f, 36.f};
+}
+
+// A new pick that lands on a full slot throws out what's there (as
+// applyUpgradeKind places it): that one asks first. Levelling up, an empty
+// slot or an Alchemist's room for another element don't.
+int EquipScreen::replacedSlot(App& app, int ball, int slot) const {
+    const EquipSource src = app.equipSource();
+    if (src != EquipSource::Choice && src != EquipSource::Gift && src != EquipSource::Shop) return -1;
+    const UpgradeKind k = app.equipKind();
+    if (ball < 0 || ball >= app.runBallCount() || !upgradeTakesSlot(k)) return -1;
+    const BallLoadout& L = app.data().run.balls[static_cast<std::size_t>(ball)];
+    if (!app.fitsSquad(k, L) || upgradeLevelsUp(k, L)) return -1;
+    if (!slotAccepts(k, slot, L)) slot = defaultSlot(k, L);
+    Element have[kMaxElements];
+    if (upgradeCat(k) == UpgradeCat::Element && L.type >= 0 && L.elements(have) < L.elementCap()) return -1;
+    return L.kindAt(slot) >= 0 ? slot : -1;
+}
+
+void EquipScreen::pick(App& app, int ball, int slot) {
+    if (const int full = replacedSlot(app, ball, slot); full >= 0) {
+        askBall_ = ball;
+        askSlot_ = full;
+        askHover_ = -1;
+        return;
+    }
+    app.confirmEquip(ball, slot);
+}
+
 void EquipScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
+    if (askBall_ >= 0) {   // "Replace X?" is up: only its answer counts
+        const sf::Vector2f s = app.size();
+        const bool yes = isKey(e, sf::Keyboard::Enter) || isKey(e, sf::Keyboard::Space) ||
+                         (isLeftClick(e) && askButton(s, 0).contains(mouse));
+        const bool no = isRightClick(e) || isKey(e, sf::Keyboard::Escape) ||
+                        (isLeftClick(e) && askButton(s, 1).contains(mouse));
+        if (yes) {
+            const int b = askBall_, sl = askSlot_;
+            askBall_ = askSlot_ = -1;
+            app.confirmEquip(b, sl);
+        } else if (no) {
+            askBall_ = askSlot_ = -1;
+        }
+        return;
+    }
     if (isRightClick(e) || (isLeftClick(e) && backRect(app.size()).contains(mouse))) {
         app.cancelEquip();
         return;
     }
     if (e.type == sf::Event::KeyPressed && e.key.code >= sf::Keyboard::Num1 &&
         e.key.code < sf::Keyboard::Num1 + app.runBallCount()) {
-        app.confirmEquip(e.key.code - sf::Keyboard::Num1, -1);   // -1: default slot
+        pick(app, e.key.code - sf::Keyboard::Num1, -1);   // -1: default slot
         return;
     }
     if (!isLeftClick(e)) return;
     int b, sl;
     targetAt(app, mouse, b, sl);
-    if (b >= 0) app.confirmEquip(b, sl);
+    if (b >= 0) pick(app, b, sl);
 }
 
 void EquipScreen::update(App& app, float, sf::Vector2f mouse) {
     mouse_ = mouse;
+    if (askBall_ >= 0) {
+        const sf::Vector2f s = app.size();
+        askHover_ = askButton(s, 0).contains(mouse) ? 0 : askButton(s, 1).contains(mouse) ? 1 : -1;
+        uisound::hover(this, askHover_ >= 0 ? 2000 + askHover_ : -1);
+        return;
+    }
     targetAt(app, mouse, hoverBall_, hoverSlot_);
     const bool onBack = backRect(app.size()).contains(mouse);
     uisound::hover(this, onBack ? 999 : hoverBall_ >= 0 ? hoverBall_ * 16 + hoverSlot_ + 1 : -1);
@@ -317,7 +375,7 @@ void EquipScreen::draw(App& app, sf::RenderWindow& w) {
 
     drawCenteredPop(w, app.font(), title, theme::fsHeading, {s.x * 0.5f, s.y * 0.20f}, theme::textHi,
                     introPop(it, 0.f, 0.25f));
-    drawCentered(w, app.font(), sub, theme::fsSmall, {s.x * 0.5f, s.y * 0.20f + 30.f}, theme::textLo);
+    drawRichText(w, app.font(), sub, theme::fsSmall, {s.x * 0.5f, s.y * 0.20f + 30.f}, theme::textLo, 0);
 
     (void)hint;   // how to click is on hover (the slot tooltips), not a line of text
 
@@ -359,7 +417,8 @@ void EquipScreen::draw(App& app, sf::RenderWindow& w) {
                 tt = "Sell " + tt + "  for " + std::to_string(app.sellValue(i, part)) + " gold";
             std::string st;
             const float g = loadoutGrowth(balls[static_cast<std::size_t>(i)], part, st);
-            drawTooltip(w, app.font(), zm, zs, tt, td, theme::textHi, g, st);
+            const int kind = part < kLoadoutSlots ? balls[static_cast<std::size_t>(i)].kindAt(part) : -1;
+            drawTooltip(w, app.font(), zm, zs, tt, td, kind >= 0 ? nameColor(static_cast<UpgradeKind>(kind)) : theme::textHi, g, st);
         }
     }
     app.useUiView();
@@ -371,6 +430,32 @@ void EquipScreen::draw(App& app, sf::RenderWindow& w) {
     draw::panel(w, br, theme::textLo, ba, onBack ? 1.f : 0.f);
     drawCentered(w, app.font(), equipBackLabel(src), theme::fsSmall, {s.x * 0.5f, br.top + br.height * 0.5f - 1.f},
                  withAlpha(onBack ? theme::textHi : theme::textLo, ba));
+
+    if (askBall_ >= 0 && askBall_ < n) {   // "Replace X?": nothing goes out by a slip
+        const BallLoadout& L = balls[static_cast<std::size_t>(askBall_)];
+        const int old = L.kindAt(askSlot_);
+        if (old >= 0) {
+            drawDim(w, s, 0.62f);
+            const sf::FloatRect r = askRect(s);
+            draw::panel(w, r, theme::coreLow, 1.f, 0.f);
+            const std::string oldName = upgradeInfo(static_cast<UpgradeKind>(old)).title;
+            const int lv = L.levelAt(askSlot_);
+            drawCentered(w, app.font(), "Replace " + oldName + "?", theme::fsHeading, {s.x * 0.5f, r.top + 38.f},
+                         theme::textHi);
+            drawCentered(w, app.font(),
+                         oldName + (lv > 1 ? " Lv " + std::to_string(lv) : "") + " is gone for good; " + info.title +
+                             " takes its slot.",
+                         theme::fsSmall, {s.x * 0.5f, r.top + 80.f}, theme::textLo);
+            const char* labels[2] = {"Replace", "Keep it"};
+            for (int i = 0; i < 2; ++i) {
+                const sf::FloatRect b = askButton(s, i);
+                const bool hot = askHover_ == i;
+                draw::panel(w, b, i == 0 ? theme::coreLow : theme::textLo, 1.f, hot ? 1.f : 0.f);
+                drawCentered(w, app.font(), labels[i], theme::fsSmall, {b.left + b.width * 0.5f, b.top + b.height * 0.5f - 1.f},
+                             hot ? theme::textHi : theme::textLo);
+            }
+        }
+    }
 }
 
 // ================================================================ Map

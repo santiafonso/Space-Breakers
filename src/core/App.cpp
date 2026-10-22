@@ -8,6 +8,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
+#include <random>
 #include <sstream>
 
 #include "core/ClassSpec.hpp"
@@ -23,9 +24,11 @@
 #include "ui/Screens.hpp"
 #include "ui/SoundScreen.hpp"
 #include "ui/UiSound.hpp"
+#include "ui/Icons.hpp"
 #include "ui/Widgets.hpp"
 
 namespace sb {
+
 
 namespace {
 
@@ -137,6 +140,7 @@ WorldParams App::params() const {
     p.ascension = data_.run.ascension;
     p.bossHpMul = data_.run.tutorial ? cfg::tutorial::bossHpMul : 1.f;
     p.enemyHpMul = data_.run.tutorial ? cfg::tutorial::enemyHpMul : 1.f;
+    p.actDepth = !data_.run.tutorial;
     p.bossKind = static_cast<int>(runBoss(cfg::run::actOfWave(data_.run.wave)));
     p.damageMult = 1.f + cfg::combat::heftPerLevel * static_cast<float>(u[MetaHeft]);
     p.wave = std::max(1, data_.run.wave);
@@ -179,6 +183,7 @@ WorldParams App::params() const {
     }
     foldCreeds(p);   // Fase O: the run's creeds
     foldPacts(p);    // the run's pacts
+    foldTraits(p);   // the squad's traits
     return p;
 }
 
@@ -492,6 +497,11 @@ int App::houseEdge(int gold) {
 }
 
 void App::syncWorldBalls() {
+    {   // "Arcanist" creed: one more ability slot on every ball (kept in step with the creed, so never saved)
+        const int extra = hasCreed(CreedId::Arcanist) ? 1 : 0;
+        for (BallLoadout& L : data_.run.balls) L.bonusAbility = extra;
+        for (RunState::Benched& bn : data_.run.bench) bn.ball.bonusAbility = extra;
+    }
     grantMageMissiles();
     grantAlchemistPoison();
     world_.syncBalls(ballSpecs(), params());
@@ -506,6 +516,9 @@ void App::syncWorldBalls() {
 void App::rememberClasses() {
     knownClasses_.clear();
     for (const BallLoadout& L : data_.run.balls) knownClasses_.push_back({L.roleMask(), L.ascended(), L.element()});
+    int counts[kTraitCount];
+    teamTraitCounts(data_.run.balls, counts);
+    for (int t = 0; t < kTraitCount; ++t) knownTraits_[t] = traitTier(counts[t]);
 }
 
 // "FIRE BALL > STRIKER", "STRIKER > STRIKER + SUPPORT", "ASCENDED: MEGA
@@ -570,6 +583,19 @@ void App::announceClassGains() {
         effects_.flash(col, 0.4f);
         audio_.classGain(false);
         world_.pulseClass(static_cast<int>(i), false);
+    }
+    {   // a squad trait turning on or levelling up: "IMPACT 2  -  every ball hits +10%"
+        int counts[kTraitCount];
+        teamTraitCounts(data_.run.balls, counts);
+        float y = size().y * 0.22f;
+        for (int t = 0; t < kTraitCount; ++t) {
+            const int tier = traitTier(counts[t]);
+            if (tier <= knownTraits_[t]) continue;
+            const auto tr = static_cast<Trait>(t);
+            effects_.addLabel(upperCase(traitName(tr)) + " " + std::to_string(counts[t]) + "  -  " + traitDesc(tr, tier),
+                              {size().x * 0.5f, y}, traitColor(tr), 24, 2.2f);
+            y += 34.f;
+        }
     }
     rememberClasses();
 }
@@ -765,7 +791,10 @@ void App::newRun() {
     RunState& r = data_.run;
     r = RunState{};
     r.active = true;
-    r.hard = data_.meta.hardMode;
+    lessonsSeen_ = 0;
+    lesson_ = -1;
+    drill_ = drillDone_ = false;
+    r.hard = data_.meta.hardMode && hardUnlocked();
     r.ascension = std::clamp(data_.meta.ascSel, 0, data_.meta.ascMax);
     r.wave = 0;
     r.coreMaxHp = startCoreHp();
@@ -1078,6 +1107,8 @@ void App::rollChoices(RollSource src) {
     starterChoice_ = false;
     choiceTitle_.clear();
     choiceCount_ = pickCards();
+    if (src == RollSource::Elite && hasCreed(CreedId::GiantSlayer))   // "Giant Slayer": one more card
+        choiceCount_ = std::min(kChoiceCount, choiceCount_ + 1);
     std::vector<UpgradeKind> taken;
     for (int i = 0; i < choiceCount_; ++i) {
         choices_[i] = rollPick(src, taken);
@@ -1139,7 +1170,7 @@ bool App::autoTarget(UpgradeKind k, int& ball, int& slot) const {
     const auto& balls = data_.run.balls;
     ball = slot = -1;
     for (int i = 0; i < static_cast<int>(balls.size()); ++i) {
-        if (!upgradeFitsBall(k, balls[i])) continue;
+        if (!upgradeFitsTeam(k, balls, i)) continue;
         const int sl = defaultSlot(k, balls[i]);
         const bool free = balls[i].kindAt(sl) < 0;
         if (ball < 0 || free) { ball = i; slot = sl; }
@@ -1159,7 +1190,7 @@ void App::applyUpgradeKind(UpgradeKind k, int ball, int slot) {
     }
     if (upgradeNeedsTarget(k)) {
         if (ball < 0 && !autoTarget(k, ball, slot)) return;
-        if (ball >= static_cast<int>(r.balls.size()) || !upgradeFitsBall(k, r.balls[ball])) return;
+        if (ball >= static_cast<int>(r.balls.size()) || !upgradeFitsTeam(k, r.balls, ball)) return;
         BallLoadout& b = r.balls[ball];
         if (const int mi = modifierIndex(k); mi >= 0) {
             ++b.mods[mi];
@@ -1252,6 +1283,10 @@ BossKind App::runBoss(int act) const {
     return static_cast<BossKind>(data_.run.bosses[static_cast<std::size_t>(std::clamp(act, 1, 4) - 1)]);
 }
 
+bool App::hardUnlocked() const {
+    return data_.meta.stats.wins > 0 || data_.meta.stats.bestWave > static_cast<std::uint32_t>(cfg::run::bossWave);
+}
+
 bool App::repulseOpen() const { return data_.run.map.act >= cfg::player::repulseAct; }
 
 // F: the core's shockwave - every enemy near it is shoved away and staggered.
@@ -1282,7 +1317,7 @@ void App::playerMark() {
     const float speed = lerpf(cfg::app::slingMinSpeed, cfg::app::slingMaxSpeed, cfg::app::quickThrowPower) *
                         cfg::player::volleySpeedMul * quickThrowMul() * world_.arenaScale() * flingPower();
     if (!world_.volley(speed)) return;
-    markCd_ = cfg::player::markCooldown;
+    markCd_ = cfg::player::markCooldown * (hasCreed(CreedId::Sharpshooter) ? cfg::creed::sharpQCooldown : 1.f);
     hintDone(Hint::Volley);
     audio_.thrown(1.f);
 }
@@ -1341,6 +1376,15 @@ void App::travelTo(int node) {
     const int wave = r.tutorial ? (n.row < r.map.bossRow() ? n.row : cfg::tutorial::finaleWave) : mapRowWave(r.map, n.row);
     audio_.travel();
     hintDone(Hint::Map);
+    if (hasCreed(CreedId::Usurer) && r.gold > 0) {   // "Usurer": interest on what you carry
+        const int interest = std::min(cfg::creed::usurerInterestCap,
+                                      static_cast<int>(static_cast<float>(r.gold) * cfg::creed::usurerInterest));
+        if (interest > 0) {
+            r.gold += interest;
+            effects_.addLabel("+" + std::to_string(interest) + " interest", {size().x * 0.5f, size().y * 0.12f},
+                              theme::puGolden, 22, 1.3f);
+        }
+    }
     switch (n.type) {   // the stop's own hint (App::updateHints)
         case MapNodeType::Recruit: hintDone(Hint::Recruit); break;
         case MapNodeType::Elite:   hintDone(Hint::Elite); break;
@@ -1368,17 +1412,14 @@ void App::travelTo(int node) {
             break;
         case MapNodeType::Upgrade:   // a "?": an encounter (a free pick only if none can apply)
             r.wave = wave;
-            if (r.tutorial) {   // the tutorial's "?": a gift, and word of what else one can hold
+            if (r.tutorial) {   // the tutorial's "?": a real encounter, two of its deals (2026-10-20)
+                // A free item or a gamble, so a new player sees what a "?" is: a choice, or walk away.
+                // A little gold first, so the flip can be tried and the shop still has something to spend.
                 r.gold += cfg::tutorial::eventGold;
                 audio_.purchase();
-                effects_.flash(theme::puGolden, 0.4f);
-                // beside the map's single column, not over it
-                const sf::Vector2f side{size().x * 0.25f, size().y * 0.45f};
-                effects_.addLabel("+" + std::to_string(cfg::tutorial::eventGold) + " gold - a stranger's gift", side,
-                                  theme::puGolden, 26, 3.f);
-                effects_.addLabel("a ? can hold anything:", side + sf::Vector2f{0.f, 40.f}, theme::textHi, 18, 4.f);
-                effects_.addLabel("deals, strangers, gambles, odd things", side + sf::Vector2f{0.f, 66.f}, theme::textHi, 18, 4.f);
-                openMap();
+                eventDeals_ = {EventKind::Scavenge, EventKind::Gamble};
+                push(ScreenId::Event);
+                showLesson(Lesson::Event);
                 break;
             }
             if (!openEvent()) openChoice();
@@ -1550,7 +1591,14 @@ bool App::equipFitsSlot(int ball, int slot) const {
     if (equipSrc_ == EquipSource::Sell) return isItemSlot(slot) && b.gear[slot] >= 0;
     if (equipSrc_ == EquipSource::Barter) return isItemSlot(slot) && b.gear[slot] >= 0 && b.gear[slot] != cocoon;
     if (equipKind_ == UpgradeKind::Cocoon && b.has(UpgradeKind::Cocoon)) return false;   // one per ball
-    return upgradeFitsBall(equipKind_, b);
+    return upgradeFitsTeam(equipKind_, data_.run.balls, ball);
+}
+
+bool App::fitsSquad(UpgradeKind k, const BallLoadout& b) const {
+    const auto& balls = data_.run.balls;
+    for (int i = 0; i < static_cast<int>(balls.size()); ++i)
+        if (&balls[static_cast<std::size_t>(i)] == &b) return upgradeFitsTeam(k, balls, i);
+    return upgradeFitsBall(k, b);
 }
 
 bool App::equipFitsBall(int ball) const {
@@ -1693,7 +1741,8 @@ void App::cancelEquip() {
 // Same kind only (item / type / ability). Refused: an empty source, the same
 // spot, a ball with no free slot of that kind, a closed ability slot, or a
 // result that breaks the pick rules - two copies of one pick on a ball, or
-// Conductor / Bedrock without their element (upgradeFitsBall). The type slot
+// Conductor / Bedrock without their element (upgradeFitsBall), or a class on a 3rd ball
+// (classCapFits). The type slot
 // is one per ball, so a drop on a ball's panel swaps elements.
 // An element dropped on an Alchemist with room (and without that element)
 // joins its elements instead of swapping.
@@ -1746,7 +1795,13 @@ int App::slotMoveTarget(int fromBall, int fromSlot, int toBall, int toSlot) cons
         const auto k = static_cast<UpgradeKind>(kind);
         return !L.has(k) && upgradeFitsBall(k, L);
     };
-    return fits(b, ka) && fits(a, kb) ? toSlot : -1;
+    if (!fits(b, ka) || !fits(a, kb)) return -1;
+    // ...and the squad's class cap, counted on the squad as it would be after the swap
+    std::vector<BallLoadout> team = data_.run.balls;
+    team[static_cast<std::size_t>(fromBall)] = a;
+    team[static_cast<std::size_t>(toBall)] = b;
+    auto capOk = [&](int ball, int kind) { return kind < 0 || classCapFits(static_cast<UpgradeKind>(kind), team, ball); };
+    return capOk(toBall, ka) && capOk(fromBall, kb) ? toSlot : -1;
 }
 
 // Levels travel with the pick. Everything derived (classes, ascended, ability
@@ -1820,7 +1875,8 @@ int App::shopPrice(UpgradeKind k) const {
     }
     const float off = cfg::meta::hagglerPerLevel * static_cast<float>(data_.meta.unlock[MetaHaggler]);   // "Haggler"
     const float asc = ascension() >= 4 ? cfg::asc::shopPriceMul : 1.f;                                    // Ascension 4
-    return std::max(1, static_cast<int>(std::lround(static_cast<float>(base) * (1.f - off) * asc)));
+    const float usurer = hasCreed(CreedId::Usurer) ? cfg::creed::usurerShop : 1.f;                        // "Usurer" creed
+    return std::max(1, static_cast<int>(std::lround(static_cast<float>(base) * (1.f - off) * asc * usurer)));
 }
 
 // A fresh shop visit: new stock, rerolls and sells back to full.
@@ -1997,6 +2053,10 @@ void App::abandonRun() {
         data_.meta.prisms += static_cast<std::uint32_t>(prisms);
         data_.meta.stats.coresEarned += static_cast<std::uint32_t>(cores);
     }
+    // Abandoning a real run (2026-10-19) pays like losing it there: cores for
+    // the waves reached, no prisms.
+    const bool paid = !data_.run.tutorial && !runBanked_ && data_.run.wave > 0;
+    if (paid) bankRun(false);
     clearRun(runPath());
     data_.run = RunState{};
     save();
@@ -2004,6 +2064,9 @@ void App::abandonRun() {
     push(ScreenId::Loadout);
     if (skippedTutorial)
         effects_.addLabel("tutorial skipped:  +" + std::to_string(cores) + " cores   +" + std::to_string(prisms) + " prism",
+                          {size().x * 0.5f, size().y * 0.22f}, theme::accent, 24, 2.6f);
+    else if (paid)
+        effects_.addLabel("run abandoned:  +" + std::to_string(lastRunCores_) + " cores",
                           {size().x * 0.5f, size().y * 0.22f}, theme::accent, 24, 2.6f);
 }
 
@@ -2094,7 +2157,7 @@ void App::devGrant(UpgradeKind k) {
         }
     }
     if (upgradeNeedsTarget(k)) {
-        if (b >= runBallCount() || !upgradeFitsBall(k, data_.run.balls[static_cast<std::size_t>(b)])) {
+        if (b >= runBallCount() || !upgradeFitsTeam(k, data_.run.balls, b)) {
             effects_.addLabel("doesn't fit that ball", {size().x * 0.5f, size().y * 0.9f}, theme::coreLow, 18, 0.9f);
             return;
         }
@@ -2289,6 +2352,8 @@ void App::handleEvent(const sf::Event& e) {
         window_.applyLetterbox(e.size.width, e.size.height);
         return;
     }
+    if (lessonEvent(e)) return;   // a tutorial lesson up: it takes every click and key
+    if (drillEvent(e)) return;    // the grab drill: only the mouse (and Esc) gets through
     if (e.type == sf::Event::KeyPressed &&
         (e.key.code == sf::Keyboard::F11 || (e.key.code == sf::Keyboard::F && !simulating()))) {   // in a fight F throws
         toggleFullscreen();
@@ -2414,7 +2479,10 @@ void App::processEvents(const FrameEvents& ev) {
         audio_.gold();
     }
     if (!ev.kills.empty()) {
-        hitstop_ = std::max(hitstop_, cfg::app::hitstopKill);
+        if (killStopCd_ <= 0.f) {   // spaced out: with many balls the kills never stop
+            hitstop_ = std::max(hitstop_, cfg::app::hitstopKill);
+            killStopCd_ = cfg::app::hitstopKillGap;
+        }
         const int n = static_cast<int>(ev.kills.size());
         const auto& eff = world_.effect();
         const bool dbl = eff && eff->kind == PowerUp::Points2x && eff->remaining > 0.f;
@@ -2654,6 +2722,15 @@ void App::afterFightPick() {
         effects_.flash(tierColor(Tier::Legendary), 0.7f);
         return;
     }
+    if (hasCreed(CreedId::Usurer) && !data_.run.eliteWave) {   // "Usurer": a plain fight pays gold, no card
+        const int gold = cfg::creed::usurerFightGold + cfg::creed::usurerFightGoldPerAct * (std::max(1, data_.run.map.act) - 1);
+        data_.run.gold += gold;
+        effects_.addLabel("+" + std::to_string(gold) + " gold  (Usurer)", {size().x * 0.5f, size().y * 0.46f},
+                          theme::puGolden, 24, 1.4f);
+        audio_.purchase();
+        openMap();
+        return;
+    }
     openChoice(data_.run.eliteWave ? RollSource::Elite : RollSource::PostFight);
 }
 
@@ -2732,8 +2809,9 @@ void App::update(float frameDt) {
     // keep the cursor hidden until Esc.
     if (aiming_ && !sf::Mouse::isButtonPressed(sf::Mouse::Left)) setAiming(false);
     updateHints(frameDt);
+    updateLessons(frameDt);
 
-    if (simulating() && !stack_.back()->frozen()) {
+    if (simulating() && !stack_.back()->frozen() && lesson_ < 0 && !drill_) {   // (a lesson card or the drill stops the fight)
         // A fresh wave eases in: feed the fixed-step accumulator slowly at first
         // and ramp to real time, so balls flow out of the previous wave.
         float simDt = frameDt;
@@ -2772,6 +2850,8 @@ void App::update(float frameDt) {
         markCd_ = std::max(0.f, markCd_ - frameDt);
         if (const float q = world_.takeQRefund(); q > 0.f)   // "Second wind": a catch refunds the Q
             markCd_ = std::max(0.f, markCd_ - q * cfg::player::markCooldown);
+        if (noHitstop_) hitstop_ = 0.f;
+        killStopCd_ = std::max(0.f, killStopCd_ - frameDt);
         if (hitstop_ > 0.f) {  // an impact landed: hold the frame, no catch-up after
             hitstop_ = std::max(0.f, hitstop_ - frameDt);
             simDt = 0.f;
@@ -2784,7 +2864,7 @@ void App::update(float frameDt) {
             worldAccum_ -= cfg::loop::fixedDt;
             ++steps;
             if (!simulating()) break;  // a screen (choice / summary) was just pushed
-            if (hitstop_ > 0.f) { worldAccum_ = 0.f; break; }  // impact mid-frame: stop now
+            if (hitstop_ > 0.f && !noHitstop_) { worldAccum_ = 0.f; break; }  // impact mid-frame: stop now
         }
         if (steps == cfg::loop::maxSteps) worldAccum_ = 0.f;
 
@@ -2895,6 +2975,8 @@ void App::render() {
     if (peek_.open) drawLoadoutOverlay(*this, w, false, peek_);
 
     effects_.drawOverlay(w);
+    drawDrill(w);
+    drawLesson(w);
     if (fade_ > 0.01f) drawDim(w, size(), fade_ * 0.5f);
     if (!capturePath_.empty()) {   // photo mode: grab the finished frame before it's shown
         sf::Texture shot;
@@ -2913,51 +2995,63 @@ void App::snapFrame(const std::string& file) {
     render();
 }
 
+namespace {
+using K = UpgradeKind;
+// Each class at its best and its god at theirs: SB_BALANCE pits them against
+// each other, SB_SHOWCASE_BUILD films one.
+struct Build { const char* name; std::vector<K> items; ItemTag from; bool mage; int extra = 0; };   // extra: plain balls alongside (Support / Apolo buff them)
+const Build kBuilds[] = {
+    {"Striker (Mega)", {K::Railgun, K::Seeker, K::Berserk, K::Piercing}, ItemTag::None, false},
+    {"Hermes", {K::Talaria, K::Caduceus, K::Petasos, K::Quicksilver}, ItemTag::Striker, false},
+    {"Guardian (Iron)", {K::Titan, K::Juggernaut, K::Giant, K::Glutton}, ItemTag::None, false},
+    {"Atlas", {K::Satellite, K::StarryNight, K::PlanetJupiter, K::PlanetSaturn}, ItemTag::Guardian, false},
+    {"Mage (Ancient)", {K::SpellChorus, K::Chronomancy, K::Archmage, K::TimeStop}, ItemTag::None, true},
+    {"Odin", {K::Huginn, K::Muninn, K::Gungnir, K::Draupnir}, ItemTag::Mage, true},
+    {"Assassin (Shadow)", {K::DeathSentence, K::RazorWire, K::Reaper, K::Contract}, ItemTag::None, false},
+    {"Thanatos", {K::ShadowStep, K::Eclipse, K::ReaperScythe, K::FinalHour}, ItemTag::Assassin, false},
+    {"Summoner (Arch)", {K::Hive, K::ElderDragon, K::TwinCall, K::BabyDragon}, ItemTag::None, false},
+    {"Tiamat", {K::AncientGold, K::Devourer, K::Wyrmling, K::FrostWyrm}, ItemTag::Summoner, false},
+    {"Jester (Grand)", {K::Rigged, K::Slot777, K::HighRoller, K::Jackpot}, ItemTag::None, false},
+    {"Loki", {K::LokiDice, K::LokiRoulette, K::LokiCards, K::LokiPachinko}, ItemTag::Jester, false},
+    {"Support (Grand)", {K::Storm, K::BlackHole, K::Gemini, K::Tesla}, ItemTag::None, false, 2},
+    {"Apolo", {K::Lyre, K::Laurel, K::SilverBow, K::Oracle}, ItemTag::Support, false, 2},
+    {"Alchemist (Arch)", {K::ToxicTrail, K::Primal, K::BlackPlague, K::Maelstrom}, ItemTag::None, false},
+    {"Nergal", {K::BloodRain, K::RatTide, K::BlackDeath, K::PaleHorse}, ItemTag::Alchemist, false},
+    {"Shooter (Deadeye)", {K::Minigun, K::IonCannon, K::LeadStorm, K::Shrapnel}, ItemTag::None, false},
+    {"Ares", {K::PhobosDeimos, K::DragonTeeth, K::WrathOlympus, K::TrojanWar}, ItemTag::Shooter, false},
+    {"Slinger (Master)", {K::PerfectRelease, K::Homecoming, K::SteadyHand, K::Showtime}, ItemTag::None, false},
+    {"Artemisa", {K::SilverHounds, K::CrescentMoon, K::GoldenStag, K::HuntNight}, ItemTag::Slinger, false},
+};
+
+// One ball with a build's four items (abilities: Nova; Arc and Meteor for a Mage).
+BallLoadout buildBall(const Build& bd) {
+    BallLoadout L;
+    for (int i = 0; i < static_cast<int>(bd.items.size()); ++i) { L.gear[i] = static_cast<int>(bd.items[static_cast<std::size_t>(i)]); L.gearLvl[i] = 1; }
+    L.ascendedFrom = static_cast<int>(bd.from);
+    L.shrineUsed = bd.from != ItemTag::None;
+    L.ability[0] = static_cast<int>(K::AbilityNova); L.abilityLvl[0] = 2;
+    if (bd.mage) {
+        L.ability[1] = static_cast<int>(K::AbilityArc); L.abilityLvl[1] = 2;
+        L.ability[2] = static_cast<int>(K::AbilityMeteor); L.abilityLvl[2] = 2;
+    }
+    return L;
+}
+}  // namespace
+
 // SB_BALANCE=<waves> (dev): each class at its best against its god at theirs -
 // one ball, the same abilities, a steady stream of enemies for the same time
 // each wave, the core can't fall - and print the kills. The god should land
 // at 1.5x-2x the class (3x at most). Uses the game's own ball building and sim.
 int App::runBalance(int waves) {
     using K = UpgradeKind;
-    struct Build { const char* name; std::vector<K> items; ItemTag from; bool mage; int extra = 0; };   // extra: plain balls alongside (Support / Apolo buff them)
-    const Build builds[] = {
-        {"Striker (Mega)", {K::Railgun, K::Seeker, K::Berserk, K::Piercing}, ItemTag::None, false},
-        {"Hermes", {K::Talaria, K::Caduceus, K::Petasos, K::Quicksilver}, ItemTag::Striker, false},
-        {"Guardian (Iron)", {K::Titan, K::Juggernaut, K::Giant, K::Glutton}, ItemTag::None, false},
-        {"Atlas", {K::Satellite, K::StarryNight, K::PlanetJupiter, K::PlanetSaturn}, ItemTag::Guardian, false},
-        {"Mage (Ancient)", {K::SpellChorus, K::Chronomancy, K::Archmage, K::TimeStop}, ItemTag::None, true},
-        {"Odin", {K::Huginn, K::Muninn, K::Gungnir, K::Draupnir}, ItemTag::Mage, true},
-        {"Assassin (Shadow)", {K::DeathSentence, K::RazorWire, K::Reaper, K::Contract}, ItemTag::None, false},
-        {"Thanatos", {K::ShadowStep, K::Eclipse, K::ReaperScythe, K::FinalHour}, ItemTag::Assassin, false},
-        {"Summoner (Arch)", {K::Hive, K::ElderDragon, K::TwinCall, K::BabyDragon}, ItemTag::None, false},
-        {"Tiamat", {K::AncientGold, K::Devourer, K::Wyrmling, K::FrostWyrm}, ItemTag::Summoner, false},
-        {"Jester (Grand)", {K::Rigged, K::Slot777, K::HighRoller, K::Jackpot}, ItemTag::None, false},
-        {"Loki", {K::LokiDice, K::LokiRoulette, K::LokiCards, K::LokiPachinko}, ItemTag::Jester, false},
-        {"Support (Grand)", {K::Storm, K::BlackHole, K::Gemini, K::Tesla}, ItemTag::None, false, 2},
-        {"Apolo", {K::Lyre, K::Laurel, K::SilverBow, K::Oracle}, ItemTag::Support, false, 2},
-        {"Alchemist (Arch)", {K::ToxicTrail, K::Primal, K::BlackPlague, K::Maelstrom}, ItemTag::None, false},
-        {"Nergal", {K::BloodRain, K::RatTide, K::BlackDeath, K::PaleHorse}, ItemTag::Alchemist, false},
-        {"Shooter (Deadeye)", {K::Minigun, K::IonCannon, K::LeadStorm, K::Shrapnel}, ItemTag::None, false},
-        {"Ares", {K::PhobosDeimos, K::DragonTeeth, K::WrathOlympus, K::TrojanWar}, ItemTag::Shooter, false},
-        {"Slinger (Master)", {K::PerfectRelease, K::Homecoming, K::SteadyHand, K::Showtime}, ItemTag::None, false},
-        {"Artemisa", {K::SilverHounds, K::CrescentMoon, K::GoldenStag, K::HuntNight}, ItemTag::Slinger, false},
-    };
     const char* filter = std::getenv("SB_BALANCE_ONLY");
     savePath_ = (std::filesystem::temp_directory_path() / "sb_balance_save.txt").string();   // never the real save
     std::fprintf(stderr, "balance: %d waves x %.0f s, a steady 30 enemies, Q whenever it's ready\n", waves, 12.0);
-    for (const Build& bd : builds) {
+    for (const Build& bd : kBuilds) {
         if (filter && *filter && std::string(bd.name).find(filter) == std::string::npos) continue;
-        BallLoadout L;
-        for (int i = 0; i < static_cast<int>(bd.items.size()); ++i) { L.gear[i] = static_cast<int>(bd.items[static_cast<std::size_t>(i)]); L.gearLvl[i] = 1; }
-        L.ascendedFrom = static_cast<int>(bd.from);
-        L.shrineUsed = bd.from != ItemTag::None;
-        L.ability[0] = static_cast<int>(K::AbilityNova); L.abilityLvl[0] = 2;
+        BallLoadout L = buildBall(bd);
         L.type = static_cast<int>(K::ElemFire); L.typeLvl = 2;   // an element (two for an Alchemist), the same for every build
         L.extraType[0] = static_cast<int>(K::ElemPoison);
-        if (bd.mage) {
-            L.ability[1] = static_cast<int>(K::AbilityArc); L.abilityLvl[1] = 2;
-            L.ability[2] = static_cast<int>(K::AbilityMeteor); L.abilityLvl[2] = 2;
-        }
         RunState& r = data_.run;
         r = RunState{};
         r.active = true;
@@ -3062,9 +3156,78 @@ int App::runShowcase(const std::string& dir) {
     std::filesystem::create_directories(dir, ec);
     savePath_ = dir + "/showcase_save.txt";   // never touch the real save
     snapInvuln_ = true;
+    noHitstop_ = true;
     data_.meta.unlock[MetaCalling] = 1;
     newRun();
     chooseAbility(0);
+    const int frames = std::getenv("SB_SHOWCASE_FRAMES") ? std::atoi(std::getenv("SB_SHOWCASE_FRAMES")) : 300;
+    // SB_SHOWCASE_FPS=60 saves every sim step (smooth video) instead of every other one.
+    const int steps = std::getenv("SB_SHOWCASE_FPS") && std::atoi(std::getenv("SB_SHOWCASE_FPS")) >= 60 ? 1 : 2;
+    char name[32];
+    // SB_PROFILE=1: no PNGs, the frame time of update and render instead (and no 60 fps cap).
+    const bool profile = std::getenv("SB_PROFILE") && *std::getenv("SB_PROFILE");
+    if (profile) window_.handle().setFramerateLimit(0);
+    double profUpd = 0.0, profRen = 0.0, profUpdMax = 0.0, profRenMax = 0.0;
+    int profN = 0;
+    auto shoot = [&](int f) {
+        if (profile) {
+            sf::Clock c;
+            render();
+            const double ms = c.getElapsedTime().asMicroseconds() / 1000.0;
+            profRen += ms;
+            profRenMax = std::max(profRenMax, ms);
+            if (++profN == 60) {
+                std::cerr << "profile f" << f << " balls " << world_.balls().size() << " enemies " << world_.enemies().size()
+                          << " shots " << world_.shots().size() << " bolts " << world_.bolts().size()
+                          << " | update avg " << profUpd / profN << " max " << profUpdMax
+                          << " ms | render avg " << profRen / profN << " max " << profRenMax << " ms\n";
+                profUpd = profRen = profUpdMax = profRenMax = 0.0;
+                profN = 0;
+            }
+            return;
+        }
+        std::snprintf(name, sizeof name, "/f%04d.png", f);
+        capturePath_ = dir + name;
+        render();
+    };
+    if (profile) noHitstop_ = false;
+    int frozen = 0, frames60 = 0;
+    auto step = [&] {
+        sf::Clock c;
+        update(1.f / 60.f);
+        frozen += hitstop_ > 0.f;
+        if (++frames60 == 120) {
+            std::cerr << "  hitstop froze " << frozen << " of 120 frames\n";
+            frozen = frames60 = 0;
+        }
+        const double ms = c.getElapsedTime().asMicroseconds() / 1000.0;
+        profUpd += ms;
+        profUpdMax = std::max(profUpdMax, ms);
+    };
+    // SB_SHOWCASE_SCREEN=map | web: that screen instead of a fight (the web grows a node every few frames).
+    if (const char* scr = std::getenv("SB_SHOWCASE_SCREEN"); scr && *scr) {
+        const bool web = std::string(scr) == "web";
+        if (web) {
+            for (int& u : data_.meta.unlock) u = 0;   // from an empty web (the real save is never written here)
+            data_.run = RunState{};
+            replaceStack(ScreenId::Menu);
+            openLoadout();
+        } else {
+            openMap();
+        }
+        std::mt19937 rng(7);
+        for (int f = 0; f < frames; ++f) {
+            if (web && f % (4 / steps) == 0) {   // one more node, from those the web lets you buy next
+                std::vector<int> open;
+                for (int u = 0; u < MetaUnlockCount; ++u)
+                    if (data_.meta.unlock[u] == 0 && metaUnlockAvailable(u, data_.meta.unlock)) open.push_back(u);
+                if (!open.empty()) data_.meta.unlock[open[rng() % open.size()]] = 1;
+            }
+            for (int st = 0; st < steps; ++st) update(1.f / 60.f);
+            shoot(f);
+        }
+        return 0;
+    }
     RunState& r = data_.run;
     r.balls.assign(5, BallLoadout{});
     auto put = [](BallLoadout& L, int slot, K k, int lvl) { L.setSlot(slot, static_cast<int>(k), lvl); };
@@ -3097,14 +3260,32 @@ int App::runShowcase(const std::string& dir) {
     put(r.balls[4], 1, K::Bumper, 2);
     put(r.balls[4], 2, K::Glutton, 1);
     r.gold = 342;
+    // SB_SHOWCASE_BUILD=<name from kBuilds, e.g. "Guardian" or "Tiamat">: that ball alone.
+    const char* only = std::getenv("SB_SHOWCASE_BUILD");
+    if (only && *only)
+        for (const Build& bd : kBuilds)
+            if (std::string(bd.name).rfind(only, 0) == 0) {
+                r.balls = {buildBall(bd)};
+                if (bd.from != ItemTag::None) r.poolIn |= RunState::tagBit(godOf(bd.from));
+                break;
+            }
+    // SB_SHOWCASE_BALLS=<n>: the squad repeated up to n balls (stress test with SB_PROFILE).
+    if (const char* nb = std::getenv("SB_SHOWCASE_BALLS"); nb && *nb && !r.balls.empty())
+        for (std::size_t i = r.balls.size(), want = static_cast<std::size_t>(std::atoi(nb)); i < want; ++i)
+            r.balls.push_back(r.balls[i % 5 < r.balls.size() ? i % 5 : 0]);
     rememberClasses();
     syncWorldBalls();
     for (int i = 0; i < static_cast<int>(r.map.nodes.size()); ++i)
         if (mapNodeOpen(i)) { travelTo(i); break; }
     world_.devSetInvuln(true);
     world_.startWave(6, params(), false);
-    auto crowd = [this](int f) {   // a steady stream, so the arena is never empty or swamped
-        world_.devSpawn(EnemyKind::Grunt, 5);
+    // SB_SHOWCASE_ENEMY=<EnemyKind index>: a stream of that kind only.
+    const int enemyOnly = std::getenv("SB_SHOWCASE_ENEMY") ? std::atoi(std::getenv("SB_SHOWCASE_ENEMY")) : -1;
+    const bool lone = only && *only;
+    auto crowd = [this, enemyOnly, lone](int f) {   // a steady stream, so the arena is never empty or swamped
+        if (enemyOnly >= 0) { world_.devSpawn(static_cast<EnemyKind>(enemyOnly), f % 2 == 0 ? 2 : 1); return; }
+        world_.devSpawn(EnemyKind::Grunt, lone ? 2 : 5);
+        if (lone) return;
         if (f % 3 == 0) world_.devSpawn(EnemyKind::Runner, 2);
         if (f % 4 == 1) world_.devSpawn(EnemyKind::Shielded, 1);
         if (f % 5 == 2) world_.devSpawn(EnemyKind::Splitter, 1);
@@ -3114,16 +3295,14 @@ int App::runShowcase(const std::string& dir) {
         if (i % 24 == 0) crowd(i / 24);
         update(1.f / 60.f);
     }
-    world_.devSetCombo(140.f);
-    const int frames = std::getenv("SB_SHOWCASE_FRAMES") ? std::atoi(std::getenv("SB_SHOWCASE_FRAMES")) : 300;
-    char name[32];
+    if (!lone && enemyOnly < 0) world_.devSetCombo(140.f);
+    // SB_SHOWCASE_CROWD=<n>: n times the stream (stress test with SB_PROFILE).
+    const int crowdMul = std::getenv("SB_SHOWCASE_CROWD") ? std::max(1, std::atoi(std::getenv("SB_SHOWCASE_CROWD"))) : 1;
     for (int f = 0; f < frames; ++f) {
-        if (f % 12 == 0) crowd(f / 12);
-        update(1.f / 60.f);
-        update(1.f / 60.f);
-        std::snprintf(name, sizeof name, "/f%04d.png", f);
-        capturePath_ = dir + name;
-        render();
+        if (f % (24 / steps) == 0)
+            for (int m = 0; m < crowdMul; ++m) crowd(f / (24 / steps));
+        for (int st = 0; st < steps; ++st) step();
+        shoot(f);
     }
     return 0;
 }
@@ -3281,6 +3460,19 @@ int App::runSnapshots(const std::string& dir) {
     beginEquip(EquipSource::Choice, UpgradeKind::AbilityOverclock, 0);   // an ability: the ability slots
     snapFrame(d + "07_equip_ability.png");
     back();
+    {   // a pick onto a full ball: "Replace X?" asks first
+        const BallLoadout keep = r.balls[0];
+        for (int i = 0; i < r.balls[0].itemSlots; ++i)
+            if (r.balls[0].gear[i] < 0) r.balls[0].setSlot(i, static_cast<int>(UpgradeKind::Hunter), 1);
+        beginEquip(EquipSource::Choice, UpgradeKind::Railgun, 0);
+        sf::Event one{};
+        one.type = sf::Event::KeyPressed;
+        one.key.code = sf::Keyboard::Num1;
+        stack_.back()->handleEvent(*this, one, {0.f, 0.f});
+        snapFrame(d + "07b_equip_replace.png");
+        back();
+        r.balls[0] = keep;
+    }
 
     sf::Event tab{};
     tab.type = sf::Event::KeyPressed;
@@ -3383,6 +3575,16 @@ int App::runSnapshots(const std::string& dir) {
         data_.meta.unlock[u] = 1;
     if (openCreedChoice(CreedSource::Boss)) {
         snapFrame(d + "10_creed.png");
+        back();
+    }
+    if (openCreedChoice(CreedSource::Boss)) {   // the second batch (2026-10-20), on the table together
+        creedChoices_ = {CreedId::Sharpshooter, CreedId::Arcanist, CreedId::Usurer, CreedId::GiantSlayer};
+        snapFrame(d + "10b_creed_new.png");
+        back();
+    }
+    if (openCreedChoice(CreedSource::Boss)) {
+        creedChoices_ = {CreedId::Puppeteer, CreedId::Snowball, CreedId::Usurer};
+        snapFrame(d + "10c_creed_new2.png");
         back();
     }
     grantCreed(CreedId::Hunters);
@@ -3986,6 +4188,13 @@ int App::runSnapshots(const std::string& dir) {
     replaceStack(ScreenId::Menu);
     openSound();
     snapFrame(d + "20_sound.png");
+    {   // its other tab
+        sf::Event tab{};
+        tab.type = sf::Event::KeyPressed;
+        tab.key.code = sf::Keyboard::Tab;
+        handleEvent(tab);
+        snapFrame(d + "20b_sound_mix.png");
+    }
 
     // The tutorial: a fresh player's first run, its straight map and its hints.
     {
@@ -3995,6 +4204,18 @@ int App::runSnapshots(const std::string& dir) {
         newRun();
         settle();
         snapFrame(d + "37_tutorial_map.png");
+        for (int l = 0; l < static_cast<int>(Lesson::Count); ++l)   // every lesson card, every page
+            for (int pg = 0; pg < 2; ++pg) {
+                lessonsSeen_ = 0;
+                showLesson(static_cast<Lesson>(l));
+                lessonPage_ = pg;
+                lessonA_ = 1.f;
+                if (pg == 1 && l != static_cast<int>(Lesson::Fight)) continue;
+                snapFrame(d + "37l_lesson_" + std::to_string(l) + "_" + std::to_string(pg) + ".png");
+            }
+        lesson_ = -1;
+        lessonsSeen_ = ~0u;   // (the shots below show the screens themselves)
+        drillDone_ = true;
         back();
         data_.run.map.nodes[0].visited = true;
         data_.run.mapNode = 0;
@@ -4036,6 +4257,14 @@ int App::runSnapshots(const std::string& dir) {
             capturePath_ = d + "38f_tutorial_finale.png";
             render();
             std::cerr << "snapshot: tutorial finale wave " << tr.wave << " boss " << (world_.bossWave() ? "yes" : "no") << '\n';
+            drill_ = true;   // the grab drill (it runs after the first fight's card), over this fight
+            drillT_ = 1.f;
+            capturePath_ = d + "38g_tutorial_drill.png";
+            render();
+            drillClicked_ = true;
+            capturePath_ = d + "38h_tutorial_drill_clicked.png";
+            render();
+            drill_ = false;
             replaceStack(ScreenId::Play);
         }
         openPause();
@@ -4059,6 +4288,27 @@ int App::run() {
             if (!drawFxSheet(rt, page, font())) break;
             rt.display();
             rt.getTexture().copyToImage().saveToFile(std::string(sheet) + "/fx_" + std::to_string(page + 1) + ".png");
+        }
+        return 0;
+    }
+    if (const char* sheet = std::getenv("SB_ICONSHEET"); sheet && *sheet) {   // dev: every item / relic / ability icon
+        sf::RenderTexture rt;
+        rt.create(1280, 800);
+        rt.setSmooth(true);
+        std::filesystem::create_directories(sheet);
+        constexpr int kCols = 12, kRows = 6;
+        for (int page = 0; page * kCols * kRows < kUpgradeKindCount; ++page) {
+            rt.clear(theme::bg);
+            for (int i = 0; i < kCols * kRows; ++i) {
+                const int k = page * kCols * kRows + i;
+                if (k >= kUpgradeKindCount) break;
+                const sf::Vector2f c{60.f + 106.f * static_cast<float>(i % kCols), 70.f + 128.f * static_cast<float>(i / kCols)};
+                drawIcon(rt, static_cast<UpgradeKind>(k), c, 26.f);
+                drawLabel(rt, font(), upgradeInfo(static_cast<UpgradeKind>(k)).title, 11, c + sf::Vector2f{0.f, 46.f},
+                          theme::textLo, 0);
+            }
+            rt.display();
+            rt.getTexture().copyToImage().saveToFile(std::string(sheet) + "/icons_" + std::to_string(page + 1) + ".png");
         }
         return 0;
     }

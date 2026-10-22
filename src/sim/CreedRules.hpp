@@ -8,6 +8,9 @@ namespace sb {
 // small. All defaults = no creed. The hooks live in sim/WorldCreeds.cpp.
 struct CreedRules {
     // Thrower
+    bool puppeteer = false;      // Puppeteer: holding the button steers every ball toward the pointer
+    bool snowball = false;       // Snowball: a ball grows (size, damage) with its kills this fight
+    bool sharpshooter = false;   // Sharpshooter: a full pull pierces and its first hit lands x2
     float speedCeilMul = 1.f;    // Hot Hands: a ball's top speed x this (flings can go far past cruise)
     float flingHold = 1.f;       // Hot Hands: fling-speed decay x this (< 1 keeps a throw fast longer)
     // Spectator
@@ -23,6 +26,9 @@ struct CreedRules {
     float enemySpeedMul = 1.f;   // Living Core's cost: enemies march faster
     // Alchemist
     bool alchemy = false;        // random extra elements; a ball can react with itself
+    // Caster
+    float castRate = 1.f;        // Arcanist: ability recharge x this
+    float contactMul = 1.f;      // ...its cost: contact hits x this
     // Berserker
     bool bloodlust = false;      // the combo never decays and climbs twice as fast; core hits wipe it
     float coreDamageMul = 1.f;   // Bloodlust's cost: core hits x this

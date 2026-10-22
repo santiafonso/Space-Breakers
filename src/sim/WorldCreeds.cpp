@@ -33,6 +33,27 @@ void World::trimBalls(int n) {
 
 // "Nova": every ball is thrown out of the core at once, fanned evenly around
 // it, and the core shoves back whatever was pressing on it.
+// "Snowball": a fight starts small and weak, each kill adds a little, to a cap.
+float World::snowMul(const Ball& b, const WorldParams& p) const {
+    if (!p.creed.snowball) return 1.f;
+    namespace P = cfg::creed;
+    return std::min(P::snowMax, P::snowStart + P::snowPer * static_cast<float>(b.snowKills));
+}
+
+// "Puppeteer": while the button is down every free ball turns toward the
+// pointer and never flies slower than a little over its cruise.
+void World::creedSteer(Ball& b, float dt, const WorldParams& p) {
+    if (!steering() || !hasPointer_ || b.held || b.snaredBy >= 0 || b.hexT > 0.f) return;
+    namespace P = cfg::creed;
+    const float speed = length(b.vel);
+    const sf::Vector2f to = pointer_ - b.pos;
+    if (speed < 1.f || length(to) < b.radius) return;
+    const float cur = std::atan2(b.vel.y, b.vel.x);
+    const float turn = clampf(std::remainder(std::atan2(to.y, to.x) - cur, 2.f * kPi), -P::puppetTurn * dt, P::puppetTurn * dt);
+    const float want = std::max(speed, ballCruise(b, p) * P::puppetSpeed);
+    b.vel = sf::Vector2f{std::cos(cur + turn), std::sin(cur + turn)} * want;
+}
+
 void World::creedNova(const WorldParams& p) {
     forceRelease();
     std::vector<Ball*> movers;

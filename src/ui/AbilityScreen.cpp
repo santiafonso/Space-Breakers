@@ -12,6 +12,7 @@
 #include "render/Draw.hpp"
 #include "ui/Screens.hpp"
 #include "ui/UiSound.hpp"
+#include "ui/Icons.hpp"
 #include "ui/Widgets.hpp"
 
 namespace sb {
@@ -83,18 +84,19 @@ void AbilityPickScreen::draw(App& app, sf::RenderWindow& w) {
         draw::brackets(w, r, theme::bracket + 3.f, 2.f, withAlpha(col, (0.6f + 0.4f * h) * a));
 
         drawLabel(w, f, std::to_string(i + 1), 10, {cx, r.top + 18.f}, withAlpha(theme::textDim, a));
-        // A plain ball with its cooldown arc filling up (the in-fight indicator).
+        // Its icon, with the cooldown arc filling up round it (the in-fight indicator).
         const sf::Vector2f bp{cx, r.top + 62.f};
-        const float br = 16.f;
-        draw::disc(w, bp, br, withAlpha(sf::Color(178, 184, 198), a), withAlpha(sf::Color(96, 102, 118), a));
-        draw::ring(w, bp, br, 1.5f, withAlpha(sf::Color::White, 0.25f * a));
+        const float br = 18.f;
+        drawIcon(w, k, bp, br, a);
         const float fill = std::fmod(clock_ * 0.45f + 0.23f * static_cast<float>(i), 1.f);
-        draw::ring(w, bp, br + 5.f, 2.f, withAlpha(col, (0.5f + 0.4f * h) * a), -kPi * 0.5f, -kPi * 0.5f + 2.f * kPi * fill);
+        draw::ring(w, bp, br * 1.3f + 6.f, 2.f, withAlpha(col, (0.5f + 0.4f * h) * a), -kPi * 0.5f, -kPi * 0.5f + 2.f * kPi * fill);
 
         drawCentered(w, f, info.title, theme::fsItem, {cx, r.top + 108.f}, withAlpha(col, a));
-        float y = r.top + 138.f;
+        float y = r.top + 138.f;   // what it does: under the pointer only
+        const float da = a * clampf(h * 1.5f, 0.f, 1.f);
+        if (da > 0.01f)
         for (const std::string& l : wrapText(f, info.desc, theme::fsSmall, r.width - 24.f)) {
-            drawCentered(w, f, l, theme::fsSmall, {cx, y}, withAlpha(theme::textLo, a));
+            drawRichText(w, f, l, theme::fsSmall, {cx, y}, withAlpha(theme::textLo, da), 0);
             y += 17.f;
         }
         char cd[32];

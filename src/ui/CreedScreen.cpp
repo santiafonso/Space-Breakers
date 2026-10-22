@@ -13,6 +13,7 @@
 #include "core/Theme.hpp"
 #include "render/Draw.hpp"
 #include "ui/UiSound.hpp"
+#include "ui/Icons.hpp"
 #include "ui/Widgets.hpp"
 
 namespace sb {
@@ -43,9 +44,7 @@ void seg(sf::RenderTarget& w, sf::Vector2f a, sf::Vector2f b, float thick, sf::C
 float paragraph(sf::RenderWindow& w, const sf::Font& f, const std::string& s, unsigned size, float x, float y,
                 float maxW, sf::Color col, float lineH) {
     for (const std::string& l : wrapText(f, s, size, maxW)) {
-        sf::Text t = makeText(f, l, size, col);
-        t.setPosition(std::round(x), std::round(y));
-        w.draw(t);
+        drawRichText(w, f, l, size, {x, y}, col);
         y += lineH;
     }
     return y;
@@ -67,13 +66,17 @@ sf::Color creedColor(CreedArchetype a) {
         case CreedArchetype::Gambler:   return theme::puGolden;
         case CreedArchetype::Alchemist: return theme::venom;
         case CreedArchetype::Berserker: return theme::coreLow;
+        case CreedArchetype::Caster:    return theme::classMage;
+        case CreedArchetype::Merchant:  return theme::puPoints;
+        case CreedArchetype::Slayer:    return theme::classAssassin;
+        case CreedArchetype::Conductor: return theme::classSlinger;
     }
     return theme::textHi;
 }
 
 void drawRuleCard(sf::RenderWindow& w, const sf::Font& f, sf::FloatRect r, sf::Color col, float a, float h,
                   float pulse, const std::string& head, const std::string& hint, const std::string& name,
-                  const std::string& gain, const std::string& cost) {
+                  const std::string& gain, const std::string& cost, int glyph, float reserve) {
     // Breathing halo in the card's colour, stronger under the pointer.
     const float grow = 4.f + 5.f * pulse + 4.f * h;
     draw::box(w, {r.left - grow, r.top - grow, r.width + 2.f * grow, r.height + 2.f * grow}, theme::corner,
@@ -86,19 +89,65 @@ void drawRuleCard(sf::RenderWindow& w, const sf::Font& f, sf::FloatRect r, sf::C
     const float cx = r.left + r.width * 0.5f;
     drawCentered(w, f, head, theme::fsSmall, {cx, r.top + 22.f}, withAlpha(col, a));
     drawCentered(w, f, hint, theme::fsSmall, {cx, r.top + 40.f}, withAlpha(theme::textDim, a));
-    drawCentered(w, f, name, theme::fsTitle, {cx, r.top + 80.f}, withAlpha(theme::textHi, a));
+    if (glyph >= 0) {   // resting: a big emblem and the name; the terms come up under the pointer
+        const float e = h * h * (3.f - 2.f * h);
+        const sf::Vector2f ic{cx, r.top + 150.f - 60.f * e};
+        const float ir = 46.f - 22.f * e;
+        draw::disc(w, ic, ir, withAlpha(lerpColor(theme::bg, col, 0.3f), a * (1.f - e)),
+                   withAlpha(lerpColor(theme::bg, col, 0.12f), a * (1.f - e)), {1.f, 1.f}, 48);
+        draw::ring(w, ic, ir, 2.f, withAlpha(col, a * (1.f - e)));
+        drawGlyph(w, static_cast<Glyph>(glyph), ic, ir * 0.62f,
+                  withAlpha(lerpColor(col, sf::Color::White, 0.4f), a * (1.f - e)));
+        drawCentered(w, f, name, theme::fsTitle, {cx, r.top + 240.f - 160.f * e}, withAlpha(theme::textHi, a));
+        if (e < 0.01f) return;
+        a *= e;
+    } else {
+        drawCentered(w, f, name, theme::fsTitle, {cx, r.top + 80.f}, withAlpha(theme::textHi, a));
+    }
     seg(w, {r.left + 24.f, r.top + 112.f}, {r.left + r.width - 24.f, r.top + 112.f}, 1.f, withAlpha(col, 0.35f * a));
 
     const float x = r.left + 20.f, tw = r.width - 40.f;
+    // Long terms drop to smaller type rather than run into the foot.
+    unsigned fs = theme::fsBody;
+    float lh = 21.f;
+    auto bodyH = [&] {
+        return static_cast<float>(wrapText(f, gain, fs, tw).size() + wrapText(f, cost, fs, tw).size()) * lh + 32.f;
+    };
+    if (r.top + 146.f + bodyH() > r.top + r.height - reserve - 6.f) {
+        fs = theme::fsSmall;
+        lh = 18.f;
+    }
     sf::Text gh = makeText(f, "GAIN", theme::fsSmall, withAlpha(theme::core, a));
     gh.setPosition(x, r.top + 126.f);
     w.draw(gh);
-    float y = paragraph(w, f, gain, theme::fsBody, x, r.top + 146.f, tw, withAlpha(theme::textHi, a), 21.f);
+    float y = paragraph(w, f, gain, fs, x, r.top + 146.f, tw, withAlpha(theme::textHi, a), lh);
     y += 12.f;
     sf::Text ch = makeText(f, "COST", theme::fsSmall, withAlpha(theme::coreLow, a));
     ch.setPosition(x, y);
     w.draw(ch);
-    paragraph(w, f, cost, theme::fsBody, x, y + 20.f, tw, withAlpha(lerpColor(theme::coreLow, theme::textHi, 0.35f), a), 21.f);
+    paragraph(w, f, cost, fs, x, y + 20.f, tw, withAlpha(lerpColor(theme::coreLow, theme::textHi, 0.35f), a), lh);
+}
+
+float ruleFootHeight(const sf::Font& f, sf::FloatRect r, const std::string& text) {
+    if (text.empty()) return 0.f;
+    return 58.f + 16.f * static_cast<float>(wrapText(f, text, 12, r.width - 44.f).size() - 1);
+}
+
+void drawRuleFoot(sf::RenderWindow& w, const sf::Font& f, sf::FloatRect r, float h, const std::string& text, sf::Color col) {
+    const float ha = clampf(h, 0.f, 1.f);
+    if (ha <= 0.01f || text.empty()) return;
+    // Its synergies, as a small block at the foot: a hairline, a caption in the
+    // card's colour, then what it pairs with, readable.
+    const float cx = r.left + r.width * 0.5f;
+    const std::vector<std::string> lines = wrapText(f, text, 12, r.width - 44.f);
+    float y = r.top + r.height - 20.f - 16.f * static_cast<float>(lines.size() - 1);
+    const float capY = y - 20.f;
+    draw::line(w, {r.left + 26.f, capY - 12.f}, {r.left + r.width - 26.f, capY - 12.f}, 1.f, withAlpha(col, 0.3f * ha));
+    drawLabel(w, f, "pairs well with", 10, {cx, capY}, withAlpha(col, 0.9f * ha));
+    for (const std::string& l : lines) {
+        drawRichText(w, f, l, 12, {cx, y}, withAlpha(lerpColor(col, theme::textHi, 0.6f), ha), 0);
+        y += 16.f;
+    }
 }
 
 // ================================================================ CreedScreen
@@ -146,6 +195,31 @@ void CreedScreen::update(App& app, float dt, sf::Vector2f mouse) {
     uisound::hover(this, c >= 0 ? c : (refuseRect(app).contains(mouse) ? 10 : -1));
 }
 
+// Each creed's emblem on its card.
+static Glyph creedGlyph(CreedId c) {
+    switch (c) {
+        case CreedId::HotHands:   return Glyph::Flame;
+        case CreedId::Nova:       return Glyph::Blast;
+        case CreedId::Hunters:    return Glyph::Eye;
+        case CreedId::Clockwork:  return Glyph::Clock;
+        case CreedId::Pinball:    return Glyph::Bounce;
+        case CreedId::Duet:       return Glyph::Twin;
+        case CreedId::Legion:     return Glyph::Plus;
+        case CreedId::LivingCore: return Glyph::Bolt;
+        case CreedId::Fortress:   return Glyph::Shield;
+        case CreedId::LoadedDice: return Glyph::Dice;
+        case CreedId::Alchemy:    return Glyph::Flask;
+        case CreedId::Bloodlust:  return Glyph::Drop;
+        case CreedId::Sharpshooter: return Glyph::Pierce;
+        case CreedId::Arcanist:   return Glyph::Rune;
+        case CreedId::Usurer:     return Glyph::Coin;
+        case CreedId::GiantSlayer: return Glyph::Skull;
+        case CreedId::Puppeteer:  return Glyph::Magnet;
+        case CreedId::Snowball:   return Glyph::Size;
+    }
+    return Glyph::Star;
+}
+
 void CreedScreen::draw(App& app, sf::RenderWindow& w) {
     const sf::Vector2f s = app.size();
     const float it = intro();
@@ -178,7 +252,8 @@ void CreedScreen::draw(App& app, sf::RenderWindow& w) {
         r.top += (1.f - a) * 50.f - 12.f * h;
         const float pulse = 0.5f + 0.5f * std::sin(clock_ * 2.4f + static_cast<float>(i));
         drawRuleCard(w, f, r, col, a, h, pulse, std::to_string(i + 1) + "   " + creedArchetypeName(d.archetype),
-                     creedArchetypeHint(d.archetype), d.name, d.gain, d.cost);
+                     creedArchetypeHint(d.archetype), d.name, d.gain, d.cost, static_cast<int>(creedGlyph(picks[static_cast<std::size_t>(i)])),
+                     ruleFootHeight(f, r, d.synergy));
     }
 
     // Refuse: all of them, for a little gold.
@@ -192,9 +267,11 @@ void CreedScreen::draw(App& app, sf::RenderWindow& w) {
                      {r.left + r.width * 0.5f, r.top + r.height * 0.5f - 1.f}, withAlpha(theme::textLo, a));
     }
 
-    if (const int c = cardAt(app, mouse_); c >= 0) {
+    if (const int c = cardAt(app, mouse_); c >= 0) {   // what it pairs with, at the foot of the open card
         const CreedDef& d = creedDef(picks[static_cast<std::size_t>(c)]);
-        drawTooltip(w, f, mouse_, s, "Pairs well with", d.synergy, creedColor(d.archetype));
+        sf::FloatRect r = cardRect(app, c);
+        r.top -= 12.f * hover_[c];
+        drawRuleFoot(w, f, r, hover_[c], d.synergy, creedColor(d.archetype));
     } else if (refuseRect(app).contains(mouse_)) {
         drawTooltip(w, f, mouse_, s, "Refuse",
                     boss ? "no creed this run - take the gold and go straight to the boss treasure"

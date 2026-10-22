@@ -546,6 +546,19 @@ inline constexpr float coreSlideTime = 1.4f;  // core eases left -> arena centre
 inline constexpr int rerollsPerLevel = 2;     // "Foresight" web node: reroll charges per run, per level
 }  // namespace run
 
+// The squad (2026-10-22): a class's items go on at most classCap balls, and each
+// class brings two traits (progression/Traits.hpp) - balls sharing a trait turn on
+// a bonus for the whole squad, so mixing classes pays and stacking one doesn't.
+namespace team {
+inline constexpr int classCap = 2;               // balls holding a class's items (or ascended from it)
+inline constexpr int traitAt[2] = {2, 4};        // balls with a trait for its level 1 / 2
+inline constexpr float impactDamage[2] = {1.10f, 1.25f};   // Impact: every ball's hit x this
+inline constexpr float swiftCruise[2] = {1.08f, 1.16f};    // Swift: every ball's cruise x this
+inline constexpr float arcaneRate[2] = {1.15f, 1.30f};     // Arcane: ability recharge x this
+inline constexpr float elementalPower[2] = {1.15f, 1.30f}; // Elemental: every element's potency x this
+inline constexpr int squadAegis[2] = {1, 3};               // Squad: core hits shrugged off at each fight's start
+}  // namespace team
+
 // Hard mode (toggled on the run-start screen, saved): everything hits harder,
 // comes in bigger numbers. Pays more cores.
 // The very first run (no run played yet; SB_DEV=1 SB_TUTORIAL=1 forces it):
@@ -639,6 +652,8 @@ inline constexpr int wShopNeutral = 5;
 // Elite waves: tougher and more of them.
 inline constexpr float eliteHpMul = 1.6f;
 inline constexpr float eliteCountMul = 1.3f;
+inline constexpr float eliteDepthRamp = 0.4f;   // and those x (1 + this x (depth - 0.5)) on top of cfg::wave's:
+                                                // an act's first elite ~1.3x hp, the one before the boss ~1.9x
 // Altar (pacts): rare on the map, or down the hidden path before the boss.
 inline constexpr int altarPct = 22;            // % chance an act's map has one Altar (rows 4+, not the pre-boss row)
 inline constexpr int altarStreak = 3;          // flawless fights in a row (per act) that open the hidden path
@@ -712,8 +727,16 @@ inline constexpr float shockEvery = 5.0f;
 inline constexpr float shockWarn = 0.8f;
 inline constexpr float shockRadius = 300.f;
 inline constexpr float shockPush = 1100.f;    // px/s a ball right next to it leaves at (less at the edge)
-inline constexpr float addInterval = 0.95f;   // infinite adds cadence while the boss lives
-inline constexpr int   maxAdds = 18;          // concurrent cap so it stays fair
+inline constexpr float addInterval = 1.4f;    // infinite adds cadence while the boss lives (0.95 till 2026-10-19: the packs carry it now)
+inline constexpr int   maxAdds = 24;          // concurrent cap so it stays fair (18 till 2026-10-19)
+// Boss fights are half wave (2026-10-19): every boss has less health and packs
+// of small enemies pour in with it, so it isn't one long chip at a sponge.
+inline constexpr float hpMul = 0.6f;            // every boss's health (Charger ... Orbital)
+inline constexpr float packFirst = 3.f;         // seconds to the first pack...
+inline constexpr float packEvery = 7.f;         // ...and between packs while the boss lives (faster enraged)
+inline constexpr int   packBase = 4;            // enemies per pack in act 1...
+inline constexpr int   packPerAct = 1;          // ...plus this per act after
+inline constexpr float packRunnerChance = 0.35f; // a pack's enemy is a Runner this often, else a Grunt
 inline constexpr float addHpMul = 0.8f;       // boss adds are a touch softer than that act's grunts
 // Acts 2-4 (bosses in a centred core arena; each enters from an edge).
 // Hive (act 2): drifts in on a slow wobble and every few seconds bursts a fan
@@ -845,6 +868,16 @@ inline constexpr float act1BossHpMul = 0.8f;  // ...and its boss
 inline constexpr float hpGrowth = 1.18f;      // per wave up to hpKneeWave...
 inline constexpr int   hpKneeWave = 20;
 inline constexpr float hpGrowthLate = 1.04f;  // ...and this per wave after
+// Normal mode climbs gentler (2026-10-19): x14 by wave 20 instead of x23, x40 by
+// the final wave instead of x75; hard keeps the curve above.
+inline constexpr float hpGrowthNormal = 1.15f;
+inline constexpr float hpGrowthLateNormal = 1.035f;
+// Depth in the act (2026-10-22): a fight just before the boss is tougher than one
+// near the act's start, on top of the wave curve (which flattens from act 3: late
+// hp growth, count and speed caps). Centred on the act's middle, so an act as a
+// whole stays as hard. depth = 0 at its first wave .. 1 at the one before the boss.
+inline constexpr float depthHpRamp = 0.3f;      // hp x (1 + this x (depth - 0.5)): 0.85 .. 1.15
+inline constexpr float depthCountRamp = 0.24f;  // count likewise, past maxCount: 0.88 .. 1.12
 inline constexpr float speedBase = 36.f;
 inline constexpr float speedGrowth = 1.05f;
 inline constexpr float speedMax = 150.f;
@@ -1030,6 +1063,30 @@ inline constexpr float alchemyChance = 0.5f;
 inline constexpr float alchemyDamage = 0.75f;
 // Bloodlust
 inline constexpr float bloodCoreDamage = 1.5f;
+// The second batch (2026-10-20)
+// Sharpshooter: a full pull (cfg::app::slingFullPull) pierces and hits x2
+inline constexpr float sharpHitBonus = 0.4f;    // + the full pull's own slingHitMax (0.6): first hit x2
+inline constexpr float sharpPierceTime = 1.2f;  // s the throw goes through enemies
+inline constexpr float sharpQCooldown = 2.f;    // cost: the Q recharges x this slower (and a click doesn't throw)
+// Arcanist
+inline constexpr float arcaneRate = 2.f;        // abilities recharge x this
+inline constexpr float arcaneContact = 0.7f;    // cost: contact hits x this
+// Usurer
+inline constexpr float usurerInterest = 0.15f;  // each stop you travel to: + this x your gold...
+inline constexpr int usurerInterestCap = 30;    // ...up to this much
+inline constexpr float usurerShop = 0.75f;      // shop prices x this
+inline constexpr int usurerFightGold = 30, usurerFightGoldPerAct = 10;   // cost: a plain fight's card becomes this much gold
+// Giant Slayer: x2 on bosses and elites, -25% on the rest (as their health: every source counts)
+inline constexpr float slayerBossHp = 0.5f;
+inline constexpr float slayerEliteHp = 0.5f;
+inline constexpr float slayerPlainHp = 1.f / 0.75f;
+// Puppeteer: hold the button and every ball bends toward the pointer
+inline constexpr float puppetTurn = 5.5f;       // rad/s a ball turns toward it
+inline constexpr float puppetSpeed = 1.35f;     // ...and it flies at least this x its cruise
+// Snowball: every kill grows the ball that made it, per fight
+inline constexpr float snowStart = 0.7f;        // size and damage at a fight's start (cost)...
+inline constexpr float snowPer = 0.03f;         // ...+ this a kill...
+inline constexpr float snowMax = 1.5f;          // ...up to this
 }  // namespace creed
 
 // The player's own abilities (2026-10-01): Q = Mark from the start, E =
@@ -1039,7 +1096,7 @@ namespace player {
 // straight at the enemy (or boss) nearest to it, faster than a click throw,
 // with no catch reward.
 inline constexpr float markCooldown = 2.5f;   // 1.25 until 2026-10-06: a good click should beat spamming Q
-inline constexpr float volleySpeedMul = 1.4f;   // x the click throw's speed
+inline constexpr float volleySpeedMul = 1.6f;   // x the click throw's speed (1.4 while that was 0.65 power)
 // E, Bullet time: hold it and the fight runs slow. A gauge: it drains while
 // held and refills on its own a moment after you let go, so you choose
 // where to spend it.
@@ -1167,15 +1224,20 @@ inline constexpr float slingMaxPull = 220.f;    // px of pull for full power
 inline constexpr float slingDeadzone = 14.f;    // a shorter pull cancels (the ball carries on)
 inline constexpr float slingMinSpeed = 330.f;
 inline constexpr float slingMaxSpeed = 1500.f;
+// A hand-aimed pull arms the throw's first hit (like the catch reward), from
+// half a pull up to this at a full one - a click throw gets none.
+inline constexpr float slingHitFrom = 0.5f;    // pull share where the bonus starts
+inline constexpr float slingHitMax = 0.6f;     // first hit x (1 + this) at a full pull
+inline constexpr float slingFullPull = 0.97f;  // from here the aim reads "full power" (gold, pulsing)
 // Quick throw: a click on a ball (let go with the pointer moved less than
 // quickThrowSlop px, however long it was held) flings it at the nearest enemy
-// at this fraction of the slingshot range (~1090 px/s, a firm pull - full power
-// stays a reward for aiming by hand). Pulling further aims with the slingshot.
+// at this fraction of the slingshot range (~960 px/s; 0.65 until 2026-10-20 -
+// full power stays a reward for aiming by hand). Pulling further aims with the slingshot.
 inline constexpr float quickThrowSlop = 12.f;
 inline constexpr float regrabDelay = 0.4f;   // s after a throw before that ball can be grabbed again (no click-spam; 1 s until 2026-10-06, 0.6 until 2026-10-12)
 inline constexpr int endlessCrowd = 20;      // dev endless: enemies the button throws in
 inline constexpr float endlessTough = 8.f;   // ...and the tough button's, with this x the health
-inline constexpr float quickThrowPower = 0.65f;
+inline constexpr float quickThrowPower = 0.55f;
 inline constexpr float aimTimeScale = 0.3f;
 inline constexpr float aimSlowMax = 2.5f;
 inline constexpr float catchRadius = 130.f;   // grab a ball from near it, not only dead-on
@@ -1188,6 +1250,7 @@ inline constexpr float arenaBand = 36.f;
 // Impact juice: freeze the sim for a beat and kick the camera on a hit. Kept
 // short so the game still feels fast.
 inline constexpr float hitstopKill    = 0.035f;  // an enemy dies
+inline constexpr float hitstopKillGap = 0.5f;    // at most one kill freeze per this (real s): a busy fight was frozen ~40% of frames
 inline constexpr float hitstopCoreHit = 0.075f;  // something reaches the core
 inline constexpr float hitstopBossHit = 0.055f;  // a ball lands on the miniboss
 inline constexpr float camKickCoreHit = 9.f;     // camera-shake amplitude (px at normal zoom)

@@ -17,12 +17,13 @@ int waveEnemyCount(int wave) {
                                                W::countPerWave2 * x * x));
     return std::clamp(n, 1, W::maxCount);
 }
-float waveEnemyHp(int wave) {
+// Normal climbs gentler than hard (2026-10-19): hard keeps the old curve.
+float waveEnemyHp(int wave, bool hard) {
     namespace W = cfg::wave;
     const int early = std::min(wave, W::hpKneeWave) - 1;
     const int late = std::max(0, wave - W::hpKneeWave);
-    return W::hpBase * std::pow(W::hpGrowth, static_cast<float>(early)) *
-           std::pow(W::hpGrowthLate, static_cast<float>(late));
+    return W::hpBase * std::pow(hard ? W::hpGrowth : W::hpGrowthNormal, static_cast<float>(early)) *
+           std::pow(hard ? W::hpGrowthLate : W::hpGrowthLateNormal, static_cast<float>(late));
 }
 float waveEnemySpeed(int wave) {
     return std::min(cfg::wave::speedMax,
@@ -35,7 +36,7 @@ World::World(sf::Vector2f size) : baseSize_(size), size_(size) { core_.pos = siz
 
 // The wave's enemy stats, with hard mode on top (cfg::hard).
 float World::enemyHp(int wave) const {
-    return waveEnemyHp(wave) * (hard_ ? cfg::hard::enemyHpMul : 1.f) * pact_.enemyHpMul *   // "Mirror" pact
+    return waveEnemyHp(wave, hard_) * (hard_ ? cfg::hard::enemyHpMul : 1.f) * pact_.enemyHpMul *   // "Mirror" pact
            (asc_ >= 10 ? cfg::asc::allHpMul : 1.f) * easeHp_ *
            (cfg::run::actOfWave(wave) == 1 ? cfg::wave::act1HpMul : 1.f);   // act 1: few items yet
 }
@@ -145,6 +146,7 @@ float World::ballRadius(const Ball& b, const WorldParams& p) const {
     if (b.hasRole(BallRole::Astronomer))   // Atlas: every kill this fight, a little bigger (past the cap too)
         mult *= 1.f + cfg::planet::growPer * static_cast<float>(std::min(b.cls.astronomer.growth, cfg::planet::growMax));
     mult *= apoloSizeMul(b);   // Apolo's Giant muse
+    mult *= snowMul(b, p);     // "Snowball" creed
     return cfg::ball::radius * mult * b.scale * (1.f + (arenaScale() - 1.f) * cfg::boss::ballRadiusArenaFrac);
 }
 
@@ -347,6 +349,7 @@ void World::carryBalls(const WorldParams& p) {
         if (length(b.vel) < cfg::ball::minThrowSpeed)
             b.vel = rng_.direction() * ballBaseCruise(b, p);
         b.gluttonStacks = 0;   // "Glutton" grows per wave
+        b.snowKills = 0;       // "Snowball": back to its starting size
         b.preyId = -1;
         b.homing = false;
         b.overclockT = 0.f;
@@ -369,13 +372,39 @@ void World::carryBalls(const WorldParams& p) {
     for (Ball& b : balls_) b.sinceThrow = 0.f;   // "Quick Hands": every fight starts fresh
     classWaveStart(p);
     commonWaveStart();
+    clearArena();
+}
+
+// A clean arena each fight (2026-10-22): nothing of the last one lingers - stone
+// pools, water waves, runes, the gods' summons and craters. Two map rows can play
+// as the same wave, so the gods' "new fight" checks (wave != wave_) are forced too.
+void World::clearArena() {
+    pools_.clear();
+    waves_.clear();
+    ClassWorldState& c = classWorld_;
+    c.support.wake.clear();
+    c.mage.runes.clear();
+    c.jester.pops.clear();
+    c.astronomer.builtWave = -1;
+    c.odin.wave = c.tiamat.wave = c.loki.wave = c.nergal.wave = c.apolo.wave = c.ares.wave = c.artemisa.wave = -1;
+    c.hermes.fx.clear();
+    c.thanatos.fx.clear();
+    c.artemisa.arrows.clear();
+    c.tiamat.fx.clear();
+    c.loki.fx.clear();
+    c.nergal.fx.clear();
+    c.apolo.fx.clear();
+    c.ares.fx.clear();
+    c.artemisa.fx.clear();
 }
 
 void World::startWave(int wave, const WorldParams& p, bool elite) {
     hard_ = p.hard;
     asc_ = p.ascension;
     easeHp_ = p.enemyHpMul;
+    actDepth_ = p.actDepth;
     pact_ = p.pact;
+    creed_ = p.creed;
     bossWave_ = false;
     boss_ = Boss{};
     coreSlideT_ = 0.f;
@@ -388,14 +417,22 @@ void World::startWave(int wave, const WorldParams& p, bool elite) {
 
 // A normal (or elite) wave's spawn plan: how many, how tough, and where in the
 // queue the minibosses (Brutes) come - an elite brings one (two from act 3),
-// halfway and at the end; from act 2 a normal fight can end with one.
+// halfway and at the end; from act 2 a normal fight can end with one. Deeper
+// into the act, more and tougher (cfg::wave::depthHpRamp), elites most of all.
 void World::beginWave(int wave, bool elite) {
     wave_ = wave;
-    toSpawn_ = waveEnemyCount(wave);
-    if (elite) toSpawn_ = static_cast<int>(std::lround(static_cast<float>(toSpawn_) * cfg::map::eliteCountMul));
-    if (hard_) toSpawn_ = static_cast<int>(std::lround(static_cast<float>(toSpawn_) * cfg::hard::countMul));
-    toSpawn_ = static_cast<int>(std::lround(static_cast<float>(toSpawn_) * pact_.enemyCountMul));   // "Horde" pact
-    waveHpMul_ = elite ? cfg::map::eliteHpMul * (asc_ >= 1 ? cfg::asc::eliteHpMul : 1.f) : 1.f;
+    // 0 at the act's first wave .. 1 at the one before its boss (0.5 = no change)
+    const float depth = actDepth_ ? static_cast<float>((wave - 1) % cfg::run::bossWave) /
+                                        static_cast<float>(cfg::run::bossWave - 2)
+                                  : 0.5f;
+    const float eliteDepth = 1.f + cfg::map::eliteDepthRamp * (depth - 0.5f);
+    float count = static_cast<float>(waveEnemyCount(wave)) * (1.f + cfg::wave::depthCountRamp * (depth - 0.5f));
+    if (elite) count *= cfg::map::eliteCountMul * eliteDepth;
+    if (hard_) count *= cfg::hard::countMul;
+    count *= pact_.enemyCountMul;   // "Horde" pact
+    toSpawn_ = std::max(1, static_cast<int>(std::lround(count)));
+    waveHpMul_ = (1.f + cfg::wave::depthHpRamp * (depth - 0.5f)) *
+                 (elite ? cfg::map::eliteHpMul * eliteDepth * (asc_ >= 1 ? cfg::asc::eliteHpMul : 1.f) : 1.f);
     eliteWave_ = elite;
     eliteTrait_ = elite && asc_ >= 6 ? static_cast<EliteTrait>(rng_.irange(1, 4)) : EliteTrait::None;
     bossRules_ = 0;
@@ -430,7 +467,9 @@ void World::startPostBossWave(int wave, const WorldParams& p, bool elite) {
     hard_ = p.hard;
     asc_ = p.ascension;
     easeHp_ = p.enemyHpMul;
+    actDepth_ = p.actDepth;
     pact_ = p.pact;
+    creed_ = p.creed;
     bossWave_ = false;
     boss_ = Boss{};
     size_ = wideArenaSize();
@@ -460,6 +499,7 @@ void World::startBossWave(int wave, const WorldParams& p) {
     easeHp_ = p.enemyHpMul;
     bossHpMul_ = p.bossHpMul;
     pact_ = p.pact;
+    creed_ = p.creed;
     const int act = cfg::run::actOfWave(wave);
     // Acts 1-4 draw their boss from the run's shuffled order; the last is always the Orbital.
     const BossKind kind = p.bossKind >= 0 ? static_cast<BossKind>(p.bossKind) : bossOfAct(act);
@@ -474,6 +514,7 @@ void World::startBossWave(int wave, const WorldParams& p) {
     waveRunning_ = true;
     toSpawn_ = 0;
     spawnTimer_ = 2.0f;   // a beat before the first add
+    packTimer_ = cfg::boss::packFirst;
     enemies_.clear();
     bolts_.clear();
     shots_.clear();
@@ -533,7 +574,7 @@ void World::ascendBoss(bool last) {
 // A boss's HP in grunts of its wave, padded for a wide squad.
 float World::bossHp(float grunts, int wave) const {
     const float extra = static_cast<float>(std::max(0, static_cast<int>(balls_.size()) - 1));
-    return grunts * waveEnemyHp(wave) * (1.f + cfg::boss::hpPerExtraBall * extra) *
+    return grunts * cfg::boss::hpMul * waveEnemyHp(wave, hard_) * (1.f + cfg::boss::hpPerExtraBall * extra) *
            (hard_ ? cfg::hard::bossHpMul : 1.f) * bossHpMul_ *
            (cfg::run::actOfWave(wave) == 1 ? cfg::wave::act1BossHpMul : 1.f);
 }
@@ -543,6 +584,7 @@ void World::startChargerWave(int wave, const WorldParams& p) {
     asc_ = p.ascension;
     easeHp_ = p.enemyHpMul;
     pact_ = p.pact;
+    creed_ = p.creed;
     bossWave_ = true;
     waveHpMul_ = 1.f;
     eliteWave_ = false;
@@ -551,6 +593,7 @@ void World::startChargerWave(int wave, const WorldParams& p) {
     waveRunning_ = true;
     toSpawn_ = 0;
     spawnTimer_ = 1.0f;
+    packTimer_ = cfg::boss::packFirst;
     enemies_.clear();
     bolts_.clear();
     shots_.clear();
@@ -583,6 +626,7 @@ void World::startFinalBossWave(const WorldParams& p) {
     asc_ = p.ascension;
     easeHp_ = p.enemyHpMul;
     pact_ = p.pact;
+    creed_ = p.creed;
     bossWave_ = true;
     waveHpMul_ = 1.f;
     eliteWave_ = false;
@@ -591,6 +635,7 @@ void World::startFinalBossWave(const WorldParams& p) {
     waveRunning_ = true;
     toSpawn_ = 0;
     spawnTimer_ = cfg::finalBoss::addInterval;   // first edge add after a short beat
+    packTimer_ = cfg::boss::packFirst;
     enemies_.clear();
     bolts_.clear();
     shots_.clear();
@@ -857,6 +902,7 @@ bool World::grabAt(sf::Vector2f point, float catchRadius) {
     b.cls.common.leashT = b.cls.common.leashFlyT = 0.f;   // "Leash": your hand cuts the rope
     b.held = true;
     b.vel = {0.f, 0.f};
+    b.squash = 0.f;   // in the hand it's round (a bounce's squash would hang on in the aim's slow motion)
     b.trail.clear();
     b.waterTrail.clear();
     return true;
@@ -873,13 +919,20 @@ void World::moveHeld(sf::Vector2f target, float dt) {
     b.vel = {0.f, 0.f};
 }
 
-void World::releaseHeld(sf::Vector2f throwVel) {
+void World::releaseHeld(sf::Vector2f throwVel, float pull) {
     if (grabbed_ != Grabbed::Ball) return;
     Ball& b = balls_[heldIndex_];
     b.held = false;
     b.regrabT = cfg::app::regrabDelay;   // no grabbing it straight back: the throw keeps its line a moment
     heldGrabOffset_ = {0.f, 0.f};
-    launchThrow(b, throwVel, heldCatch_, heldT_);
+    // A hand-aimed pull arms the first hit too, up to slingHitMax at a full pull.
+    float aimed = cfg::app::slingHitMax *
+                  clampf((pull - cfg::app::slingHitFrom) / (1.f - cfg::app::slingHitFrom), 0.f, 1.f);
+    if (creed_.sharpshooter && pull >= cfg::app::slingFullPull) {   // "Sharpshooter": through them all, x2
+        aimed += cfg::creed::sharpHitBonus;
+        b.sharpT = cfg::creed::sharpPierceTime;
+    }
+    launchThrow(b, throwVel, heldCatch_ + aimed, heldT_);
     heldCatch_ = 0.f;
     grabbed_ = Grabbed::None;
     heldIndex_ = -1;
@@ -1555,6 +1608,7 @@ bool World::strike(Ball& b, Enemy& e, sf::Vector2f normal, const WorldParams& p,
     dmg *= apoloPreHit(b);             // "Oracle": a muse just arrived - a sure crit
     dmg *= artemisaPreHit(b, e);       // Artemisa: her prey (and where the throw hit, for Arrow rain)
     dmg *= roleContact(b, e);          // the classes' own feel on a contact hit
+    dmg *= p.creed.contactMul;         // "Arcanist" creed's cost
     const bool coinHeads = b.cls.jester.coinMul > 1.f;   // (Hot streak / Confetti count it as doubled)
     const bool afflicted = e.poison > 0.f || e.frozen > 0.f || e.burn > 0.f;
     if (p.primed && afflicted) dmg *= cfg::combat::primedMult;             // "Primed"
@@ -1678,6 +1732,7 @@ void World::onKill(Ball& b, Enemy& e, float dmg, const WorldParams& p, FrameEven
         itemFx(CommonWorld::Fx::Blast, e.pos, m.bombRadius, theme::elemFire, 0.45f);
     }
     if (b.gluttonStacks < m.gluttonMax) ++b.gluttonStacks;         // "Glutton" grows
+    if (p.creed.snowball) ++b.snowKills;                            // "Snowball" creed
     if (m.mitosis > 0 && b.scale >= 1.f)                            // "Mitosis": copies don't split again
         for (int i = 0; i < m.mitosis; ++i) spawnMitosis(b, p);
     if (m.blackHoleChance > 0.f && static_cast<int>(blackHoles_.size()) < C::maxBlackHoles &&
@@ -1986,6 +2041,7 @@ float World::ballDamage(const Ball& b, const WorldParams& p) const {
     if (b.ricochetT > 0.f) dmg *= b.mods.ricochetMult;   // "Ricochet": fresh off a wall
     if (b.creedCharge > 0.f) dmg *= cfg::creed::coreChargeDamage;   // "Living Core" creed: overcharged
     dmg *= pactDamageMul(b, p);   // pacts
+    dmg *= snowMul(b, p);         // "Snowball" creed
     return dmg;
 }
 
@@ -2108,6 +2164,7 @@ void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
     if (!b.ghost || b.twin || b.mods.cls.common.projection)   // copies don't fire abilities (Gemini twins and "Projection" do)
         updateAbilities(b, dt, p, ev);
     classTick(b, dt, p, ev);
+    creedSteer(b, dt, p);   // "Puppeteer" creed
     godsTick(b, dt, p, ev);    // Hermes, Odin (sim/WorldGods.cpp)
     styleTick(b, dt, p, ev);   // the older classes' speed items
     commonTick(b, dt, p, ev);  // the commons' timers
@@ -2209,7 +2266,7 @@ void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
             pushFx(c);
         }
         const bool golden = hermesGolden(b, p);   // Hermes "Petasos": fast, it goes through
-        const bool passThrough = b.mods.piercing || styleBlurring(b, p) || b.cls.common.perfect || golden;   // "Piercing" / "Blur" / "Perfect release"
+        const bool passThrough = b.mods.piercing || styleBlurring(b, p) || b.cls.common.perfect || golden || b.sharpT > 0.f;   // "Piercing" / "Blur" / "Perfect release"
         if (passThrough) {   // "Piercing": no bounce - every enemy on the path takes the hit
             for (Enemy& e : enemies_) {
                 if (e.hp <= 0.f || e.pierceCd > 0.f) continue;
@@ -2284,6 +2341,7 @@ void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev
 
     b.ricochetT = std::max(0.f, b.ricochetT - dt);   // "Ricochet" window ticks down
     if (b.catchT > 0.f && (b.catchT -= dt) <= 0.f) b.catchBonus = 0.f;   // the catch reward went unused
+    if (b.sharpT > 0.f) b.sharpT = std::max(0.f, b.sharpT - dt);
     emitElement(b, dt, p, ev);
     regulateSpeed(b, dt, p);
     b.color = ballTint(b, length(b.vel), p);
@@ -3220,7 +3278,7 @@ void World::ballHitsBoss(Ball& b, float cdMul, const WorldParams& p, FrameEvents
     }
     if (bossRules_ & BossRuleThickHide) mul *= cfg::asc::thickHideContact;   // Ascension 9 "Thick hide"
     const float before = boss_.hp;
-    boss_.hp -= ballDamage(b, p) * (1.f + b.mods.cls.common.bully) * mul;   // "Bully": bosses are bigger
+    boss_.hp -= ballDamage(b, p) * (1.f + b.mods.cls.common.bully) * mul * p.creed.contactMul;   // "Bully": bosses are bigger
     if (classWorld_.common.contractBoss && b.mods.cls.common.contractBoss > 0.f)   // "Contract" on the boss
         boss_.hp -= boss_.maxHp * b.mods.cls.common.contractBoss;
     bossContact_ += before - boss_.hp;
@@ -3334,6 +3392,19 @@ void World::updateWaveSpawner(float dt, FrameEvents& ev) {
         // The wave ends only once the boss is down and every enemy it left
         // behind is cleared.
         if (boss_.alive) {
+            // Packs of small enemies come with every boss: half wave, half boss.
+            packTimer_ -= dt / (boss_.enraged ? cfg::boss::enrageAddMul : 1.f);
+            if (packTimer_ <= 0.f) {
+                namespace B = cfg::boss;
+                packTimer_ = B::packEvery;
+                const int n = B::packBase + B::packPerAct * (cfg::run::actOfWave(wave_) - 1);
+                const int cap = B::maxAdds + (boss_.kind == BossKind::Orbital ? cfg::finalBoss::shieldCount : 0);
+                for (int i = 0; i < n && static_cast<int>(enemies_.size()) < cap; ++i) {
+                    spawnEnemy(rng_.range(0.f, 1.f) < B::packRunnerChance ? EnemyKind::Runner : EnemyKind::Grunt);
+                    Enemy& e = enemies_.back();
+                    e.maxHp = e.hp = e.maxHp * B::addHpMul;
+                }
+            }
             spawnTimer_ -= dt;
             if (spawnTimer_ <= 0.f) {
                 if (boss_.kind == BossKind::Hive) {
@@ -3485,6 +3556,7 @@ FrameEvents World::step(float dt, const WorldParams& p) {
     }
 
     pact_ = p.pact;
+    creed_ = p.creed;
     advanceCombo(dt, p);
     ascensionTick(dt, p);
     updateCoreSlide(dt);

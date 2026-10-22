@@ -182,6 +182,19 @@ void panel(sf::RenderTarget& t, sf::FloatRect r, sf::Color edge, float alpha, fl
 }
 
 void vignette(sf::RenderTarget& t, sf::Vector2f size, sf::Color edge, float strength) {
+    // Built once per size / colour: ~9k vertices of trig every frame was most of the backdrop's cost.
+    static sf::VertexArray strip(sf::Triangles);
+    static sf::Vector2f builtSize{-1.f, -1.f};
+    static sf::Color builtEdge;
+    static float builtStrength = -1.f;
+    if (builtSize == size && builtEdge == edge && builtStrength == strength) {
+        t.draw(strip);
+        return;
+    }
+    builtSize = size;
+    builtEdge = edge;
+    builtStrength = strength;
+    strip.clear();
     // Concentric annuli from mid-screen out past the corners, each band's alpha
     // following a smooth ease: a clean radial falloff with no fan artefacts.
     const sf::Vector2f c = size * 0.5f;
@@ -192,7 +205,6 @@ void vignette(sf::RenderTarget& t, sf::Vector2f size, sf::Color edge, float stre
         const float x = std::clamp((r - r0) / (maxD - r0), 0.f, 1.f);
         return alphaScaled(edge, strength * x * x * (3.f - 2.f * x));
     };
-    sf::VertexArray strip(sf::Triangles);
     for (int b = 0; b < bands; ++b) {
         const float ra = r0 + (maxD * 1.02f - r0) * static_cast<float>(b) / static_cast<float>(bands);
         const float rb = r0 + (maxD * 1.02f - r0) * static_cast<float>(b + 1) / static_cast<float>(bands);

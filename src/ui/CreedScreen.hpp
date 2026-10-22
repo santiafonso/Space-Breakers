@@ -31,10 +31,17 @@ private:
 
 // A big two-part rule card (creeds, pacts): a coloured cap, a headline and a
 // hint, the name, then GAIN and COST. `a` = alpha, `h` = hover 0..1, `pulse`
-// = the halo's breathing 0..1.
+// = the halo's breathing 0..1. With a `glyph` (a Glyph), the card rests on
+// its icon and name and shows GAIN / COST only under the pointer.
 void drawRuleCard(sf::RenderWindow& w, const sf::Font& f, sf::FloatRect r, sf::Color col, float a, float h,
                   float pulse, const std::string& head, const std::string& hint, const std::string& name,
-                  const std::string& gain, const std::string& cost);
+                  const std::string& gain, const std::string& cost, int glyph = -1, float reserve = 0.f);
+// (`reserve` = px kept free at the card's foot - its synergy block: GAIN / COST
+// drop to smaller type rather than run into it.)
+
+// The foot of an open rule card: "pairs well with" and what, faded by `h`.
+void drawRuleFoot(sf::RenderWindow& w, const sf::Font& f, sf::FloatRect r, float h, const std::string& text, sf::Color col);
+float ruleFootHeight(const sf::Font& f, sf::FloatRect r, const std::string& text);   // how tall that foot is
 
 // Archetype colour: the creed cards, chips and the web's Creeds branch share it.
 sf::Color creedColor(CreedArchetype a);

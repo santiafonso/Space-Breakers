@@ -221,6 +221,8 @@ struct Ball {
     float ricochetT = 0.f;   // "Ricochet": seconds of post-wall-bounce damage bonus left
     float catchBonus = 0.f;  // catch reward: the next hit x (1 + this) (0 = unarmed)...
     float catchT = 0.f;      // ...for this many more seconds
+    int snowKills = 0;       // "Snowball" creed: kills this fight (size and damage grow with them)
+    float sharpT = 0.f;      // "Sharpshooter" creed: s left of a full pull going through enemies
     float sinceThrow = 0.f;  // "Quick Hands" pact: seconds since you last threw it
     int juggle = 0;          // "Juggler" pact: catches in a row without touching the core
     std::deque<sf::Vector2f> trail;
@@ -554,6 +556,7 @@ struct WorldParams {
     bool hard = false;            // hard mode (cfg::hard)
     int ascension = 0;            // Ascension level 0-10 (cfg::asc, progression/Ascension.hpp)
     float enemyHpMul = 1.f;       // the tutorial's softer enemies (cfg::tutorial)
+    bool actDepth = true;         // fights toughen deeper into the act (cfg::wave::depthHpRamp); not the tutorial
     float bossHpMul = 1.f;        // the tutorial's softer boss (cfg::tutorial)
     int bossKind = -1;            // the act's boss (BossKind) - the run shuffles them; -1 = bossOfAct
     float damageMult = 1.f;       // Heft (web): every ball

@@ -795,12 +795,24 @@ void drawFx(sf::RenderTarget& t, const CommonWorld::Fx& f, float k) {
             }
             break;
         }
-        case F::Sonic: {   // Mega Striker: a sonic boom - arcs fanning out ahead of the hit
+        case F::Sonic: {   // Mega Striker: a shock wave - a flash on the hit, a front out to the whole reach
+                           // (what it hits), a white boom ahead of the hit, an echo and streaks flung forward
             const float an = std::atan2(f.b.y, f.b.x);
-            for (int i = 0; i < 3; ++i) {
-                const float v = clampf(u * 1.3f - 0.15f * static_cast<float>(i), 0.f, 1.f);
-                if (v <= 0.f) continue;
-                draw::ring(t, f.a, f.r * v, (2.5f - 0.5f * static_cast<float>(i)) * k, withAlpha(hot, 0.8f * (1.f - v)), an - 0.8f, an + 0.8f, 14);
+            const float e = easeOut(u);
+            const float r = f.r * e;
+            if (u < 0.3f) draw::glow(t, f.a, f.r * (0.3f + 0.5f * u), hot, 0.9f * (1.f - u / 0.3f));
+            draw::disc(t, f.a, r, withAlpha(f.color, 0.f), withAlpha(f.color, 0.2f * fl));   // the pressure behind the front
+            draw::ring(t, f.a, r, (1.f + 5.f * fl) * k, withAlpha(hot, 0.7f * fl));
+            draw::ring(t, f.a, r * 1.04f, (2.f + 7.f * fl) * k, withAlpha(sf::Color::White, 0.85f * fl), an - 0.9f, an + 0.9f);
+            const float v = clampf(u * 1.4f - 0.3f, 0.f, 1.f);   // the echo, a beat behind
+            if (v > 0.f)
+                draw::ring(t, f.a, f.r * 0.8f * easeOut(v), 1.5f * k, withAlpha(hot, 0.5f * (1.f - v)), an - 0.7f, an + 0.7f);
+            for (int i = 0; i < 5; ++i) {
+                const float sa = an + (static_cast<float>(i) - 2.f) * 0.3f;
+                const sf::Vector2f sd{std::cos(sa), std::sin(sa)};
+                const float r1 = f.r * (0.3f + 0.85f * e) * (i == 2 ? 1.1f : 1.f);
+                const float len = std::min(r1, 22.f * k * fl);
+                draw::line(t, f.a + sd * (r1 - len), f.a + sd * r1, 1.6f * k, withAlpha(hot, 0.75f * fl));
             }
             break;
         }
@@ -3618,7 +3630,7 @@ bool drawFxSheet(sf::RenderTarget& t, int page, const sf::Font& font) {
         {F::Star, "Grand reaction", 50.f, 0.6f, 0, fire, water},
         {F::Hexshield, "Ward ring", 26.f, 0.5f, 2, theme::core, sf::Color::White},
         {F::Link, "Fission", 0.f, 0.35f, 2, theme::elemPoison, sf::Color::White},
-        {F::Sonic, "Mega Striker", 40.f, 0.35f, 1, theme::ballFast, sf::Color::White},
+        {F::Sonic, "Mega Striker", 40.f, 0.45f, 1, theme::ballFast, sf::Color::White},
         {F::Rune, "Ancient nova", 40.f, 0.45f, 0, mage, sf::Color::White},
         {F::Spokes, "Lead storm", 30.f, 0.4f, 0, sho, sf::Color::White},
         {F::Pellets, "Frag rounds", 30.f, 0.25f, 0, sho, sf::Color::White},

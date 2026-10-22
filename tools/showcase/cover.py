@@ -1,21 +1,26 @@
 #!/usr/bin/env python3
 """A showcase frame -> the itch cover (630x500) with the title on it.
 
-usage: cover.py <frame.png> <out.png> [font dir]
+usage: cover.py <frame.png> <out.png> [font dir] [zoom] [core x]
+zoom > 1 cuts closer; core x is where the core sits across the cover (0..1),
+so the busy side of the arena can fill the rest. The core sits low, under the title.
 """
 import sys
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 frame, out = sys.argv[1], sys.argv[2]
 fonts = sys.argv[3] if len(sys.argv) > 3 else "assets/fonts"
+zoom = float(sys.argv[4]) if len(sys.argv) > 4 else 1.0
+core_x = float(sys.argv[5]) if len(sys.argv) > 5 else 0.5
 W, H = 630, 500
 im = Image.open(frame).convert("RGB")
 # The arena without the HUD bands, cut to the cover's shape around the core.
-top, bot = 38, im.height - 38
-ch = bot - top
+band = 38
+ch = round((im.height - 2 * band) / zoom)
 cw = round(ch * W / H)
-x0 = (im.width - cw) // 2
-im = im.crop((x0, top, x0 + cw, bot)).resize((W, H), Image.LANCZOS)
+x0 = max(0, min(im.width - cw, round(im.width / 2 - core_x * cw)))
+top = max(band, min(im.height - band - ch, round(im.height / 2 - 0.6 * ch)))
+im = im.crop((x0, top, x0 + cw, top + ch)).resize((W, H), Image.LANCZOS)
 
 # Darken the top so the title reads.
 shade = Image.new("L", (W, H))

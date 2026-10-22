@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <vector>
 
+#include "core/Config.hpp"
 #include "progression/ClassItems.hpp"
 #include "progression/UpgradeKind.hpp"
 #include "sim/Entities.hpp"
@@ -551,6 +552,7 @@ inline const char* upgradeLevelDesc(UpgradeKind k) {
 struct BallLoadout {
     int gear[kBallSlots] = {-1, -1, -1, -1, -1, -1};   // UpgradeKind per item slot, -1 = empty
     int gearLvl[kBallSlots] = {0, 0, 0, 0, 0, 0};    // item level: 1 once equipped, up to kMaxItemLevel
+    int bonusAbility = 0;                      // "Arcanist" creed: + ability slots (App::syncWorldBalls, not saved)
     int itemSlots = kBaseItemSlots;            // open item slots: 4, 6 after a Shrine's "Expand"
     bool shrineUsed = false;                   // it has had its Shrine (ascended or expanded): once a run
     int ascendedFrom = 0;                      // the ItemTag it ascended from at a Shrine (0 = none)
@@ -697,7 +699,7 @@ struct BallLoadout {
 inline int abilitySlotCount(const BallLoadout& b) {
     if (b.hasRole(ItemTag::Odin)) return kMaxAbilitySlots;   // the Mage's god: all of them
     const int mage = b.tagCount(ItemTag::Mage);
-    return std::min(kMaxAbilitySlots, mage >= 4 ? 3 : mage >= 2 ? 2 : 1);
+    return std::min(kMaxAbilitySlots, (mage >= 4 ? 3 : mage >= 2 ? 2 : 1) + b.bonusAbility);   // + "Arcanist" creed
 }
 
 inline bool upgradeTakesSlot(UpgradeKind k) {
@@ -748,6 +750,31 @@ inline bool upgradeFitsBall(UpgradeKind k, const BallLoadout& b) {
             return true;
         default: return false;
     }
+}
+
+// A class on at most cfg::team::classCap balls (2026-10-22). A ball is on a
+// class once it holds one of its items, or ascended from it. Gods' items only go
+// on their own ball anyway. Squads past the cap (an older save, a ball back from
+// the bench) keep what they have; they just can't add to it.
+inline bool onClass(const BallLoadout& b, ItemTag t) {
+    return b.tagCount(t) > 0 || (b.ascendedFrom != 0 && static_cast<ItemTag>(b.ascendedFrom) == t);
+}
+inline int ballsOnClass(const std::vector<BallLoadout>& team, ItemTag t, int except = -1) {
+    int n = 0;
+    for (int i = 0; i < static_cast<int>(team.size()); ++i)
+        if (i != except && onClass(team[static_cast<std::size_t>(i)], t)) ++n;
+    return n;
+}
+inline bool classCapFits(UpgradeKind k, const std::vector<BallLoadout>& team, int ball) {
+    const ItemTag t = itemTag(k);
+    if (upgradeCat(k) != UpgradeCat::Item || t == ItemTag::None || isGod(t)) return true;
+    if (ball < 0 || ball >= static_cast<int>(team.size())) return false;
+    return onClass(team[static_cast<std::size_t>(ball)], t) || ballsOnClass(team, t, ball) < cfg::team::classCap;
+}
+// upgradeFitsBall, with the squad's class cap on top.
+inline bool upgradeFitsTeam(UpgradeKind k, const std::vector<BallLoadout>& team, int ball) {
+    return ball >= 0 && ball < static_cast<int>(team.size()) &&
+           upgradeFitsBall(k, team[static_cast<std::size_t>(ball)]) && classCapFits(k, team, ball);
 }
 
 // Where a pick lands on this ball when no slot is picked: a duplicate levels
@@ -825,8 +852,8 @@ inline bool upgradeEligible(UpgradeKind k, const UpgradeCtx& c) {
     const int ballCount = c.balls ? static_cast<int>(c.balls->size()) : 0;
     auto anyBallFits = [&] {
         if (!c.balls) return false;
-        for (const BallLoadout& b : *c.balls)
-            if (upgradeFitsBall(k, b)) return true;
+        for (int i = 0; i < ballCount; ++i)
+            if (upgradeFitsTeam(k, *c.balls, i)) return true;
         return false;
     };
     switch (upgradeCat(k)) {

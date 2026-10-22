@@ -11,6 +11,7 @@
 #include "progression/Events.hpp"
 #include "progression/GameData.hpp"
 #include "progression/Offers.hpp"
+#include "progression/Traits.hpp"
 #include "render/Effects.hpp"
 #include "sim/World.hpp"
 #include "ui/Hud.hpp"
@@ -93,6 +94,16 @@ public:
                       Count };
     void hintDone(Hint h);
     bool hintSeen(Hint h) const { return (data_.meta.hints >> static_cast<int>(h)) & 1u; }
+    // The tutorial's lessons (2026-10-19): the first time each kind of stop
+    // comes up, a card stops the game and says plainly what it is and how it
+    // works (see AppLessons.cpp). Click / Space moves on.
+    enum class Lesson { Map, Fight, Recruit, Reward, Elite, Event, Shop, Finale, Cards, Equip, Count };
+    void showLesson(Lesson l);
+    // ...and after the first fight's card, a drill (2026-10-20): time stops,
+    // the arena goes dark round one ball and the fight waits for you to grab
+    // it and throw it with the slingshot. A plain click doesn't count.
+    bool drillOn() const { return drill_; }
+    void drillThrown(bool aimed);   // the play screen let go of a throw (aimed: the slingshot)
     void leaveRunOver(bool toWeb);   // the run-over card: to the skill web, or the menu
     int bossFlawlessGold() const { return bossFlawlessGold_; }   // BossWin card: flawless boss bonus (0 = none)
     int bossIronCores() const { return bossIronCores_; }         // BossWin card: "Iron core" cores (0 = none)
@@ -125,6 +136,9 @@ public:
     EquipSource equipSource() const { return equipSrc_; }
     UpgradeKind equipKind() const { return equipKind_; }
     bool equipFitsBall(int ball) const;
+    // upgradeFitsBall plus the squad's class cap (upgradeFitsTeam), for a ball of
+    // data_.run.balls given by reference; any other ball (a bench one): just the ball.
+    bool fitsSquad(UpgradeKind k, const BallLoadout& b) const;
     bool equipFitsSlot(int ball, int slot) const;
     void confirmEquip(int ball, int slot);   // slot -1 = default slot
     void cancelEquip();
@@ -159,6 +173,7 @@ public:
     int ballCap() const;          // balls the arena holds now (more after act 2's boss; "Duet": two)
     // F, Repulse (from act 2): the core shoves nearby enemies away.
     bool repulseOpen() const;
+    bool hardUnlocked() const;   // hard mode opens once a run gets past act 1 (2026-10-19)
     float repulseCooldown() const { return repulseCd_; }
     void repulse();
     // "?" stop events (progression/Events.hpp): deals for gold, or walk away.
@@ -303,6 +318,7 @@ private:
     void grantCreed(CreedId id);
     // Pacts.
     void foldPacts(WorldParams& p) const;
+    void foldTraits(WorldParams& p) const;  // the squad's traits (progression/Traits.hpp)
     bool openPactChoice(bool fromMap = true);   // false = nothing to offer (caller moves on)
     void grantPact(PactId id);
     void notePactFight(bool flawless);  // the hidden Altar path's streak
@@ -323,6 +339,7 @@ private:
     // the ascended form gets a banner, a sound and a flare on the ball.
     struct KnownClasses { RoleMask roles = 0; ItemTag ascended = ItemTag::None; Element element = Element::Plain; };
     std::vector<KnownClasses> knownClasses_;
+    int knownTraits_[kTraitCount] = {};   // each squad trait's level at the last sync (a rise gets a label)
     void rememberClasses();   // take the current loadout as the baseline (run start)
     void announceClassGains();
     void bankRun(bool won);   // pay out cores/prisms/stats for the run; no navigation
@@ -340,6 +357,7 @@ private:
     void snapFrame(const std::string& file);
     std::string capturePath_;   // non-empty: render() saves this frame here
     bool snapInvuln_ = false;   // SB_SNAPSHOT: the staged core never falls (no repair between fights)
+    bool noHitstop_ = false;    // SB_SHOWCASE: no freeze on kills (reads as lag in a video)
     bool snapMouseOn_ = false;  // photo mode: uiMouse() reports snapMouse_ (a drag in the TAB peek)
     sf::Vector2f snapMouse_;
     void processEvents(const FrameEvents& ev);
@@ -384,6 +402,21 @@ private:
     float hintT_ = 0.f;      // how long it's been up (it gives up after a while)
     void updateHints(float dt);
     void drawHint(sf::RenderWindow& w) const;
+    int lesson_ = -1;                 // the lesson card up (a Lesson), -1 none
+    int lessonPage_ = 0;
+    float lessonA_ = 0.f;             // its fade in
+    float lessonT_ = 0.f;             // how long it's been up (a click right away doesn't close it)
+    std::uint32_t lessonsSeen_ = 0;   // this run's lessons already shown
+    bool lessonEatRelease_ = false;   // the click that closed it: its release isn't a throw
+    bool drill_ = false;              // the grab drill is on (the fight waits)
+    bool drillDone_ = false;          // ...and done this run
+    bool drillClicked_ = false;       // a plain click tried: the drill asks for a pull
+    float drillT_ = 0.f;              // how long it's been up (its fade, its pulse)
+    bool drillEvent(const sf::Event& e);
+    void drawDrill(sf::RenderWindow& w) const;
+    void updateLessons(float dt);
+    bool lessonEvent(const sf::Event& e);
+    void drawLesson(sf::RenderWindow& w) const;
     int bossFlawlessGold_ = 0;       // set when a boss falls, for the BossWin card
     int bossIronCores_ = 0;
     bool continueUnlocked_ = false;  // snapshot at newRun: has a run ever been won before?
@@ -442,6 +475,7 @@ private:
     float worldAccum_ = 0.f;
     float autosaveTimer_ = 20.f;
     float hitstop_ = 0.f;     // >0 freezes the simulation for a beat after an impact
+    float killStopCd_ = 0.f;  // >0: kills don't freeze yet (cfg::app::hitstopKillGap)
     float heat_ = 0.f;        // 0..1 backdrop warmth, follows the damage combo
     bool aiming_ = false;
     float aimT_ = 0.f;        // real seconds spent aiming (slow-mo runs out)
