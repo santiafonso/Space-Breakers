@@ -12,6 +12,7 @@
 #include "progression/ActRules.hpp"
 #include "render/Draw.hpp"
 #include "ui/CreedScreen.hpp"
+#include "ui/Icons.hpp"
 #include "ui/Screens.hpp"
 #include "ui/UiSound.hpp"
 #include "ui/Widgets.hpp"
@@ -96,60 +97,126 @@ sf::Color nodeColor(MapNodeType t) {
     return theme::textLo;
 }
 
-const char* nodeGlyph(MapNodeType t) {
+// Each stop's mark, drawn (ui/Icons.hpp) - not a letter.
+Glyph nodeIcon(MapNodeType t) {
     switch (t) {
-        case MapNodeType::Combat:  return "";
-        case MapNodeType::Elite:   return "!";
-        case MapNodeType::Shop:    return "$";
-        case MapNodeType::Forge:   return "^";
-        case MapNodeType::Rest:    return "+";
-        case MapNodeType::Upgrade: return "?";
-        case MapNodeType::Recruit: return "o";
-        case MapNodeType::Boss:    return "B";
-        case MapNodeType::Altar:   return "*";
-        case MapNodeType::Shrine:  return "A";
+        case MapNodeType::Combat:  return Glyph::Blade;
+        case MapNodeType::Elite:   return Glyph::Claw;
+        case MapNodeType::Shop:    return Glyph::Coin;
+        case MapNodeType::Forge:   return Glyph::Rune;
+        case MapNodeType::Rest:    return Glyph::Heal;
+        case MapNodeType::Upgrade: return Glyph::Dice;
+        case MapNodeType::Recruit: return Glyph::Twin;
+        case MapNodeType::Boss:    return Glyph::Skull;
+        case MapNodeType::Altar:   return Glyph::Eye;
+        case MapNodeType::Shrine:  return Glyph::Star;
     }
-    return "";
+    return Glyph::Star;
 }
 
-void drawNode(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f p, MapNodeType t, float r,
-              float alpha, bool filled) {
+// How a stop reads: ahead (muted), open to you (lit, breathing), walked
+// (filled, quiet), where you stand.
+enum class NodeLook { Ahead, Open, Visited, Here };
+
+void drawNode(sf::RenderWindow& w, sf::Vector2f p, MapNodeType t, float r, float alpha, bool filled,
+              NodeLook look = NodeLook::Open, float clock = 0.f, sf::Color actCol = theme::accent) {
     // Map nodes are diamonds - straight-edged like the rest of the console -
     // and the boss an octagon, the same silhouette as in the arena.
-    const sf::Color col = nodeColor(t);
+    sf::Color col = nodeColor(t);
+    if (look == NodeLook::Ahead) col = lerpColor(col, theme::textDim, 0.45f);
     const bool boss = t == MapNodeType::Boss;
     const bool altar = t == MapNodeType::Altar || t == MapNodeType::Shrine;   // a hexagon: it isn't a stop like the others
     const int sides = boss ? 8 : (altar ? 6 : 4);
     const float rot = boss ? kPi / 8.f : (altar ? kPi / 6.f : 0.f);
     const bool elite = t == MapNodeType::Elite;
     const float rr = boss ? r : r * (elite ? 1.4f : 1.2f);   // a diamond needs a longer radius to match a disc's weight
+    const bool lit = look == NodeLook::Open || look == NodeLook::Here;
+    if (lit) {   // a soft halo in its colour, breathing
+        const float br = 0.5f + 0.5f * std::sin(clock * 2.4f + p.x * 0.013f);
+        draw::glow(w, p, rr * 2.4f, col, (0.09f + 0.07f * br) * alpha);
+    }
+    if (boss) {   // the act's colour in a ring of slow ticks round the boss
+        for (int k = 0; k < 12; ++k) {
+            const float an = clock * 0.3f + static_cast<float>(k) * kPi / 6.f;
+            const sf::Vector2f d{std::cos(an), std::sin(an)};
+            draw::line(w, p + d * (rr + 9.f), p + d * (rr + (k % 3 == 0 ? 17.f : 13.f)), 1.5f,
+                       withAlpha(actCol, 0.55f * alpha));
+        }
+    }
     if (elite || altar)   // an elite wears a second, outer frame; an Altar too
         draw::polygonOutline(w, p, rr + 6.f, sides, rot, 1.5f, withAlpha(col, 0.6f * alpha));
     if (filled) {
         draw::polygon(w, p, rr, sides, rot, withAlpha(lerpColor(col, sf::Color::White, 0.15f), 0.9f * alpha),
                       withAlpha(col, 0.8f * alpha));
+    } else if (look == NodeLook::Visited) {   // walked: filled in its colour, quiet
+        draw::polygon(w, p, rr, sides, rot, withAlpha(col, 0.32f * alpha), withAlpha(lerpColor(col, theme::bg, 0.5f), 0.4f * alpha));
     } else {
         draw::polygon(w, p, rr, sides, rot, withAlpha(lerpColor(theme::glassTop, col, 0.2f), 0.95f * alpha),
                       withAlpha(theme::glassBottom, 0.95f * alpha));
     }
-    draw::polygonOutline(w, p, rr, sides, rot, 1.5f, withAlpha(col, 0.95f * alpha));
-    if (altar) {   // an Altar: a small hexagon inside the frame
-        draw::polygon(w, p, r * 0.42f, 6, kPi / 6.f, withAlpha(filled ? theme::bg : col, alpha),
-                      withAlpha(filled ? theme::bg : col, alpha));
-    } else if (t == MapNodeType::Combat) {   // a plain fight: just a small enemy pip
-        const float d = r * 0.28f;
-        draw::polygon(w, p, d * 1.3f, 4, 0.f, withAlpha(filled ? theme::bg : col, alpha),
-                      withAlpha(filled ? theme::bg : col, alpha));
-    } else {
-        drawCentered(w, font, nodeGlyph(t), boss ? theme::fsHeading : theme::fsSmall + 1u,
-                     {p.x, p.y - 1.f}, withAlpha(filled ? theme::bg : theme::textHi, alpha));
-    }
+    draw::polygonOutline(w, p, rr, sides, rot, lit ? 2.f : 1.5f, withAlpha(col, 0.95f * alpha));
+    const sf::Color gc = filled ? theme::bg
+                         : look == NodeLook::Visited ? lerpColor(col, theme::textHi, 0.3f)
+                         : lerpColor(col, sf::Color::White, lit ? 0.3f : 0.f);
+    drawGlyph(w, nodeIcon(t), p, rr * (boss ? 0.5f : 0.46f), withAlpha(gc, alpha));
 }
+
+// ---- links: a smooth S that leaves and enters each node upright (straight
+// when they share a row), cut short of both icons, walked by arc length.
+struct Curve {
+    std::vector<sf::Vector2f> p;
+    std::vector<float> cum;   // arc length at each point
+    float len = 0.f;
+    Curve(sf::Vector2f a, sf::Vector2f b, float ra, float rb) {
+        const sf::Vector2f h{0.f, (b.y - a.y) * 0.5f};
+        const sf::Vector2f c1 = a + h, c2 = b - h;
+        constexpr int kN = 28;
+        for (int i = 0; i <= kN; ++i) {
+            const float t = static_cast<float>(i) / kN, u = 1.f - t;
+            const sf::Vector2f q = a * (u * u * u) + c1 * (3.f * u * u * t) + c2 * (3.f * u * t * t) + b * (t * t * t);
+            if (length(q - a) < ra || length(q - b) < rb) continue;
+            if (!p.empty()) len += length(q - p.back());
+            p.push_back(q);
+            cum.push_back(len);
+        }
+    }
+    sf::Vector2f at(float d) const {
+        if (p.empty()) return {};
+        d = clampf(d, 0.f, len);
+        for (std::size_t i = 1; i < p.size(); ++i)
+            if (cum[i] >= d) {
+                const float seg = cum[i] - cum[i - 1];
+                return p[i - 1] + (p[i] - p[i - 1]) * (seg > 0.f ? (d - cum[i - 1]) / seg : 0.f);
+            }
+        return p.back();
+    }
+    void stroke(sf::RenderWindow& w, float d0, float d1, float width, sf::Color c) const {
+        d0 = std::max(d0, 0.f);
+        d1 = std::min(d1, len);
+        if (d1 <= d0 || p.size() < 2) return;
+        sf::Vector2f prev = at(d0);
+        for (std::size_t i = 1; i < p.size(); ++i) {
+            if (cum[i] <= d0) continue;
+            const bool last = cum[i] >= d1;
+            const sf::Vector2f q = last ? at(d1) : p[i];
+            draw::line(w, prev, q, width, c);
+            prev = q;
+            if (last) break;
+        }
+    }
+    void dots(sf::RenderWindow& w, float gap, float r, sf::Color c) const {
+        for (float d = gap * 0.5f; d < len; d += gap) draw::disc(w, at(d), r, c, c, {1.f, 1.f}, 8);
+    }
+    void dashes(sf::RenderWindow& w, float dash, float gap, float offset, float width, sf::Color c) const {
+        const float per = dash + gap;
+        for (float d = std::fmod(offset, per) - per; d < len; d += per) stroke(w, d, d + dash, width, c);
+    }
+};
 
 }  // namespace
 
-void drawMapNode(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f p, MapNodeType t, float r, float alpha) {
-    drawNode(w, font, p, t, r, alpha, false);
+void drawMapNode(sf::RenderWindow& w, const sf::Font&, sf::Vector2f p, MapNodeType t, float r, float alpha) {
+    drawNode(w, p, t, r, alpha, false);
 }
 
 // ================================================================ Equip
@@ -480,6 +547,9 @@ constexpr float kScrollRate = 12.f;    // how fast the view glides to where you 
 constexpr float kRevealDelay = 0.5f;   // the hidden Altar: a beat, then the path draws itself...
 constexpr float kRevealDraw = 1.3f;    // ...over this long, then the Altar lights up
 constexpr float kRevealPop = 0.6f;
+constexpr float kCineLead = 0.55f;     // the constellation: the map goes dark, then a star every...
+constexpr float kCineStep = 0.26f;     // ...this long along the path you walked...
+constexpr float kCineHold = 0.9f;      // ...and the boss's flare holds this long before its fight
 }  // namespace
 
 float MapScreen::scrollMax(App& app) const {
@@ -531,9 +601,30 @@ bool MapScreen::ready() const {   // the opening has played: a pick now is on pu
 }
 
 void MapScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
+    if (cineT_ >= 0.f) {   // the constellation: a click or a key skips to the boss
+        if (e.type == sf::Event::MouseButtonPressed || e.type == sf::Event::KeyPressed) cineT_ = 1e3f;
+        return;
+    }
     if (travelTo_ >= 0) return;   // on the way: the trip plays out
     auto go = [&](int node) {     // a spark runs along the link, then the stop opens (update)
         if (!ready() || !app.mapNodeOpen(node)) return;   // not while the map is still opening
+        const auto& nodes = app.data().run.map.nodes;
+        if (nodes[static_cast<std::size_t>(node)].type == MapNodeType::Boss) {
+            // The way to the boss: the path you walked replays as a constellation first.
+            cinePath_.clear();
+            for (int i = 0; i < static_cast<int>(nodes.size()); ++i)
+                if (nodes[static_cast<std::size_t>(i)].visited && nodes[static_cast<std::size_t>(i)].type != MapNodeType::Boss)
+                    cinePath_.push_back(i);
+            std::stable_sort(cinePath_.begin(), cinePath_.end(), [&](int x, int y) {
+                return nodes[static_cast<std::size_t>(x)].row < nodes[static_cast<std::size_t>(y)].row;
+            });
+            cinePath_.push_back(node);
+            if (cinePath_.size() >= 2) {
+                cineT_ = 0.f;
+                scrollTarget_ = 0.f;   // back down to where the act began
+                return;
+            }
+        }
         travelTo_ = node;
         travelT_ = 0.f;
     };
@@ -629,6 +720,29 @@ void MapScreen::update(App& app, float dt, sf::Vector2f mouse) {
         }
         if (revealT_ > lit + kRevealPop + 0.2f) revealT_ = -1.f;
     }
+    if (cineT_ >= 0.f) {   // the constellation: a chime per star, the view follows, then the boss
+        const int n = static_cast<int>(cinePath_.size());
+        const float before = (cineT_ - kCineLead) / kCineStep;
+        cineT_ += dt;
+        const float prog = (cineT_ - kCineLead) / kCineStep;
+        if (std::floor(prog) > std::floor(before) && prog >= 0.f && prog < static_cast<float>(n)) {
+            const int k = static_cast<int>(std::floor(prog));
+            if (k == n - 1) {
+                app.audio().bossAppear();
+                app.effects().flash(theme::actColor(app.data().run.map.act), 0.3f);
+            } else {
+                app.audio().comboUp(std::min(k, 8));
+            }
+        }
+        const int at = std::clamp(static_cast<int>(prog) + 1, 0, n - 1);   // the view a stop ahead of the line
+        if (prog >= 0.f) scrollTarget_ = scrollFor(app, app.data().run.map.nodes[static_cast<std::size_t>(cinePath_[static_cast<std::size_t>(at)])].row);
+        if (cineT_ >= kCineLead + kCineStep * static_cast<float>(n - 1) + kCineHold) {
+            const int boss = cinePath_.back();
+            cineT_ = -1.f;
+            app.travelTo(boss);
+            return;   // this screen is closed
+        }
+    }
     if (travelTo_ >= 0) {   // the spark reaches the node: the stop opens
         travelT_ += dt;
         if (travelT_ >= kTravelTime) {
@@ -641,8 +755,8 @@ void MapScreen::update(App& app, float dt, sf::Vector2f mouse) {
     const bool card = rulesCardOpen(app);
     rulesCard_ = clampf(rulesCard_ + dt * (card ? 4.f : -6.f), 0.f, 1.f);
     scroll_ += (scrollTarget_ - scroll_) * (1.f - std::exp(-kScrollRate * dt));
-    hover_ = card || peek_.open || travelTo_ >= 0 || !ready() ? -1 : nodeAt(app, mouse);
-    info_ = card || peek_.open ? -1 : nodeAt(app, mouse, false);
+    hover_ = card || cineT_ >= 0.f || peek_.open || travelTo_ >= 0 || !ready() ? -1 : nodeAt(app, mouse);
+    info_ = card || cineT_ >= 0.f || peek_.open ? -1 : nodeAt(app, mouse, false);
     uisound::hover(this, hover_);
     // The lit way follows the pointer and eases in; a trip keeps it on its node.
     const int want = travelTo_ >= 0 ? travelTo_ : hover_;
@@ -697,9 +811,13 @@ void MapScreen::draw(App& app, sf::RenderWindow& w) {
     const float altarLit = revealT_ < 0.f ? 1.f : clampf((revealT_ - kRevealDelay - kRevealDraw) / kRevealPop, 0.f, 1.f);
     const float glow = hoverGlow_ * hoverGlow_ * (3.f - 2.f * hoverGlow_);   // eased
 
-    // Links first. The path you walked is bright, the ways open to you are
-    // clear lines, everything else stays faint. The way under the pointer
-    // lights up and flows toward its node.
+    // Links first: curves that leave and enter each stop upright. The path you
+    // walked is a solid line in the act's colour, the ways open to you flow
+    // toward their stop, everything ahead is a faint dotted trail. The way under
+    // the pointer lights up.
+    const sf::Color actCol = theme::actColor(r.map.act);
+    const sf::Color walkCol = lerpColor(actCol, theme::textHi, 0.35f);
+    const bool cine = cineT_ >= 0.f;
     for (int i = 0; i < count; ++i) {
         const MapNode& a = nodes[static_cast<std::size_t>(i)];
         for (int j : a.next) {
@@ -710,35 +828,36 @@ void MapScreen::draw(App& app, sf::RenderWindow& w) {
             const float fa = std::min(edgeFade(pa.y), edgeFade(pb.y)) * 0.5f +
                              0.5f * std::max(edgeFade(pa.y), edgeFade(pb.y));
             if (fa <= 0.01f) continue;
-            // stop short of the nodes so a line never runs through an icon
-            const sf::Vector2f d = pb - pa;
-            const float len = length(d);
-            const sf::Vector2f u = d / len;
             const float ra = a.type == MapNodeType::Boss ? kBossR : kNodeR * 1.25f;
             const float rb = b.type == MapNodeType::Boss ? kBossR : kNodeR * 1.25f;
-            const sf::Vector2f p0 = pa + u * (ra + 6.f), p1 = pb - u * (rb + 6.f);
+            const Curve cv(pa, pb, ra + 6.f, rb + 6.f);   // stop short: a line never runs through an icon
+            if (cv.len < 2.f) continue;
             const bool toAltar = j == altarNode_, fromAltar = i == altarNode_;
             if (toAltar || fromAltar) {   // the hidden path: in the pact colour, drawn in on its reveal
                 const float k = toAltar ? revealDraw : altarLit;
                 if (k <= 0.f) continue;
-                const sf::Vector2f end = p0 + (p1 - p0) * k;
                 const bool lit = open || walked;
-                draw::line(w, p0, end, 6.f, withAlpha(theme::pact, (0.12f + 0.2f * (1.f - altarLit)) * fa));
-                draw::line(w, p0, end, lit ? 2.5f : 1.5f, withAlpha(theme::pact, (lit ? 0.85f : 0.45f) * fa));
-                if (toAltar && k < 1.f) draw::disc(w, end, 4.f, theme::textHi, theme::pact, {1.f, 1.f}, 12);   // the tip
+                cv.stroke(w, 0.f, cv.len * k, 6.f, withAlpha(theme::pact, (0.12f + 0.2f * (1.f - altarLit)) * fa));
+                cv.stroke(w, 0.f, cv.len * k, lit ? 2.5f : 1.5f, withAlpha(theme::pact, (lit ? 0.85f : 0.45f) * fa));
+                if (toAltar && k < 1.f) draw::disc(w, cv.at(cv.len * k), 4.f, theme::textHi, theme::pact, {1.f, 1.f}, 12);   // the tip
                 if (!(open && j == glowNode_)) continue;
             }
-            if (open && j == glowNode_ && glow > 0.f) {   // the way you're about to take
+            if (open && j == glowNode_ && glow > 0.f && !cine) {   // the way you're about to take
                 const sf::Color c = lerpColor(theme::accent, theme::textHi, 0.25f);
-                draw::line(w, p0, p1, 2.f + 5.f * glow, withAlpha(theme::accent, 0.16f * glow * fa));
-                draw::line(w, p0, p1, 2.f + 1.f * glow, withAlpha(c, (0.7f + 0.3f * glow) * fa));
+                cv.stroke(w, 0.f, cv.len, 2.f + 5.f * glow, withAlpha(theme::accent, 0.16f * glow * fa));
+                cv.stroke(w, 0.f, cv.len, 2.f + 1.f * glow, withAlpha(c, (0.7f + 0.3f * glow) * fa));
                 for (int k = 0; k < 3; ++k) {   // sparks flowing toward the node
                     const float t = std::fmod(clock_ * 0.9f + static_cast<float>(k) / 3.f, 1.f);
-                    draw::disc(w, p0 + (p1 - p0) * t, 2.5f, theme::textHi, c, {1.f, 1.f}, 10);
+                    draw::disc(w, cv.at(cv.len * t), 2.5f, theme::textHi, c, {1.f, 1.f}, 10);
                 }
-            } else if (open) draw::line(w, p0, p1, 2.f, withAlpha(theme::accent, (0.7f - 0.35f * glow) * fa));
-            else draw::line(w, p0, p1, walked ? 2.5f : 1.f,
-                            withAlpha(walked ? theme::textLo : theme::grid, (walked ? 0.7f : 0.22f) * fa));
+            } else if (open) {   // open: dashes flowing up toward the stop
+                cv.dashes(w, 9.f, 7.f, clock_ * 26.f, 2.f, withAlpha(theme::accent, (0.75f - 0.35f * glow) * fa));
+            } else if (walked) {   // walked: solid, in the act's colour
+                cv.stroke(w, 0.f, cv.len, 6.f, withAlpha(actCol, 0.12f * fa));
+                cv.stroke(w, 0.f, cv.len, 2.5f, withAlpha(walkCol, 0.8f * fa));
+            } else {   // ahead: a faint dotted trail
+                cv.dots(w, 11.f, 1.3f, withAlpha(theme::textDim, 0.4f * fa));
+            }
         }
     }
 
@@ -755,7 +874,7 @@ void MapScreen::draw(App& app, sf::RenderWindow& w) {
         float rad = n.type == MapNodeType::Boss ? kBossR : kNodeR;
         if (open && glowNode_ == i) rad *= 1.f + 0.14f * glow;
         // Ahead: plain but readable. Open: full. Behind: only the path you took.
-        float a = cp * fade * (open || here ? 1.f : (past ? (n.visited ? 0.55f : 0.14f) : 0.5f));
+        float a = cp * fade * (open || here ? 1.f : (past ? (n.visited ? 0.75f : 0.14f) : 0.6f));
         if (i == altarNode_) {   // the hidden Altar: pops in at the end of its path, then breathes
             if (altarLit <= 0.f) continue;
             a *= altarLit;
@@ -766,30 +885,73 @@ void MapScreen::draw(App& app, sf::RenderWindow& w) {
             if (altarLit < 1.f)   // the flare as it lights
                 draw::ring(w, p, rad * (1.5f + 3.f * altarLit), 2.f, withAlpha(theme::pact, 0.8f * (1.f - altarLit)));
         }
-        drawNode(w, app.font(), p, n.type, rad, a, open && glowNode_ == i && glow > 0.5f);
+        const NodeLook look = here ? NodeLook::Here : open ? NodeLook::Open : n.visited ? NodeLook::Visited : NodeLook::Ahead;
+        drawNode(w, p, n.type, rad, a, open && glowNode_ == i && glow > 0.5f && !cine, look, clock_, actCol);
         if (here) {   // you are here: still brackets around the node
             const float h = rad * 1.25f + 10.f;
             draw::brackets(w, {p.x - h, p.y - h, 2.f * h, 2.f * h}, 8.f, 2.f, withAlpha(theme::textHi, 0.8f * cp * fade));
         }
     }
 
-    // A trip: a spark runs from where you stand to the chosen node, which
-    // flares as it arrives.
+    // A trip: a spark runs along the link from where you stand to the chosen
+    // node, which flares as it arrives.
     if (travelTo_ >= 0) {
         const float t = clampf(travelT_ / kTravelTime, 0.f, 1.f);
         const float e = t * t * (3.f - 2.f * t);
-        const sf::Vector2f a = travelFrom(app), b = nodePos(app, travelTo_);
+        const sf::Vector2f b = nodePos(app, travelTo_);
+        const Curve cv(travelFrom(app), b, 0.f, 0.f);
         const sf::Color c = nodeColor(nodes[static_cast<std::size_t>(travelTo_)].type);
         for (int k = 1; k <= 4; ++k) {   // a short fading tail
             const float te = std::max(0.f, e - 0.05f * static_cast<float>(k));
-            draw::disc(w, a + (b - a) * te, 6.f - static_cast<float>(k), withAlpha(theme::textHi, 0.5f - 0.1f * static_cast<float>(k)),
+            draw::disc(w, cv.at(cv.len * te), 6.f - static_cast<float>(k), withAlpha(theme::textHi, 0.5f - 0.1f * static_cast<float>(k)),
                        withAlpha(c, 0.4f - 0.08f * static_cast<float>(k)), {1.f, 1.f}, 12);
         }
-        draw::disc(w, a + (b - a) * e, 7.f, theme::textHi, c, {1.f, 1.f}, 16);
+        draw::disc(w, cv.at(cv.len * e), 7.f, theme::textHi, c, {1.f, 1.f}, 16);
         if (t > 0.6f) {
             const float f2 = (t - 0.6f) / 0.4f;
             draw::ring(w, b, kNodeR * (1.3f + 1.2f * f2), 2.f, withAlpha(c, 0.9f * (1.f - f2)));
         }
+    }
+
+    // On to the boss: the path you walked replays as a constellation - the map
+    // goes dark, a star lights at every stop and a line draws to the next,
+    // the view following it up to the boss, which flares.
+    if (cine && cinePath_.size() >= 2) {
+        const int n = static_cast<int>(cinePath_.size());
+        const float prog = (cineT_ - kCineLead) / kCineStep;   // stops lit so far (fractional)
+        const float veil = clampf(cineT_ / 0.4f, 0.f, 1.f);
+        sf::RectangleShape dark({s.x, s.y});
+        dark.setFillColor(withAlpha(theme::bg, 0.6f * veil));
+        w.draw(dark);
+        const sf::Color star = lerpColor(theme::textHi, actCol, 0.3f);
+        std::vector<sf::Vector2f> P;
+        for (int id : cinePath_) P.push_back(nodePos(app, id));
+        for (int k = 0; k + 1 < n; ++k) {   // the lines, drawing themselves from star to star
+            const float sp = clampf(prog - static_cast<float>(k), 0.f, 1.f);
+            if (sp <= 0.f) break;
+            const float e = sp * sp * (3.f - 2.f * sp);
+            const sf::Vector2f end = P[static_cast<std::size_t>(k)] + (P[static_cast<std::size_t>(k + 1)] - P[static_cast<std::size_t>(k)]) * e;
+            draw::line(w, P[static_cast<std::size_t>(k)], end, 6.f, withAlpha(star, 0.1f));
+            draw::line(w, P[static_cast<std::size_t>(k)], end, 1.5f, withAlpha(star, 0.85f));
+            if (sp < 1.f) draw::disc(w, end, 3.5f, sf::Color::White, star, {1.f, 1.f}, 12);   // the tracer
+        }
+        for (int k = 0; k < n; ++k) {   // the stars, each popping in as the line reaches it
+            const float age = (prog - static_cast<float>(k)) * kCineStep;
+            if (age < 0.f) break;
+            const bool bossStar = k == n - 1;
+            const float base = bossStar ? 9.f : 4.5f;
+            const float pop = clampf(age / 0.22f, 0.f, 1.f);
+            const float tw = 0.75f + 0.25f * std::sin(clock_ * 5.f + static_cast<float>(k) * 1.7f);
+            const sf::Vector2f p = P[static_cast<std::size_t>(k)];
+            draw::glow(w, p, base * (bossStar ? 7.f : 5.f), bossStar ? actCol : star, 0.35f * tw * pop);
+            draw::disc(w, p, base * (0.4f + 0.6f * pop), sf::Color::White, star, {1.f, 1.f}, 16);
+            const float L = base * (2.2f + 1.4f * (1.f - pop)) * tw;   // a four-point sparkle
+            draw::line(w, p - sf::Vector2f{L, 0.f}, p + sf::Vector2f{L, 0.f}, 1.2f, withAlpha(sf::Color::White, 0.7f * pop));
+            draw::line(w, p - sf::Vector2f{0.f, L}, p + sf::Vector2f{0.f, L}, 1.2f, withAlpha(sf::Color::White, 0.7f * pop));
+            if (age < 0.45f) draw::ring(w, p, base * (1.f + 7.f * age / 0.45f), bossStar ? 2.5f : 1.5f,
+                                        withAlpha(bossStar ? actCol : star, 1.f - age / 0.45f));
+        }
+        drawLabel(w, app.font(), "click to skip", 11, {s.x * 0.5f, s.y - 22.f}, withAlpha(theme::textDim, 0.6f * veil));
     }
 
     // Pinned header: a band over the scrolled map with the act and the run's

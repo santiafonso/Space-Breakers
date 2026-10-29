@@ -3351,11 +3351,14 @@ int App::runShowcase(const std::string& dir) {
                 openMap();
                 held = 0;
                 pick = -1;
-            } else if (walk && map && ++held > 75) {   // pick one of the lit ways (1-4 keys)
+            } else if (walk && map && !map->travelling() && ++held > (std::atoi(std::getenv("SB_SHOWCASE_WALK")) >= 2 ? 25 : 75)) {   // pick one of the lit ways (1-4 keys); WALK=2 hurries
                 std::vector<int> open;
                 for (int i = 0; i < static_cast<int>(data_.run.map.nodes.size()); ++i)
                     if (mapNodeOpen(i)) open.push_back(i);
                 if (pick < 0 && !open.empty()) pick = static_cast<int>(rng() % open.size());
+                for (int k = 0; k < static_cast<int>(open.size()); ++k)   // the boss when it's there: its constellation plays
+                    if (data_.run.map.nodes[static_cast<std::size_t>(open[static_cast<std::size_t>(k)])].type == MapNodeType::Boss)
+                        pick = k;
                 if (pick >= 0 && pick < 4) {
                     sf::Event e{};
                     e.type = sf::Event::KeyPressed;

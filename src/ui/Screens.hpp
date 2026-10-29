@@ -210,6 +210,7 @@ public:
     void update(App& app, float dt, sf::Vector2f mouse) override;
     void draw(App& app, sf::RenderWindow& w) override;
     bool ownsTab() const override { return true; }
+    bool travelling() const { return cineT_ >= 0.f || travelTo_ >= 0; }   // a trip (or the constellation) is playing
 
 private:
     sf::Vector2f nodePos(App& app, int node) const;
@@ -241,6 +242,10 @@ private:
     MenuBackdrop backdrop_;                    // drifting balls + orbiting planets behind the map
     bool backdropInit_ = false;
     float rulesCard_ = 0.f;                    // the run's opening card with the act rules: 0..1 shown
+    // On to the boss: the walked path replays as a constellation (cineT_ >= 0
+    // while it plays), then the boss fight opens.
+    std::vector<int> cinePath_;
+    float cineT_ = -1.f;
     bool rulesCardOpen(App& app) const;
 };
 

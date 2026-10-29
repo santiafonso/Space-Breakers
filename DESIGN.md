@@ -3910,3 +3910,27 @@ desde el centro. Las capturas 41 / 42 muestran cada motivo y las etapas.
   del jefe (BossWin) muestra "UNLOCKED ..." la primera vez.
 - Migración: un save viejo abre lo que su mejor run alcanzó (`stat.bestWave` pasado el
   jefe; con Ascensión abierta, todo). `stat.wins` no sirve: también cuenta el tutorial.
+
+### 2026-10-29: el mapa: nodos con ícono, conexiones curvas y la constelación antes del jefe
+
+- Santi: "mejorar la estética del mapa, lo veo medio soso; más que todo los nodos y las
+  conexiones". Y después: "una animación de constelación cada vez que terminás el camino,
+  repasando los nodos estilo cinemática y luego entrando al boss".
+- **Nodos** (`drawNode`, `ui/RunScreens.cpp`): las letras (`! $ ^ + ? o B`) pasan a ser
+  íconos dibujados (`nodeIcon` → `drawGlyph`): pelea Blade, élite Claw, tienda Coin,
+  forja Rune, descanso Heal, "?" Dice, reclutar Twin, jefe Skull, Altar Eye, santuario
+  Star. Cuatro looks (`NodeLook`): adelante (desaturado), abierto (halo de su color que
+  respira), recorrido (relleno tenue), donde estás. El jefe lleva un anillo de marcas
+  que gira lento, del color del acto.
+- **Conexiones** (`Curve`): una S suave que sale y entra vertical a cada nodo (recta si
+  comparten fila), cortada antes del ícono. Adelante: puntitos tenues; abiertas: guiones
+  que fluyen hacia el nodo; recorridas: línea sólida del color del acto con brillo. El
+  resaltado al pasar el mouse, la chispa del viaje y el camino del Altar siguen la curva.
+- **Constelación**: elegir al jefe no abre la pelea enseguida. El mapa se oscurece, la
+  vista baja al principio del acto y el camino recorrido se repasa: una estrella por
+  parada (con destello y una nota que sube), líneas rectas de estrella a estrella, la
+  vista sube con ellas y el jefe estalla en el color del acto antes de su pelea
+  (`kCineLead` 0.55 s + `kCineStep` 0.26 s por parada + `kCineHold` 0.9 s). Un clic o
+  una tecla la saltea.
+- `SB_SHOWCASE_WALK=2` recorre el mapa más rápido y siempre entra al jefe (para grabar la
+  constelación).
