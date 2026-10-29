@@ -11,10 +11,10 @@ namespace sb {
 // ---- squad traits (2026-10-22) ---------------------------------------------
 //
 // Every class brings two of five traits - each pair of traits is exactly one
-// class, so every trait is shared by four. Balls with a trait (a ball counts
-// once, however many of its classes share it; a god counts as its class) turn
-// on its bonus for the whole squad at cfg::team::traitAt balls, and a stronger
-// one further up. App::foldTraits folds them into the params.
+// class, so every trait is shared by four. The different classes in the squad
+// that bring a trait (2026-10-29: two Strikers count once; a god counts as its
+// class) turn on its bonus for the whole squad at cfg::team::traitAt classes,
+// and a stronger one at all four. App::foldTraits folds them into the params.
 
 enum class Trait { Impact, Swift, Arcane, Elemental, Squad };
 inline constexpr int kTraitCount = 5;
@@ -77,37 +77,32 @@ inline std::string traitClasses(Trait t) {
     return s;
 }
 
-// Which traits this ball has: from its classes (2 items of a tag), or the class
-// its god ascended from.
-inline void ballTraits(const BallLoadout& L, bool out[kTraitCount]) {
-    for (int i = 0; i < kTraitCount; ++i) out[i] = false;
-    auto add = [&](ItemTag t) {
-        Trait a, b;
-        if (isGod(t)) t = baseOf(t);
-        if (!traitsOf(t, a, b)) return;
-        out[static_cast<int>(a)] = out[static_cast<int>(b)] = true;
-    };
-    if (L.ascendedFrom != 0) add(static_cast<ItemTag>(L.ascendedFrom));
-    ItemTag r[3];
-    for (int i = 0, n = L.roles(r); i < n; ++i) add(r[i]);
-}
-
-// Balls per trait across the squad; `bonus` more on every trait that has one
-// ("War banner" relic).
+// Different classes per trait across the squad (the same class on two balls
+// counts once); `bonus` more on every trait that has one ("War banner" relic).
 inline void teamTraitCounts(const std::vector<BallLoadout>& balls, int out[kTraitCount], int bonus = 0) {
     for (int i = 0; i < kTraitCount; ++i) out[i] = 0;
+    unsigned seen = 0;   // base classes already counted (bits by ItemTag)
+    auto add = [&](ItemTag t) {
+        if (isGod(t)) t = baseOf(t);
+        Trait a, b;
+        const unsigned bit = 1u << static_cast<unsigned>(t);
+        if ((seen & bit) || !traitsOf(t, a, b)) return;
+        seen |= bit;
+        ++out[static_cast<int>(a)];
+        ++out[static_cast<int>(b)];
+    };
     for (const BallLoadout& L : balls) {
-        bool has[kTraitCount];
-        ballTraits(L, has);
-        for (int i = 0; i < kTraitCount; ++i) out[i] += has[i] ? 1 : 0;
+        if (L.ascendedFrom != 0) add(static_cast<ItemTag>(L.ascendedFrom));
+        ItemTag r[3];
+        for (int i = 0, n = L.roles(r); i < n; ++i) add(r[i]);
     }
     for (int i = 0; i < kTraitCount; ++i)
         if (out[i] > 0) out[i] += bonus;
 }
 
 // 0 = off, 1 or 2 = its level.
-inline int traitTier(int balls) {
-    return balls >= cfg::team::traitAt[1] ? 2 : balls >= cfg::team::traitAt[0] ? 1 : 0;
+inline int traitTier(int classes) {
+    return classes >= cfg::team::traitAt[1] ? 2 : classes >= cfg::team::traitAt[0] ? 1 : 0;
 }
 
 }  // namespace sb

@@ -3043,12 +3043,6 @@ void App::update(float frameDt) {
     const Core& c = world_.core();
     hud_.setHard(data_.run.hard);
     hud_.setAscension(data_.run.ascension, world_.eliteTrait(), world_.bossRules());
-    {   // the act's rule, left of the creed chips (and the Nova charge) in the bottom band
-        float right = size().x - theme::margin;
-        if (!data_.run.creeds.empty() || !data_.run.pacts.empty()) right -= creedStripWidth(*this) + 22.f;
-        if (hasCreed(CreedId::Nova)) right -= 240.f;
-        hud_.setActRule(data_.run.active ? data_.run.actRule(cfg::run::actOfWave(std::max(1, data_.run.wave))) : -1, right);
-    }
     {   // the boss's health for the top bar
         const Boss& bs = world_.boss();
         hud_.setBossKind(runBoss(data_.run.map.act));

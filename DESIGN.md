@@ -3002,6 +3002,11 @@ desde el centro. Las capturas 41 / 42 muestran cada motivo y las etapas.
 
 ### Anotado para después (el usuario lo pidió así)
 
+- **Elegir camino entre actos (2026-10-29, idea de Santi):** que la run no sea tan
+  lineal: entre un acto y otro elegís a qué escenario ir, cada uno con su regla (su buff
+  y su debuff), así la regla del acto también se elige. Va con las reglas por acto (§11
+  "2026-10-29: reglas por acto").
+
 - ~~Hitstop con muchas bajas~~: hecho el 2026-10-21 (enfriamiento entre congeladas, ver §11).
 - **Sistema de misiones (2026-10-22, idea de Santi):** misiones que desbloquean cosas
   (ganar con X, ascender un dios de Y, terminar un acto sin daño...). Puede ir junto con
@@ -3955,3 +3960,28 @@ desde el centro. Las capturas 41 / 42 muestran cada motivo y las etapas.
   letra por letra y abajo su descripción. Pausa la pelea mientras dura; un clic la
   pasa. La segunda clase y la ascensión siguen con banner. `drawLoadoutBall` (la pelota
   de los paneles) quedó como función para usarla acá.
+
+### 2026-10-29 (b): playtest de Santi - reglas a ciegas, pelotas que se leen, cruces, rasgos por clase, clases simples
+
+- Santi: "no digas los Broken signal hasta que llegues al acto, solo poné el buff o debuff
+  arriba a la izquierda; más adelante vas a poder elegir camino entre actos (anotado);
+  no hay pelotas que te digan a simple vista qué es cada pelota; más cruces entre nodos;
+  si tenés dos Striker que no te cuente doble la sinergia; las descripciones de clase,
+  solo la que tiene desbloqueada y simple".
+- **Reglas por acto, a ciegas**: fuera la tarjeta de las cinco al empezar, las marcas por
+  acto y el nombre de la regla. El mapa muestra bajo "act N" solo lo que inclina este
+  acto ("contact -40%, abilities +25%"); el hover explica que cada acto tiene la suya y
+  que se ve al llegar. En la pelea ya no se muestra.
+- **Fichas de pelota** (abajo a la izquierda en la pelea): cada una es la pelota en
+  chico con su color y sus marcas de clase (`drawLoadoutBall`, r 8, una cada 34 px,
+  `ballTallyPos`); el hover dice de qué clase es y qué hace (el texto del panel).
+- **Mapa con cruces**: además de los pasos de cada camino, cada parada se une a la de al
+  lado en la fila siguiente con `cfg::map::crossPct` = 40%: los caminos se cruzan y se
+  puede cambiar de uno a otro. Los puntitos de adelante se ven más (más grandes y menos
+  transparentes).
+- **Rasgos de equipo por clase**: cuentan clases distintas, no pelotas: dos Strikers suman
+  Impact y Swift una vez (`teamTraitCounts`). Nivel 1 con 2 clases, nivel 2 con las 4 que
+  comparten el rasgo. War banner suma una clase. Los textos dicen "classes".
+- **Descripción de clase** (hover de la pelota en el TAB y en la ficha): solo lo que hace
+  ahora. Con 2 ítems, su descripción y "4 items: Mega Striker (2/4)"; con 4, su forma
+  completa y lo que suma. Sin la lista de rasgos ni los dos pasos.

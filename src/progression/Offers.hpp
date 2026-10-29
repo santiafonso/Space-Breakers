@@ -451,7 +451,7 @@ inline UpgradeInfo upgradeInfoFull(UpgradeKind k) {
         case UpgradeKind::TimeDilation:  return {"Time dilation", "all enemies move 25% slower, all the time"};
         case UpgradeKind::Overcharge:    return {"Overcharge", "the damage combo can climb twice as high"};
         case UpgradeKind::RelicHourglass:     return {"Hourglass", "every ability recharges 25% faster - your balls' and your own Q, E and F"};
-        case UpgradeKind::RelicWarBanner:     return {"War banner", "every squad trait your balls have counts one more ball: its bonus at 1, the big one at 3"};
+        case UpgradeKind::RelicWarBanner:     return {"War banner", "every squad trait your balls have counts one more class: its bonus at 1, the big one at 3"};
         case UpgradeKind::RelicGiantsRing:    return {"Giant's ring", "every ball is 15% bigger"};
         case UpgradeKind::RelicCatchersMitt:  return {"Catcher's mitt", "catch balls from 40% further away, and a thrown ball's first hit lands 25% harder"};
         case UpgradeKind::RelicGoldenTooth:   return {"Golden tooth", "after every fight, 10% interest on the gold you carry (up to 12)"};

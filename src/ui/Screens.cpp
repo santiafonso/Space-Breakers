@@ -1806,14 +1806,23 @@ void PlayScreen::draw(App& app, sf::RenderWindow& w) {
     // player's keys, then the [TAB] cap for the loadout. Words only on hover.
     const std::vector<Ball>& balls = app.world().balls();
     const sf::Vector2f s = app.size();
+    // Each chip is the ball itself, small - its class colour and marks - so
+    // which ball is which reads at a glance; hover one for its class.
     const sf::FloatRect tally = ballTallyRect(app, static_cast<int>(balls.size()));
-    float dx = tally.left + 13.f;
+    const auto& loadouts = app.data().run.balls;
+    const int nb = static_cast<int>(balls.size());
+    float dx = tally.left + tally.width + 3.f;
     const float dy = tally.top + tally.height * 0.5f;
-    for (const Ball& b : balls) {
-        const sf::Color ec = ballHue(b);   // its class, not its element
-        draw::disc(w, {dx, dy}, 7.f, lerpColor(ec, sf::Color::White, 0.2f), ec, {1.f, 1.f}, 20);
-        dx += 22.f;
+    for (int i = 0; i < nb; ++i) {
+        const sf::Vector2f bp = ballTallyPos(app, i, nb);
+        if (i < static_cast<int>(loadouts.size())) {
+            drawLoadoutBall(w, loadouts[static_cast<std::size_t>(i)], bp, 8.f, 1.f);
+        } else {
+            const sf::Color ec = ballHue(balls[static_cast<std::size_t>(i)]);   // its class, not its element
+            draw::disc(w, bp, 7.f, lerpColor(ec, sf::Color::White, 0.2f), ec, {1.f, 1.f}, 20);
+        }
     }
+    dx += 2.f;
     // The player's keys, right of the tally: Q volley, E bullet-time gauge, F repulse.
     // A key cap fills up from the bottom while it recharges; E is a green ring
     // that empties as you spend it.
@@ -1907,9 +1916,13 @@ void PlayScreen::draw(App& app, sf::RenderWindow& w) {
                         "the core sends out a shockwave: every enemy near it is shoved away and staggered for a "
                         "moment (soaked ones fly further). Recharges in 10 s.",
                         theme::core);
-        } else if (tally.contains(um)) {
-            drawTooltip(w, app.font(), um, s, "Your balls",
-                        "click one to throw it at the enemy nearest the core, or press and pull back to aim (further = harder). TAB shows each ball's classes, items, type, abilities and modifiers (the fight pauses).");
+        } else if (tally.contains(um)) {   // the ball under the pointer: what it is
+            const int i = std::clamp(static_cast<int>((um.x - tally.left) / kBallTallyStep), 0,
+                                     static_cast<int>(app.data().run.balls.size()) - 1);
+            std::string tt, td;
+            if (i >= 0 && loadoutTooltip(app.data().run.balls[static_cast<std::size_t>(i)], kPanelPartBall, tt, td))
+                drawTooltip(w, app.font(), um, s, "Ball " + std::to_string(i + 1) + ":  " + tt,
+                            td + "\n\nTAB: its items, type, abilities and modifiers.");
         }
     }
 
@@ -1986,7 +1999,12 @@ bool TabPeek::handle(const sf::Event& e) {
 sf::FloatRect ballTallyRect(App& app, int balls) {
     const sf::Vector2f s = app.size();
     const float band = cfg::app::arenaBand;
-    return {theme::margin - 6.f, s.y - band, 22.f * static_cast<float>(std::max(1, balls)) - 3.f, band};
+    return {theme::margin - 6.f, s.y - band, kBallTallyStep * static_cast<float>(std::max(1, balls)) - 3.f, band};
+}
+
+sf::Vector2f ballTallyPos(App& app, int ball, int balls) {
+    const sf::FloatRect t = ballTallyRect(app, balls);
+    return {t.left + 19.f + kBallTallyStep * static_cast<float>(ball), t.top + t.height * 0.5f};
 }
 
 void drawTabHint(App& app, sf::RenderWindow& w, sf::Vector2f topLeft) {
@@ -2173,8 +2191,8 @@ void drawLoadoutOverlay(App& app, sf::RenderWindow& w, bool paused, const TabPee
         }
     }
 
-    // ---- under the balls: the squad's traits that have a ball - the name lit once
-    // it's on, a pip per ball up to its top level; what it does on hover.
+    // ---- under the balls: the squad's traits that have a class - the name lit once
+    // it's on, a pip per different class up to its top level; what it does on hover.
     int hotTrait = -1;
     int traits[kTraitCount];
     teamTraitCounts(r.balls, traits, r.mods.has(UpgradeKind::RelicWarBanner) ? cfg::relic::warBannerBalls : 0);   // "War banner"
@@ -2335,10 +2353,10 @@ void drawLoadoutOverlay(App& app, sf::RenderWindow& w, bool paused, const TabPee
         const auto tr = static_cast<Trait>(hotTrait);
         const int n = traits[hotTrait];
         drawTooltip(w, app.font(), um, s,
-                    std::string(traitName(tr)) + "  -  " + std::to_string(n) + (n == 1 ? " ball" : " balls"),
-                    std::to_string(cfg::team::traitAt[0]) + " balls: " + traitDesc(tr, 1) + ".  " +
-                        std::to_string(cfg::team::traitAt[1]) + " balls: " + traitDesc(tr, 2) + ".  From " +
-                        traitClasses(tr) + " (2 items of the class).",
+                    std::string(traitName(tr)) + "  -  " + std::to_string(n) + (n == 1 ? " class" : " classes"),
+                    std::to_string(cfg::team::traitAt[0]) + " different classes: " + traitDesc(tr, 1) + ".  " +
+                        std::to_string(cfg::team::traitAt[1]) + ": " + traitDesc(tr, 2) + ".  From " +
+                        traitClasses(tr) + " (2 items of the class; the same class twice counts once).",
                     traitColor(tr));
         return;
     }

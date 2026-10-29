@@ -1023,24 +1023,21 @@ bool loadoutTooltip(const BallLoadout& L, int part, std::string& title, std::str
         const ItemTag asc = L.ascended();
         title.clear();
         desc.clear();
-        for (int i = 0; i < n; ++i) {   // per class: what it does, then its two steps
+        // Per class, only what it does now (2026-10-29): its 2-item form, and the
+        // full form's extra once it has 4 - before that just the name to aim for.
+        auto cap = [](std::string t) {
+            if (!t.empty()) t[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(t[0])));
+            return t;
+        };
+        for (int i = 0; i < n; ++i) {
             const BallRole r = tagRole(roles[i]);
             const int c = L.tagCount(roles[i]);
+            const bool full = c >= 4 || roles[i] == asc;
             if (i > 0) { title += " / "; desc += "\n\n"; }
-            title += roles[i] == asc ? ascendedName(r) : roleName(r);
-            std::string what = roleDesc(r);
-            if (!what.empty()) what[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(what[0])));
-            desc += what + ".\n";
-            if (std::string tr = roleTraits(r); !tr.empty()) {
-                tr[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(tr[0])));
-                desc += tr + ".\n";
-            }
-            desc += "\n";
-            desc += std::string("2 items: ") + roleName(r) + "  (done)\n";
-            desc += std::string("4 items: ") + ascendedName(r) + (c >= 4 ? "  (done)" : "  (" + std::to_string(c) + "/4)");
-            std::string more = ascendedDesc(r);
-            if (!more.empty()) more[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(more[0])));
-            desc += "\n" + more + ".";
+            title += full ? ascendedName(r) : roleName(r);
+            desc += cap(roleDesc(r)) + ".";
+            if (full) desc += "\n" + cap(ascendedDesc(r)) + ".";
+            else desc += std::string("\n4 items: ") + ascendedName(r) + "  (" + std::to_string(c) + "/4)";
         }
         if (n == 0) {   // no class yet: what it's building toward
             title = roleName(BallRole::Normal);

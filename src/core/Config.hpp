@@ -443,7 +443,7 @@ inline constexpr float phoenixHeal = 0.5f;         // core comes back at this fr
 namespace relic {
 inline constexpr float hourglassRate = 1.25f;      // "Hourglass": abilities (balls' and Q / E / F) recharge x this
 inline constexpr float hourglassFocus = 0.25f;     // ...as the balls' Focus
-inline constexpr int   warBannerBalls = 1;         // "War banner": each trait counts this many more balls
+inline constexpr int   warBannerBalls = 1;         // "War banner": each trait counts this many more classes
 inline constexpr float giantsRing = 1.15f;         // "Giant's ring": every ball's radius x this
 inline constexpr float mittReach = 1.4f;           // "Catcher's mitt": catch reach x this...
 inline constexpr float mittThrow = 0.25f;          // ...and a thrown first hit + this
@@ -569,7 +569,7 @@ inline constexpr int rerollsPerLevel = 2;     // "Foresight" web node: reroll ch
 // a bonus for the whole squad, so mixing classes pays and stacking one doesn't.
 namespace team {
 inline constexpr int classCap = 2;               // balls holding a class's items (or ascended from it)
-inline constexpr int traitAt[2] = {2, 4};        // balls with a trait for its level 1 / 2
+inline constexpr int traitAt[2] = {2, 4};        // different classes with a trait for its level 1 / 2
 inline constexpr float impactDamage[2] = {1.10f, 1.25f};   // Impact: every ball's hit x this
 inline constexpr float swiftCruise[2] = {1.08f, 1.16f};    // Swift: every ball's cruise x this
 inline constexpr float arcaneRate[2] = {1.15f, 1.30f};     // Arcane: ability recharge x this
@@ -651,6 +651,7 @@ inline constexpr int rowsFirstRun = 6;  // ...and half that until the first clas
 inline constexpr int lanes = 4;         // max nodes per row
 inline constexpr int minPerRow = 2;     // and min, between the trunk and the pre-boss row
 inline constexpr int splitPct = 22;     // % chance per row that a path forks into a free neighbouring lane
+inline constexpr int crossPct = 40;     // % chance a stop also links to the one a lane over on the next row (paths cross)
 inline constexpr int driftPct = 34;     // % chance a path drifts a lane over each row (else it goes straight)
 // Node weights for rows 2..rows-1 (row 1 is always a fight; the last row is
 // shop / rest / upgrade / recruit, see kPreBossRow in progression/RunMap.hpp).

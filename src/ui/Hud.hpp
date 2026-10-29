@@ -24,9 +24,6 @@ public:
     // The boss's health for the top bar (frac < 0 = no boss on the field).
     void setBoss(float frac) { bossFrac_ = frac; }
     void setBossKind(BossKind k) { bossKind_ = k; }   // the act's boss, for its name
-    // The act's rule (ActRule, -1 = none), drawn in the bottom band ending at
-    // `right` (left of the creed chips).
-    void setActRule(int rule, float right) { rule_ = rule; ruleRight_ = right; }
     void update(float dt, int act, int stage, int stages, int enemiesLeft, float coreFrac,
                 float comboMultiplier, int score, int gold, const std::optional<ActiveEffect>& effect,
                 bool bossWave, bool eliteWave = false);
@@ -56,9 +53,6 @@ private:
     int asc_ = 0;
     EliteTrait trait_ = EliteTrait::None;
     unsigned bossRules_ = 0;
-    int rule_ = -1;
-    float ruleRight_ = 0.f;
-    mutable sf::FloatRect ruleBox_;   // where it was drawn (hover)
     float bossFrac_ = -1.f;
     BossKind bossKind_ = BossKind::Charger;
     bool eliteWave_ = false;

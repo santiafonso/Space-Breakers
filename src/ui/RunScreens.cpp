@@ -379,8 +379,7 @@ void EquipScreen::update(App& app, float dt, sf::Vector2f mouse) {
             const int n = app.runBallCount();
             const sf::Vector2f c = panelCenter(app.size() / zoom, ball, n, equipRowY(app));
             const sf::Vector2f from = sf::Vector2f{c.x, c.y - kPanelH * 0.5f + kPanelHeadY} * zoom;
-            const sf::FloatRect tally = ballTallyRect(app, n);
-            const sf::Vector2f to{tally.left + 13.f + 22.f * static_cast<float>(ball), tally.top + tally.height * 0.5f};
+            const sf::Vector2f to = ballTallyPos(app, ball, n);
             const BallLoadout& L = app.data().run.balls[static_cast<std::size_t>(ball)];
             ItemTag roles[3];
             const sf::Color col = L.roles(roles) > 0 ? tagColor(roles[0])
@@ -697,12 +696,6 @@ void MapScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
         travelTo_ = node;
         travelT_ = 0.f;
     };
-    if (rulesCardOpen(app)) {   // the opening card: any click or key puts it away
-        if (e.type == sf::Event::MouseButtonPressed || e.type == sf::Event::KeyPressed) {
-            app.data().run.rulesSeen = true;
-        }
-        return;
-    }
     if (peek_.handle(e)) return;   // TAB loadout peek: the map waits under it
     if (peek_.open) { loadoutDragEvent(app, peek_, e); return; }
     if (isKey(e, sf::Keyboard::Escape)) { app.openPause(); return; }
@@ -821,11 +814,9 @@ void MapScreen::update(App& app, float dt, sf::Vector2f mouse) {
             return;   // this screen is closed
         }
     }
-    const bool card = rulesCardOpen(app);
-    rulesCard_ = clampf(rulesCard_ + dt * (card ? 4.f : -6.f), 0.f, 1.f);
     scroll_ += (scrollTarget_ - scroll_) * (1.f - std::exp(-kScrollRate * dt));
-    hover_ = card || cineT_ >= 0.f || peek_.open || travelTo_ >= 0 || !ready() ? -1 : nodeAt(app, mouse);
-    info_ = card || cineT_ >= 0.f || peek_.open ? -1 : nodeAt(app, mouse, false);
+    hover_ = cineT_ >= 0.f || peek_.open || travelTo_ >= 0 || !ready() ? -1 : nodeAt(app, mouse);
+    info_ = cineT_ >= 0.f || peek_.open ? -1 : nodeAt(app, mouse, false);
     uisound::hover(this, hover_);
     // The lit way follows the pointer and eases in; a trip keeps it on its node.
     const int want = travelTo_ >= 0 ? travelTo_ : hover_;
@@ -835,24 +826,8 @@ void MapScreen::update(App& app, float dt, sf::Vector2f mouse) {
 }
 
 namespace {
-// The run's act rules, one line each ("act 2  Thick hull: ball hits -40%, ..."),
-// this act's marked - for the header's hover and the run's opening panel.
-std::string actRulesText(const RunState& r) {
-    std::string t;
-    for (int a = 1; a <= cfg::run::acts; ++a) {
-        if (a > 1) t += '\n';
-        t += "act " + std::to_string(a) + "  " + actRuleDef(static_cast<ActRule>(r.actRule(a))).name + ": " +
-             actRuleDesc(r.actRule(a), a);
-    }
-    return t;
-}
 bool hasActRules(const RunState& r) { return r.actRule(1) >= 0; }
 }  // namespace
-
-bool MapScreen::rulesCardOpen(App& app) const {
-    const RunState& r = app.data().run;
-    return hasActRules(r) && !r.rulesSeen && r.map.act == 1 && r.mapNode < 0;
-}
 
 void MapScreen::draw(App& app, sf::RenderWindow& w) {
     const sf::Vector2f s = app.size();
@@ -925,7 +900,7 @@ void MapScreen::draw(App& app, sf::RenderWindow& w) {
                 cv.stroke(w, 0.f, cv.len, 6.f, withAlpha(actCol, 0.12f * fa));
                 cv.stroke(w, 0.f, cv.len, 2.5f, withAlpha(walkCol, 0.8f * fa));
             } else {   // ahead: a faint dotted trail
-                cv.dots(w, 11.f, 1.3f, withAlpha(theme::textDim, 0.4f * fa));
+                cv.dots(w, 10.f, 1.6f, withAlpha(theme::textDim, 0.65f * fa));
             }
         }
     }
@@ -1034,25 +1009,14 @@ void MapScreen::draw(App& app, sf::RenderWindow& w) {
     const float ha = clampf(introPop(it, 0.f), 0.f, 1.f);
     drawLabel(w, app.font(), "act " + std::to_string(r.map.act), 14, {theme::margin, kStatusY},
               withAlpha(theme::accent, ha), -1);
-    // The act's rule under it, and a pip per act beside it (this one lit, the
-    // ones behind dim); hover for all five.
+    // This act's rule under it: just what it tilts (the next acts' stay
+    // unknown until you get there); hover says what it is.
     sf::FloatRect rulesBox;
     if (hasActRules(r)) {
-        const float lx = theme::margin + makeLabel(app.font(), "act 0", 14, theme::accent).getLocalBounds().width + 14.f;
-        for (int a = 1; a <= cfg::run::acts; ++a) {
-            const sf::Vector2f c{lx + 12.f * static_cast<float>(a - 1), kStatusY + 1.f};
-            const bool now = a == r.map.act, past = a < r.map.act;
-            const sf::Color pc = withAlpha(now ? theme::accent : theme::textDim, (past ? 0.35f : 0.9f) * ha);
-            if (now) draw::polygon(w, c, 4.5f, 4, 0.f, pc, pc);
-            else draw::polygonOutline(w, c, 3.5f, 4, 0.f, 1.f, pc);
-        }
-        const int rule = r.actRule(r.map.act);
-        const std::string name = actRuleDef(static_cast<ActRule>(rule)).name;
-        drawLabel(w, app.font(), name, 11, {theme::margin, kStatusY + 24.f}, withAlpha(theme::textHi, 0.85f * ha), -1);
-        const float nx = theme::margin + makeLabel(app.font(), name, 11, theme::textHi).getLocalBounds().width + 10.f;
-        drawRichText(w, app.font(), actRuleDesc(rule, r.map.act), theme::fsSmall, {nx, kStatusY + 16.f},
-                     withAlpha(theme::textLo, ha));
-        rulesBox = {theme::margin - 6.f, kStatusY - 14.f, 330.f, 50.f};
+        const std::string d = actRuleDesc(r.actRule(r.map.act), r.map.act);
+        drawRichText(w, app.font(), d, theme::fsSmall, {theme::margin, kStatusY + 16.f}, withAlpha(theme::textLo, ha));
+        rulesBox = {theme::margin - 6.f, kStatusY + 12.f,
+                    makeText(app.font(), d, theme::fsSmall, theme::textLo).getLocalBounds().width + 12.f, 26.f};
     }
     const float statusEnd = drawRunStatus(app, w, kStatusY);
     const float ironX = statusEnd + 34.f;
@@ -1075,38 +1039,6 @@ void MapScreen::draw(App& app, sf::RenderWindow& w) {
         creedHover = drawCreedStrip(app, w, {s.x - theme::margin - creedStripWidth(app), kStatusY - 11.f}, false,
                                   mouse_, info_ < 0 && !peek_.open);
 
-    if (rulesCard_ > 0.f) {   // the run's opening card: the five rules, to plan the build around
-        const float k = rulesCard_ * rulesCard_ * (3.f - 2.f * rulesCard_);
-        drawDim(w, s, 0.55f * k);
-        const float cw = 560.f, pad = 22.f, rowH = 30.f;
-        const float ch = 2.f * pad + 64.f + rowH * static_cast<float>(cfg::run::acts) + 30.f;
-        const sf::FloatRect box{std::round(s.x * 0.5f - cw * 0.5f), std::round(s.y * 0.5f - ch * 0.5f + 12.f * (1.f - k)),
-                                cw, ch};
-        draw::box(w, box, theme::corner, withAlpha(theme::glassTop, 0.97f * k), withAlpha(theme::glassBottom, 0.97f * k),
-                  withAlpha(theme::accent, 0.35f * k), 1.f);
-        draw::brackets(w, box, 10.f, 2.f, withAlpha(theme::accent, 0.8f * k));
-        drawLabel(w, app.font(), "this run's act rules", 14, {s.x * 0.5f, box.top + pad + 8.f}, withAlpha(theme::accent, k));
-        drawRichText(w, app.font(), "each act tilts damage: plan your build around them", theme::fsSmall,
-                     {s.x * 0.5f, box.top + pad + 34.f}, withAlpha(theme::textLo, k), 0);
-        float y = box.top + pad + 64.f + rowH * 0.5f;
-        for (int a = 1; a <= cfg::run::acts; ++a) {
-            const int rule = r.actRule(a);
-            draw::line(w, {box.left + pad, y - rowH * 0.5f}, {box.left + cw - pad, y - rowH * 0.5f}, 1.f,
-                       withAlpha(theme::grid, 0.35f * k));
-            drawLabel(w, app.font(), "act " + std::to_string(a), 12, {box.left + pad, y},
-                      withAlpha(a == 1 ? theme::accent : theme::textDim, k), -1);
-            drawLabel(w, app.font(), actRuleDef(static_cast<ActRule>(rule)).name, 12, {box.left + pad + 70.f, y},
-                      withAlpha(theme::textHi, k), -1);
-            const std::string d = actRuleDesc(rule, a);
-            const float dw = makeText(app.font(), d, theme::fsSmall, theme::textLo).getLocalBounds().width;
-            drawRichText(w, app.font(), d, theme::fsSmall, {box.left + cw - pad - dw * 0.5f, y}, withAlpha(theme::textLo, k), 0);
-            y += rowH;
-        }
-        drawLabel(w, app.font(), "click to continue", 11, {s.x * 0.5f, box.top + ch - pad - 4.f},
-                  withAlpha(theme::textDim, k * (0.6f + 0.4f * std::sin(clock_ * 3.f))));
-        return;
-    }
-
     if (peek_.open) {   // the loadout peek covers the map; its own hover help only
         drawLoadoutOverlay(app, w, false, peek_);
         return;
@@ -1120,9 +1052,9 @@ void MapScreen::draw(App& app, sf::RenderWindow& w) {
             d += n.row <= r.mapRow ? "  (behind you)" : "  (not reachable from here yet)";
         drawTooltip(w, app.font(), mouse_, s, mapNodeName(n.type), d, nodeColor(n.type));
     } else if (!creedHover && rulesBox.contains(mouse_)) {
-        drawTooltip(w, app.font(), mouse_, s, "Act rules",
-                    "each act tilts damage: one source hits softer, another harder. Act 1's rule is half as strong.\n\n" +
-                        actRulesText(r), theme::accent);
+        drawTooltip(w, app.font(), mouse_, s, "This act's rule",
+                    "this act tilts damage: " + actRuleDesc(r.actRule(r.map.act), r.map.act) +
+                        ". Every act has its own - you find out when you get there.", theme::accent);
     } else if (!creedHover && app.ironCoreAlive() && std::fabs(mouse_.y - kStatusY) < 10.f &&
                mouse_.x > ironX - 4.f && mouse_.x < ironX + 90.f) {
         drawTooltip(w, app.font(), mouse_, s, "Iron core",

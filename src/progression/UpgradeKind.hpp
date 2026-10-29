@@ -385,7 +385,7 @@ enum class UpgradeKind {
     // ---- relics, second batch (2026-10-24): after everything so saved runs keep
     // their numbers (upgradeCat reads this range; keep RelicHourglass first) ----
     RelicHourglass,    // abilities (the balls' and your Q / E / F) recharge faster
-    RelicWarBanner,    // every squad trait counts one more ball
+    RelicWarBanner,    // every squad trait counts one more class
     RelicGiantsRing,   // every ball bigger
     RelicCatchersMitt, // catch from further away; a thrown ball's first hit harder
     RelicGoldenTooth,  // interest on your gold after every fight

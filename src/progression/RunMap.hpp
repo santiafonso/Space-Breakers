@@ -194,8 +194,9 @@ static_assert(sizeof(kPreBossRow) / sizeof(kPreBossRow[0]) == cfg::map::lanes);
 
 // Build an act's map. Row 1 is a single fight (the trunk). Above it a few
 // paths climb toward the boss: each path mostly keeps its lane and now and
-// then drifts one lane over, splitting off or merging into a neighbour, and
-// paths never cross - so a branch you take is a commitment, not a detour.
+// then drifts one lane over, splitting off or merging into a neighbour; on
+// top of that some stops also link a lane over (cfg::map::crossPct), so paths
+// cross and a branch can be left for the next one.
 // Every row between has 2..lanes nodes. The last row is kPreBossRow: each
 // node of the row before links to the stops in its lane and the lanes beside
 // it, and all of it feeds the boss.
@@ -402,6 +403,14 @@ inline RunMap generateMap(Rng& rng, int act, int rows = 0) {
     for (int b : rowNodes[1]) link(rowNodes[0][0], b);   // the trunk opens onto every path
     for (std::size_t i = 0; i < steps.size(); ++i)        // rows 2..R-2: the walkers' own steps
         for (const auto& [from, to] : steps[i]) link(nodeOn(i + 1, from), nodeOn(i + 2, to));
+    // Crossings (2026-10-29): now and then a stop also reaches the one a lane
+    // over on the next row, so paths cross and you can switch between them.
+    for (std::size_t i = 0; i < steps.size(); ++i)
+        for (int a : rowNodes[i + 1])
+            for (int b : rowNodes[i + 2])
+                if (std::abs(m.nodes[static_cast<std::size_t>(a)].lane - m.nodes[static_cast<std::size_t>(b)].lane) == 1 &&
+                    rng.irange(0, 99) < cfg::map::crossPct)
+                    link(a, b);
     for (int a : rowNodes[rowNodes.size() - 2])           // the pre-boss stops beside you
         for (int b : rowNodes.back())
             if (std::abs(m.nodes[static_cast<std::size_t>(a)].lane - m.nodes[static_cast<std::size_t>(b)].lane) <= 1)

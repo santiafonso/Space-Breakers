@@ -102,7 +102,9 @@ sf::Vector2f loadoutPanelCenter(App& app, int i);
 // A small [tab] key cap with "loadout" beside it; `topLeft` in UI units.
 void drawTabHint(App& app, sf::RenderWindow& w, sf::Vector2f topLeft);
 // The fight's bottom-left ball tally: [TAB] cap on top, a chip per ball below.
+inline constexpr float kBallTallyStep = 34.f;   // one ball's chip in it
 sf::FloatRect ballTallyRect(App& app, int balls);
+sf::Vector2f ballTallyPos(App& app, int ball, int balls);   // ball's chip in that tally (its centre)
 
 // Combat. One or more balls bounce freely; you fling them into the enemies.
 // The fight holds still while the TAB peek is open.
@@ -245,12 +247,10 @@ private:
     bool ready() const;                        // the opening has played out: nodes can be picked
     MenuBackdrop backdrop_;                    // drifting balls + orbiting planets behind the map
     bool backdropInit_ = false;
-    float rulesCard_ = 0.f;                    // the run's opening card with the act rules: 0..1 shown
     // On to the boss: the walked path replays as a constellation (cineT_ >= 0
     // while it plays), then the boss fight opens.
     std::vector<int> cinePath_;
     float cineT_ = -1.f;
-    bool rulesCardOpen(App& app) const;
 };
 
 // The F1 dev panel (SB_DEV): grant any pick to a chosen ball, spawn enemy

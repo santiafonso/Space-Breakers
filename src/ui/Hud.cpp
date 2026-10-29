@@ -8,7 +8,6 @@
 
 #include "core/Config.hpp"
 #include "core/Theme.hpp"
-#include "progression/ActRules.hpp"
 #include "render/Draw.hpp"
 #include "ui/Widgets.hpp"
 
@@ -55,12 +54,6 @@ bool Hud::tooltipAt(sf::Vector2f m, std::string& title, std::string& desc, sf::C
     if (comboShown_ > 0.01f && sf::FloatRect(mg - 4.f, 0.f, 230.f, band).contains(m)) {
         title = "Damage combo";
         desc = "every hit fills the bar a little and every ball hits harder (each mark is +0.5x); stop hitting and the line under it runs out, then the bar drains";
-        color = theme::accent;
-        return true;
-    }
-    if (rule_ >= 0 && ruleBox_.contains(m)) {
-        title = std::string("Act rule: ") + actRuleDef(static_cast<ActRule>(rule_)).name;
-        desc = actRuleDesc(rule_, act_) + " this act. Every act has its own (see them on the map).";
         color = theme::accent;
         return true;
     }
@@ -194,27 +187,6 @@ void Hud::draw(sf::RenderWindow& window) const {
         if (comboFuse_ > 0.f)   // the fuse
             draw::line(window, {bx, by + bh + 4.f}, {bx + bw * comboFuse_, by + bh + 4.f}, 1.f,
                        withAlpha(col, 0.25f + 0.35f * comboFuse_));
-    }
-
-    // The act's rule in the bottom band, left of the creed chips: its name and
-    // its tilt - just the name when the chips leave no room, nothing when not
-    // even that fits (the map always shows it).
-    ruleBox_ = {};
-    if (rule_ >= 0) {
-        const float by = size_.y - band * 0.5f, minX = 330.f;   // the balls and keys hold the left end
-        const std::string name = actRuleDef(static_cast<ActRule>(rule_)).name;
-        const std::string d = actRuleDesc(rule_, act_);
-        const float nw = makeLabel(*font_, name, 11, theme::textDim).getLocalBounds().width;
-        const float dw = makeText(*font_, d, theme::fsSmall, theme::textLo).getLocalBounds().width;
-        float x = ruleRight_;
-        if (x - dw - 12.f - nw >= minX) {
-            drawRichText(window, *font_, d, theme::fsSmall, {x - dw * 0.5f, by}, withAlpha(theme::textLo, 0.85f), 0);
-            x -= dw + 12.f;
-        }
-        if (x - nw >= minX) {
-            drawLabel(window, *font_, name, 11, {x, by}, withAlpha(theme::textDim, 0.9f), 1);
-            ruleBox_ = {x - nw - 4.f, size_.y - band, ruleRight_ - x + nw + 8.f, band};
-        }
     }
 
     // Gold, top-right: the one run number worth watching mid-fight.
