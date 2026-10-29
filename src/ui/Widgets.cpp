@@ -738,23 +738,11 @@ sf::Color catColor(UpgradeCat c) {
 // One ball of the loadout: its look (class-coloured body, element rim, class
 // marks - same as in the arena), its classes, 4 item slots, its type slot, its ability slot(s)
 // and its stacked modifiers.
-void drawLoadoutPanel(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f c,
-                      const BallLoadout& L, float alpha, float hover, int hoverSlot, bool dim, int placing) {
-    const float a = alpha * (dim ? 0.35f : 1.f);
-    // Solid, so the arena never shows through; lit a touch from the top.
-    const sf::FloatRect pr{c.x - kPanelW * 0.5f, c.y - kPanelH * 0.5f, kPanelW, kPanelH};
-    draw::panel(w, pr, dim ? theme::textDim : theme::accent, alpha, hover);
-    const float top = c.y - kPanelH * 0.5f;
-
-    // The ball, as in the arena: its lead class's colour (grey without one),
-    // the element as a muted rim, class marks, ascended halo, highlight.
+void drawLoadoutBall(sf::RenderTarget& w, const BallLoadout& L, sf::Vector2f bp, float r, float a, float heading) {
     const Element el = L.element();
-    const sf::Color ec = el == Element::Plain ? theme::textLo : elementColor(el);
     ItemTag roles[3];
     const int nRoles = L.roles(roles);
     const ItemTag asc = L.ascended();
-    const float r = L.hasRole(ItemTag::Guardian) ? 16.f : 13.f;
-    const sf::Vector2f bp{c.x, top + kPanelHeadY};
     BallLook look;
     look.roles = L.roleMask();
     look.ascended = roleBit(tagRole(asc));
@@ -767,9 +755,27 @@ void drawLoadoutPanel(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f c,
     draw::glow(w, bp, r * (asc != ItemTag::None ? 2.f : 1.6f), bc, (asc != ItemTag::None ? 0.11f : 0.06f) * a);
     draw::disc(w, bp, r, withAlpha(lerpColor(bc, sf::Color::White, 0.2f), a),
                withAlpha(lerpColor(bc, theme::bg, 0.18f), a));
-    drawBallIdentity(w, look, bp, r, 0.f, a);
+    drawBallIdentity(w, look, bp, r, heading, a);
     draw::disc(w, bp + sf::Vector2f{-0.34f, -0.38f} * r, r * 0.26f, withAlpha(sf::Color::White, 0.22f * a),
                withAlpha(sf::Color::White, 0.f), {1.f, 0.8f}, 16);
+}
+
+void drawLoadoutPanel(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f c,
+                      const BallLoadout& L, float alpha, float hover, int hoverSlot, bool dim, int placing) {
+    const float a = alpha * (dim ? 0.35f : 1.f);
+    // Solid, so the arena never shows through; lit a touch from the top.
+    const sf::FloatRect pr{c.x - kPanelW * 0.5f, c.y - kPanelH * 0.5f, kPanelW, kPanelH};
+    draw::panel(w, pr, dim ? theme::textDim : theme::accent, alpha, hover);
+    const float top = c.y - kPanelH * 0.5f;
+
+    // The ball, as in the arena: its lead class's colour (grey without one),
+    // the element as a muted rim, class marks, ascended halo, highlight.
+    ItemTag roles[3];
+    const int nRoles = L.roles(roles);
+    const ItemTag asc = L.ascended();
+    const float r = L.hasRole(ItemTag::Guardian) ? 16.f : 13.f;
+    const sf::Vector2f bp{c.x, top + kPanelHeadY};
+    drawLoadoutBall(w, L, bp, r, a);
 
     // "Striker / Jester": each class in its own colour - an ascended one by
     // its ascended name, brighter.

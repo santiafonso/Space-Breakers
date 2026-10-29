@@ -583,10 +583,15 @@ void App::announceClassGains() {
         std::string to;
         for (int k = 0; k < n; ++k) to += (k ? " + " : "") + upperCase(roleName(tagRole(order[k])));
         std::string from = names(was.roles & now);
-        if (from.empty()) {
-            const Element el = L.element();
-            from = el == Element::Plain ? "BALL" : upperCase(elementName(el)) + " BALL";
-            caption += "  -  NEW CLASS";
+        if (from.empty()) {   // a ball's first class: its own cinematic, not a banner
+            ItemTag got = n > 0 ? order[0] : ItemTag::None;
+            for (int k = 0; k < n; ++k)
+                if (gained & roleBit(tagRole(order[k]))) got = order[k];
+            if (classCines_.size() < 4) classCines_.push_back({L, got, static_cast<int>(i), 0.f});
+            effects_.flash(tagColor(got), 0.4f);
+            audio_.classGain(false);
+            world_.pulseClass(static_cast<int>(i), false);
+            continue;
         } else {
             caption += "  -  SECOND CLASS";
         }
@@ -744,7 +749,7 @@ void App::back() {
 }
 
 bool App::simulating() const {
-    return !stack_.empty() && stack_.back()->simulates();
+    return classCines_.empty() && !stack_.empty() && stack_.back()->simulates();   // a class cinematic holds the fight
 }
 
 // ---------------------------------------------------------------- run flow
@@ -2412,6 +2417,7 @@ void App::handleEvent(const sf::Event& e) {
         window_.applyLetterbox(e.size.width, e.size.height);
         return;
     }
+    if (classCineEvent(e)) return;   // a ball's first class playing: a click or key moves on
     if (lessonEvent(e)) return;   // a tutorial lesson up: it takes every click and key
     if (drillEvent(e)) return;    // the grab drill: only the mouse (and Esc) gets through
     if (e.type == sf::Event::KeyPressed &&
@@ -2843,6 +2849,8 @@ void App::update(float frameDt) {
     const sf::Vector2f mouse =
         simulating() ? window_.mousePosition() : uiMouse();   // uiMouse: the snapshot pointer when staged
     effects_.update(frameDt);
+    if (!classCines_.empty() && (classCines_.front().t += frameDt) >= cfg::app::classCineTime)
+        classCines_.erase(classCines_.begin());
     fade_ *= std::exp(-cfg::app::fadeRate * frameDt);
 
     // Music follows the run: one loop carries a whole act (map, fights, shops
@@ -3084,6 +3092,7 @@ void App::render() {
     if (peek_.open) drawLoadoutOverlay(*this, w, false, peek_);
 
     effects_.drawOverlay(w);
+    drawClassCine(w);   // over everything: the moment is the ball's
     drawDrill(w);
     drawLesson(w);
     if (fade_ > 0.01f) drawDim(w, size(), fade_ * 0.5f);
@@ -3096,6 +3105,71 @@ void App::render() {
         capturePath_.clear();
     }
     w.display();
+}
+
+bool App::classCineEvent(const sf::Event& e) {
+    if (classCines_.empty()) return false;
+    if (e.type == sf::Event::MouseButtonPressed || e.type == sf::Event::KeyPressed) {
+        ClassCine& c = classCines_.front();   // past its entrance: on to the rest of it, or the next
+        if (c.t > 0.6f) classCines_.erase(classCines_.begin());
+        return true;
+    }
+    return e.type == sf::Event::MouseButtonReleased || e.type == sf::Event::KeyReleased;
+}
+
+void App::drawClassCine(sf::RenderWindow& w) const {
+    if (classCines_.empty()) return;
+    const ClassCine& c = classCines_.front();
+    const float T = cfg::app::classCineTime, t = c.t;
+    const sf::Vector2f s = size();
+    auto ease = [](float x) { x = clampf(x, 0.f, 1.f); return x * x * (3.f - 2.f * x); };
+    const float a = ease(t / 0.3f) * (1.f - ease((t - (T - 0.4f)) / 0.4f));   // in, hold, out
+    const sf::Color col = tagColor(c.tag);
+    const BallRole role = tagRole(c.tag);
+    drawDim(w, s, 0.86f * a);
+    const sf::Vector2f mid{s.x * 0.5f, s.y * 0.36f};
+
+    // Light from behind: slow rays in the class's colour.
+    for (int k = 0; k < 14; ++k) {
+        const float an = t * 0.25f + static_cast<float>(k) * 2.f * kPi / 14.f;
+        const sf::Vector2f d{std::cos(an), std::sin(an)}, n{-d.y, d.x};
+        sf::ConvexShape ray(3);
+        ray.setPoint(0, mid);
+        ray.setPoint(1, mid + d * s.x * 0.7f + n * 46.f);
+        ray.setPoint(2, mid + d * s.x * 0.7f - n * 46.f);
+        ray.setFillColor(withAlpha(col, (k % 2 ? 0.035f : 0.06f) * a));
+        w.draw(ray);
+    }
+    // The ball: it pops in with an overshoot, turns slowly, and rings roll off it.
+    const float pop = t < 0.15f ? 0.f : 1.f + 0.25f * std::sin(clampf((t - 0.15f) / 0.45f, 0.f, 1.f) * kPi) *
+                                                std::exp(-(t - 0.15f) * 3.f);
+    const float R = 48.f * std::min(1.f, ease((t - 0.15f) / 0.3f)) * pop;
+    for (int k = 0; k < 3; ++k) {
+        const float rt = std::fmod(t - 0.3f + static_cast<float>(k) * 0.45f, 1.35f) / 1.35f;
+        if (t < 0.3f || rt < 0.f) continue;
+        draw::ring(w, mid, R * (1.2f + 2.6f * rt), 2.f, withAlpha(col, 0.7f * (1.f - rt) * a));
+    }
+    if (R > 1.f) {
+        draw::glow(w, mid, R * 3.2f, col, 0.35f * a);
+        drawLoadoutBall(w, c.ball, mid, R, a, t * 0.8f);
+    }
+
+    // Its name writes itself in, a letter at a time, under a small kicker.
+    const float ty = mid.y + 168.f;
+    drawLabel(w, font_, "ball " + std::to_string(c.index + 1) + "  -  new class", 13,
+              {mid.x, ty - 30.f}, withAlpha(theme::textLo, a * ease((t - 0.35f) / 0.3f)));
+    const std::string name = upperCase(roleName(role));
+    const int shown = std::clamp(static_cast<int>((t - 0.45f) / 0.06f), 0, static_cast<int>(name.size()));
+    sf::Text full = makeText(font_, name, theme::fsTitle + 14u, col);
+    const float fw = full.getLocalBounds().width;
+    sf::Text part = makeText(font_, name.substr(0, static_cast<std::size_t>(shown)), theme::fsTitle + 14u, withAlpha(col, a));
+    part.setStyle(sf::Text::Bold);
+    part.setPosition(std::round(mid.x - fw * 0.5f), std::round(ty - 10.f));
+    w.draw(part);
+    const float da = a * ease((t - 0.45f - 0.06f * static_cast<float>(name.size())) / 0.35f);
+    drawRichText(w, font_, roleDesc(role), theme::fsBody, {mid.x, ty + 62.f}, withAlpha(theme::textLo, da), 0);
+    drawLabel(w, font_, "click to continue", 11, {mid.x, s.y - 40.f},
+              withAlpha(theme::textDim, da * (0.6f + 0.4f * std::sin(t * 3.f))));
 }
 
 void App::snapFrame(const std::string& file) {
@@ -3452,6 +3526,7 @@ int App::runShowcase(const std::string& dir) {
     if (!lone && enemyOnly < 0) world_.devSetCombo(140.f);
     // SB_SHOWCASE_CROWD=<n>: n times the stream (stress test with SB_PROFILE).
     const int crowdMul = std::getenv("SB_SHOWCASE_CROWD") ? std::max(1, std::atoi(std::getenv("SB_SHOWCASE_CROWD"))) : 1;
+    classCines_.clear();   // a staged fight: no class cinematic over it
     for (int f = 0; f < frames; ++f) {
         if (f % (24 / steps) == 0)
             for (int m = 0; m < crowdMul; ++m) crowd(f / (24 / steps));

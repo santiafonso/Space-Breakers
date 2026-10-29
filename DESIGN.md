@@ -3934,3 +3934,24 @@ desde el centro. Las capturas 41 / 42 muestran cada motivo y las etapas.
   una tecla la saltea.
 - `SB_SHOWCASE_WALK=2` recorre el mapa más rápido y siempre entra al jefe (para grabar la
   constelación).
+
+### 2026-10-29: más animaciones (equipar, agarrar, elegir pelota, primera clase)
+
+- Santi: "meté más animaciones: cuando asignás un ítem, cuando mantenés presionado un
+  ítem para cambiarlo que tiemble, cuando elegís una pelota ver cómo se mueve abajo a la
+  izquierda, y cuando una pelota pasa por primera vez a una clase, una cinemática".
+- **Equipar** (`EquipScreen::land`): al elegir ball y slot, el ícono de la carta vuela
+  al slot achicándose (0.28 s) y el slot destella en el color del ítem antes de quedar
+  puesto (0.5 s en total; forja / ascender / expandir solo destellan). No toma clics
+  mientras aterriza.
+- **Elegir una pelota**: después, la pelota elegida vuela en arco hasta su ficha de la
+  franja de abajo a la izquierda y la marca con un anillo (`Effects::flyBall`). No en
+  vender / trueque.
+- **Agarrar un ítem en el TAB**: la ficha en la mano tiembla (fuerte al levantarla,
+  después un temblor chico) y crece un poco al agarrarla (`TabPeek::dragT`).
+- **Primera clase** (`App::drawClassCine`, `cfg::app::classCineTime` = 2.8 s): reemplaza
+  al banner "NEW CLASS". La pantalla se oscurece con rayos del color de la clase, la
+  pelota aparece en grande con un rebote y anillos, el nombre de la clase se escribe
+  letra por letra y abajo su descripción. Pausa la pelea mientras dura; un clic la
+  pasa. La segunda clase y la ascensión siguen con banner. `drawLoadoutBall` (la pelota
+  de los paneles) quedó como función para usarla acá.

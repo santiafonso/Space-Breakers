@@ -17,6 +17,7 @@ void Effects::init(const sf::Font& font, sf::Vector2f size) {
 }
 
 void Effects::clear() {
+    flyers_.clear();
     rings_.clear();
     coins_.clear();
     labels_.clear();
@@ -123,7 +124,22 @@ void Effects::classBanner(const std::string& caption, const std::string& from, c
     banners_.push_back(b);
 }
 
+void Effects::flyBall(sf::Vector2f from, sf::Vector2f to, sf::Color color, float radius) {
+    if (flyers_.size() >= 6) return;
+    Flyer f;
+    f.from = from;
+    f.to = to;
+    f.color = color;
+    f.radius = radius;
+    flyers_.push_back(f);
+}
+
 void Effects::update(float dt) {
+    for (auto it = flyers_.begin(); it != flyers_.end();) {
+        it->age += dt;
+        if (it->age >= it->life + 0.35f) it = flyers_.erase(it);   // (the landing ring plays out after)
+        else ++it;
+    }
     if (!banners_.empty()) {
         // the next one in the queue starts a touch early, as the current fades
         banners_.front().age += dt;
@@ -279,6 +295,30 @@ void Effects::drawOverlay(sf::RenderWindow& window) const {
         sf::RectangleShape r(size_);
         r.setFillColor(withAlpha(flashColor_, flash_ * 0.16f));
         window.draw(r);
+    }
+    for (const Flyer& f : flyers_) {   // a picked ball on its way down to its chip
+        // an arc: up a little, then swooping down-left; it shrinks to the chip's size
+        const sf::Vector2f ctrl{f.from.x + (f.to.x - f.from.x) * 0.2f, std::min(f.from.y, f.to.y) - 60.f};
+        auto at = [&](float t) {
+            const float u = 1.f - t;
+            return f.from * (u * u) + ctrl * (2.f * u * t) + f.to * (t * t);
+        };
+        const float t = clampf(f.age / f.life, 0.f, 1.f);
+        const float e = t * t * (3.f - 2.f * t);
+        if (t < 1.f) {
+            for (int k = 5; k >= 1; --k) {   // the tail
+                const float te = std::max(0.f, e - 0.045f * static_cast<float>(k));
+                const float rk = lerpf(f.radius, 7.f, te) * (1.f - 0.13f * static_cast<float>(k));
+                const sf::Color c = withAlpha(f.color, 0.35f - 0.06f * static_cast<float>(k));
+                draw::disc(window, at(te), rk, c, c, {1.f, 1.f}, 16);
+            }
+            const float r = lerpf(f.radius, 7.f, e);
+            draw::glow(window, at(e), r * 2.4f, f.color, 0.3f);
+            draw::disc(window, at(e), r, lerpColor(f.color, sf::Color::White, 0.3f), f.color, {1.f, 1.f}, 20);
+        } else {   // landed: a ring off the chip
+            const float k = clampf((f.age - f.life) / 0.35f, 0.f, 1.f);
+            draw::ring(window, f.to, 7.f + 16.f * k, 2.f, withAlpha(f.color, 1.f - k));
+        }
     }
     for (const Coin& c : coins_) {
         sf::CircleShape coin(c.radius, 18);

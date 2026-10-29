@@ -1261,6 +1261,7 @@ inline constexpr float magnetMaxSpeed = 340.f;
 }  // namespace powerup
 
 namespace app {
+inline constexpr float classCineTime = 2.8f;   // a ball's first class: its cinematic (App::drawClassCine)
 // The build's version, shown under the main menu (bump it with every release).
 inline constexpr const char* version = "0.1.0-beta";
 // "Feedback" in the main menu opens this (the itch page: comments once it's public;

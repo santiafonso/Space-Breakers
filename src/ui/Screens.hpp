@@ -194,6 +194,10 @@ private:
     static sf::FloatRect backRect(sf::Vector2f s);   // "Back": undo the pick's target step (bottom centre)
     int replacedSlot(App& app, int ball, int slot) const;   // the full slot this pick would empty, or -1
     void pick(App& app, int ball, int slot);   // place it, or ask first if it throws something out
+    void land(App& app, int ball, int slot);   // the pick flies into its slot, then it's placed
+    int landBall_ = -1;   // landing: the chosen ball / slot while landT_ >= 0
+    int landSlot_ = -1;
+    float landT_ = -1.f;
     int hoverBall_ = -1;
     int hoverSlot_ = -1;
     int askBall_ = -1;   // >= 0: "Replace X?" is up, for this ball / slot

@@ -32,6 +32,9 @@ public:
     // Bigger coins for a bigger combo.
     void addCoin(sf::Vector2f pos, sf::Vector2f target, float radius);
     int takeArrivedCoins();   // coins that reached their target since the last call
+    // A ball you just picked flies down to its chip in the bottom-left tally
+    // (UI units) on an arc, with a short tail, and rings it as it lands.
+    void flyBall(sf::Vector2f from, sf::Vector2f to, sf::Color color, float radius);
     void clear();
 
     void update(float dt);
@@ -74,6 +77,15 @@ private:
     };
     void drawBanner(sf::RenderWindow& window, const Banner& b) const;
     std::vector<Banner> banners_;   // front one plays
+
+    struct Flyer {
+        sf::Vector2f from, to;
+        sf::Color color;
+        float radius = 12.f;
+        float age = 0.f;
+        float life = 0.6f;
+    };
+    std::vector<Flyer> flyers_;
 
     std::vector<Coin> coins_;
     int arrived_ = 0;

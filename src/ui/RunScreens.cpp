@@ -318,10 +318,23 @@ void EquipScreen::pick(App& app, int ball, int slot) {
         askHover_ = -1;
         return;
     }
-    app.confirmEquip(ball, slot);
+    land(app, ball, slot);
+}
+
+namespace {
+constexpr float kLandFly = 0.28f;   // the pick's icon flies into its slot...
+constexpr float kLandTime = 0.5f;   // ...the slot flares, and then it's placed
+}  // namespace
+
+void EquipScreen::land(App& app, int ball, int slot) {
+    landBall_ = ball;
+    landSlot_ = slot;
+    landT_ = 0.f;
+    app.audio().grab();
 }
 
 void EquipScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) {
+    if (landT_ >= 0.f) return;   // landing: it plays out
     if (askBall_ >= 0) {   // "Replace X?" is up: only its answer counts
         const sf::Vector2f s = app.size();
         const bool yes = isKey(e, sf::Keyboard::Enter) || isKey(e, sf::Keyboard::Space) ||
@@ -331,7 +344,7 @@ void EquipScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) 
         if (yes) {
             const int b = askBall_, sl = askSlot_;
             askBall_ = askSlot_ = -1;
-            app.confirmEquip(b, sl);
+            land(app, b, sl);
         } else if (no) {
             askBall_ = askSlot_ = -1;
         }
@@ -352,8 +365,31 @@ void EquipScreen::handleEvent(App& app, const sf::Event& e, sf::Vector2f mouse) 
     if (b >= 0) pick(app, b, sl);
 }
 
-void EquipScreen::update(App& app, float, sf::Vector2f mouse) {
+void EquipScreen::update(App& app, float dt, sf::Vector2f mouse) {
     mouse_ = mouse;
+    if (landT_ >= 0.f) {
+        landT_ += dt;
+        if (landT_ < kLandTime) return;
+        const int ball = landBall_, slot = landSlot_;
+        landT_ = -1.f;
+        // The ball you chose heads down to its chip in the bottom-left tally.
+        const EquipSource src = app.equipSource();
+        if (src != EquipSource::Sell && src != EquipSource::Barter) {
+            const float zoom = equipZoom(app);
+            const int n = app.runBallCount();
+            const sf::Vector2f c = panelCenter(app.size() / zoom, ball, n, equipRowY(app));
+            const sf::Vector2f from = sf::Vector2f{c.x, c.y - kPanelH * 0.5f + kPanelHeadY} * zoom;
+            const sf::FloatRect tally = ballTallyRect(app, n);
+            const sf::Vector2f to{tally.left + 13.f + 22.f * static_cast<float>(ball), tally.top + tally.height * 0.5f};
+            const BallLoadout& L = app.data().run.balls[static_cast<std::size_t>(ball)];
+            ItemTag roles[3];
+            const sf::Color col = L.roles(roles) > 0 ? tagColor(roles[0])
+                                  : L.element() != Element::Plain ? elementColor(L.element()) : theme::textHi;
+            app.effects().flyBall(from, to, col, 13.f * zoom);
+        }
+        app.confirmEquip(ball, slot);   // (this screen may be gone after this)
+        return;
+    }
     if (askBall_ >= 0) {
         const sf::Vector2f s = app.size();
         askHover_ = askButton(s, 0).contains(mouse) ? 0 : askButton(s, 1).contains(mouse) ? 1 : -1;
@@ -477,7 +513,40 @@ void EquipScreen::draw(App& app, sf::RenderWindow& w) {
         }
     }
 
+    if (landT_ >= 0.f && landBall_ >= 0 && landBall_ < n) {   // landing: the pick flies in, its slot flares
+        const BallLoadout& L = balls[static_cast<std::size_t>(landBall_)];
+        const sf::Vector2f c = panelCenter(zs, landBall_, n, rowY);
+        const bool places = !forge && !sell && !barter && src != EquipSource::Ascend && src != EquipSource::Expand;
+        int sl = landSlot_;   // where it lands when no slot was named
+        if (sl < 0 && places) {
+            if (upgradeCat(k) == UpgradeCat::Element) sl = kSlotType;
+            else if (L.has(k)) sl = L.slotOf(k);
+        }
+        const sf::FloatRect panel{c.x - kPanelW * 0.5f, c.y - kPanelH * 0.5f, kPanelW, kPanelH};
+        const sf::FloatRect tr = sl >= 0 ? slotRect(c, sl, L) : panel;
+        const sf::Vector2f tc{tr.left + tr.width * 0.5f, tr.top + tr.height * 0.5f};
+        const sf::Color col = places ? nameColor(k) : theme::accent;
+        const float fly = places ? clampf(landT_ / kLandFly, 0.f, 1.f) : 1.f;
+        if (fly < 1.f) {   // the icon on its way, shrinking into the slot, a tail behind
+            const sf::Vector2f from = sf::Vector2f{s.x * 0.5f, s.y * 0.20f + 60.f} / zoom;
+            const float e = fly * fly * (3.f - 2.f * fly);
+            for (int q = 3; q >= 1; --q) {
+                const float te = std::max(0.f, e - 0.08f * static_cast<float>(q));
+                draw::glow(w, from + (tc - from) * te, 14.f, col, 0.18f / static_cast<float>(q));
+            }
+            drawIcon(w, k, from + (tc - from) * e, lerpf(22.f, 11.f, e));
+        } else {   // it's in: the slot (or the whole ball) flares in its colour
+            const float f = clampf((landT_ - (places ? kLandFly : 0.f)) / (kLandTime - (places ? kLandFly : 0.f)), 0.f, 1.f);
+            const float pad = 3.f + 8.f * f;
+            draw::box(w, {tr.left - pad, tr.top - pad, tr.width + 2.f * pad, tr.height + 2.f * pad}, theme::corner,
+                      withAlpha(col, 0.f), withAlpha(col, 0.f), withAlpha(col, 0.9f * (1.f - f)), 2.f);
+            draw::box(w, tr, theme::corner, withAlpha(col, 0.35f * (1.f - f)), withAlpha(col, 0.2f * (1.f - f)),
+                      withAlpha(col, 0.f), 0.f);
+        }
+    }
+
     for (int i = 0; i < n; ++i) {   // what's in the slot / on the ball under the pointer
+        if (landT_ >= 0.f) break;
         const int part = panelPartAt(panelCenter(zs, i, n, rowY), zm, balls[static_cast<std::size_t>(i)]);
         std::string tt, td;
         if (part >= 0 && loadoutTooltip(balls[static_cast<std::size_t>(i)], part, tt, td)) {

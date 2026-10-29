@@ -51,7 +51,11 @@ struct TabPeek {
     int dragSlot = -1;
     bool closeOnDrop = false;   // TAB was let go mid-drag: close once it lands
     bool handle(const sf::Event& e);   // true if it consumed the event
-    void update(float dt) { if (down) held += dt; }
+    float dragT = 0.f;     // seconds the dragged slot has been held (it trembles in hand)
+    void update(float dt) {
+        if (down) held += dt;
+        if (dragBall >= 0) dragT += dt;
+    }
     void close() { open = down = closeOnDrop = false; held = 0.f; dragBall = dragSlot = -1; }
     bool latched() const { return open && !down && !closeOnDrop; }
     bool dragging() const { return open && dragBall >= 0; }

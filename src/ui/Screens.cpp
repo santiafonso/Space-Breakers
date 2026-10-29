@@ -2088,6 +2088,7 @@ bool loadoutDragEvent(App& app, TabPeek& peek, const sf::Event& e) {
         if (ball >= 0 && slot >= 0 && app.data().run.balls[static_cast<std::size_t>(ball)].kindAt(slot) >= 0) {
             peek.dragBall = ball;
             peek.dragSlot = slot;
+            peek.dragT = 0.f;
             app.audio().grab();
         }
         return true;
@@ -2296,7 +2297,13 @@ void drawLoadoutOverlay(App& app, sf::RenderWindow& w, bool paused, const TabPee
         const auto k = static_cast<UpgradeKind>(L.kindAt(peek.dragSlot));
         std::string t = upgradeInfo(k).title;
         if (L.levelAt(peek.dragSlot) > 1) t += "  Lv" + std::to_string(L.levelAt(peek.dragSlot));
-        const sf::FloatRect chip{um.x + 10.f, um.y + 8.f, 128.f, kSlotH};   // beside the pointer, off the target
+        // Beside the pointer, off the target; in hand it trembles - harder for a
+        // beat as it's picked up, then a nervous quiver until it's set down.
+        const float hT = peek.dragT;
+        const float amp = 1.2f + 2.6f * std::exp(-hT * 6.f);
+        const sf::Vector2f shake{amp * std::sin(hT * 47.f), amp * 0.7f * std::cos(hT * 39.f)};
+        const float grow = 1.f + 0.12f * std::exp(-hT * 9.f);
+        const sf::FloatRect chip{um.x + 10.f + shake.x, um.y + 8.f + shake.y, 128.f * grow, kSlotH * grow};
         draw::box(w, chip, theme::corner, withAlpha(theme::bgDeep, 0.92f), withAlpha(theme::bgDeep, 0.85f),
                   withAlpha(land >= 0 ? theme::accent : theme::textDim, 0.7f), 1.f);
         const sf::Color tc = tierColor(upgradeTier(k));

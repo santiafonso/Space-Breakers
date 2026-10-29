@@ -425,6 +425,18 @@ private:
     void updateLessons(float dt);
     bool lessonEvent(const sf::Event& e);
     void drawLesson(sf::RenderWindow& w) const;
+    // A ball's first class is a moment (2026-10-29): the screen goes dark, the
+    // ball swells in the middle in its new colours with rings off it, and the
+    // class's name writes itself under it. Queued; a click or key moves on.
+    struct ClassCine {
+        BallLoadout ball;
+        ItemTag tag = ItemTag::None;
+        int index = 0;
+        float t = 0.f;
+    };
+    std::vector<ClassCine> classCines_;
+    bool classCineEvent(const sf::Event& e);
+    void drawClassCine(sf::RenderWindow& w) const;
     int bossFlawlessGold_ = 0;       // set when a boss falls, for the BossWin card
     std::string bossUnlock_;         // ...and the milestone it opened
     int bossIronCores_ = 0;

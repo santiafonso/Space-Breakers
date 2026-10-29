@@ -146,6 +146,11 @@ bool loadoutTooltip(const BallLoadout& L, int part, std::string& title, std::str
 // A Tiamat dragon's item: how grown its dragon is (0..1 of adult) and its stage's name; -1 for other parts.
 float loadoutGrowth(const BallLoadout& L, int part, std::string& stage);
 
+// A loadout's ball as the panels show it (body in its lead class's colour, its
+// element rim, class marks, ascended halo, highlight), centred on `c`.
+void drawLoadoutBall(sf::RenderTarget& w, const BallLoadout& L, sf::Vector2f c, float r, float alpha,
+                     float heading = 0.f);
+
 // A small hover box by the pointer: a title and a short wrapped description,
 // kept on screen.
 void drawTooltip(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f mouse, sf::Vector2f screen,
