@@ -92,14 +92,17 @@ inline void ballTraits(const BallLoadout& L, bool out[kTraitCount]) {
     for (int i = 0, n = L.roles(r); i < n; ++i) add(r[i]);
 }
 
-// Balls per trait across the squad.
-inline void teamTraitCounts(const std::vector<BallLoadout>& balls, int out[kTraitCount]) {
+// Balls per trait across the squad; `bonus` more on every trait that has one
+// ("War banner" relic).
+inline void teamTraitCounts(const std::vector<BallLoadout>& balls, int out[kTraitCount], int bonus = 0) {
     for (int i = 0; i < kTraitCount; ++i) out[i] = 0;
     for (const BallLoadout& L : balls) {
         bool has[kTraitCount];
         ballTraits(L, has);
         for (int i = 0; i < kTraitCount; ++i) out[i] += has[i] ? 1 : 0;
     }
+    for (int i = 0; i < kTraitCount; ++i)
+        if (out[i] > 0) out[i] += bonus;
 }
 
 // 0 = off, 1 or 2 = its level.

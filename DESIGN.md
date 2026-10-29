@@ -3783,3 +3783,46 @@ desde el centro. Las capturas 41 / 42 muestran cada motivo y las etapas.
   tamaños de `cfg::boss::actArenaScale` del 2 al 5, con el cielo de ese acto
   (`App::endlessArena`, `World::forceArenaAct`; una run normal lo vuelve a 0 en
   `World::startRun`).
+
+### 2026-10-24: aviso de crítico, rarezas que se leen, 8 reliquias, reroll de habilidades, rama de Creencias, ítem de Calling
+
+- Santi: "pon un aviso cuando pega un crítico un aliado, chequeá en la web; en todos los
+  textos de rare, común y tal que sea más relevante el texto; añadí las reliquias; en las
+  tiendas solo podés rerolear las habilidades; más importante la rama de creed; el nodo del
+  centro: al principio de cada run empezás con un ítem raro para abajo, solo uno, para que
+  vean qué ítems pueden aparecer".
+- **Crítico**: un golpe crítico de una pelea (Keen eye / Keen instinct / Glass Edge, el
+  crítico de Wild card y el de Oracle) pone "CRIT" en rojo sobre el enemigo con un anillo
+  (`FrameEvents::crits`; `App`, uno cada `cfg::combat::critLabelGap` = 0.35 s para no
+  llenar la pantalla). En la web, Keen instinct / Trick shot / Lucky shot ya estaban
+  bien conectados (`App::ballSpecs`).
+- **Rareza**: deja de ser una palabrita gris. Es un chip (`drawTierChip`): contorno en
+  Común / Poco común, relleno sólido desde Raro. Arriba a la izquierda de cada carta (13
+  px) y debajo del título en los tooltips de ítems y reliquias (`drawTooltip(..., tier)`;
+  el "[Rare, Mage]" del final pasa a "[Mage]"). En los textos, las palabras Common /
+  Uncommon / Rare / Epic / Legendary van en el brillo de su rareza (`keywordColor`). Se
+  mantiene la regla de §"Lenguaje visual": rareza = brillo, nunca un color de clase.
+- **8 reliquias nuevas** (al final de `UpgradeKind`, `RunMods::relics2` como máscara,
+  `run.relics2` en el save; números en `cfg::relic`): Hourglass (R, habilidades de las
+  pelotas y Q / E / F recargan 25% más rápido), War banner (R, cada rasgo de equipo cuenta
+  una pelota más), Giant's ring (U, pelotas +15%), Catcher's mitt (U, atrapar desde 40% más
+  lejos y el primer golpe del tiro +25%), Golden tooth (C, 10% de interés tras cada pelea,
+  tope 12), Merchant's bell (C, un estante más y un reroll gratis por tienda), Iron heart
+  (U, +20 de vida máxima y cada élite ganada cura 10%), Hunting horn (R, invocaciones +30%;
+  solo sale con un ítem de Invocador). "Quick Hands" y "Kennel" ya eran nombres de un pacto
+  y de un ítem: de ahí Catcher's mitt y Hunting horn. La columna del TAB acerca las filas si
+  no entran.
+- **Tienda**: el reroll cambia solo las habilidades del estante; ítems, reliquias,
+  elementos y el resto quedan (`App::rerollShop`, `shopRerollable`). Sin habilidades en
+  el estante, el botón dice "No abilities to reroll" y no cobra. Botones más anchos.
+- **Rama de Creencias** (6 → 9 nodos): Zeal (3 niveles: +6% de daño por nivel por cada
+  creencia de la run), Sanctuary (2 niveles: +12 de vida máxima del núcleo por nivel con
+  cada creencia que tomás) y Pilgrimage (prismas: el jefe del acto 3 también ofrece una
+  creencia; una run puede tener tres, `App::creedCap`, `kMaxCreeds` = 3).
+- **Calling** (el nodo del centro): cada run (no el tutorial) arranca con un ítem al azar,
+  Raro como mucho, de cualquiera de las diez clases aunque no esté desbloqueada en la web
+  (`randomItemFor(..., anyClass)`; nada de dioses ni formas ascendidas). Un ítem solo no
+  da la clase: de una clase bloqueada es una muestra. Va en el slot 1 de la primera
+  pelota; el Starter kit pasa al siguiente libre. Se anuncia al abrir el mapa.
+- `SB_SNAPSHOT` suma `08_tab_hover`, `12b_shop_relics2`, `12c_shop_reroll` y
+  `12d_tab_relics2`.

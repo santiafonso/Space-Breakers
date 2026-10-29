@@ -162,6 +162,9 @@ public:
     int shopRerollPrice() const;
     int shopFreeRerolls() const;        // free rerolls this visit still has ("Merchant": 1 per level)
     int shopRerollsLeft() const;        // rerolls this visit still has (cfg::gold::rerollsPerVisit + Merchant)
+    int shopFreeRerollCount() const;    // free rerolls per visit (Merchant levels + Merchant's bell)
+    bool shopRerollable(int i) const;   // shelf slot i is an ability a reroll would swap
+    bool shopHasAbilityToReroll() const;
     int shopSellsLeft() const;          // items this visit may still buy back (1, +1 per "Haggler" level)
     void rerollShop();
     int saleOffPercent() const;
@@ -314,6 +317,7 @@ private:
     // Creeds.
     void foldCreeds(WorldParams& p) const;  // the run's creeds into the sim params
     bool openCreedChoice(CreedSource src);   // false = nothing to offer (caller moves on)
+    int creedCap() const;                    // creeds a run can hold (kMaxCreeds with "Pilgrimage")
     float coinRadius(int comboTier) const;   // a kill's gold coin (UI px)
     void continueAfterCreed();
     void grantCreed(CreedId id);
@@ -327,7 +331,7 @@ private:
     int colossusBall() const;           // "Colossus": the most built-up ball (-1 = none)
     void applyDuet();
     void applyLegion();
-    int randomItemFor(const BallLoadout& b, Tier maxTier);   // a random unlocked item that fits (-1 none)
+    int randomItemFor(const BallLoadout& b, Tier maxTier, bool anyClass = false);   // a random item that fits (-1 none); anyClass: locked classes too
     int randomItemOfTier(Tier t, const BallLoadout* fits);
     bool anyItemOfTier(Tier t) const;   // an unlocked item of exactly this tier fits some ball   // exactly this tier; fits that ball, or any ball (-1 none)
     void afterFight();        // a fight won: cocoons count down, benched balls come back
@@ -482,6 +486,8 @@ private:
     float aimT_ = 0.f;        // real seconds spent aiming (slow-mo runs out)
     float lowCoreCd_ = 0.f;   // time to the next low-core warning cue
     float reactLabelCd_ = 0.f;   // spacing between reaction name labels
+    float critLabelCd_ = 0.f;    // spacing between "CRIT" calls
+    int callingItem_ = -1;       // the run's "Calling" item, announced when the map first opens (-1 = done)
     int multiKillN_ = 0;      // kills in the current quick burst
     float multiKillT_ = 0.f;  // time left for the burst to keep chaining
     sf::Vector2f multiKillPos_{0.f, 0.f};   // UI position of the burst's last kill

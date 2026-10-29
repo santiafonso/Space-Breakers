@@ -125,7 +125,7 @@ void App::useCreedAbility() {
 bool App::openCreedChoice(CreedSource src) {
     const RunState& r = data_.run;
     const int* u = data_.meta.unlock;
-    if (static_cast<int>(r.creeds.size()) >= kMaxCreeds) return false;
+    if (static_cast<int>(r.creeds.size()) >= creedCap()) return false;
 
     std::vector<CreedId> pool;
     for (int i = 0; i < kCreedCount; ++i) {
@@ -162,6 +162,9 @@ bool App::openCreedChoice(CreedSource src) {
     push(ScreenId::Creed);
     return true;
 }
+
+// Creeds a run can hold: two, three with "Pilgrimage".
+int App::creedCap() const { return data_.meta.unlock[MetaPilgrimage] > 0 ? kMaxCreeds : kMaxCreeds - 1; }
 
 void App::continueAfterCreed() {
     if (creedSrc_ == CreedSource::Boss) openChoice(RollSource::Boss);   // then the boss treasure
@@ -203,6 +206,8 @@ void App::grantCreed(CreedId id) {
         case CreedId::Legion: applyLegion(); break;
         default: break;
     }
+    if (const int sanctuary = data_.meta.unlock[MetaSanctuary]; sanctuary > 0)   // web "Sanctuary": the core grows
+        world_.addCoreMaxHp(cfg::meta::sanctuaryHpPerLevel * static_cast<float>(sanctuary));
     syncWorldBalls();
     const sf::Color col = creedColor(creedDef(id).archetype);
     effects_.flash(col, 0.8f);
@@ -279,13 +284,18 @@ void App::applyLegion() {
     }
 }
 
-int App::randomItemFor(const BallLoadout& b, Tier maxTier) {
+int App::randomItemFor(const BallLoadout& b, Tier maxTier, bool anyClass) {
     const UpgradeCtx c = buildUpgradeCtx();
     std::vector<int> pool;
     for (int i = 0; i < kUpgradeKindCount; ++i) {
         const auto k = static_cast<UpgradeKind>(i);
-        if (upgradeCat(k) != UpgradeCat::Item || upgradeTier(k) > maxTier) continue;
-        if (c.isLocked(k) || !fitsSquad(k, b)) continue;
+        if (upgradeCat(k) != UpgradeCat::Item || upgradeTier(k) > maxTier || k == UpgradeKind::Cocoon) continue;
+        if (anyClass) {   // the web's locks aside - but only the ten base classes (no gods, no ascended forms)
+            const int t = static_cast<int>(itemTag(k));
+            if (t > static_cast<int>(ItemTag::Alchemist)) continue;
+            if (itemNeedsElement(k) && elementsUnlocked(c) == 0) continue;
+            if (!fitsSquad(k, b)) continue;
+        } else if (c.isLocked(k) || !fitsSquad(k, b)) continue;
         if (k == UpgradeKind::Shatter && !c.elemUnlocked[3]) continue;   // needs ice
         pool.push_back(i);
     }
@@ -474,7 +484,7 @@ void App::rollShopOffers() {
 
     std::vector<UpgradeKind> taken;
     for (int k : prepaid) taken.push_back(static_cast<UpgradeKind>(k));
-    const int count = cfg::gold::shopOffers;
+    const int count = cfg::gold::shopOffers + (r.mods.has(UpgradeKind::RelicMerchantsBell) ? cfg::relic::bellShelf : 0);   // "Merchant's bell"
     std::vector<UpgradeKind> fresh;
     // At most cfg::gold::shopMaxItems items on the shelf, and on most visits none.
     int items = rng_.range(0.f, 1.f) < cfg::gold::shopItemChance ? 0 : cfg::gold::shopMaxItems;
@@ -511,27 +521,58 @@ void App::rollShopOffers() {
 }
 
 // Rerolls: cfg::gold::rerollsPerVisit per visit, each dearer than the last
-// (cfg::gold::rerollGrowth); "Merchant" adds one per level, free and first.
+// (cfg::gold::rerollGrowth); "Merchant" (one per level) and "Merchant's bell"
+// add free ones, used first. A reroll swaps only the abilities (2026-10-24).
+int App::shopFreeRerollCount() const {
+    return data_.meta.unlock[MetaMerchant] +
+           (data_.run.mods.has(UpgradeKind::RelicMerchantsBell) ? cfg::relic::bellFreeRerolls : 0);
+}
+
 int App::shopRerollPrice() const {
     if (shopFreeRerolls() > 0) return 0;
-    const int paid = data_.run.shopRerolls - data_.meta.unlock[MetaMerchant];
+    const int paid = data_.run.shopRerolls - shopFreeRerollCount();
     return static_cast<int>(std::lround(static_cast<float>(cfg::gold::rerollBase) *
                                         std::pow(cfg::gold::rerollGrowth, static_cast<float>(paid))));
 }
 
 // Selling is one item per visit (+1 per "Haggler" level).
-int App::shopFreeRerolls() const { return std::max(0, data_.meta.unlock[MetaMerchant] - data_.run.shopRerolls); }
+int App::shopFreeRerolls() const { return std::max(0, shopFreeRerollCount() - data_.run.shopRerolls); }
 int App::shopRerollsLeft() const {
-    return std::max(0, cfg::gold::rerollsPerVisit + data_.meta.unlock[MetaMerchant] - data_.run.shopRerolls);
+    return std::max(0, cfg::gold::rerollsPerVisit + shopFreeRerollCount() - data_.run.shopRerolls);
+}
+// A shelf slot a reroll would swap: an unsold ability (not a revealed mystery box).
+bool App::shopRerollable(int i) const {
+    const RunState& r = data_.run;
+    const auto n = static_cast<std::size_t>(i);
+    return n < r.shopOffers.size() && upgradeCat(static_cast<UpgradeKind>(r.shopOffers[n])) == UpgradeCat::Ability &&
+           !(n < r.shopSold.size() && r.shopSold[n]) && !(n < r.shopDeal.size() && r.shopDeal[n] == 2);
+}
+bool App::shopHasAbilityToReroll() const {
+    for (int i = 0; i < static_cast<int>(data_.run.shopOffers.size()); ++i)
+        if (shopRerollable(i)) return true;
+    return false;
 }
 int App::shopSellsLeft() const { return std::max(0, 1 + data_.meta.unlock[MetaHaggler] - data_.run.shopSells); }
 
+// Only the abilities on the shelf change; items, relics, elements and the
+// rest stay where they are (2026-10-24).
 void App::rerollShop() {
     RunState& r = data_.run;
-    if (shopRerollsLeft() <= 0 || r.gold < shopRerollPrice()) return;
+    if (shopRerollsLeft() <= 0 || !shopHasAbilityToReroll() || r.gold < shopRerollPrice()) return;
+    std::vector<UpgradeKind> taken;
+    for (int k : r.shopOffers) taken.push_back(static_cast<UpgradeKind>(k));
+    bool swapped = false;
+    for (int i = 0; i < static_cast<int>(r.shopOffers.size()); ++i) {
+        if (!shopRerollable(i)) continue;
+        const UpgradeKind k = rollPick(RollSource::Shop, taken, [](UpgradeKind u) { return upgradeCat(u) == UpgradeCat::Ability; });
+        if (upgradeCat(k) != UpgradeCat::Ability || std::find(taken.begin(), taken.end(), k) != taken.end()) continue;   // pool ran dry
+        r.shopOffers[static_cast<std::size_t>(i)] = static_cast<int>(k);
+        taken.push_back(k);
+        swapped = true;
+    }
+    if (!swapped) return;   // no other ability to offer: nothing paid
     r.gold -= shopRerollPrice();
     ++r.shopRerolls;
-    rollShopOffers();
     audio_.purchase();
     effects_.flash(theme::accent, 0.25f);
 }

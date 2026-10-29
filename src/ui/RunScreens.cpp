@@ -418,7 +418,8 @@ void EquipScreen::draw(App& app, sf::RenderWindow& w) {
             std::string st;
             const float g = loadoutGrowth(balls[static_cast<std::size_t>(i)], part, st);
             const int kind = part < kLoadoutSlots ? balls[static_cast<std::size_t>(i)].kindAt(part) : -1;
-            drawTooltip(w, app.font(), zm, zs, tt, td, kind >= 0 ? nameColor(static_cast<UpgradeKind>(kind)) : theme::textHi, g, st);
+            drawTooltip(w, app.font(), zm, zs, tt, td, kind >= 0 ? nameColor(static_cast<UpgradeKind>(kind)) : theme::textHi, g, st,
+                        kind >= 0 ? static_cast<int>(upgradeTier(static_cast<UpgradeKind>(kind))) : -1);
         }
     }
     app.useUiView();
@@ -828,7 +829,7 @@ constexpr float kOfferH = 236.f;
 constexpr float kOfferGap = 14.f;
 constexpr float kGroupGap = 30.f;    // extra room between the shelf's groups (items | abilities | relics ...)
 constexpr float kOfferTop = 0.27f;   // * size.y
-constexpr float kBtnW = 204.f, kBtnH = 36.f, kBtnGap = 12.f;
+constexpr float kBtnW = 250.f, kBtnH = 36.f, kBtnGap = 12.f;
 }  // namespace
 
 int ShopScreen::cardCount(App& app) const {
@@ -1063,11 +1064,13 @@ void ShopScreen::draw(App& app, sf::RenderWindow& w) {
                    theme::puGolden, hover_ == 100 ? 1.f : 0.f, true);
     if (const sf::FloatRect br = buttonRect(app, 1); br.width > 0.f)
         drawButton(w, f, br, app.shopRerollsLeft() <= 0 ? std::string("No rerolls left")
-                             : (app.shopRerollPrice() == 0 ? std::string("Reroll (R)  -  free")
-                                                           : "Reroll (R)  -  " + std::to_string(app.shopRerollPrice()) + "g") +
+                             : !app.shopHasAbilityToReroll() ? std::string("No abilities to reroll")
+                             : (app.shopRerollPrice() == 0 ? std::string("Reroll abilities (R)  -  free")
+                                                           : "Reroll abilities (R)  -  " + std::to_string(app.shopRerollPrice()) + "g") +
                                    "  (" + std::to_string(app.shopRerollsLeft()) + ")",
                    theme::puSurge,
-                   hover_ == 101 ? 1.f : 0.f, app.shopRerollsLeft() > 0 && g >= app.shopRerollPrice());
+                   hover_ == 101 ? 1.f : 0.f,
+                   app.shopRerollsLeft() > 0 && app.shopHasAbilityToReroll() && g >= app.shopRerollPrice());
     drawButton(w, f, buttonRect(app, 2), "Leave", theme::accent, hover_ == 102 ? 1.f : 0.f, true);
 
     // Hover help.
@@ -1085,8 +1088,9 @@ void ShopScreen::draw(App& app, sf::RenderWindow& w) {
                         " left at this shop (Haggler: +1 per level).", theme::puGolden);
     } else if (hover_ == 101) {
         drawTooltip(w, f, mouse_, s, "Reroll",
-                    "replace the stock with new picks (and a new sale). As often as you like - each reroll at "
-                    "this shop costs much more than the last (Merchant: the first is free, 1 per level).",
+                    "swap the abilities on the shelf for new ones - items, relics and the rest stay. Each reroll at "
+                    "this shop costs much more than the last (Merchant: the first is free, 1 per level; "
+                    "Merchant's bell: one more free).",
                     theme::puSurge);
     }
 }

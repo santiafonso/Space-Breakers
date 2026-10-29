@@ -1609,7 +1609,8 @@ bool World::strike(Ball& b, Enemy& e, sf::Vector2f normal, const WorldParams& p,
     dmg *= classPreHit(b, e, p);    // Slinger: the thrown first hit, Execution throw, Double down
     dmg *= stylePreHit(b, e, p, ev);   // a Beacon / Pass charge
     dmg *= commonPreHit(b, e, p);      // the commons: Reagent, Spotter, First blood...
-    dmg *= apoloPreHit(b);             // "Oracle": a muse just arrived - a sure crit
+    const float oracle = apoloPreHit(b);   // "Oracle": a muse just arrived - a sure crit
+    dmg *= oracle;
     dmg *= artemisaPreHit(b, e);       // Artemisa: her prey (and where the throw hit, for Arrow rain)
     dmg *= roleContact(b, e);          // the classes' own feel on a contact hit
     dmg *= p.creed.contactMul;         // "Arcanist" creed's cost
@@ -1623,6 +1624,7 @@ bool World::strike(Ball& b, Enemy& e, sf::Vector2f normal, const WorldParams& p,
     bool crit = false;
     if (m.critChance > 0.f && chance(m.critChance, p)) { dmg *= m.critMult; crit = true; }  // "Keen eye"
     else if (p.pact.glassEdge) dmg *= cfg::pact::glassMiss;                // "Glass Edge" pact: no crit, weaker
+    if (crit || oracle > 1.f) ev.crits.push_back(e.pos);                   // the "CRIT" call over it (App)
     if (m.executeThreshold > 0.f && e.hp < e.maxHp * m.executeThreshold)   // "Executioner"
         dmg *= m.executeMult;
     if (m.hunterMult > 0.f && e.id == b.preyId) dmg *= m.hunterMult;       // "Hunter": its prey

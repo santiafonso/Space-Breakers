@@ -382,8 +382,23 @@ enum class UpgradeKind {
     ArrowRain,         // a catch: arrows rain wherever the throw hit         [Artemisa]
     GoldenStag,        // a full-pull throw: a golden stag charges ahead      [Artemisa]
     HuntNight,         // night falls: all are prey; a throw runs them all through [Artemisa]
+    // ---- relics, second batch (2026-10-24): after everything so saved runs keep
+    // their numbers (upgradeCat reads this range; keep RelicHourglass first) ----
+    RelicHourglass,    // abilities (the balls' and your Q / E / F) recharge faster
+    RelicWarBanner,    // every squad trait counts one more ball
+    RelicGiantsRing,   // every ball bigger
+    RelicCatchersMitt, // catch from further away; a thrown ball's first hit harder
+    RelicGoldenTooth,  // interest on your gold after every fight
+    RelicMerchantsBell,// one more shelf and a free reroll at every shop
+    RelicIronHeart,    // +core max health; an elite won heals the core
+    RelicHuntingHorn,  // summons hit harder and last longer
 };
-inline constexpr int kUpgradeKindCount = static_cast<int>(UpgradeKind::HuntNight) + 1;
+inline constexpr int kUpgradeKindCount = static_cast<int>(UpgradeKind::RelicHuntingHorn) + 1;
+inline constexpr int kRelic2Count = kUpgradeKindCount - static_cast<int>(UpgradeKind::RelicHourglass);
+// The second relic batch is a bit mask (RunMods::relics2): bit of relic k.
+inline unsigned relic2Bit(UpgradeKind k) {
+    return 1u << (static_cast<int>(k) - static_cast<int>(UpgradeKind::RelicHourglass));
+}
 inline constexpr int kMaxUpgradeKinds = 384;   // capacity of UpgradeCtx::locked
 static_assert(kUpgradeKindCount <= kMaxUpgradeKinds, "raise kMaxUpgradeKinds");
 

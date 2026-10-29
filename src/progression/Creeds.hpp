@@ -38,7 +38,7 @@ enum class CreedId {
     Snowball,     // Berserker: kills grow a ball (to x1.5) each fight; it starts at x0.7
 };
 inline constexpr int kCreedCount = 18;
-inline constexpr int kMaxCreeds = 2;   // one from the run start (Covenant) + one from the boss
+inline constexpr int kMaxCreeds = 3;   // the run start (Covenant), the act-1 boss, the act-3 boss ("Pilgrimage"; App::creedCap)
 
 enum class CreedArchetype { Thrower, Spectator, FewMighty, Swarm, Core, Gambler, Alchemist, Berserker, Caster, Merchant, Slayer, Conductor };
 

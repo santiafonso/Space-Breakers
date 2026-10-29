@@ -96,6 +96,10 @@ sf::Color catColor(UpgradeCat c);
 sf::Color tagColor(ItemTag t);   // a class's colour (its items, its name)
 sf::Color traitColor(Trait t);   // a squad trait's colour (TAB, the label when it turns on)
 sf::Color tierColor(Tier t);     // Common grey .. Legendary gold
+// How rare, as a tag (2026-10-24): its name in capitals in a chip - outlined for
+// Common / Uncommon, filled solid from Rare up. `left` is its left edge, `cy` its
+// centre line. Returns its width.
+float drawTierChip(sf::RenderTarget& w, const sf::Font& font, Tier t, float left, float cy, float alpha, unsigned size = 12);
 // A pick's card frame: dark glass lit from the top by the tier colour, a tier
 // band along the top edge and corner brackets; Epic / Legendary get a second
 // set of brackets outside that breathes, so the rare ones jump out. `time`
@@ -146,7 +150,8 @@ float loadoutGrowth(const BallLoadout& L, int part, std::string& stage);
 // kept on screen.
 void drawTooltip(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f mouse, sf::Vector2f screen,
                  const std::string& title, const std::string& desc, sf::Color titleColor = theme::textHi,
-                 float meter = -1.f, const std::string& meterLabel = "");   // meter >= 0: a growth bar under it (Tiamat's dragons)
+                 float meter = -1.f, const std::string& meterLabel = "",   // meter >= 0: a growth bar under it (Tiamat's dragons)
+                 int tier = -1);   // tier >= 0: its rarity tag under the title
 // `placing` = the UpgradeKind being equipped (-1 none): the slots that take it light up.
 void drawLoadoutPanel(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f c,
                       const BallLoadout& L, float alpha, float hover, int hoverSlot, bool dim, int placing = -1);

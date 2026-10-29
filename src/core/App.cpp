@@ -157,6 +157,9 @@ WorldParams App::params() const {
     p.timeDilation = m.timeDilation;
     p.overcharge = m.overcharge;
     if (m.glassCannon) p.damageMult *= cfg::synergy::glassDamage;
+    p.damageMult *= 1.f + cfg::meta::zealPerLevel * static_cast<float>(u[MetaZeal]) *   // web "Zeal": per creed held
+                              static_cast<float>(data_.run.creeds.size());
+    if (m.has(UpgradeKind::RelicGiantsRing)) p.ballRadiusMult *= cfg::relic::giantsRing;   // "Giant's ring"
 
     // Meta web (Fase A).
     p.emberLevel = u[MetaEmber];
@@ -376,6 +379,15 @@ BallSpec App::ballSpec(const BallLoadout& L) const {
         const float levels = lv(node) + lv(MetaOuterStrikerSlinger + (node - MetaFollowThrough));
         return levels * static_cast<float>((L.hasRole(a) ? 1 : 0) + (L.hasRole(b) ? 1 : 0));
     };
+    {   // the second relic batch: the balls' own numbers
+        const RunMods& rm = data_.run.mods;
+        if (rm.has(UpgradeKind::RelicHourglass)) m.cls.mage.focus += cfg::relic::hourglassFocus;   // "Hourglass"
+        if (rm.has(UpgradeKind::RelicCatchersMitt)) {                                            // "Catcher's mitt"
+            m.reach *= cfg::relic::mittReach;
+            m.heavyThrow += cfg::relic::mittThrow;
+        }
+        if (rm.has(UpgradeKind::RelicHuntingHorn)) m.cls.summoner.bond *= cfg::relic::hornBond;  // "Hunting horn"
+    }
     m.reach *= 1.f + W::gripPerLevel * lv(MetaGrip);                           // "Grip"
     m.heavyThrow += W::windupPerLevel * lv(MetaWindup);                        // "Wind-up"
     m.heavyThrow += W::followThroughPerLevel * bridge(MetaFollowThrough, ItemTag::Striker, ItemTag::Slinger);
@@ -517,7 +529,7 @@ void App::rememberClasses() {
     knownClasses_.clear();
     for (const BallLoadout& L : data_.run.balls) knownClasses_.push_back({L.roleMask(), L.ascended(), L.element()});
     int counts[kTraitCount];
-    teamTraitCounts(data_.run.balls, counts);
+    teamTraitCounts(data_.run.balls, counts, data_.run.mods.has(UpgradeKind::RelicWarBanner) ? cfg::relic::warBannerBalls : 0);   // "War banner"
     for (int t = 0; t < kTraitCount; ++t) knownTraits_[t] = traitTier(counts[t]);
 }
 
@@ -586,7 +598,7 @@ void App::announceClassGains() {
     }
     {   // a squad trait turning on or levelling up: "IMPACT 2  -  every ball hits +10%"
         int counts[kTraitCount];
-        teamTraitCounts(data_.run.balls, counts);
+        teamTraitCounts(data_.run.balls, counts, data_.run.mods.has(UpgradeKind::RelicWarBanner) ? cfg::relic::warBannerBalls : 0);   // "War banner"
         float y = size().y * 0.22f;
         for (int t = 0; t < kTraitCount; ++t) {
             const int tier = traitTier(counts[t]);
@@ -843,12 +855,25 @@ void App::newRun() {
     // (or when a dev shortcut drops us past the boss already).
     continueUnlocked_ = !r.tutorial && (data_.meta.stats.wins > 0 || startWave > cfg::run::bossWave);
 
+    // "Calling" (2026-10-24): every run opens with one random item, Rare at most,
+    // from any class - unlocked on the web or not - so the player sees what's out
+    // there. One item alone makes no class, so a locked class's item is a taste.
+    if (data_.meta.unlock[MetaCalling] > 0 && !r.tutorial && !r.balls.empty()) {
+        const int item = randomItemFor(r.balls[0], Tier::Rare, true);
+        if (item >= 0) {
+            r.balls[0].setSlot(0, item, 1);
+            callingItem_ = item;
+        }
+    }
     // "Starter kit": a free item on the first ball (Uncommon, then Rare). With
     // "Quartermaster" you pick it from 4 cards in the run intro instead.
     if (const int kit = data_.meta.unlock[MetaStarterKit];
         kit > 0 && !r.balls.empty() && data_.meta.unlock[MetaQuartermaster] == 0) {
         const std::vector<UpgradeKind> pool = starterPool(kit >= 2 ? Tier::Rare : Tier::Uncommon);
-        if (!pool.empty()) r.balls[0].setSlot(0, static_cast<int>(pool[0]), 1);   // its tier, else the nearest
+        int free = 0;   // after the Calling item
+        while (free < r.balls[0].itemSlots - 1 && r.balls[0].gear[free] >= 0) ++free;
+        if (!pool.empty() && r.balls[0].gear[free] < 0)
+            r.balls[0].setSlot(free, static_cast<int>(pool[0]), 1);   // its tier, else the nearest
     }
     world_.startRun(params(), ballSpecs(), r.coreHp, r.coreMaxHp);
     rememberClasses();   // the class-gain watch starts from here (Calling announces its class)
@@ -976,6 +1001,7 @@ UpgradeCtx App::buildUpgradeCtx() const {
     c.phoenix = r.mods.phoenix;
     c.timeDilation = r.mods.timeDilation;
     c.overcharge = r.mods.overcharge;
+    c.relics2 = r.mods.relics2;
     // Legendaries that still sit behind their web node.
     const int* u = data_.meta.unlock;
     if (u[MetaSatellite] == 0) c.lock(UpgradeKind::Satellite);
@@ -1250,7 +1276,18 @@ void App::applyUpgradeKind(UpgradeKind k, int ball, int slot) {
             m.glassCannon = true;
             world_.addCoreMaxHp(-world_.core().maxHp * (1.f - cfg::synergy::glassCoreHp));
             break;
-        default: break;
+        case UpgradeKind::RelicIronHeart:   // a bigger core, filled
+            m.relics2 |= relic2Bit(k);
+            world_.addCoreMaxHp(cfg::relic::ironHeartHp);
+            break;
+        case UpgradeKind::RelicWarBanner: case UpgradeKind::RelicGiantsRing: case UpgradeKind::RelicCatchersMitt:
+        case UpgradeKind::RelicHuntingHorn:   // the balls' own numbers (ballSpecs)
+            m.relics2 |= relic2Bit(k);
+            syncWorldBalls();
+            break;
+        default:
+            if (k >= UpgradeKind::RelicHourglass) m.relics2 |= relic2Bit(k);
+            break;
     }
 }
 
@@ -1355,6 +1392,13 @@ void App::applyUpgrade(int idx) {
 void App::openMap() {
     revealAltarPath();   // one step from the boss with the streak earned: the hidden Altar
     push(ScreenId::Map);
+    if (callingItem_ >= 0) {   // "Calling": what the first ball opened the run with
+        const auto k = static_cast<UpgradeKind>(callingItem_);
+        const std::string cls = itemTag(k) != ItemTag::None ? std::string("  (") + itemTagName(itemTag(k)) + ")" : "";
+        effects_.addLabel(std::string("CALLING  your first ball starts with ") + upgradeInfo(k).title + cls,
+                          {size().x * 0.5f, size().y * 0.16f}, tierColor(upgradeTier(k)), 22, 3.f);
+        callingItem_ = -1;
+    }
     saveRunNow();        // quitting from here resumes here
 }
 
@@ -2014,9 +2058,10 @@ void App::continuePastBoss() {
         effects_.addLabel("HORDE  a new ball joins", {size().x * 0.5f, size().y * 0.18f}, theme::pact, 24, 1.6f);
     }
     world_.setPhoenix((r.mods.phoenix ? 1 : 0) + r.lastStandLeft);   // "Phoenix" recharges for the new act
-    // After act 1 a creed first (Fase O); every boss: the treasure (an Epic /
-    // Legendary pick), then the map.
-    if (act != 2 || !openCreedChoice(CreedSource::Boss)) openChoice(RollSource::Boss);
+    // After act 1 a creed first (Fase O) - after act 3 too with "Pilgrimage";
+    // every boss: the treasure (an Epic / Legendary pick), then the map.
+    const bool creedAct = act == 2 || (act == 4 && data_.meta.unlock[MetaPilgrimage] > 0);
+    if (!creedAct || !openCreedChoice(CreedSource::Boss)) openChoice(RollSource::Boss);
 }
 
 // "Back to menu" on the BossWin card. If the run wasn't banked yet (miniboss just
@@ -2508,6 +2553,16 @@ void App::processEvents(const FrameEvents& ev) {
             reactLabelCd_ = 0.25f;
         }
     }
+    // A ball's critical hit: "CRIT" over the enemy, in the crit red - spaced out
+    // so a crit build reads as a beat, not a wall of text.
+    if (!ev.crits.empty() && critLabelCd_ <= 0.f) {
+        sf::Color red;
+        keywordColor("crit", red);
+        const sf::Vector2f at = ev.crits.back();
+        effects_.addLabel("CRIT", worldToUi(at) + sf::Vector2f{0.f, -30.f}, red, 21, 0.7f);
+        effects_.addRing(at, 520.f, red);
+        critLabelCd_ = cfg::combat::critLabelGap;
+    }
     for (const BounceFx& b : ev.bounces) {
         effects_.addRing(b.pos, b.speed, b.color);
         if (!b.ballPair) effects_.edgeHit(b.normal);   // edge flash only for wall / core hits
@@ -2694,6 +2749,21 @@ void App::processEvents(const FrameEvents& ev) {
                               theme::core, 24, 1.5f);
             effects_.flash(theme::core, 0.3f);
         }
+        if (r.mods.has(UpgradeKind::RelicGoldenTooth) && r.gold > 0) {   // "Golden tooth": interest on what you carry
+            const int interest = std::min(cfg::relic::toothCap,
+                                          static_cast<int>(static_cast<float>(r.gold) * cfg::relic::toothInterest));
+            if (interest > 0) {
+                r.gold += interest;
+                effects_.addLabel("+" + std::to_string(interest) + " interest  (Golden tooth)",
+                                  {size().x * 0.5f, size().y * 0.4f + 108.f}, theme::puGolden, 20, 1.3f);
+            }
+        }
+        if (r.eliteWave && r.mods.has(UpgradeKind::RelicIronHeart)) {   // "Iron heart": an elite won heals the core
+            world_.repairCore(world_.core().maxHp * cfg::relic::ironHeartEliteHeal);
+            data_.run.coreHp = world_.core().hp;
+            effects_.addLabel("Iron heart  +" + std::to_string(static_cast<int>(std::lround(world_.core().maxHp * cfg::relic::ironHeartEliteHeal))) + " core",
+                              {size().x * 0.5f, size().y * 0.4f + 144.f}, theme::core, 20, 1.3f);
+        }
         postFight();
     }
 }
@@ -2843,14 +2913,16 @@ void App::update(float frameDt) {
                 slow = std::min(slow, P::bulletScale);
                 hintDone(Hint::Bullet);
             } else if ((bulletIdle_ += frameDt) > P::bulletRechargeDelay) {
-                bulletGauge_ = std::min(1.f, bulletGauge_ + frameDt / P::bulletRecharge);
+                bulletGauge_ = std::min(1.f, bulletGauge_ + frameDt / P::bulletRecharge *
+                                                 (data_.run.mods.has(UpgradeKind::RelicHourglass) ? cfg::relic::hourglassRate : 1.f));   // "Hourglass"
             }
         }
         simDt *= slow;
         simDt *= devTimeScale_;   // dev panel: slow motion / fast forward
         novaCd_ = std::max(0.f, novaCd_ - frameDt);   // "Nova" creed recharges while you fight
-        repulseCd_ = std::max(0.f, repulseCd_ - frameDt);
-        markCd_ = std::max(0.f, markCd_ - frameDt);
+        const float cdDt = frameDt * (data_.run.mods.has(UpgradeKind::RelicHourglass) ? cfg::relic::hourglassRate : 1.f);   // "Hourglass"
+        repulseCd_ = std::max(0.f, repulseCd_ - cdDt);
+        markCd_ = std::max(0.f, markCd_ - cdDt);
         if (const float q = world_.takeQRefund(); q > 0.f)   // "Second wind": a catch refunds the Q
             markCd_ = std::max(0.f, markCd_ - q * cfg::player::markCooldown);
         if (noHitstop_) hitstop_ = 0.f;
@@ -2872,6 +2944,7 @@ void App::update(float frameDt) {
         if (steps == cfg::loop::maxSteps) worldAccum_ = 0.f;
 
         reactLabelCd_ = std::max(0.f, reactLabelCd_ - frameDt);
+        critLabelCd_ = std::max(0.f, critLabelCd_ - frameDt);
         if (multiKillT_ > 0.f) {   // a kill burst ends once kills stop chaining
             multiKillT_ -= frameDt;
             if (multiKillT_ <= 0.f) flushMultiKill();
@@ -3221,10 +3294,52 @@ int App::runShowcase(const std::string& dir) {
             replaceStack(ScreenId::Menu);
             openLoadout();
         } else {
+            // SB_SHOWCASE_ACT=<n> / SB_SHOWCASE_SEED=<n>: that act's full map, rolled from that seed.
+            RunState& r = data_.run;
+            const int act = std::getenv("SB_SHOWCASE_ACT") ? std::max(1, std::atoi(std::getenv("SB_SHOWCASE_ACT"))) : 1;
+            Rng mrng;
+            mrng.gen.seed(std::getenv("SB_SHOWCASE_SEED") ? static_cast<unsigned>(std::atoi(std::getenv("SB_SHOWCASE_SEED"))) : 1u);
+            r.tutorial = false;
+            r.map = generateMap(mrng, act);
+            r.mapNode = -1;
+            r.mapRow = 0;
+            r.wave = (act - 1) * cfg::run::bossWave;
+            callingItem_ = -1;
+            replaceStack(ScreenId::Play);
             openMap();
         }
+        // SB_SHOWCASE_WALK=1 (map): climb the map a stop at a time, a beat on each,
+        // and earn the hidden Altar on the way; SB_SHOWCASE_PAN=1: scroll up it instead.
+        const bool walk = !web && std::getenv("SB_SHOWCASE_WALK");
+        const bool pan = !web && std::getenv("SB_SHOWCASE_PAN");
+        int held = 0, pick = -1;
         std::mt19937 rng(7);
         for (int f = 0; f < frames; ++f) {
+            auto* map = stack_.empty() ? nullptr : dynamic_cast<MapScreen*>(stack_.back().get());
+            if (walk && !map && data_.run.mapNode >= 0) {   // a stop opened: back to the map, one row up
+                if (data_.run.mapRow >= data_.run.map.bossRow()) break;
+                if (data_.run.mapRow == data_.run.map.rowCount()) data_.run.altarState = 1;
+                replaceStack(ScreenId::Play);
+                openMap();
+                held = 0;
+                pick = -1;
+            } else if (walk && map && ++held > 75) {   // pick one of the lit ways (1-4 keys)
+                std::vector<int> open;
+                for (int i = 0; i < static_cast<int>(data_.run.map.nodes.size()); ++i)
+                    if (mapNodeOpen(i)) open.push_back(i);
+                if (pick < 0 && !open.empty()) pick = static_cast<int>(rng() % open.size());
+                if (pick >= 0 && pick < 4) {
+                    sf::Event e{};
+                    e.type = sf::Event::KeyPressed;
+                    e.key.code = static_cast<sf::Keyboard::Key>(sf::Keyboard::Num1 + pick);
+                    map->handleEvent(*this, e, {0.f, 0.f});
+                }
+            } else if (pan && map && f > 40 && f % 45 == 0) {
+                sf::Event e{};
+                e.type = sf::Event::KeyPressed;
+                e.key.code = sf::Keyboard::Up;
+                map->handleEvent(*this, e, {0.f, 0.f});
+            }
             if (web && f % (4 / steps) == 0) {   // one more node, from those the web lets you buy next
                 std::vector<int> open;
                 for (int u = 0; u < MetaUnlockCount; ++u)
@@ -3512,6 +3627,8 @@ int App::runSnapshots(const std::string& dir) {
         snapMouse_ = {size().x * 0.5f, 20.f};
         press.type = sf::Event::MouseButtonReleased;
         stack_.back()->handleEvent(*this, press, {0.f, 0.f});
+        snapMouse_ = slotMid(0, 0);   // hovering an item: its tooltip, with the rarity tag
+        snapFrame(d + "08_tab_hover.png");
         snapMouseOn_ = false;
     }
     tab.type = sf::Event::KeyReleased;
@@ -3950,6 +4067,34 @@ int App::runSnapshots(const std::string& dir) {
     rollShop();
     push(ScreenId::Shop);
     snapFrame(d + "12_shop_extras.png");
+    {   // the second relic batch on the shelf, with "Merchant's bell" (a 4th offer, a free
+        // reroll); then the reroll: only the abilities change
+        using K = UpgradeKind;
+        const unsigned keepRelics = r.mods.relics2;
+        const int keepGold = r.gold;
+        r.mods.relics2 |= relic2Bit(K::RelicMerchantsBell);
+        rollShop();
+        r.shopOffers = {static_cast<int>(K::AbilityWarp), static_cast<int>(K::AbilityBeam),
+                        static_cast<int>(K::RelicHourglass), static_cast<int>(K::RelicGiantsRing)};
+        r.shopDeal.assign(r.shopOffers.size(), 0);
+        r.shopSold.assign(r.shopOffers.size(), false);
+        snapFrame(d + "12b_shop_relics2.png");
+        rerollShop();
+        snapFrame(d + "12c_shop_reroll.png");
+        r.mods.relics2 = ~0u >> (32 - kRelic2Count);   // every one held: the TAB's relic column
+        sf::Event tabKey{};
+        tabKey.type = sf::Event::KeyPressed;
+        tabKey.key.code = sf::Keyboard::Tab;
+        back();
+        stack_.back()->handleEvent(*this, tabKey, {0.f, 0.f});
+        snapFrame(d + "12d_tab_relics2.png");
+        tabKey.type = sf::Event::KeyReleased;
+        stack_.back()->handleEvent(*this, tabKey, {0.f, 0.f});
+        r.mods.relics2 = keepRelics;
+        r.gold = keepGold;
+        rollShop();
+        push(ScreenId::Shop);
+    }
     beginSell();
     snapFrame(d + "13_sell.png");
     back();

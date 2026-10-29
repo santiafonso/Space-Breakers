@@ -59,6 +59,7 @@ enum class UpgradeCat { NewBall, Element, Ability, Item, Modifier, Relic };
 
 inline UpgradeCat upgradeCat(UpgradeKind k) {
     const int i = static_cast<int>(k);
+    if (k >= UpgradeKind::RelicHourglass) return UpgradeCat::Relic;   // the second relic batch
     if (k >= UpgradeKind::Cocoon) return UpgradeCat::Item;   // event-only, and items added after the abilities
     if (i >= static_cast<int>(UpgradeKind::AbilityHook)) return UpgradeCat::Ability;   // the second batch, after the relics
     if (i <= static_cast<int>(UpgradeKind::AddBall)) return UpgradeCat::NewBall;
@@ -130,6 +131,7 @@ inline Tier upgradeTier(UpgradeKind k) {
         case UpgradeKind::Comet: case UpgradeKind::Mitosis: case UpgradeKind::Boomerang:
         case UpgradeKind::Glutton:
         case UpgradeKind::LuckyClover: case UpgradeKind::MagneticCore: case UpgradeKind::Overcharge:
+        case UpgradeKind::RelicHourglass: case UpgradeKind::RelicWarBanner: case UpgradeKind::RelicHuntingHorn:
             return Tier::Rare;
         case UpgradeKind::AbilityPortal: case UpgradeKind::AbilityLeash:
         case UpgradeKind::SplitShot: case UpgradeKind::Piercing:
@@ -138,6 +140,10 @@ inline Tier upgradeTier(UpgradeKind k) {
         case UpgradeKind::Catalyst: case UpgradeKind::ChainReaction:
         case UpgradeKind::GlassCannon: case UpgradeKind::Phoenix: case UpgradeKind::TimeDilation:
             return Tier::Epic;
+        case UpgradeKind::RelicGiantsRing: case UpgradeKind::RelicCatchersMitt: case UpgradeKind::RelicIronHeart:
+            return Tier::Uncommon;
+        case UpgradeKind::RelicGoldenTooth: case UpgradeKind::RelicMerchantsBell:
+            return Tier::Common;
         case UpgradeKind::Railgun: case UpgradeKind::GravityWell:
         case UpgradeKind::Gemini: case UpgradeKind::PrismCore: case UpgradeKind::Seeker:
             return Tier::Legendary;
@@ -339,6 +345,14 @@ inline const char* upgradeKindId(UpgradeKind k) {
         case UpgradeKind::Phoenix:        return "Phoenix";
         case UpgradeKind::TimeDilation:   return "TimeDilation";
         case UpgradeKind::Overcharge:     return "Overcharge";
+        case UpgradeKind::RelicHourglass:     return "Hourglass";
+        case UpgradeKind::RelicWarBanner:     return "WarBanner";
+        case UpgradeKind::RelicGiantsRing:    return "GiantsRing";
+        case UpgradeKind::RelicCatchersMitt:  return "CatchersMitt";
+        case UpgradeKind::RelicGoldenTooth:   return "GoldenTooth";
+        case UpgradeKind::RelicMerchantsBell: return "MerchantsBell";
+        case UpgradeKind::RelicIronHeart:     return "IronHeart";
+        case UpgradeKind::RelicHuntingHorn:   return "HuntingHorn";
         default: break;
     }
     if (const ItemDef* d = classItemDef(k)) return d->id;
@@ -436,6 +450,14 @@ inline UpgradeInfo upgradeInfoFull(UpgradeKind k) {
         case UpgradeKind::Phoenix:       return {"Phoenix", "once per act, when the core breaks it comes back at half health"};
         case UpgradeKind::TimeDilation:  return {"Time dilation", "all enemies move 25% slower, all the time"};
         case UpgradeKind::Overcharge:    return {"Overcharge", "the damage combo can climb twice as high"};
+        case UpgradeKind::RelicHourglass:     return {"Hourglass", "every ability recharges 25% faster - your balls' and your own Q, E and F"};
+        case UpgradeKind::RelicWarBanner:     return {"War banner", "every squad trait your balls have counts one more ball: its bonus at 1, the big one at 3"};
+        case UpgradeKind::RelicGiantsRing:    return {"Giant's ring", "every ball is 15% bigger"};
+        case UpgradeKind::RelicCatchersMitt:  return {"Catcher's mitt", "catch balls from 40% further away, and a thrown ball's first hit lands 25% harder"};
+        case UpgradeKind::RelicGoldenTooth:   return {"Golden tooth", "after every fight, 10% interest on the gold you carry (up to 12)"};
+        case UpgradeKind::RelicMerchantsBell: return {"Merchant's bell", "every shop has one more shelf, and its first ability reroll is free"};
+        case UpgradeKind::RelicIronHeart:     return {"Iron heart", "+20 core max health, and every elite you beat heals the core 10%"};
+        case UpgradeKind::RelicHuntingHorn:   return {"Hunting horn", "summons hit 30% harder and last 30% longer"};
         default: break;
     }
     if (const ItemDef* d = classItemDef(k)) return {d->title, d->desc};
@@ -815,6 +837,7 @@ struct UpgradeCtx {
     bool phoenix = false;
     bool timeDilation = false;
     bool overcharge = false;
+    unsigned relics2 = 0;   // the second relic batch held (relic2Bit)
     // Picks still behind the web: legendaries without their node, and every
     // item of a class that isn't unlocked yet.
     std::bitset<kMaxUpgradeKinds> locked;
@@ -882,7 +905,14 @@ inline bool upgradeEligible(UpgradeKind k, const UpgradeCtx& c) {
         case UpgradeKind::Phoenix:       return !c.phoenix;
         case UpgradeKind::TimeDilation:  return !c.timeDilation;
         case UpgradeKind::Overcharge:    return !c.overcharge;
-        default:                         return false;
+        case UpgradeKind::RelicHuntingHorn:   // summons: a Summoner item to feed
+            if (!c.balls) return false;
+            for (const BallLoadout& L : *c.balls)
+                if (L.tagCount(ItemTag::Summoner) > 0) return !(c.relics2 & relic2Bit(k));
+            return false;
+        default:
+            if (k >= UpgradeKind::RelicHourglass) return !(c.relics2 & relic2Bit(k));
+            return false;
     }
 }
 
@@ -1063,6 +1093,11 @@ enum MetaUnlock {
     MetaOuterStrikerSlinger, MetaOuterSlingerShooter, MetaOuterShooterJester, MetaOuterJesterAssassin,
     MetaOuterAssassinSummoner, MetaOuterSummonerSupport, MetaOuterSupportMage, MetaOuterMageAlchemist,
     MetaOuterAlchemistGuardian, MetaOuterGuardianStriker,
+    // ---- 2026-10-24 append (never reorder): the Creeds branch grows - every
+    // creed held pays, and a run can hold a third ----
+    MetaZeal,         // Zeal        - every ball hits harder for each creed the run holds   (Creeds)
+    MetaSanctuary,    // Sanctuary   - the core grows for each creed the run holds
+    MetaPilgrimage,   // Pilgrimage  - the act-3 boss offers a creed too: up to 3 a run
     MetaUnlockCount
 };
 
@@ -1092,7 +1127,7 @@ inline const MetaUnlockDef& metaUnlockDef(int u) {
     using B = MetaBranch;
     constexpr MetaCurrency C = MetaCurrency::Cores, P = MetaCurrency::Prisms;
     static const MetaUnlockDef defs[MetaUnlockCount] = {
-        /* Calling   */ {"Calling",   "opens the web: everything else grows from here",
+        /* Calling   */ {"Calling",   "opens the web - everything else grows from here - and every run starts with one random item, Rare at most, from any class: a taste of what's out there",
                          8u,  1, B::Root,     C, -1,   0.f, 0.f},
         /* Bulwark   */ {"Bulwark",   "start with +20 core health",
                          10u, 3, B::Guardian, C,  0, 330.f, 1.f},
@@ -1174,7 +1209,7 @@ inline const MetaUnlockDef& metaUnlockDef(int u) {
                          14u, 2, B::Summoner, C, MetaBrood, 164.f, 2.3f},
         /* EliteSpoils*/{"Elite spoils","elite fights pay +50% gold per level",
                          12u, 2, B::Assassin, C, MetaKeenInstinct, 115.f, 2.f},
-        /* Oath      */ {"Oath",      "after the act-1 boss, choose from 4 creeds instead of 3. Opens the Creeds.",
+        /* Oath      */ {"Oath",      "after the act-1 boss, choose from 4 creeds instead of 3. Opens the Creeds: creeds that pay more, and a third one.",
                          14u, 1, B::Creeds,    C,  0, 145.f, 1.f},
         /* Covenant  */ {"Covenant",  "start every run by choosing a creed (1 of 3) - with the boss's, a run can hold two",
                          3u,  1, B::Creeds,    P, 41, 145.f, 2.f},
@@ -1413,6 +1448,13 @@ inline const MetaUnlockDef& metaUnlockDef(int u) {
                          36u, 2, B::Alchemist, C, MetaLegendAlchemist, 0.f, 8.f, MetaLegendGuardian},
         /* OuterGuaStr */ {"Colossus", "balls with the Guardian or Striker class: +6% contact damage and 6% higher top speed per level (twice that with both) - on top of Juggernaut",
                          36u, 2, B::Guardian, C, MetaLegendGuardian, 0.f, 8.f, MetaLegendStriker},
+        // ---- the Creeds branch, deeper (2026-10-24) ----
+        /* Zeal      */ {"Zeal",       "every ball deals 6% more damage per level for each creed your run holds",
+                         18u, 3, B::Creeds,    C, MetaCovenant, 145.f, 3.f},
+        /* Sanctuary */ {"Sanctuary",  "the core gains 12 max health per level for each creed your run holds",
+                         16u, 2, B::Creeds,    C, MetaZeal, 140.f, 4.f},
+        /* Pilgrimage*/ {"Pilgrimage", "the act-3 boss offers a creed too: a run can hold three",
+                         5u,  1, B::Creeds,    P, MetaZeal, 150.f, 4.f},
     };
     return defs[u];
 }

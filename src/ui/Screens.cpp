@@ -2010,6 +2010,8 @@ std::vector<UpgradeKind> runRelics(const RunMods& m) {
     std::vector<UpgradeKind> out;
     for (const auto& [on, k] : list)
         if (on) out.push_back(k);
+    for (int i = 0; i < kRelic2Count; ++i)   // the second batch
+        if (m.relics2 & (1u << i)) out.push_back(static_cast<UpgradeKind>(static_cast<int>(UpgradeKind::RelicHourglass) + i));
     return out;
 }
 
@@ -2175,7 +2177,7 @@ void drawLoadoutOverlay(App& app, sf::RenderWindow& w, bool paused, const TabPee
     // it's on, a pip per ball up to its top level; what it does on hover.
     int hotTrait = -1;
     int traits[kTraitCount];
-    teamTraitCounts(r.balls, traits);
+    teamTraitCounts(r.balls, traits, r.mods.has(UpgradeKind::RelicWarBanner) ? cfg::relic::warBannerBalls : 0);   // "War banner"
     {
         constexpr float kGap = 26.f, kPip = 10.f, kChipH = 26.f;
         const int top = cfg::team::traitAt[1];
@@ -2232,11 +2234,15 @@ void drawLoadoutOverlay(App& app, sf::RenderWindow& w, bool paused, const TabPee
     const RuleRow* hotRule = nullptr;
     const char* hotRuleKind = "";
     if (lay.side) {
-        constexpr float kRelicStep = 30.f, kHeadStep = 26.f, kSectionGap = 12.f;
-        float need = 20.f;   // the column's height, section by section
-        for (std::size_t n : {relics.size(), creedRows.size(), pactRows.size()})
-            if (n > 0) need += kHeadStep + kRelicStep * static_cast<float>(n) + kSectionGap;
+        constexpr float kHeadStep = 26.f, kSectionGap = 12.f;
         const float colTop = rowY - kPanelH * 0.5f;
+        // A row each; a long run's rows draw closer so the column stays on screen.
+        float heads = 0.f, rowsN = 0.f;
+        for (std::size_t n : {relics.size(), creedRows.size(), pactRows.size()})
+            if (n > 0) { heads += kHeadStep + kSectionGap; rowsN += static_cast<float>(n); }
+        const float room = s.y - 48.f - colTop - 20.f - heads;
+        const float kRelicStep = rowsN > 0.f ? std::clamp(room / rowsN, 22.f, 30.f) : 30.f;
+        const float need = 20.f + heads + kRelicStep * rowsN;   // the column's height, section by section
         draw::panel(w, {sideX, colTop, kSideW, std::max(kPanelH, need)}, theme::puGolden, 0.9f);
         float y = colTop + 20.f;
         if (!relics.empty()) {
@@ -2314,7 +2320,8 @@ void drawLoadoutOverlay(App& app, sf::RenderWindow& w, bool paused, const TabPee
             std::string st;
             const float g = loadoutGrowth(L, part, st);
             const int kind = part < kLoadoutSlots ? L.kindAt(part) : -1;
-            drawTooltip(w, app.font(), um, s, tt, td, kind >= 0 ? nameColor(static_cast<UpgradeKind>(kind)) : theme::textHi, g, st);
+            drawTooltip(w, app.font(), um, s, tt, td, kind >= 0 ? nameColor(static_cast<UpgradeKind>(kind)) : theme::textHi, g, st,
+                        kind >= 0 ? static_cast<int>(upgradeTier(static_cast<UpgradeKind>(kind))) : -1);
             return;
         }
     }
@@ -2331,8 +2338,8 @@ void drawLoadoutOverlay(App& app, sf::RenderWindow& w, bool paused, const TabPee
     }
     if (hotRelic)
         drawTooltip(w, app.font(), um, s, std::string(upgradeInfo(*hotRelic).title) + "  -  relic",
-                    std::string(upgradeInfo(*hotRelic).desc) + "  [" + tierName(upgradeTier(*hotRelic)) + ", every ball]",
-                    theme::puGolden);
+                    std::string(upgradeInfo(*hotRelic).desc) + "  [every ball]",
+                    theme::puGolden, -1.f, "", static_cast<int>(upgradeTier(*hotRelic)));
 }
 
 // ================================================================ Choice

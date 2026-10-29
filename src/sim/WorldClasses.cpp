@@ -1372,7 +1372,7 @@ template <> struct ClassHooks<BallRole::Jester> : NoClassHooks {
 
     // "Wild card": one proc borrowed at random from the items of any ball on
     // the field (its own numbers); with none around, a zap, a bomb or an echo.
-    static void wildCard(World& w, Ball& b, Enemy& e, float dmg, bool kill, const WorldParams& p, FrameEvents&) {
+    static void wildCard(World& w, Ball& b, Enemy& e, float dmg, bool kill, const WorldParams& p, FrameEvents& ev) {
         namespace S = cfg::synergy;
         namespace C = cfg::changer;
         struct Pick { Trick t; const BallMods* m; };
@@ -1393,6 +1393,7 @@ template <> struct ClassHooks<BallRole::Jester> : NoClassHooks {
         switch (pk.t) {
             case Crit:
                 w.damageEnemy(e, dmg * ((pk.m ? pk.m->critMult : cfg::combat::critMult) - 1.f));
+                ev.crits.push_back(e.pos);
                 break;
             case Echo:
                 w.damageEnemy(e, dmg);

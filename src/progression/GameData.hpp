@@ -61,6 +61,8 @@ struct RunMods {
     bool phoenix = false;        // the core comes back once per act
     bool timeDilation = false;   // enemies slower
     bool overcharge = false;     // higher combo cap
+    unsigned relics2 = 0;        // the second batch (2026-10-24), one bit each (relic2Bit)
+    bool has(UpgradeKind k) const { return (relics2 & relic2Bit(k)) != 0; }
 };
 
 // The current run, in memory only.
@@ -115,7 +117,7 @@ struct RunState {
     int shopRerolls = 0;              // paid rerolls at this shop (each costs more)
     int shopSells = 0;                // items sold at this shop
 
-    // Creeds (Fase O): CreedId values, at most kMaxCreeds.
+    // Creeds (Fase O): CreedId values, at most App::creedCap() (kMaxCreeds).
     std::vector<int> creeds;
     bool hasCreed(CreedId id) const {
         for (int p : creeds)

@@ -122,6 +122,7 @@ inline constexpr float bedrockLifeMult = 1.5f, bedrockPerLevel = 0.25f; // "Bedr
 inline constexpr float primedMult = 1.35f;        // "Primed": +damage to an enemy already under an element effect
 inline constexpr float critChance = 0.12f, critChancePerLevel = 0.07f;  // "Keen eye": chance a hit deals...
 inline constexpr float critMult = 2.0f, critMultPerLevel = 0.25f;       // ...x this damage
+inline constexpr float critLabelGap = 0.35f;   // s between two "CRIT" calls over the field
 inline constexpr float executeThreshold = 0.30f, executeThresholdPerLevel = 0.06f;  // "Executioner": below this HP...
 inline constexpr float executeMult = 2.6f, executeMultPerLevel = 0.3f;              // ...take x this
 inline constexpr float overkillFrac = 0.5f, overkillFracPerLevel = 0.25f;  // "Overkill": this share of a kill's leftover...
@@ -437,6 +438,23 @@ inline constexpr float timeDilation = 0.75f;       // enemies' time scale
 inline constexpr int   overchargeMul = 2;          // combo cap x this
 inline constexpr float phoenixHeal = 0.5f;         // core comes back at this fraction of max
 }  // namespace changer
+
+// The second relic batch (2026-10-24): RunMods::relics2.
+namespace relic {
+inline constexpr float hourglassRate = 1.25f;      // "Hourglass": abilities (balls' and Q / E / F) recharge x this
+inline constexpr float hourglassFocus = 0.25f;     // ...as the balls' Focus
+inline constexpr int   warBannerBalls = 1;         // "War banner": each trait counts this many more balls
+inline constexpr float giantsRing = 1.15f;         // "Giant's ring": every ball's radius x this
+inline constexpr float mittReach = 1.4f;           // "Catcher's mitt": catch reach x this...
+inline constexpr float mittThrow = 0.25f;          // ...and a thrown first hit + this
+inline constexpr float toothInterest = 0.1f;       // "Golden tooth": gold carried x this after a fight...
+inline constexpr int   toothCap = 12;              // ...at most this
+inline constexpr int   bellShelf = 1;              // "Merchant's bell": one more offer
+inline constexpr int   bellFreeRerolls = 1;        // ...and a free reroll per visit
+inline constexpr float ironHeartHp = 20.f;         // "Iron heart": core max health
+inline constexpr float ironHeartEliteHeal = 0.1f;  // ...and an elite won heals this much of it
+inline constexpr float hornBond = 1.3f;            // "Hunting horn": summons' power x this
+}  // namespace relic
 
 // Run score: arcade points, shown in the HUD and kept as a lifetime best.
 namespace score {
@@ -975,6 +993,8 @@ inline constexpr float interestPerLevel = 4.f;         // "Interest" node: cores
 inline constexpr float armoryEpicPerLevel = 0.5f;      // "Armory": Epic odds x (1 + this * level)
 inline constexpr float hagglerPerLevel = 0.10f;        // "Haggler": shop prices -this per level
 inline constexpr float eliteSpoilsPerLevel = 0.5f;     // "Elite spoils": elite gold x (1 + this * level)
+inline constexpr float zealPerLevel = 0.06f;           // "Zeal": every ball's damage, per level per creed held
+inline constexpr float sanctuaryHpPerLevel = 12.f;     // "Sanctuary": core max health, per level per creed taken
 inline constexpr float merchantSalePerLevel = 0.15f;   // "Merchant": the shop sale is this much deeper per level
 inline constexpr int treasuryGoldPerLevel = 20;        // "Treasury": starting gold per level
 // "Iron core": beat an act's boss without a single deliberate repair that act

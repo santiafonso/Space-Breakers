@@ -525,6 +525,7 @@ struct FrameEvents {
     std::vector<BurstFx> bursts;
     std::vector<BounceFx> bounces;
     std::vector<sf::Vector2f> kills;
+    std::vector<sf::Vector2f> crits;      // a ball's critical hit landed here (shown as "CRIT", rate-limited)
     int comboTier = 0;
     bool comboTierUp = false;
     bool gotPickup = false;

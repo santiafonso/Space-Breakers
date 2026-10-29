@@ -17,7 +17,7 @@ namespace sb {
 void App::foldTraits(WorldParams& p) const {
     namespace T = cfg::team;
     int counts[kTraitCount];
-    teamTraitCounts(data_.run.balls, counts);
+    teamTraitCounts(data_.run.balls, counts, data_.run.mods.has(UpgradeKind::RelicWarBanner) ? cfg::relic::warBannerBalls : 0);   // "War banner"
     for (int t = 0; t < kTraitCount; ++t) {
         const int tier = traitTier(counts[t]);
         if (tier == 0) continue;

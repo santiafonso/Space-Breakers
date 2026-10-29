@@ -213,6 +213,14 @@ bool keywordColor(const std::string& word, sf::Color& out) {
     if (w.size() > 2 && w.compare(w.size() - 2, 2, "'s") == 0) w.resize(w.size() - 2);   // "Striker's"
     for (const Keyword& k : keywords())
         if (w == k.word) { out = k.color; return true; }
+    for (int i = 0; i < kTierCount; ++i) {   // a rarity by name: its brightness, always above the body text
+        std::string name = tierName(static_cast<Tier>(i));
+        for (char& ch : name) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+        if (w == name || w == name + "s" || (i == static_cast<int>(Tier::Legendary) && w == "legendaries")) {
+            out = lerpColor(tierColor(static_cast<Tier>(i)), sf::Color::White, i == 0 ? 0.5f : 0.3f);
+            return true;
+        }
+    }
     for (int i = 1; i < kBallRoleCount; ++i) {   // a class by name: its colour
         std::string name = roleName(static_cast<BallRole>(i));
         for (char& ch : name) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
@@ -521,6 +529,20 @@ sf::Color tierColor(Tier t) {
     return theme::textLo;
 }
 
+float drawTierChip(sf::RenderTarget& w, const sf::Font& font, Tier t, float left, float cy, float alpha, unsigned size) {
+    const sf::Color tc = tierColor(t);
+    const bool solid = t >= Tier::Rare;
+    const float tw = makeLabel(font, tierName(t), size, tc).getLocalBounds().width;
+    const float h = static_cast<float>(size) + 9.f, wd = std::round(tw + 16.f);
+    const sf::FloatRect r{std::round(left), std::round(cy - h * 0.5f), wd, h};
+    if (solid)
+        draw::box(w, r, 2.f, withAlpha(tc, 0.95f * alpha), withAlpha(lerpColor(tc, theme::bgDeep, 0.18f), 0.95f * alpha));
+    else
+        draw::box(w, r, 2.f, withAlpha(tc, 0.12f * alpha), withAlpha(tc, 0.05f * alpha), withAlpha(tc, 0.85f * alpha), 1.f);
+    drawLabel(w, font, tierName(t), size, {r.left + wd * 0.5f, cy}, withAlpha(solid ? theme::bgDeep : lerpColor(tc, sf::Color::White, 0.25f), alpha));
+    return wd;
+}
+
 void drawTierFrame(sf::RenderWindow& w, sf::FloatRect r, Tier t, float hover, float alpha, float time,
                    float reveal) {
     // Rarity lives on the frame only - its edge, a thin top band and the
@@ -615,7 +637,7 @@ void drawPickCard(sf::RenderWindow& w, const sf::Font& font, sf::FloatRect r, Up
         draw::polygon(w, {x, top}, on ? 4.5f : 3.5f, 4, 0.f, withAlpha(pc, a), withAlpha(pc, a));
         x -= kPip;
     }
-    drawLabel(w, font, tierName(tier), 12, {r.left + pad, top}, withAlpha(tc, a), -1);
+    drawTierChip(w, font, tier, r.left + pad - 4.f, top, a, 13);
 
     const float cx = r.left + r.width * 0.5f;
     if (h < 0.99f) drawIcon(w, k, {cx, r.top + 68.f - 18.f * h}, 25.f * clampf(st.pop, 0.f, 1.1f), a * (1.f - h));
@@ -984,10 +1006,9 @@ bool loadoutTooltip(const BallLoadout& L, int part, std::string& title, std::str
             desc = "(asleep: this slot closed when the ball lost its Mage items - it wakes up when they're back)  " + desc;
         if (L.levelAt(part) < maxLevelOf(k) && *upgradeLevelDesc(k))
             desc += std::string(".  Next level: ") + upgradeLevelDesc(k);
-        desc += std::string("  [") + tierName(upgradeTier(k));
-        if (itemTag(k) != ItemTag::None) desc += std::string(", ") + itemTagName(itemTag(k));
-        else if (upgradeCat(k) != UpgradeCat::Item) desc += std::string(", ") + upgradeCatName(upgradeCat(k));
-        desc += "]";
+        // (its rarity is the tag under the title: drawTooltip's `tier`)
+        if (itemTag(k) != ItemTag::None) desc += std::string("  [") + itemTagName(itemTag(k)) + "]";
+        else if (upgradeCat(k) != UpgradeCat::Item) desc += std::string("  [") + upgradeCatName(upgradeCat(k)) + "]";
         return true;
     }
     if (part == kPanelPartBall) {
@@ -1072,13 +1093,15 @@ float loadoutGrowth(const BallLoadout& L, int part, std::string& stage) {
 }
 
 void drawTooltip(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f mouse, sf::Vector2f screen,
-                 const std::string& title, const std::string& desc, sf::Color titleColor, float meter, const std::string& meterLabel) {
+                 const std::string& title, const std::string& desc, sf::Color titleColor, float meter, const std::string& meterLabel,
+                 int tier) {
     const float wd = 270.f, pad = 10.f, lineH = 17.f;
     const std::vector<std::string> lines = wrapText(font, desc, theme::fsSmall, wd - 2.f * pad);
     float textH = 0.f;   // an empty line is a half-height gap between paragraphs
     for (const std::string& l : lines) textH += l.empty() ? lineH * 0.5f : lineH;
     const float meterH = meter >= 0.f ? 30.f : 0.f;
-    const float ht = pad * 2.f + 20.f + textH + meterH;
+    const float tierH = tier >= 0 ? 26.f : 0.f;
+    const float ht = pad * 2.f + 20.f + tierH + textH + meterH;
     float x = mouse.x + 16.f, y = mouse.y + 18.f;
     if (x + wd > screen.x - 4.f) x = mouse.x - wd - 12.f;
     if (y + ht > screen.y - 4.f) y = mouse.y - ht - 10.f;
@@ -1094,6 +1117,10 @@ void drawTooltip(sf::RenderWindow& w, const sf::Font& font, sf::Vector2f mouse, 
     t.setPosition(std::round(x + pad), std::round(y + pad - 2.f));
     w.draw(t);
     float ly = y + pad + 22.f;
+    if (tier >= 0) {   // how rare: a tag of its own, under the title
+        drawTierChip(w, font, static_cast<Tier>(std::clamp(tier, 0, kTierCount - 1)), x + pad, ly + 9.f, 1.f, 12);
+        ly += tierH;
+    }
     for (const std::string& l : lines) {
         if (l.empty()) { ly += lineH * 0.5f; continue; }
         drawRichText(w, font, l, theme::fsSmall, {x + pad, ly}, theme::textLo);

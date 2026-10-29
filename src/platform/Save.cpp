@@ -208,6 +208,7 @@ bool saveRun(const std::string& path, const RunState& r) {
           << m.primed << ' ' << m.catalyst << ' ' << m.chainReaction << ' ' << m.luckyClover << ' '
           << m.glassCannon << ' ' << m.magneticCore << ' ' << m.prismCore << ' ' << m.phoenix << ' '
           << m.timeDilation << ' ' << m.overcharge << '\n';
+        f << "run.relics2 " << m.relics2 << '\n';
         f << "run.creeds " << r.creeds.size();
         for (int c : r.creeds) f << ' ' << c;
         f << '\n';
@@ -299,6 +300,8 @@ bool loadRun(const std::string& path, RunState& out) {
                               &m.catalyst, &m.chainReaction, &m.luckyClover, &m.glassCannon, &m.magneticCore,
                               &m.prismCore, &m.phoenix, &m.timeDilation, &m.overcharge};
             for (bool* b : fields) { int v = 0; ls >> v; *b = v != 0; }
+        } else if (key == "run.relics2") {
+            ls >> r.mods.relics2;
         } else if (key == "run.pactsPure") {
             ls >> r.pactsPure;
         } else if (key == "run.creeds" || key == "run.pacts") {

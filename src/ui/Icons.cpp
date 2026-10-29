@@ -167,6 +167,14 @@ Glyph glyphOf(UpgradeKind k) {
             return Glyph::Claw;
         case UpgradeKind::PlanetJupiter: case UpgradeKind::PlanetSaturn:
             return Glyph::Planet;
+        case UpgradeKind::RelicHourglass:     return Glyph::Recharge;
+        case UpgradeKind::RelicWarBanner:     return Glyph::Combo;
+        case UpgradeKind::RelicGiantsRing:    return Glyph::Size;
+        case UpgradeKind::RelicCatchersMitt:  return Glyph::Sling;
+        case UpgradeKind::RelicGoldenTooth:   return Glyph::Coin;
+        case UpgradeKind::RelicMerchantsBell: return Glyph::Dice;
+        case UpgradeKind::RelicIronHeart:     return Glyph::Heal;
+        case UpgradeKind::RelicHuntingHorn:   return Glyph::Claw;
     }
     return Glyph::Burst;
 }
