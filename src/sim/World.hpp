@@ -156,6 +156,8 @@ public:
     // How much bigger the current arena is than the normal one (1 on waves
     // 1-9). Ball speeds scale by it so they look the same on screen.
     float arenaScale() const { return size_.x / baseSize_.x; }
+    bool scorching() const { return pact_.scorch; }     // "Scorch" pact: the trails burn (drawn hot)
+    bool lodestoneOn() const { return pact_.lodestone; } // "Lodestone" pact: a held ball's pull (drawn as a field)
     sf::Vector2f viewCenter() const { return size_ * 0.5f; }
 
     bool waveRunning() const { return waveRunning_; }
@@ -408,9 +410,14 @@ private:
     void commonOnDeath(const Enemy& dead, FrameEvents& ev);  // "Fission"
     float qRefund_ = 0.f;                                    // "Second wind": share of the Q cooldown to refund
     // Pacts (sim/WorldPacts.cpp).
-    float pactDamageMul(const Ball& b, const WorldParams& p) const;   // Lead / Stillness / Quick Hands / Juggler / Last Breath
+    float pactDamageMul(const Ball& b, const WorldParams& p) const;   // Juggler / Rubber walls / Starfall's price
     bool pactWrap(Ball& b);                                           // "Void Walls": true = it went through an edge
-    void pactWallBump(Ball& b);                                       // "Anchor Walls"
+    void pactWallBump(Ball& b);                                       // "Anchor Walls" / "Rubber walls"
+    void pactStrike(Ball& b, Enemy& e, float& dmg, FrameEvents& ev);  // "Starfall": a meteor's first hit
+    void pactKill(const Ball& b, const Enemy& e, float dmg, FrameEvents& ev);   // "Billiards"
+    void pactOnDeath(const Enemy& dead, FrameEvents& ev);             // "Powder keg"
+    void pactTick(float dt, const WorldParams& p, FrameEvents& ev);   // "Lodestone" / "Scorch"
+    int pactThrows_ = 0;                                              // "Starfall": throws so far
     void pactCoreBounce(Ball& b);                                     // "Juggler": the streak ends on the core
     void pactOnGrab(Ball& b);                                         // "Frenzy" / "Juggler"
     void pactOnThrow(Ball& b);

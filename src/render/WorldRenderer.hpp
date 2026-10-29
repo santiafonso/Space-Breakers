@@ -19,7 +19,7 @@ private:
     void drawBolt(sf::RenderWindow& window, const Bolt& bo) const;
     void drawPickup(sf::RenderWindow& window, const Pickup& pu) const;
     void drawBall(sf::RenderWindow& window, const Ball& b,
-                  const std::optional<ActiveEffect>& effect) const;
+                  const std::optional<ActiveEffect>& effect, bool scorch = false) const;
 };
 
 }  // namespace sb

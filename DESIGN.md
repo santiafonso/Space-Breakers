@@ -1938,6 +1938,9 @@ de atrapar, así que una lenta que pega fuerte es un estilo válido. Tirar
   incluidos Hunters y Clockwork: son para quien no quiere agarrar mucho.
 
 ### 10.3 Pacts (carta nueva: te da y te saca)
+(2026-10-29: Quick hands, Heavy arm, Glass edge, Stillness, Overflow, Last breath y
+Elemental se reemplazaron por pactos que cambian cómo se juega, y el Altar ya no aparece
+al azar en el mapa: ver §11 "2026-10-29: pactos".)
 Solo gameplay, nada de plata. Lista aprobada:
 - Lead: +60% daño / la pelota va 40% más lenta.
 - Quick hands: premio por atrapar x2 / una pelota que nadie tira pierde 20% de daño.
@@ -3853,3 +3856,38 @@ desde el centro. Las capturas 41 / 42 muestran cada motivo y las etapas.
   con una marca por acto al lado y las cinco al pasar el mouse; en la pelea, abajo a la
   derecha en la franja negra.
 - `SB_ACTRULE=<n>` fuerza la regla n en todos los actos (para `SB_BALANCE`).
+
+### 2026-10-29: pactos que cambian cómo se juega, solo sin recibir daño
+
+- Santi: "el tema de los pactos lo quisiera cambiar a cosas más divertidas; sacá los
+  pactos en medio de la run, que solo se puedan sacar si no recibís daño".
+- **Cómo se consiguen**: el Altar al azar del mapa (`cfg::map::altarPct`, 22% por acto) ya
+  no existe. Solo queda el camino oculto que abren 3 peleas seguidas sin que nada toque el
+  núcleo (`notePactFight` / `revealAltarPath`, sin cambios).
+- **Pactos nuevos**: los 7 que eran solo números ceden su lugar (mismos `PactId`, así una
+  run guardada no se rompe; el pacto viejo pasa a ser el nuevo):
+  - Quick Hands → **Afterimage**: atrapar una pelota en vuelo deja un fantasma suyo
+    que sigue 5 s / enemigos +20% de vida.
+  - Heavy Arm → **Starfall**: cada 6º tiro es un meteoro (brilla en brasa): su primer
+    golpe x3 y una explosión de 60% alrededor / los otros tiros -15%
+    (`Ball::starfall`, `World::pactStrike`).
+  - Glass Edge → **Powder keg**: cada enemigo explota al morir (30% de su vida máxima
+    alrededor, en cadena) / una explosión al lado del núcleo le saca 2%
+    (`World::pactOnDeath`).
+  - Stillness → **Lodestone**: mientras tenés una pelota en la mano, los enemigos
+    cercanos van hacia ella (un anillo que se cierra lo muestra) / tiros 25% más lentos
+    (`World::pactTick`, `App::flingPower`). Reemplaza a las "Rastreadoras" del plan,
+    que repetían al ítem Hunter.
+  - Overflow → **Billiards**: el enemigo que matás con una pelota sale despedido y
+    golpea a los de atrás por la mitad del golpe / enemigos 10% más rápidos
+    (`World::pactKill`).
+  - Last Breath → **Rubber walls**: cada rebote en pared +15% de daño (hasta 6) hasta
+    que la atrapás / y +6% de velocidad: cuesta más atraparla (`Ball::rubber`).
+    No va con Void Walls.
+  - Elemental → **Scorch**: las pelotas dejan una estela que prende fuego (una
+    quemadura de 45% del daño de la pelota por segundo, cuenta como elemento para las
+    reglas del acto) / pelotas 20% más chicas.
+- Los nombres evitan los de ítems que ya existen (Mitosis, Meteor, Volatile, Ricochet,
+  Comet). Íconos de pacto reacomodados (`pactGlyph`).
+- Se fueron con ellos: `aimSlows` (Heavy Arm), `quickThrowMul` (Stillness), el crítico de
+  Glass Edge, la pelota de Overflow y el núcleo de Last Breath.

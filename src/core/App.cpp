@@ -490,8 +490,6 @@ std::vector<BallSpec> App::ballSpecs() const {
         v.push_back(ballSpec(b));
         for (int i = 0; i < 6; ++i) v.back().mods.cls.tiamat.xp[i] = b.dragonXp[i];   // Tiamat's dragons: grown so far
     }
-    if (hasPact(PactId::GlassEdge))   // "Glass Edge": every ball crits more
-        for (BallSpec& s : v) s.mods.critChance += cfg::pact::glassCrit;
     if (hasPact(PactId::Colossus)) {   // "Colossus": one giant, the rest carry less
         const int big = colossusBall();
         for (int i = 0; i < static_cast<int>(v.size()); ++i) {
@@ -1369,14 +1367,14 @@ void App::playerRepair(float amount) {
 void App::playerMark() {
     if (!data_.run.active || !simulating() || markCd_ > 0.f) return;
     const float speed = lerpf(cfg::app::slingMinSpeed, cfg::app::slingMaxSpeed, cfg::app::quickThrowPower) *
-                        cfg::player::volleySpeedMul * quickThrowMul() * world_.arenaScale() * flingPower();
+                        cfg::player::volleySpeedMul * world_.arenaScale() * flingPower();
     if (!world_.volley(speed)) return;
     markCd_ = cfg::player::markCooldown * (hasCreed(CreedId::Sharpshooter) ? cfg::creed::sharpQCooldown : 1.f);
     hintDone(Hint::Volley);
     audio_.thrown(1.f);
 }
 
-bool App::bulletOpen() const { return data_.run.map.act >= cfg::player::bulletAct && aimSlows(); }   // "Heavy Arm": none
+bool App::bulletOpen() const { return data_.run.map.act >= cfg::player::bulletAct; }
 
 void App::finishChoice() {
     audio_.cardPick();
@@ -2063,7 +2061,7 @@ void App::continuePastBoss() {
     if (r.map.act == cfg::ball::lateBallsAct && !hasCreed(CreedId::Duet))   // room for more balls from here on
         effects_.addLabel("+" + std::to_string(cfg::ball::lateBalls) + " BALL SLOTS", {size().x * 0.5f, size().y * 0.24f},
                           theme::ballMid, 26, 2.f);
-    if (r.map.act == cfg::player::bulletAct && aimSlows())
+    if (r.map.act == cfg::player::bulletAct)
         effects_.addLabel("NEW  hold E: bullet time", {size().x * 0.5f, size().y * 0.30f}, theme::bulletTime, 22, 2.6f);
     if (r.map.act == cfg::player::repulseAct)
         effects_.addLabel("NEW  F: the core repulses", {size().x * 0.5f, size().y * 0.35f}, theme::core, 22, 2.6f);
@@ -2914,7 +2912,7 @@ void App::update(float frameDt) {
         if (aiming_ && steady > 0.f) {
             aimT_ += frameDt;
             slow = steady;
-        } else if (aiming_ && aimSlows() && aimT_ < cfg::app::aimSlowMax) {   // "Heavy Arm" pact: none   // slingshot aim: bullet time, briefly
+        } else if (aiming_ && aimT_ < cfg::app::aimSlowMax) {   // slingshot aim: bullet time, briefly
             aimT_ += frameDt;
             slow = cfg::app::aimTimeScale;
         }
@@ -3028,7 +3026,12 @@ void App::update(float frameDt) {
     const Core& c = world_.core();
     hud_.setHard(data_.run.hard);
     hud_.setAscension(data_.run.ascension, world_.eliteTrait(), world_.bossRules());
-    hud_.setActRule(data_.run.active ? data_.run.actRule(cfg::run::actOfWave(std::max(1, data_.run.wave))) : -1);
+    {   // the act's rule, left of the creed chips (and the Nova charge) in the bottom band
+        float right = size().x - theme::margin;
+        if (!data_.run.creeds.empty() || !data_.run.pacts.empty()) right -= creedStripWidth(*this) + 22.f;
+        if (hasCreed(CreedId::Nova)) right -= 240.f;
+        hud_.setActRule(data_.run.active ? data_.run.actRule(cfg::run::actOfWave(std::max(1, data_.run.wave))) : -1, right);
+    }
     {   // the boss's health for the top bar
         const Boss& bs = world_.boss();
         hud_.setBossKind(runBoss(data_.run.map.act));
@@ -3173,7 +3176,7 @@ int App::runBalance(int waves) {
                 if ((q -= cfg::loop::fixedDt) <= 0.f) {   // a player pressing Q each time it's ready: every ball thrown at an enemy
                     q = cfg::player::markCooldown;
                     world_.volley(lerpf(cfg::app::slingMinSpeed, cfg::app::slingMaxSpeed, cfg::app::quickThrowPower) *
-                                  cfg::player::volleySpeedMul * quickThrowMul() * world_.arenaScale() * flingPower());
+                                  cfg::player::volleySpeedMul * world_.arenaScale() * flingPower());
                 }
                 if ((top -= cfg::loop::fixedDt) <= 0.f) {   // keep the field full
                     top = 0.25f;
@@ -3230,7 +3233,7 @@ int App::runTutorialSim(int trials) {
                 if (!lazy && (q -= cfg::loop::fixedDt) <= 0.f) {
                     q = cfg::player::markCooldown;
                     world_.volley(lerpf(cfg::app::slingMinSpeed, cfg::app::slingMaxSpeed, cfg::app::quickThrowPower) *
-                                  cfg::player::volleySpeedMul * quickThrowMul() * world_.arenaScale() * flingPower());
+                                  cfg::player::volleySpeedMul * world_.arenaScale() * flingPower());
                 }
                 const FrameEvents ev = world_.step(cfg::loop::fixedDt, params());
                 if (ev.runOver || world_.core().hp <= 0.f) { alive = false; break; }
@@ -3735,8 +3738,8 @@ int App::runSnapshots(const std::string& dir) {
     for (int i = 0; i < 150; ++i) update(1.f / 60.f);
     capturePath_ = d + "11_creed_fight.png";
     render();
-    for (PactId id : {PactId::VoidWalls, PactId::Mirror, PactId::Frenzy, PactId::Stillness, PactId::LastBreath,
-                      PactId::Colossus, PactId::Elemental, PactId::Horde})
+    for (PactId id : {PactId::VoidWalls, PactId::Mirror, PactId::Frenzy, PactId::Lodestone, PactId::PowderKeg,
+                      PactId::Colossus, PactId::Scorch, PactId::Horde})
         grantPact(id);
     world_.devSpawn(EnemyKind::Grunt, 10);
     for (int i = 0; i < 240; ++i) update(1.f / 60.f);

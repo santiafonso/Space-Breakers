@@ -69,20 +69,20 @@ void PactScreen::update(App& app, float dt, sf::Vector2f mouse) {
 Glyph pactGlyph(PactId p) {
     switch (p) {
         case PactId::Lead:        return Glyph::Rock;
-        case PactId::QuickHands:  return Glyph::Combo;
-        case PactId::HeavyArm:    return Glyph::Sling;
-        case PactId::GlassEdge:   return Glyph::Crit;
-        case PactId::Stillness:   return Glyph::Clock;
-        case PactId::Overflow:    return Glyph::Plus;
+        case PactId::Afterimage:  return Glyph::Ghost;
+        case PactId::Starfall:    return Glyph::Meteor;
+        case PactId::PowderKeg:   return Glyph::Blast;
+        case PactId::Lodestone:   return Glyph::Magnet;
+        case PactId::Billiards:   return Glyph::Shove;
         case PactId::Tiny:        return Glyph::Burst;
         case PactId::Colossus:    return Glyph::Size;
-        case PactId::HotPotato:   return Glyph::Flame;
-        case PactId::Juggler:     return Glyph::Bounce;
-        case PactId::VoidWalls:   return Glyph::Ghost;
-        case PactId::AnchorWalls: return Glyph::Magnet;
-        case PactId::LastBreath:  return Glyph::Heal;
+        case PactId::HotPotato:   return Glyph::Clock;
+        case PactId::Juggler:     return Glyph::Combo;
+        case PactId::VoidWalls:   return Glyph::Vortex;
+        case PactId::AnchorWalls: return Glyph::Shield;
+        case PactId::RubberWalls: return Glyph::Bounce;
         case PactId::Mirror:      return Glyph::Twin;
-        case PactId::Elemental:   return Glyph::Flask;
+        case PactId::Scorch:      return Glyph::Flame;
         case PactId::Frenzy:      return Glyph::Speed;
         case PactId::Blind:       return Glyph::Eye;
         case PactId::Horde:       return Glyph::Skull;

@@ -218,11 +218,9 @@ public:
     void choosePact(int idx);           // Altar screen: take card idx
     void refusePacts();                 // Altar screen: walk away
     bool hasPact(PactId id) const { return data_.run.hasPact(id); }
-    bool aimSlows() const { return !data_.run.pactCost(PactId::HeavyArm); }   // "Heavy Arm": no bullet time
     bool aimGuide() const { return !data_.run.pactCost(PactId::Blind); }      // "Blind": no dotted guide
     std::vector<PactId> pactsWithPrice() const;   // pacts an "Unbinding" can lift the price of
     void liftPactPrice(PactId id);
-    float quickThrowMul() const;        // "Stillness": weaker quick throws
     bool consumeAltarReveal();          // the map: play the "a path opens" animation once
     void devTogglePact(PactId id);      // SB_DEV: grant it (or drop the rule)
     float novaCooldown() const { return novaCd_; }

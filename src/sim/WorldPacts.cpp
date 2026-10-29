@@ -14,13 +14,9 @@ float World::pactDamageMul(const Ball& b, const WorldParams& p) const {
     namespace P = cfg::pact;
     const PactRules& r = p.pact;
     float k = 1.f;
-    if (r.stillness > 0.f) {   // "Stillness": the slower, the harder (full bonus at a standstill)
-        const float slow = 1.f - length(b.vel) / std::max(1.f, ballCruise(b, p));
-        k *= 1.f + r.stillness * clampf(slow, 0.f, 1.f);
-    }
-    if (r.idlePenalty && b.sinceThrow > P::quickIdleAfter) k *= P::quickIdleDamage;   // "Quick Hands"
-    if (r.juggler) k *= 1.f + P::jugglePer * static_cast<float>(b.juggle);          // "Juggler"
-    if (r.lastBreath && core_.hp < core_.maxHp * P::lastBreathAt) k *= P::lastBreathMul;   // "Last Breath"
+    if (r.juggler) k *= 1.f + P::jugglePer * static_cast<float>(b.juggle);           // "Juggler"
+    if (r.rubberWalls) k *= 1.f + P::rubberPer * static_cast<float>(b.rubber);       // "Rubber walls"
+    if (r.starfallCost && !b.starfall) k *= P::starfallOthers;                      // "Starfall": the rest
     return k;
 }
 
@@ -40,9 +36,100 @@ bool World::pactWrap(Ball& b) {
     return true;   // walls never bounce under this pact
 }
 
-// "Anchor Walls": a wall soaks up nearly all of a ball's speed.
+// "Anchor Walls": a wall soaks up nearly all of a ball's speed. "Rubber
+// walls": every bounce stacks on the ball until it's caught.
 void World::pactWallBump(Ball& b) {
     if (pact_.anchorWalls) b.vel *= cfg::pact::anchorKeep;
+    if (pact_.rubberWalls) b.rubber = std::min(b.rubber + 1, cfg::pact::rubberMax);
+}
+
+// "Starfall": a meteor's first hit lands harder and blasts everything round it.
+void World::pactStrike(Ball& b, Enemy& e, float& dmg, FrameEvents& ev) {
+    if (!b.starfall) return;
+    namespace P = cfg::pact;
+    b.starfall = false;
+    dmg *= P::starfallMul;
+    const float R = P::starfallRadius * arenaScale();
+    areaDamage(e.pos, R, dmg * P::starfallBlast, &e);
+    ev.bursts.push_back({e.pos, R, theme::ember, nullptr});
+    ev.kick = std::max(ev.kick, 0.5f);
+}
+
+// "Billiards": the enemy a ball kills flies on along the ball's path and
+// slams whatever is behind it.
+void World::pactKill(const Ball& b, const Enemy& e, float dmg, FrameEvents& ev) {
+    if (!pact_.billiards || b.ghost) return;
+    namespace P = cfg::pact;
+    const sf::Vector2f dir = normalized(e.pos - b.pos, normalized(b.vel, {1.f, 0.f}));   // knocked away from the ball
+    const float reach = e.radius * P::billiardsReach;
+    bool any = false;
+    for (Enemy& o : enemies_) {
+        if (&o == &e || o.hp <= 0.f || o.orbiter) continue;
+        const float along = dot(o.pos - e.pos, dir);
+        if (along <= 0.f || along > reach) continue;
+        if (length(o.pos - (e.pos + dir * along)) > e.radius + o.radius) continue;
+        o.lastBy = b.owner;
+        damageEnemy(o, dmg * P::billiardsFrac);
+        o.vel += dir * cfg::combat::knockback;
+        ev.bursts.push_back({o.pos, o.radius * 1.8f, theme::textHi, nullptr});
+        any = true;
+    }
+    if (any) ev.bursts.push_back({e.pos + dir * (reach * 0.5f), e.radius * 1.4f, theme::textLo, nullptr});
+}
+
+// "Powder keg": every death blasts the ones around it (and they can chain).
+void World::pactOnDeath(const Enemy& dead, FrameEvents& ev) {
+    if (!pact_.powderKeg) return;
+    namespace P = cfg::pact;
+    const float R = P::kegRadius * arenaScale();
+    const float blast = dead.maxHp * P::kegFrac;
+    for (Enemy& o : enemies_) {
+        if (&o == &dead || o.hp <= 0.f || o.orbiter || length(o.pos - dead.pos) > R + o.radius) continue;
+        o.lastBy = dead.lastBy;
+        damageEnemy(o, blast);
+    }
+    ev.bursts.push_back({dead.pos, R, theme::ember, nullptr});
+    if (pact_.kegChip && length(dead.pos - core_.pos) < R + core_.radius) {   // too close: the core feels it
+        core_.hp = std::max(1.f, core_.hp - core_.maxHp * P::kegCoreChip);
+        core_.hitFlash = 1.f;
+    }
+}
+
+// Every step: "Lodestone" pulls enemies toward a held ball; "Scorch" sets
+// the ones a ball's trail crosses on fire.
+void World::pactTick(float dt, const WorldParams& p, FrameEvents& ev) {
+    namespace P = cfg::pact;
+    (void)ev;
+    if (pact_.lodestone && grabbed_ == Grabbed::Ball) {
+        const Ball& h = balls_[static_cast<std::size_t>(heldIndex_)];
+        const float R = P::lodestoneRadius * arenaScale();
+        for (Enemy& e : enemies_) {
+            if (e.hp <= 0.f || e.orbiter) continue;
+            const sf::Vector2f d = h.pos - e.pos;
+            const float dist = length(d);
+            const float gap = dist - h.radius - e.radius;
+            if (dist > R || gap <= 2.f) continue;
+            const float pull = P::lodestonePull * arenaScale() * (0.4f + 0.6f * (1.f - dist / R)) * dt;
+            e.pos += d / dist * std::min(pull, gap);
+        }
+    }
+    if (pact_.scorch) {
+        for (const Ball& b : balls_) {
+            if (b.held || b.trail.size() < 2) continue;
+            const float dps = ballDamage(b, p) * P::scorchDps;
+            for (Enemy& e : enemies_) {
+                if (e.hp <= 0.f || e.orbiter) continue;
+                const float reach = e.radius + b.radius * 0.6f;
+                bool crossed = false;
+                for (std::size_t i = 0; i + 1 < b.trail.size() && !crossed; i += 2)
+                    crossed = length(e.pos - b.trail[i]) < reach;
+                if (!crossed) continue;
+                e.burn = std::max(e.burn, P::scorchTime);   // a burn like fire's (it counts as an element)
+                e.burnDps = std::max(e.burnDps, dps);
+                e.lastBy = b.owner;
+            }
+        }
+    }
 }
 
 // "Juggler": a juggled ball touching the core loses its streak and chips it.
@@ -56,10 +143,28 @@ void World::pactCoreBounce(Ball& b) {
 void World::pactOnGrab(Ball& b) {
     if (pact_.frenzyBreak) comboStreak_ = 0;   // "Frenzy": your hands break the combo
     if (pact_.juggler) b.juggle = std::min(b.juggle + 1, cfg::pact::juggleMax);   // "Juggler": one more catch
+    b.rubber = 0;   // "Rubber walls": caught, the stacks go
+    // "Afterimage": a ball caught on the fly leaves a ghost of itself flying on.
+    if (pact_.afterimage && !b.ghost &&
+        length(b.vel) > cfg::pact::afterimageFrom * cfg::ball::baseCruise * arenaScale() &&
+        static_cast<int>(ghosts_.size() + pendingGhosts_.size()) < cfg::synergy::maxGhosts) {
+        Ball g = b;
+        g.ghost = true;
+        g.twin = false;
+        g.held = false;
+        g.classPulse = 0.f;
+        g.catchBonus = 0.f;
+        g.starfall = false;
+        g.ghostLife = cfg::pact::afterimageLife;
+        g.trail.clear();
+        g.waterTrail.clear();
+        pendingGhosts_.push_back(g);
+    }
 }
 
 void World::pactOnThrow(Ball& b) {
-    b.sinceThrow = 0.f;   // "Quick Hands"
+    b.sinceThrow = 0.f;
+    if (pact_.starfall && ++pactThrows_ % cfg::pact::starfallEvery == 0) b.starfall = true;   // "Starfall": a meteor
     if (pact_.hotPotato && heldT_ > 0.f) {   // "Hot Potato": the time you held it rides on the first hit
         b.catchBonus += cfg::pact::potatoPerSec * std::min(heldT_, cfg::pact::potatoMax);
         b.catchT = cfg::combat::catchWindow;

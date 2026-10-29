@@ -1611,8 +1611,7 @@ void PlayScreen::release(App& app) {
         const Ball* b = app.world().heldBall();
         const std::optional<sf::Vector2f> target = b ? app.world().nearestTarget(app.world().core().pos) : std::nullopt;
         if (b && target && length(*target - b->pos) > 1e-3f) {
-            const float speed = lerpf(cfg::app::slingMinSpeed, cfg::app::slingMaxSpeed, cfg::app::quickThrowPower) *
-                                app.quickThrowMul();   // "Stillness" pact
+            const float speed = lerpf(cfg::app::slingMinSpeed, cfg::app::slingMaxSpeed, cfg::app::quickThrowPower);
             const sf::Vector2f v = normalized(*target - b->pos, {1.f, 0.f}) * speed * k * power;
             app.world().releaseHeld(v);
             app.audio().thrown(clampf(length(v) / 900.f, 0.f, 1.f));

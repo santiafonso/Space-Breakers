@@ -223,8 +223,10 @@ struct Ball {
     float catchT = 0.f;      // ...for this many more seconds
     int snowKills = 0;       // "Snowball" creed: kills this fight (size and damage grow with them)
     float sharpT = 0.f;      // "Sharpshooter" creed: s left of a full pull going through enemies
-    float sinceThrow = 0.f;  // "Quick Hands" pact: seconds since you last threw it
+    float sinceThrow = 0.f;  // seconds since you last threw it ("Relay")
     int juggle = 0;          // "Juggler" pact: catches in a row without touching the core
+    int rubber = 0;          // "Rubber walls" pact: wall bounces since you last caught it
+    bool starfall = false;   // "Starfall" pact: this throw is a meteor (until its first hit)
     std::deque<sf::Vector2f> trail;
     std::deque<sf::Vector2f> waterTrail;   // (unused since water sends waves - kept for the copies' clears)
     int owner = -1;          // index of the (real) ball this is / was copied from - reactions need two owners

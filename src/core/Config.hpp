@@ -683,7 +683,6 @@ inline constexpr float eliteCountMul = 1.3f;
 inline constexpr float eliteDepthRamp = 0.4f;   // and those x (1 + this x (depth - 0.5)) on top of cfg::wave's:
                                                 // an act's first elite ~1.3x hp, the one before the boss ~1.9x
 // Altar (pacts): rare on the map, or down the hidden path before the boss.
-inline constexpr int altarPct = 22;            // % chance an act's map has one Altar (rows 4+, not the pre-boss row)
 inline constexpr int altarStreak = 3;          // flawless fights in a row (per act) that open the hidden path
 // Shops are rare: at most this many on an act's paths (the pre-boss row's
 // shop aside); extras turn into "?" stops.
@@ -1192,14 +1191,29 @@ inline constexpr int cocoonLegendaryPct = 25;                  // ...the odds it
 namespace pact {
 inline constexpr int offered = 3;              // cards at an Altar
 inline constexpr float leadDamage = 1.6f, leadCruise = 0.6f;
-inline constexpr float quickCatchMul = 2.f;    // Quick Hands: catch reward x this...
-inline constexpr float quickIdleAfter = 10.f;  // ...a ball not thrown for this long (s)...
-inline constexpr float quickIdleDamage = 0.8f; // ...hits x this
-inline constexpr float heavyArmFling = 1.5f;
-inline constexpr float glassCrit = 0.3f, glassMiss = 0.8f;
-inline constexpr float stillnessMax = 0.6f;    // + damage at a standstill (0 at cruise)
-inline constexpr float stillnessQuick = 0.6f;  // quick throws x this
-inline constexpr float overflowDamage = 0.85f;
+inline constexpr float afterimageLife = 5.f;     // Afterimage: the ghost lasts this long (s)...
+inline constexpr float afterimageFrom = 0.5f;     // ...from a ball caught faster than this x base cruise
+inline constexpr float afterimageEnemyHp = 1.2f;
+inline constexpr int starfallEvery = 6;           // Starfall: every Nth throw is a meteor...
+inline constexpr float starfallMul = 3.f;         // ...its first hit x this...
+inline constexpr float starfallRadius = 90.f;     // ...and a blast this wide (x arena scale)...
+inline constexpr float starfallBlast = 0.6f;      // ...for this much of the hit
+inline constexpr float starfallOthers = 0.85f;    // the other throws
+inline constexpr float kegFrac = 0.3f;            // Powder keg: a death blasts this x its max HP...
+inline constexpr float kegRadius = 70.f;          // ...this wide (x arena scale)
+inline constexpr float kegCoreChip = 0.02f;       // a blast reaching the core: it loses this x max HP
+inline constexpr float lodestoneRadius = 230.f;   // Lodestone: a held ball pulls enemies this far (x arena scale)...
+inline constexpr float lodestonePull = 140.f;     // ...this fast at the edge of its body (px/s, x arena scale)
+inline constexpr float lodestoneFling = 0.75f;
+inline constexpr float billiardsFrac = 0.5f;      // Billiards: the ones behind take this x the killing hit...
+inline constexpr float billiardsReach = 7.f;      // ...along this many of the dead one's radii
+inline constexpr float billiardsSpeed = 1.1f;     // its price: enemy speed x this
+inline constexpr float rubberPer = 0.15f;         // Rubber walls: + damage per wall bounce...
+inline constexpr int rubberMax = 6;               // ...up to this many
+inline constexpr float rubberSpeed = 0.06f;       // ...and + cruise per bounce (its price)
+inline constexpr float scorchDps = 0.45f;         // Scorch: the trail burns at this x the ball's damage per second...
+inline constexpr float scorchTime = 1.5f;         // ...for this long after it's crossed
+inline constexpr float scorchRadius = 0.8f;       // its price: ball size x this
 inline constexpr float tinyDamage = 1.8f, tinyRadius = 0.5f;
 inline constexpr float colossusMul = 2.f, colossusOthers = 0.7f;
 inline constexpr float potatoPerSec = 0.25f;   // Hot Potato: first-hit bonus per second held...
@@ -1209,9 +1223,7 @@ inline constexpr int juggleMax = 8;            // ...up to this many
 inline constexpr float juggleCoreChip = 0.03f; // a juggled ball on the core: the core loses this x max HP
 inline constexpr float anchorFling = 2.f;
 inline constexpr float anchorKeep = 0.12f;     // Anchor Walls: speed kept off a wall
-inline constexpr float lastBreathAt = 0.3f, lastBreathMul = 2.f, lastBreathCore = 0.8f;
 inline constexpr float mirrorEnemyHp = 1.2f;
-inline constexpr float elementalMul = 2.f, elementalContact = 0.7f;
 inline constexpr float blindFling = 1.4f;
 inline constexpr float hordeCount = 1.3f;
 }  // namespace pact

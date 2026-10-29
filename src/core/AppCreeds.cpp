@@ -104,7 +104,7 @@ float App::flingPower() const {
     if (hasCreed(CreedId::HotHands)) k *= cfg::creed::hotFling;
     if (hasCreed(CreedId::Pinball)) k *= cfg::creed::pinFling;
     k *= 1.f + cfg::meta::slingPerLevel * static_cast<float>(data_.meta.unlock[MetaSling]);   // web "Sling"
-    if (hasPact(PactId::HeavyArm)) k *= cfg::pact::heavyArmFling;      // pacts
+    if (data_.run.pactCost(PactId::Lodestone)) k *= cfg::pact::lodestoneFling;   // pacts
     if (hasPact(PactId::AnchorWalls)) k *= cfg::pact::anchorFling;
     if (hasPact(PactId::Blind)) k *= cfg::pact::blindFling;
     return k;

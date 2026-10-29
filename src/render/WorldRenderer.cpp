@@ -521,7 +521,7 @@ void WorldRenderer::drawPickup(sf::RenderWindow& window, const Pickup& pu) const
 }
 
 void WorldRenderer::drawBall(sf::RenderWindow& window, const Ball& b,
-                             const std::optional<ActiveEffect>& effect) const {
+                             const std::optional<ActiveEffect>& effect, bool scorch) const {
     sf::Color col = b.color;   // World bakes the lead class's hue into b.color (see World::ballTint)
     // A "Split shot" ghost is see-through and fades out over its last second.
     const float alpha = b.ghost ? 0.45f * clampf(b.ghostLife, 0.f, 1.f) : 1.f;
@@ -531,7 +531,8 @@ void WorldRenderer::drawBall(sf::RenderWindow& window, const Ball& b,
 
     if (!b.held && b.trail.size() >= 2) {   // a clean tapering streak along its path
         // the element tints the streak (muted) - the body stays the class's
-        const sf::Color tc = b.element == Element::Plain ? col : lerpColor(col, elementColor(b.element), 0.55f);
+        sf::Color tc = b.element == Element::Plain ? col : lerpColor(col, elementColor(b.element), 0.55f);
+        if (scorch) tc = lerpColor(theme::ember, theme::elemFire, 0.4f);   // "Scorch" pact: a burning trail
         const int n = static_cast<int>(b.trail.size());
         sf::VertexArray ribbon(sf::TriangleStrip);
         for (int k = 0; k <= n; ++k) {
@@ -541,7 +542,7 @@ void WorldRenderer::drawBall(sf::RenderWindow& window, const Ball& b,
             const sf::Vector2f dir = normalized(q - p, {1.f, 0.f});
             const sf::Vector2f nrm{-dir.y, dir.x};
             const float f = static_cast<float>(k) / static_cast<float>(n);   // 0 tail -> 1 head
-            const sf::Color c = withAlpha(tc, 0.22f * f * f * alpha);
+            const sf::Color c = withAlpha(tc, (scorch ? 0.5f : 0.22f) * f * f * alpha);
             ribbon.append({p + nrm * (r * 0.8f * f), c});
             ribbon.append({p - nrm * (r * 0.8f * f), c});
         }
@@ -554,6 +555,11 @@ void WorldRenderer::drawBall(sf::RenderWindow& window, const Ball& b,
     const float along = 1.f - 0.32f * squash;
     const float perpS = 1.f + 0.22f * squash;
     const sf::Vector2f sc{lerpf(perpS, along, ax), lerpf(perpS, along, ay)};
+
+    if (b.starfall && !b.held) {   // "Starfall" pact: this throw is a meteor
+        draw::glow(window, b.pos, r * 3.f, theme::ember, 0.4f * alpha);
+        draw::ring(window, b.pos, r + 5.f, 2.f, withAlpha(theme::ember, 0.85f * alpha));
+    }
 
     const BallLook look = ballLook(b);
     const bool rich = (look.ascended & look.roles) != 0;
@@ -662,9 +668,15 @@ void WorldRenderer::draw(sf::RenderWindow& window, const World& world) const {
     for (const Bolt& bo : world.bolts()) drawBolt(window, bo);
     for (const Pickup& pu : world.pickups()) drawPickup(window, pu);
     drawClassWorld(window, world);   // per-class things on the field (ClassRender.cpp)
-    for (const Ball& g : world.ghosts()) drawBall(window, g, world.effect());
+    for (const Ball& g : world.ghosts()) drawBall(window, g, world.effect(), world.scorching());
     for (const Ball& b : world.balls()) {
-        drawBall(window, b, world.effect());
+        if (b.held && world.lodestoneOn()) {   // "Lodestone" pact: the held ball's pull, a slow ring closing in
+            const float R = cfg::pact::lodestoneRadius * world.arenaScale();
+            const float t = std::fmod(b.age * 0.8f, 1.f);
+            draw::ring(window, b.pos, R, 1.f, withAlpha(theme::pact, 0.18f));
+            draw::ring(window, b.pos, R * (1.f - 0.8f * t), 1.5f, withAlpha(theme::pact, 0.35f * t));
+        }
+        drawBall(window, b, world.effect(), world.scorching());
         if (b.hexT > 0.f) {   // Ascension boss "Hex": frozen - a violet ring burning down
             const float r = b.radius + 6.f, f = clampf(b.hexT / cfg::asc::hexTime, 0.f, 1.f);
             draw::glow(window, b.pos, r * 1.6f, theme::puSurge, 0.35f);

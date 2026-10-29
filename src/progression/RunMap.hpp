@@ -469,17 +469,8 @@ inline RunMap generateMap(Rng& rng, int act, int rows = 0) {
         if (!spots.empty()) spots[static_cast<std::size_t>(rng.irange(0, static_cast<int>(spots.size()) - 1))]->type =
             MapNodeType::Shrine;
     }
-    // Now and then an act hides an Altar on its map: a stop on a path (row 4
-    // up, not the pre-boss row) turns into one.
-    if (rng.irange(0, 99) < cfg::map::altarPct) {
-        std::vector<MapNode*> spots;
-        for (MapNode& n : m.nodes)
-            if (n.row >= 4 && n.row < R &&
-                (n.type == MapNodeType::Upgrade || n.type == MapNodeType::Forge || n.type == MapNodeType::Rest))
-                spots.push_back(&n);
-        if (!spots.empty()) spots[static_cast<std::size_t>(rng.irange(0, static_cast<int>(spots.size()) - 1))]->type =
-            MapNodeType::Altar;
-    }
+    // (No Altar stands on the map itself: pacts are only down the hidden path
+    // that flawless fights open - App::revealAltarPath, 2026-10-29.)
     // Whatever way you climb, an act always offers at least one Rest and one
     // "?" (2026-10-12): while some path to the boss misses one, a plain fight
     // on that path (a Rest from row 4, a "?" from row 3, never the pre-boss

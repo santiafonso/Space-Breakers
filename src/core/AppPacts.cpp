@@ -44,14 +44,17 @@ void App::foldPacts(WorldParams& p) const {
                 p.damageMult *= P::leadDamage;
                 if (cost) p.cruiseMult *= P::leadCruise;
                 break;
-            case PactId::QuickHands:
-                p.pact.catchMul *= P::quickCatchMul;
-                p.pact.idlePenalty = cost;
+            case PactId::Afterimage:
+                p.pact.afterimage = true;
+                if (cost) p.pact.enemyHpMul *= P::afterimageEnemyHp;
                 break;
-            case PactId::HeavyArm: break;    // flingPower / aimSlows
-            case PactId::GlassEdge: p.pact.glassEdge = cost; break;   // + crit in ballSpecs
-            case PactId::Stillness: p.pact.stillness = P::stillnessMax; break;   // weaker quick throws: quickThrowMul
-            case PactId::Overflow: if (cost) p.damageMult *= P::overflowDamage; break;   // the ball came with the grant
+            case PactId::Starfall: p.pact.starfall = true; p.pact.starfallCost = cost; break;
+            case PactId::PowderKeg: p.pact.powderKeg = true; p.pact.kegChip = cost; break;
+            case PactId::Lodestone: p.pact.lodestone = true; break;   // slower throws: flingPower
+            case PactId::Billiards:
+                p.pact.billiards = true;
+                if (cost) p.pact.enemySpeedMul *= P::billiardsSpeed;
+                break;
             case PactId::Tiny:
                 p.damageMult *= P::tinyDamage;
                 if (cost) p.ballRadiusMult *= P::tinyRadius;
@@ -61,14 +64,14 @@ void App::foldPacts(WorldParams& p) const {
             case PactId::Juggler: p.pact.juggler = true; p.pact.juggleChip = cost; break;
             case PactId::VoidWalls: p.pact.voidWalls = true; break;   // (its price is its gift: never lifted)
             case PactId::AnchorWalls: p.pact.anchorWalls = cost; break;   // + flingPower
-            case PactId::LastBreath: p.pact.lastBreath = true; break;    // the core shrank on the grant (given back on a lift)
+            case PactId::RubberWalls: p.pact.rubberWalls = true; p.pact.rubberSpeed = cost; break;
             case PactId::Mirror:
                 p.pact.mirror = true;
                 if (cost) p.pact.enemyHpMul *= P::mirrorEnemyHp;
                 break;
-            case PactId::Elemental:
-                for (float& m : p.elemMult) m *= P::elementalMul;
-                if (cost) p.damageMult *= P::elementalContact;
+            case PactId::Scorch:
+                p.pact.scorch = true;
+                if (cost) p.ballRadiusMult *= P::scorchRadius;
                 break;
             case PactId::Frenzy: p.pact.frenzy = true; p.pact.frenzyBreak = cost; break;
             case PactId::Blind: break;       // flingPower / aimGuide
@@ -76,8 +79,6 @@ void App::foldPacts(WorldParams& p) const {
         }
     }
 }
-
-float App::quickThrowMul() const { return data_.run.pactCost(PactId::Stillness) ? cfg::pact::stillnessQuick : 1.f; }
 
 // "Unbinding" ("?"): the pacts whose price can be lifted (Void Walls' price is
 // its gift - no walls - so it can't).
@@ -93,10 +94,6 @@ std::vector<PactId> App::pactsWithPrice() const {
 void App::liftPactPrice(PactId id) {
     RunState& r = data_.run;
     r.pactsPure |= 1u << static_cast<unsigned>(id);
-    if (id == PactId::LastBreath) {   // the core it took comes back
-        const float before = world_.core().maxHp;
-        world_.addCoreMaxHp(before / cfg::pact::lastBreathCore - before);
-    }
     syncWorldBalls();
     effects_.flash(theme::pact, 0.7f);
     effects_.addLabel(std::string("UNBOUND  ") + pactDef(id).name + " - its price is gone", {size().x * 0.5f, size().y * 0.4f},
@@ -127,8 +124,6 @@ bool App::openPactChoice(bool fromMap) {
         const auto id = static_cast<PactId>(i);
         if (r.hasPact(id)) continue;
         if (pactDef(id).needsHands && !canGrab()) continue;   // Hunters / Clockwork: hands off, nothing to trade
-        if (id == PactId::Overflow && static_cast<int>(r.balls.size()) >= ballCap()) continue;
-        if (id == PactId::Elemental && elementsUnlocked(buildUpgradeCtx()) == 0) continue;   // no element to double yet
         bool ok = true;
         for (int have : r.pacts)
             if (pactsConflict(id, static_cast<PactId>(have))) ok = false;
@@ -166,15 +161,6 @@ void App::grantPact(PactId id) {
     RunState& r = data_.run;
     if (r.hasPact(id)) return;
     r.pacts.push_back(static_cast<int>(id));
-    switch (id) {
-        case PactId::Overflow:
-            if (static_cast<int>(r.balls.size()) < ballCap()) r.balls.push_back(BallLoadout{});
-            break;
-        case PactId::LastBreath:
-            world_.addCoreMaxHp(-world_.core().maxHp * (1.f - cfg::pact::lastBreathCore));
-            break;
-        default: break;
-    }
     syncWorldBalls();
     effects_.flash(theme::pact, 0.8f);
     effects_.addLabel(std::string("PACT  ") + pactDef(id).name, {size().x * 0.5f, size().y * 0.1f}, theme::pact, 34, 1.8f);

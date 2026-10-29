@@ -42,7 +42,7 @@ float World::enemyHp(int wave) const {
 }
 float World::enemySpeed(int wave) const {
     return waveEnemySpeed(wave) * fieldMul() * (hard_ ? cfg::hard::enemySpeedMul : 1.f) * (asc_ >= 3 ? cfg::asc::enemySpeedMul : 1.f) *
-           (eliteTrait_ == EliteTrait::Swift ? cfg::asc::swiftSpeed : 1.f);
+           (eliteTrait_ == EliteTrait::Swift ? cfg::asc::swiftSpeed : 1.f) * pact_.enemySpeedMul;   // "Billiards"
 }
 
 // ---------------------------------------------------------------- speeds
@@ -113,6 +113,7 @@ static float luckySpeed(const CommonState& s) {
 
 float World::ballCruise(const Ball& b, const WorldParams& p) const {
     return cruiseSpeed(p) * b.mods.cruiseMult * roleCruise(b) *
+           (p.pact.rubberSpeed ? 1.f + cfg::pact::rubberSpeed * static_cast<float>(b.rubber) : 1.f) *   // "Rubber walls"
            (b.hasElement(Element::Stone) ? cfg::element::stoneCruise : 1.f) *   // stone: the heavy one
            (b.overclockT > 0.f ? cfg::ability::overclockCruise : 1.f) *   // "Overclock" ability
            (1.f + b.mods.cls.common.adrenaline * static_cast<float>(b.cls.common.adrenaline)) *   // "Adrenaline"
@@ -370,7 +371,7 @@ void World::carryBalls(const WorldParams& p) {
     for (const Ball& b : balls_) launchFrom_.push_back(b.pos);
     aegisChargesLeft_ = p.aegisHits;   // "Aegis": the shield recharges each wave
     coreHitThisWave_ = false;          // "Interest": track a damage-free wave
-    for (Ball& b : balls_) b.sinceThrow = 0.f;   // "Quick Hands": every fight starts fresh
+    for (Ball& b : balls_) b.sinceThrow = 0.f;   // every fight starts fresh
     classWaveStart(p);
     commonWaveStart();
     clearArena();
@@ -895,7 +896,7 @@ bool World::grabAt(sf::Vector2f point, float catchRadius) {
         namespace C = cfg::combat;
         const float ratio = length(b.vel) / (cfg::ball::baseCruise * arenaScale());
         const float t = clampf((ratio - C::catchFromRatio) / (C::catchFullRatio - C::catchFromRatio), 0.f, 1.f);
-        heldCatch_ = C::catchBonusMax * t * pact_.catchMul;   // "Quick Hands" pact
+        heldCatch_ = C::catchBonusMax * t;
     }
     if (b.hasRole(BallRole::Slinger)) heldCatch_ *= cfg::slinger::catchMul;   // Slinger: made for catching
     heldT_ = 0.f;
@@ -1632,7 +1633,6 @@ bool World::strike(Ball& b, Enemy& e, sf::Vector2f normal, const WorldParams& p,
     dmg *= 1.f + cfg::element::crackDamage * static_cast<float>(e.cracks); // stone cracks
     bool crit = false;
     if (m.critChance > 0.f && chance(m.critChance, p)) { dmg *= m.critMult; crit = true; }  // "Keen eye"
-    else if (p.pact.glassEdge) dmg *= cfg::pact::glassMiss;                // "Glass Edge" pact: no crit, weaker
     if (crit || oracle > 1.f) ev.crits.push_back(e.pos);                   // the "CRIT" call over it (App)
     if (m.executeThreshold > 0.f && e.hp < e.maxHp * m.executeThreshold)   // "Executioner"
         dmg *= m.executeMult;
@@ -1641,6 +1641,7 @@ bool World::strike(Ball& b, Enemy& e, sf::Vector2f normal, const WorldParams& p,
         if (m.boomerangHit > 0.f) dmg *= m.boomerangHit;
         b.charged = false;
     }
+    pactStrike(b, e, dmg, ev);   // "Starfall": a meteor
     if (b.catchBonus > 0.f) {   // catch reward: the throw's first hit
         dmg *= 1.f + b.catchBonus;
         ev.bursts.push_back({e.pos, e.radius * (1.6f + 2.f * b.catchBonus), theme::textHi, nullptr});
@@ -1675,6 +1676,7 @@ bool World::strike(Ball& b, Enemy& e, sf::Vector2f normal, const WorldParams& p,
     e.lastBy = b.owner;   // kill credit
     e.hp -= dmg;
     e.hitFlash = 1.f;
+    if (kill) pactKill(b, e, dmg, ev);   // "Billiards"
     const float knock = cfg::combat::knockback * m.knockMult *   // Big ball / Bumper
                         (b.hasRole(BallRole::Guardian) ? cfg::role::guardianKnockMul : 1.f) *
                         (m.rampartKnock > 0.f ? m.rampartKnock : 1.f) *   // "Rampart"
@@ -2171,7 +2173,7 @@ void World::updateTrail(Ball& b) {
 
 void World::advanceBall(Ball& b, float dt, const WorldParams& p, FrameEvents& ev) {
     b.age += dt;
-    b.sinceThrow += dt;   // "Quick Hands" pact
+    b.sinceThrow += dt;
     b.creedCharge = std::max(0.f, b.creedCharge - dt);   // "Living Core" overcharge wears off
     b.radius = ballRadius(b, p);   // role, "Big ball" gear, "Mass" web
     b.resonanceT = std::max(0.f, b.resonanceT - dt);
@@ -2742,6 +2744,7 @@ void World::sweepDeadEnemies(FrameEvents& ev, const WorldParams& p) {
                 ev.bursts.push_back({it->pos, R, theme::elemFire, nullptr});
             }
             commonOnDeath(*it, ev);   // "Fission"
+            pactOnDeath(*it, ev);     // "Powder keg"
             ev.kills.push_back(it->pos);
             nergalOnDeath(*it, p, ev);   // the infected die into rats (sim/WorldNergal.cpp)
             tiamatFeed();   // every death feeds Tiamat's dragons and her mount (sim/WorldGods2.cpp)
@@ -3588,6 +3591,7 @@ FrameEvents World::step(float dt, const WorldParams& p) {
     src_ = p.source;
     advanceCombo(dt, p);
     ascensionTick(dt, p);
+    pactTick(dt, p, ev);   // "Lodestone" / "Scorch"
     updateCoreSlide(dt);
     updateAutoFling(dt, p, ev);
     updateHunters(dt, p);                 // "Hunters" creed
