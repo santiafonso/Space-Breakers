@@ -2688,6 +2688,10 @@ void BossWinScreen::draw(App& app, sf::RenderWindow& w) {
     if (!bonus.empty())
         drawCenteredPop(w, app.font(), bonus, theme::fsBody, {s.x * 0.5f, s.y * 0.28f + (goingOn ? 92.f : 112.f)},
                         theme::core, introPop(it, 0.3f));
+    if (!app.bossUnlock().empty())   // a milestone: what this boss opened for good
+        drawCenteredPop(w, app.font(), "UNLOCKED  " + app.bossUnlock(), theme::fsHeading,
+                        {s.x * 0.5f, s.y * 0.28f + (goingOn ? 92.f : 112.f) + (bonus.empty() ? 0.f : 40.f)},
+                        theme::accent, introPop(it, 0.4f));
 
     menu_.draw(w, it);
 }

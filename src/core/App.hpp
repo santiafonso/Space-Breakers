@@ -177,6 +177,11 @@ public:
     int ballCap() const;          // balls the arena holds now (more after act 2's boss; "Duet": two)
     // F, Repulse (from act 2): the core shoves nearby enemies away.
     bool repulseOpen() const;
+    // Milestones (2026-10-29): what a boss falling in any run opens for good -
+    // act 1's boss bullet time (E), act 2's the pacts, act 3's the repulse (F).
+    enum class Milestone { BulletTime = 1, Pacts = 2, Repulse = 3 };
+    bool milestone(Milestone m) const { return data_.meta.bossBest >= static_cast<int>(m); }
+    const std::string& bossUnlock() const { return bossUnlock_; }   // BossWin card: what this boss just opened ("" = nothing)
     bool hardUnlocked() const;   // hard mode opens once a run gets past act 1 (2026-10-19)
     float repulseCooldown() const { return repulseCd_; }
     void repulse();
@@ -421,6 +426,7 @@ private:
     bool lessonEvent(const sf::Event& e);
     void drawLesson(sf::RenderWindow& w) const;
     int bossFlawlessGold_ = 0;       // set when a boss falls, for the BossWin card
+    std::string bossUnlock_;         // ...and the milestone it opened
     int bossIronCores_ = 0;
     bool continueUnlocked_ = false;  // snapshot at newRun: has a run ever been won before?
     bool runBanked_ = false;         // this run's cores/prisms have been paid out

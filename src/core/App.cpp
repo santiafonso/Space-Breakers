@@ -1339,7 +1339,7 @@ bool App::hardUnlocked() const {
     return data_.meta.stats.wins > 0 || data_.meta.stats.bestWave > static_cast<std::uint32_t>(cfg::run::bossWave);
 }
 
-bool App::repulseOpen() const { return data_.run.map.act >= cfg::player::repulseAct; }
+bool App::repulseOpen() const { return data_.run.map.act >= cfg::player::repulseAct && milestone(Milestone::Repulse); }
 
 // F: the core's shockwave - every enemy near it is shoved away and staggered.
 void App::repulse() {
@@ -1374,7 +1374,7 @@ void App::playerMark() {
     audio_.thrown(1.f);
 }
 
-bool App::bulletOpen() const { return data_.run.map.act >= cfg::player::bulletAct; }
+bool App::bulletOpen() const { return data_.run.map.act >= cfg::player::bulletAct && milestone(Milestone::BulletTime); }
 
 void App::finishChoice() {
     audio_.cardPick();
@@ -2061,9 +2061,9 @@ void App::continuePastBoss() {
     if (r.map.act == cfg::ball::lateBallsAct && !hasCreed(CreedId::Duet))   // room for more balls from here on
         effects_.addLabel("+" + std::to_string(cfg::ball::lateBalls) + " BALL SLOTS", {size().x * 0.5f, size().y * 0.24f},
                           theme::ballMid, 26, 2.f);
-    if (r.map.act == cfg::player::bulletAct)
+    if (r.map.act == cfg::player::bulletAct && milestone(Milestone::BulletTime))
         effects_.addLabel("NEW  hold E: bullet time", {size().x * 0.5f, size().y * 0.30f}, theme::bulletTime, 22, 2.6f);
-    if (r.map.act == cfg::player::repulseAct)
+    if (r.map.act == cfg::player::repulseAct && milestone(Milestone::Repulse))
         effects_.addLabel("NEW  F: the core repulses", {size().x * 0.5f, size().y * 0.35f}, theme::core, 22, 2.6f);
     if (hasPact(PactId::Horde) && static_cast<int>(r.balls.size()) < ballCap()) {   // "Horde": a ball per boss
         r.balls.push_back(BallLoadout{});
@@ -2715,6 +2715,15 @@ void App::processEvents(const FrameEvents& ev) {
             // with no deliberate repair banks "Iron core" cores (before bankRun).
             RunState& r = data_.run;
             bossFlawlessGold_ = flawless && w < cfg::run::finalWave ? cfg::gold::flawlessBoss : 0;
+            // A milestone: the furthest boss yet opens something for every run after.
+            bossUnlock_.clear();
+            if (const int act = cfg::run::actOfWave(w); act > data_.meta.bossBest && !r.tutorial) {
+                data_.meta.bossBest = act;
+                if (act == static_cast<int>(Milestone::BulletTime)) bossUnlock_ = "hold E: bullet time - from act 2 on";
+                else if (act == static_cast<int>(Milestone::Pacts))
+                    bossUnlock_ = "pacts - three flawless fights in a row open a hidden Altar";
+                else if (act == static_cast<int>(Milestone::Repulse)) bossUnlock_ = "F: the core repulses - from act 4 on";
+            }
             bossIronCores_ = r.repairedThisAct ? 0 : cfg::meta::ironCoreCores;
             r.gold += bossFlawlessGold_;
             r.bountyCores += static_cast<float>(bossIronCores_);
@@ -4368,8 +4377,10 @@ int App::runSnapshots(const std::string& dir) {
     continueUnlocked_ = true;
     bossFlawlessGold_ = cfg::gold::flawlessBoss;
     bossIronCores_ = cfg::meta::ironCoreCores;
+    bossUnlock_ = "hold E: bullet time - from act 2 on";   // a milestone opened
     push(ScreenId::BossWin);
     snapFrame(d + "19_boss_bonus.png");
+    bossUnlock_.clear();
 
     replaceStack(ScreenId::Menu);
     openSound();

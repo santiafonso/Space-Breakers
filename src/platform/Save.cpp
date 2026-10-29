@@ -48,6 +48,7 @@ bool saveGame(const std::string& path, const GameData& d) {
     f << "fullscreen " << (m.fullscreen ? 1 : 0) << '\n';
     f << "hard " << (m.hardMode ? 1 : 0) << '\n';
     f << "simpleText " << (m.simpleText ? 1 : 0) << '\n';
+    f << "bossBest " << m.bossBest << '\n';
     f << "asc " << m.ascMax << ' ' << m.ascSel << '\n';
     f << "hints " << m.hints << '\n';
     f << "stat.enemiesKilled " << m.stats.enemiesKilled << '\n';
@@ -70,6 +71,7 @@ bool loadGame(const std::string& path, GameData& d) {
     bool sawAnything = false;
     int fileVersion = 0;
     bool sawAsc = false;   // an "asc" line (2026-10-12+)
+    bool sawBossBest = false;
     std::string line;
     while (std::getline(f, line)) {
         std::istringstream ls(line);
@@ -119,6 +121,11 @@ bool loadGame(const std::string& path, GameData& d) {
             m.ascMax = std::clamp(m.ascMax, 0, cfg::asc::maxLevel);
             m.ascSel = std::clamp(m.ascSel, 0, m.ascMax);
         }
+        else if (key == "bossBest") {
+            sawBossBest = true;
+            ls >> m.bossBest;
+            m.bossBest = std::clamp(m.bossBest, 0, cfg::run::acts);
+        }
         else if (key == "stat.enemiesKilled") ls >> m.stats.enemiesKilled;
         else if (key == "stat.coresEarned") ls >> m.stats.coresEarned;
         else if (key == "stat.bestWave") ls >> m.stats.bestWave;
@@ -130,6 +137,13 @@ bool loadGame(const std::string& path, GameData& d) {
         else if (key == "stat.timePlayed") ls >> m.stats.timePlayed;
         // "version", old run.* / ball / stat.lifetimeScrap lines: ignored.
     }
+    // Milestones came in 2026-10-29: an older save opens what its best run
+    // reached (a run past a boss's wave beat it; an opened Ascension = a won run;
+    // stats.wins also counts the tutorial, so it says nothing here).
+    if (!sawBossBest)
+        m.bossBest = m.ascMax > 0 ? cfg::run::acts
+                                  : std::clamp((static_cast<int>(m.stats.bestWave) - 1) / cfg::run::bossWave, 0,
+                                               cfg::run::acts);
     // Ascension came in 2026-10-12: a save that already won a run opens level 1.
     if (!sawAsc && m.stats.wins > 0) {
         m.ascMax = 1;

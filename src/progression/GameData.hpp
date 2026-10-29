@@ -38,6 +38,7 @@ struct MetaState {
     bool hardMode = false;    // the next run starts in hard mode (cfg::hard)
     bool simpleText = false;  // simple descriptions (Options): the gist of every card, not every number
     int ascMax = 0;           // highest Ascension level opened (win a run at it to open the next)
+    int bossBest = 0;         // the furthest act whose boss fell in any run: what's opened (App::milestone)
     int ascSel = 0;           // the level the next run starts at (0..ascMax)
     std::uint32_t hints = 0;  // first-run hints already done (bit per App::Hint)
     Stats stats;

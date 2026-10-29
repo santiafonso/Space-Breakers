@@ -3013,7 +3013,8 @@ desde el centro. Las capturas 41 / 42 muestran cada motivo y las etapas.
   grabaciones CC0 / dominio público (Musopen) o re-tocarlas desde MIDI como las capas
   del menú, que además permite cortarlas en loops limpios. Evitar Orff (Carmina Burana) y
   Stravinsky: siguen con derechos.
-- **El juego por etapas (2026-10-06, el usuario lo quiere más adelante):** se
+- **El juego por etapas (2026-10-06, el usuario lo quiere más adelante):** (hecho en
+  parte 2026-10-29: E, pactos y F se abren por hitos, ver §11 "progresión por hitos") se
   desbloquea de a partes: primero las habilidades, después Q / E / F, después
   aparecen los pactos, después las ascensiones. Sin desbloquear las etapas
   casi no se puede ganar (salvo un equipo muy bueno). Los items épicos y
@@ -3891,3 +3892,21 @@ desde el centro. Las capturas 41 / 42 muestran cada motivo y las etapas.
   Comet). Íconos de pacto reacomodados (`pactGlyph`).
 - Se fueron con ellos: `aimSlows` (Heavy Arm), `quickThrowMul` (Stillness), el crítico de
   Glass Edge, la pelota de Overflow y el núcleo de Last Breath.
+
+### 2026-10-29: progresión por hitos
+
+- Santi: "el tema de progresión, de no tener todo desbloqueado al principio, quisiera
+  acomodar eso, el tema de los ascensos y demás". Eligió hitos: cada jefe vencido abre
+  algo para todas las runs siguientes.
+- `MetaState::bossBest` (`bossBest` en el save): el acto más alto cuyo jefe cayó en alguna
+  run (no el tutorial). `App::milestone(Milestone)`:
+  - jefe del acto 1 → **E (bullet time)**, que en la run sigue abriendo desde el acto 2
+    (`bulletOpen`);
+  - jefe del acto 2 → **pactos**: sin el hito, las peleas limpias no suman a la racha del
+    Altar oculto (`notePactFight`);
+  - jefe del acto 3 → **F (repulsión)**, desde el acto 4 (`repulseOpen`);
+  - ganar una run → Ascensión (como ya era). Hard y los dioses quedan igual.
+- El aviso "NEW hold E / F" al empezar el acto sale solo con el hito abierto. La tarjeta
+  del jefe (BossWin) muestra "UNLOCKED ..." la primera vez.
+- Migración: un save viejo abre lo que su mejor run alcanzó (`stat.bestWave` pasado el
+  jefe; con Ascensión abierta, todo). `stat.wins` no sirve: también cuenta el tutorial.

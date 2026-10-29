@@ -184,6 +184,7 @@ void App::devTogglePact(PactId id) {
 // A cleared fight (not the boss): flawless ones build the act's streak, one
 // that let anything through resets it. Stops in between don't count.
 void App::notePactFight(bool flawless) {
+    if (!milestone(Milestone::Pacts)) return;   // no Altars until the act 2 boss has fallen once
     RunState& r = data_.run;
     r.cleanStreak = flawless ? r.cleanStreak + 1 : 0;
     if (r.altarState == 0 && r.cleanStreak >= cfg::map::altarStreak) r.altarState = 1;   // earned, still hidden
