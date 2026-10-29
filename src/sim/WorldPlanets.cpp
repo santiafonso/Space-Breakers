@@ -179,7 +179,7 @@ void World::updatePlanets(float dt, const WorldParams& p, FrameEvents& ev) {
             dmgOwner_ = -1;
         }
         if (boss_.targetable() && length(boss_.pos - at) < R + boss_.radius) {
-            boss_.hp -= dmg * P::bossFrac;
+            damageBoss(dmg * P::bossFrac, DmgSrc::Summon);
             boss_.hitFlash = 1.f;
         }
         AstronomerWorld::Boom bm;
@@ -221,7 +221,7 @@ void World::updatePlanets(float dt, const WorldParams& p, FrameEvents& ev) {
                 any = true;
             }
             if (boss_.targetable() && length(boss_.pos - pl.pos) < boss_.radius + reach) {
-                boss_.hp -= hit * P::frac[ki] * P::bossFrac;
+                damageBoss(hit * P::frac[ki] * P::bossFrac, DmgSrc::Summon);
                 boss_.hitFlash = std::max(boss_.hitFlash, 0.4f);
                 any = true;
             }
@@ -344,7 +344,7 @@ void World::updatePlanets(float dt, const WorldParams& p, FrameEvents& ev) {
                 const float hr = t ? t->radius : boss_.radius;
                 if (length(aim - q.pos) < hr + 5.f * k) {
                     if (t) touch(*t, q.pos, q.dmg, Element::Fire, q.owner);
-                    else { boss_.hp -= q.dmg * P::bossFrac; boss_.hitFlash = 1.f; }
+                    else { damageBoss(q.dmg * P::bossFrac, DmgSrc::Summon); boss_.hitFlash = 1.f; }
                     q.back = true;
                 } else if (q.life <= 0.f) {
                     q.back = true;

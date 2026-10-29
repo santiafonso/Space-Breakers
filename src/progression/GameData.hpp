@@ -74,6 +74,9 @@ struct RunState {
     bool endless = false;     // dev: endless waves, no map, nothing saved (App::startEndless)
     float platingHp = 0.f;    // core max hp the balls' "Plating" items add (already in coreMaxHp)
     std::array<int, 4> bosses{0, 1, 2, 3};   // acts 1-4's bosses (BossKind), shuffled per run; act 5 is always the Orbital
+    std::array<int, 5> actRules{-1, -1, -1, -1, -1};   // each act's rule (ActRule), rolled per run; -1 = none (tutorial)
+    int actRule(int act) const { return act >= 1 && act <= 5 ? actRules[static_cast<std::size_t>(act - 1)] : -1; }
+    bool rulesSeen = false;   // the map's opening card with the five rules was dismissed (not saved)
     int wave = 0;
     float coreHp = cfg::core::baseHp;
     float coreMaxHp = cfg::core::baseHp;

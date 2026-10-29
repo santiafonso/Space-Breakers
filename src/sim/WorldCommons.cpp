@@ -536,7 +536,7 @@ void World::commonWorldTick(float dt, const WorldParams& p, FrameEvents& ev) {
 void World::commonEnemyTick(Enemy& e, float dt) {
     if (e.plagueT > 0.f) {   // "Black plague": it sickens while it runs mad
         e.plagueT -= dt;
-        e.hp -= e.plagueDps * dt;
+        e.hp -= e.plagueDps * dt * src_.element;   // the act's rule
     }
     if (e.bleed > 0.f) {
         e.bleed -= dt;

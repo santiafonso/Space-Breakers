@@ -236,6 +236,8 @@ private:
     // threshold crossed starts the next phase - pull back, raise parts.
     float bossTakenMul() const;
     void settleBossDamage();
+    DmgSrc hitSource() const;                    // what's dealing damage right now (castBall_ / reactBall_ / dmgOwner_)
+    void damageBoss(float dmg, DmgSrc s) { boss_.hp -= dmg * src_.of(s); }   // anything but a ball's contact
     void enterBossStage(int stage, FrameEvents& ev);
     void raiseParts(int n);                      // pillars / nests / anchors around the arena
     void updateBossParts(float dt, FrameEvents& ev);
@@ -520,6 +522,7 @@ private:
     Ball* reactBall_ = nullptr;              // the ball whose hit is resolving (Alchemist reactions)
     CreedRules creed_;                       // the run's creeds, from WorldParams (with pact_)
     PactRules pact_;                         // the run's pacts, from WorldParams (each step / wave start)
+    SourceMul src_;                          // the act's rule, from WorldParams (each step)
     float autoFlingTimer_ = 1.f;   // "Clockwork": time to its next throw
 
     float comboStreak_ = 0.f;   // hits, fractional while it drains

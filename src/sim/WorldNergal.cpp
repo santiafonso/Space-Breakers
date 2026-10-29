@@ -318,7 +318,7 @@ void World::updateNergal(float dt, const WorldParams& p, FrameEvents& ev) {
         }
         if (boss_.targetable() && near(boss_.pos, boss_.radius) && std::find(r.struck.begin(), r.struck.end(), kBossMark) == r.struck.end()) {
             r.struck.push_back(kBossMark);
-            boss_.hp -= r.dmg * 0.5f;
+            damageBoss(r.dmg * 0.5f, DmgSrc::Summon);
             boss_.hitFlash = 1.f;
         }
         if (r.t >= 1.f) r.dur = -1.f;

@@ -3826,3 +3826,30 @@ desde el centro. Las capturas 41 / 42 muestran cada motivo y las etapas.
   pelota; el Starter kit pasa al siguiente libre. Se anuncia al abrir el mapa.
 - `SB_SNAPSHOT` suma `08_tab_hover`, `12b_shop_relics2`, `12c_shop_reroll` y
   `12d_tab_relics2`.
+
+### 2026-10-29: reglas por acto
+
+- Santi: "que cada acto tenga una regla, como que el daño por contacto se ve reducido, o
+  el daño de habilidades, entonces el jugador tiene que pensar bien la build antes de
+  iniciar". Eligió: sorteadas al empezar y las 5 a la vista; cada regla es una
+  inclinación (una fuente pega menos, otra más), no un castigo solo.
+- **Fuentes de daño** (`DmgSrc` en `sim/Entities.hpp`): contacto (el golpe de la pelota,
+  `World::strike` / `ballHitsBoss`), habilidad (`castBall_`), elemento (`reactBall_` y
+  los DoT de quemadura, veneno y plaga), invocación y disparo (`dmgOwner_`: minions,
+  torretas, flechas, dragones, satélites, clones de Loki) y "otro" (los floreos de los
+  ítems, nunca se inclinan). `World::hitSource()` lo deduce del contexto en
+  `damageEnemy`; las ~22 escrituras directas a la vida del jefe pasan por
+  `World::damageBoss(dmg, src)` con su fuente explícita. Sin regla todo da x1 (mismo
+  resultado que antes).
+- **7 reglas** (`progression/ActRules.hpp`, `cfg::actrule`): Thick hull (contacto -,
+  habilidades +), Null field (habilidades -, contacto +), Cold void (elementos -,
+  contacto +), Broken signal (invocaciones -, habilidades +), Dense ether (contacto -,
+  elementos +), Static storm (habilidades -, elementos +), Open sky (elementos -,
+  invocaciones +). -40% / +25%; el acto 1 a la mitad (-20% / +12%). Cada run sortea 5
+  distintas (`App::newRun`, `RunState::actRules`, `run.actrules` en el save de la run; una
+  run vieja sigue sin reglas). El tutorial no tiene.
+- **Dónde se ven**: una tarjeta al abrir el mapa de la run por primera vez con las cinco
+  (se cierra con un clic); en el mapa, bajo "act N", el nombre y la inclinación del acto,
+  con una marca por acto al lado y las cinco al pasar el mouse; en la pelea, abajo a la
+  derecha en la franja negra.
+- `SB_ACTRULE=<n>` fuerza la regla n en todos los actos (para `SB_BALANCE`).

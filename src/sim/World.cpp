@@ -1549,7 +1549,15 @@ bool World::chance(float base, const WorldParams& p) {
     return rng_.range(0.f, 1.f) < q || (classWorld_.common.rigged && rng_.range(0.f, 1.f) < q);   // "Rigged": twice
 }
 
+DmgSrc World::hitSource() const {
+    if (castBall_) return DmgSrc::Ability;
+    if (reactBall_) return DmgSrc::Element;
+    if (dmgOwner_ >= 0) return DmgSrc::Summon;
+    return DmgSrc::Other;
+}
+
 void World::damageEnemy(Enemy& e, float dmg) {
+    dmg *= src_.of(hitSource());   // the act's rule
     if (castBall_ && castBall_->mods.cls.common.spellweave > 0.f &&   // "Spellweave": an ability on an afflicted enemy
         (e.burn > 0.f || e.poison > 0.f || e.frozen > 0.f || e.soak > 0.f || e.cracks > 0 ||
          (e.elemT > 0.f && e.elem != Element::Plain)))
@@ -1614,6 +1622,7 @@ bool World::strike(Ball& b, Enemy& e, sf::Vector2f normal, const WorldParams& p,
     dmg *= artemisaPreHit(b, e);       // Artemisa: her prey (and where the throw hit, for Arrow rain)
     dmg *= roleContact(b, e);          // the classes' own feel on a contact hit
     dmg *= p.creed.contactMul;         // "Arcanist" creed's cost
+    dmg *= p.source.contact;           // the act's rule
     const bool coinHeads = b.cls.jester.coinMul > 1.f;   // (Hot streak / Confetti count it as doubled)
     const bool afflicted = e.poison > 0.f || e.frozen > 0.f || e.burn > 0.f;
     if (p.primed && afflicted) dmg *= cfg::combat::primedMult;             // "Primed"
@@ -2513,12 +2522,12 @@ void World::updateEnemies(float dt, const WorldParams& p, FrameEvents& ev) {
         commonEnemyTick(e, dt);   // "Bleed"
         if (e.poison > 0.f) {
             e.poison -= dt;
-            e.hp -= e.poisonDps * dt;
+            e.hp -= e.poisonDps * dt * src_.element;   // the act's rule
             if (e.poison <= 0.f) e.poisonDps = 0.f;   // stacks clear when it wears off
         }
         if (e.burn > 0.f) {   // "Ember": fire burn damage-over-time
             e.burn -= dt;
-            e.hp -= e.burnDps * dt;
+            e.hp -= e.burnDps * dt * src_.element;
             if (e.burn <= 0.f) e.burnDps = 0.f;
         }
         e.age += dt;
@@ -3296,7 +3305,8 @@ void World::ballHitsBoss(Ball& b, float cdMul, const WorldParams& p, FrameEvents
     }
     if (bossRules_ & BossRuleThickHide) mul *= cfg::asc::thickHideContact;   // Ascension 9 "Thick hide"
     const float before = boss_.hp;
-    boss_.hp -= ballDamage(b, p) * (1.f + b.mods.cls.common.bully) * mul * p.creed.contactMul;   // "Bully": bosses are bigger
+    boss_.hp -= ballDamage(b, p) * (1.f + b.mods.cls.common.bully) * mul * p.creed.contactMul *
+                  p.source.contact;   // "Bully": bosses are bigger; the act's rule
     if (classWorld_.common.contractBoss && b.mods.cls.common.contractBoss > 0.f)   // "Contract" on the boss
         boss_.hp -= boss_.maxHp * b.mods.cls.common.contractBoss;
     bossContact_ += before - boss_.hp;
@@ -3575,6 +3585,7 @@ FrameEvents World::step(float dt, const WorldParams& p) {
 
     pact_ = p.pact;
     creed_ = p.creed;
+    src_ = p.source;
     advanceCombo(dt, p);
     ascensionTick(dt, p);
     updateCoreSlide(dt);

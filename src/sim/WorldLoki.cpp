@@ -72,7 +72,7 @@ void World::updateLoki(float dt, const WorldParams& p, FrameEvents& ev) {
     auto area = [&](int owner, sf::Vector2f at, float R, float dmg) {   // everything round a point (the boss at half)
         for (Enemy& e : enemies_)
             if (e.hp > 0.f && !e.orbiter && length(e.pos - at) < R + e.radius) hurt(owner, e, dmg);
-        if (boss_.targetable() && length(boss_.pos - at) < R + boss_.radius) { boss_.hp -= dmg * 0.5f; boss_.hitFlash = 1.f; }
+        if (boss_.targetable() && length(boss_.pos - at) < R + boss_.radius) { damageBoss(dmg * 0.5f, DmgSrc::Summon); boss_.hitFlash = 1.f; }
     };
     auto push = [&](LokiWorld::Fx f) { if (lw.fx.size() < 120) lw.fx.push_back(f); };
 

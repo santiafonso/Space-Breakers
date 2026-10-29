@@ -140,7 +140,7 @@ void World::updateArtemisa(float dt, const WorldParams& p, FrameEvents& ev) {
             dmgOwner_ = -1;
         }
         if (boss_.targetable() && length(boss_.pos - at) < r + boss_.radius) {
-            boss_.hp -= dmg * 0.5f;
+            damageBoss(dmg * 0.5f, DmgSrc::Summon);
             boss_.hitFlash = 1.f;
         }
     };
@@ -182,7 +182,7 @@ void World::updateArtemisa(float dt, const WorldParams& p, FrameEvents& ev) {
         if (boss_.targetable()) {
             const float along = dot(boss_.pos - from, dir);
             if (along > 0.f && along < len && length(boss_.pos - (from + dir * along)) < A::arrowWidth * k + boss_.radius) {
-                boss_.hp -= hit * A::arrowFrac * 0.5f;
+                damageBoss(hit * A::arrowFrac * 0.5f, DmgSrc::Summon);
                 boss_.hitFlash = 1.f;
             }
         }
@@ -313,7 +313,7 @@ void World::updateArtemisa(float dt, const WorldParams& p, FrameEvents& ev) {
         if (boss_.targetable() && length(boss_.pos - s.pos) < A::stagW * k + boss_.radius &&
             std::find(s.struck.begin(), s.struck.end(), -7) == s.struck.end()) {
             s.struck.push_back(-7);
-            boss_.hp -= s.dmg * 0.5f;
+            damageBoss(s.dmg * 0.5f, DmgSrc::Summon);
             boss_.hitFlash = 1.f;
         }
     }

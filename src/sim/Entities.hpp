@@ -551,6 +551,25 @@ struct FrameEvents {
     bool runOver = false;
 };
 
+// Where a hit comes from, for the act's rule (progression/ActRules.hpp): a
+// ball's own contact, an ability, an element (reactions, burn, poison,
+// plague), or a summon / shot (minions, turrets, arrows, dragons, satellites).
+// Other = the items' own flourishes, never tilted.
+enum class DmgSrc { Contact, Ability, Element, Summon, Other };
+struct SourceMul {
+    float contact = 1.f, ability = 1.f, element = 1.f, summon = 1.f;
+    float of(DmgSrc s) const {
+        switch (s) {
+            case DmgSrc::Contact: return contact;
+            case DmgSrc::Ability: return ability;
+            case DmgSrc::Element: return element;
+            case DmgSrc::Summon:  return summon;
+            case DmgSrc::Other:   break;
+        }
+        return 1.f;
+    }
+};
+
 // Per-step tuning handed to the simulation: the wave number plus whatever
 // between-wave upgrades the player has picked this run.
 struct WorldParams {
@@ -590,6 +609,7 @@ struct WorldParams {
     float pickupDurMult = 1.f;    // scales how long a power-up lasts
     float markMul = 1.35f;        // any hit vs a Support-marked enemy x this (cfg::role::markDamageMul + web "Rally")
 
+    SourceMul source;               // the act's rule: damage by where it comes from (progression/ActRules.hpp)
     CreedRules creed;               // the run's creeds (sim/CreedRules.hpp); defaults = none
     PactRules pact;                 // the run's pacts (sim/PactRules.hpp); defaults = none
 };

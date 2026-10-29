@@ -246,7 +246,7 @@ void World::updateAres(float dt, const WorldParams& p, FrameEvents& ev) {
             if (stun > 0.f) e.stagger = std::max(e.stagger, stun);
         }
         if (boss_.targetable() && length(boss_.pos - at) < r + boss_.radius) {
-            boss_.hp -= dmg * 0.5f;
+            damageBoss(dmg * 0.5f, DmgSrc::Summon);
             boss_.hitFlash = 1.f;
         }
     };
@@ -319,7 +319,7 @@ void World::updateAres(float dt, const WorldParams& p, FrameEvents& ev) {
         if (boss_.targetable() && length(boss_.pos - ch.pos) < boss_.radius + 42.f * k &&
             std::find(ch.struck.begin(), ch.struck.end(), -7) == ch.struck.end()) {
             ch.struck.push_back(-7);
-            boss_.hp -= ch.dmg * 0.5f;
+            damageBoss(ch.dmg * 0.5f, DmgSrc::Summon);
             boss_.hitFlash = 1.f;
         }
         if ((ch.flameT -= dt) <= 0.f && aw.flames.size() < 140 && ch.pos.x > 0.f && ch.pos.x < size_.x) {

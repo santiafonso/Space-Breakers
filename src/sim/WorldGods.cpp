@@ -268,7 +268,7 @@ void World::godsCoreBounce(Ball& b, const WorldParams& p, FrameEvents& ev) {
             e.stagger = std::max(e.stagger, 0.5f);
         }
         if (boss_.targetable()) {
-            boss_.hp -= dmg * 0.5f;
+            damageBoss(dmg * 0.5f, DmgSrc::Other);
             boss_.hitFlash = 1.f;
         }
         classWorld_.hermes.fx.push_back({3, core_.pos, core_.pos, 0.9f, 0.9f, length(size_)});
@@ -420,7 +420,7 @@ void World::updateGods(float dt, const WorldParams& p, FrameEvents& ev) {
             const float tt = clampf(dot(boss_.pos - prev, ab) / std::max(1e-3f, dot(ab, ab)), 0.f, 1.f);
             if (length(boss_.pos - (prev + ab * tt)) < boss_.radius + W) {
                 s.hit.push_back(-7);   // (the boss, once each way)
-                boss_.hp -= s.dmg * 0.5f;
+                damageBoss(s.dmg * 0.5f, DmgSrc::Summon);
                 boss_.hitFlash = 1.f;
             }
         }

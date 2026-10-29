@@ -1,5 +1,7 @@
 #include "platform/Save.hpp"
 
+#include "progression/ActRules.hpp"
+
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
@@ -193,6 +195,9 @@ bool saveRun(const std::string& path, const RunState& r) {
         f << "run.bosses";
         for (int b : r.bosses) f << ' ' << b;
         f << '\n';
+        f << "run.actrules";
+        for (int a : r.actRules) f << ' ' << a;
+        f << '\n';
         f << "run.wave " << r.wave << '\n';
         f << "run.core " << r.coreHp << ' ' << r.coreMaxHp << '\n';
         f << "run.score " << r.score << '\n';
@@ -280,6 +285,12 @@ bool loadRun(const std::string& path, RunState& out) {
                 seen[b] = true;
             }
             if (!ok) r.bosses = {0, 1, 2, 3};
+        }
+        else if (key == "run.actrules") {   // older runs: no rules
+            for (int& a : r.actRules) {
+                ls >> a;
+                if (a < -1 || a >= kActRuleCount) a = -1;
+            }
         }
         else if (key == "run.wave") ls >> r.wave;
         else if (key == "run.core") ls >> r.coreHp >> r.coreMaxHp;

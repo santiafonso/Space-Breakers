@@ -603,6 +603,16 @@ inline constexpr float bruteFightChance = 0.5f;   // ...this often; elites alway
 inline constexpr float coresMul = 1.75f;
 }  // namespace hard
 
+// Act rules (2026-10-29, progression/ActRules.hpp): one per act, rolled at the
+// run start. A rule's weak source loses `weak`, its strong one gains `strong`;
+// act 1 bites half as hard.
+namespace actrule {
+inline constexpr float weak = 0.40f;
+inline constexpr float strong = 0.25f;
+inline constexpr float weakAct1 = 0.20f;
+inline constexpr float strongAct1 = 0.12f;
+}  // namespace actrule
+
 // Ascension (2026-10-12): levels 1-10 past a won run, each adding one rule on
 // top of the ones below it (progression/Ascension.hpp has the texts). Win a
 // run at your highest level and the next one opens. Works on Normal or Hard.

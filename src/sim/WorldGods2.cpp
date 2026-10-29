@@ -196,7 +196,7 @@ void World::thanatosTick(Ball& b, float dt, const WorldParams& p, FrameEvents& e
             if (u < 1.f) return;
             if (there) {   // it lands: a cut, and it bounces on to the nearest one it hasn't hit
                 const float hit = ballDamage(b, p) * T::daggerFrac;
-                if (st.chain[static_cast<std::size_t>(leg)] == kBossMark) { boss_.hp -= hit * 0.5f; boss_.hitFlash = 1.f; }
+                if (st.chain[static_cast<std::size_t>(leg)] == kBossMark) { damageBoss(hit * 0.5f, DmgSrc::Summon); boss_.hitFlash = 1.f; }
                 for (Enemy& e : enemies_)
                     if (e.id == st.chain[static_cast<std::size_t>(leg)] && e.hp > 0.f) {
                         dmgOwner_ = b.owner;
@@ -363,7 +363,7 @@ void World::tiamatTick(Ball& b, float dt, const WorldParams& p, FrameEvents& ev)
             }
             if (boss_.targetable() && length(boss_.pos - mouth) < R + boss_.radius &&
                 dot(normalized(boss_.pos - mouth, dir), dir) >= cosC - 0.3f) {
-                boss_.hp -= dmg * 0.5f;
+                damageBoss(dmg * 0.5f, DmgSrc::Summon);
                 boss_.hitFlash = 1.f;
             }
             if (tw.fx.size() < 60) tw.fx.push_back({0, mouth, mouth + dir * R, 0.4f, 0.4f, R, {}});
@@ -629,7 +629,7 @@ void World::updateGods2(float dt, const WorldParams& p, FrameEvents& ev) {
     // The boss: within r of q? And a dragon's hit on it (half, like everything that isn't a ball).
     auto bossNear = [&](sf::Vector2f q, float r) { return boss_.targetable() && length(boss_.pos - q) < r + boss_.radius; };
     auto hurtBoss = [&](float dmg) {
-        boss_.hp -= dmg * 0.5f;
+        damageBoss(dmg * 0.5f, DmgSrc::Summon);
         boss_.hitFlash = 1.f;
     };
     for (auto& d : tw.dragons) {
@@ -923,7 +923,7 @@ void World::updateGods2(float dt, const WorldParams& p, FrameEvents& ev) {
                     if (boss_.targetable() && near(boss_.pos, boss_.radius) &&
                         std::find(d.struck.begin(), d.struck.end(), kBossMark) == d.struck.end()) {
                         d.struck.push_back(kBossMark);
-                        boss_.hp -= hit * T::ravageFrac * 0.5f;
+                        damageBoss(hit * T::ravageFrac * 0.5f, DmgSrc::Summon);
                         boss_.hitFlash = 1.f;
                         ++hits;
                     }
@@ -1008,7 +1008,7 @@ void World::updateGods2(float dt, const WorldParams& p, FrameEvents& ev) {
             if (length(boss_.pos - l.pos) > boss_.radius + 3.f) l.pos += l.vel * dt;
             if (length(boss_.pos - l.pos) < boss_.radius + 6.f * k && l.biteT <= 0.f) {
                 l.biteT = T::lizardBite;
-                boss_.hp -= ballDamage(*o, p) * T::lizardFrac * (o->mods.cls.tiamat.brood ? 2.f : 1.f) * 0.5f;
+                damageBoss(ballDamage(*o, p) * T::lizardFrac * (o->mods.cls.tiamat.brood ? 2.f : 1.f) * 0.5f, DmgSrc::Summon);
                 boss_.hitFlash = 1.f;
             }
             continue;
@@ -1072,7 +1072,7 @@ void World::updateGods2(float dt, const WorldParams& p, FrameEvents& ev) {
             dmgOwner_ = -1;
         }
         if (boss_.targetable() && length(boss_.pos - f.to) < f.r + boss_.radius) {
-            boss_.hp -= f.dmg * 0.5f;
+            damageBoss(f.dmg * 0.5f, DmgSrc::Summon);
             boss_.hitFlash = 1.f;
         }
         if (tw.fx.size() < 60) tw.fx.push_back({7, f.to, f.to, 0.45f, 0.45f, f.r, {}});
@@ -1101,7 +1101,7 @@ void World::updateGods2(float dt, const WorldParams& p, FrameEvents& ev) {
                 applyElement(e, Element::Electric, f.owner, f.dps, p, ev);
             }
             dmgOwner_ = -1;
-            if (boss_.targetable() && length(boss_.pos - at) < R + boss_.radius) { boss_.hp -= f.dps * 0.5f; boss_.hitFlash = 1.f; }
+            if (boss_.targetable() && length(boss_.pos - at) < R + boss_.radius) { damageBoss(f.dps * 0.5f, DmgSrc::Summon); boss_.hitFlash = 1.f; }
             TiamatWorld::Fx z;   // the bolt, jagged down out of the cloud...
             z.kind = 2;
             z.life = z.maxLife = 0.3f;

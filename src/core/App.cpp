@@ -16,6 +16,7 @@
 #include "core/Theme.hpp"
 #include "platform/Paths.hpp"
 #include "platform/Save.hpp"
+#include "progression/ActRules.hpp"
 #include "render/Draw.hpp"
 #include "ui/CreedScreen.hpp"
 #include "ui/WebSky.hpp"
@@ -142,6 +143,11 @@ WorldParams App::params() const {
     p.enemyHpMul = data_.run.tutorial ? cfg::tutorial::enemyHpMul : 1.f;
     p.actDepth = !data_.run.tutorial;
     p.bossKind = static_cast<int>(runBoss(cfg::run::actOfWave(data_.run.wave)));
+    {   // the act's rule (SB_ACTRULE=<n> forces one on every act, for the sims)
+        static const int forced = envInt("SB_ACTRULE", -1);
+        const int act = cfg::run::actOfWave(std::max(1, data_.run.wave));
+        p.source = actRuleMul(forced >= 0 ? forced : data_.run.actRule(act), act);
+    }
     p.damageMult = 1.f + cfg::combat::heftPerLevel * static_cast<float>(u[MetaHeft]);
     p.wave = std::max(1, data_.run.wave);
     p.ballRadiusMult = 1.f + cfg::combat::massPerLevel * static_cast<float>(u[MetaMass]);
@@ -829,6 +835,15 @@ void App::newRun() {
     for (int i = 3; i > (r.tutorial ? 1 : 0); --i)
         std::swap(r.bosses[static_cast<std::size_t>(i)],
                   r.bosses[static_cast<std::size_t>(rng_.irange(r.tutorial ? 1 : 0, i))]);
+
+    // Each act's rule, five different ones (none in the tutorial).
+    if (!r.tutorial) {
+        std::array<int, kActRuleCount> pool{};
+        for (int i = 0; i < kActRuleCount; ++i) pool[static_cast<std::size_t>(i)] = i;
+        for (int i = kActRuleCount - 1; i > 0; --i)
+            std::swap(pool[static_cast<std::size_t>(i)], pool[static_cast<std::size_t>(rng_.irange(0, i))]);
+        for (std::size_t a = 0; a < r.actRules.size(); ++a) r.actRules[a] = pool[a];
+    }
 
     r.rerollsLeft = data_.meta.unlock[MetaReroll] * cfg::run::rerollsPerLevel;
     r.gold = cfg::meta::treasuryGoldPerLevel * data_.meta.unlock[MetaTreasury];   // "Treasury"
@@ -3013,6 +3028,7 @@ void App::update(float frameDt) {
     const Core& c = world_.core();
     hud_.setHard(data_.run.hard);
     hud_.setAscension(data_.run.ascension, world_.eliteTrait(), world_.bossRules());
+    hud_.setActRule(data_.run.active ? data_.run.actRule(cfg::run::actOfWave(std::max(1, data_.run.wave))) : -1);
     {   // the boss's health for the top bar
         const Boss& bs = world_.boss();
         hud_.setBossKind(runBoss(data_.run.map.act));

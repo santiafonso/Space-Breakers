@@ -240,6 +240,8 @@ private:
     bool ready() const;                        // the opening has played out: nodes can be picked
     MenuBackdrop backdrop_;                    // drifting balls + orbiting planets behind the map
     bool backdropInit_ = false;
+    float rulesCard_ = 0.f;                    // the run's opening card with the act rules: 0..1 shown
+    bool rulesCardOpen(App& app) const;
 };
 
 // The F1 dev panel (SB_DEV): grant any pick to a chosen ball, spawn enemy

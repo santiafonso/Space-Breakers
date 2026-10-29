@@ -135,7 +135,7 @@ template <> struct ClassHooks<BallRole::Mage> : NoClassHooks {
                 if (m.elem != 0) w.applyElement(*hit, static_cast<Element>(m.elem), m.owner, m.dmg, p, ev);
                 m.life = 0.f;
             } else if (w.boss_.alive && w.boss_.intro <= 0.f && length(m.pos - w.boss_.pos) < w.boss_.radius + mr) {
-                w.boss_.hp -= m.dmg * A::missileBossFrac;
+                w.damageBoss(m.dmg * A::missileBossFrac, DmgSrc::Summon);
                 w.boss_.hitFlash = std::max(w.boss_.hitFlash, 0.4f);
                 m.life = 0.f;
             }
@@ -844,7 +844,7 @@ template <> struct ClassHooks<BallRole::Summoner> : NoClassHooks {
 
     static void hitBoss(World& w, float dmg) {
         if (!w.boss_.alive || w.boss_.intro > 0.f) return;
-        w.boss_.hp -= dmg * cfg::summoner::bossFrac;
+        w.damageBoss(dmg * cfg::summoner::bossFrac, DmgSrc::Summon);
         w.boss_.hitFlash = 1.f;
     }
 

@@ -744,7 +744,7 @@ bool World::fireAbility(Ball& b, const AbilitySpec& a, const WorldParams& p, Fra
                 smiteFx(e->pos, e->radius);
             }
             if (boss) {
-                boss_.hp -= dmg * A::missileBossFrac;
+                damageBoss(dmg * A::missileBossFrac, DmgSrc::Ability);
                 boss_.hitFlash = 1.f;
                 smiteFx(boss_.pos, boss_.radius);
             }
