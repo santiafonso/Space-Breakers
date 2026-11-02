@@ -138,6 +138,7 @@ public:
     const std::vector<Bolt>& bolts() const { return bolts_; }
     const std::vector<Obstacle>& obstacles() const { return obstacles_; }
     const std::vector<Shot>& shots() const { return shots_; }
+    const std::vector<Well>& wells() const { return wells_; }
     const std::vector<Pool>& pools() const { return pools_; }
     const std::vector<Wave>& waves() const { return waves_; }
     const std::vector<BlackHole>& blackHoles() const { return blackHoles_; }   // "Black hole"
@@ -243,6 +244,13 @@ private:
     void enterBossStage(int stage, FrameEvents& ev);
     void raiseParts(int n);                      // pillars / nests / anchors around the arena
     void updateBossParts(float dt, FrameEvents& ev);
+    // Attacks, eggs, wells and waves (sim/WorldBoss.cpp).
+    void updateBossMoves(float dt, const WorldParams& p, FrameEvents& ev);
+    void castBossMove(BossMove m, FrameEvents& ev);
+    void updateEggs(float dt);
+    void updateWells(float dt, FrameEvents& ev);
+    void bossWaveIn(FrameEvents& ev);
+    void fireRing(sf::Vector2f from, int n, float turn, int bounces);
     bool retreatBoss(float dt);                  // the pull-back at a phase change; true while it lasts
     void fireShots(sf::Vector2f from, int n, float spread);   // a fan of orbs at the core
     void updateShots(float dt, const WorldParams& p, FrameEvents& ev);
@@ -501,6 +509,7 @@ private:
     std::vector<Bolt> bolts_;
     std::vector<Obstacle> obstacles_;
     std::vector<Shot> shots_;   // boss orbs flying at the core
+    std::vector<Well> wells_;   // boss gravity wells pulling the balls
     std::vector<Pool> pools_;                // stone reactions: lava, mud, toxic dust
     std::vector<Wave> waves_;                // water balls' waves
     std::vector<BlackHole> blackHoles_;

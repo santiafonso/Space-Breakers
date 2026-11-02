@@ -279,6 +279,7 @@ void World::devWinWave() {
     enemies_.clear();
     bolts_.clear();
     shots_.clear();
+    wells_.clear();
     if (bossWave_ && boss_.alive) {   // updateBoss clears it -> waveCleared
         boss_.stage = 2;
         boss_.guarded = false;
@@ -298,6 +299,7 @@ void World::startRun(const WorldParams& p, const std::vector<BallSpec>& balls,
     lastCoreHitBy_ = -1;
     bolts_.clear();
     shots_.clear();
+    wells_.clear();
     obstacles_.clear();
     pools_.clear();
     waves_.clear();
@@ -451,6 +453,7 @@ void World::beginWave(int wave, bool elite) {
     waveRunning_ = true;
     bolts_.clear();
     shots_.clear();
+    wells_.clear();
 }
 
 // The pulled-back arena, sized to the base view's aspect ratio so the zoomed-out
@@ -522,6 +525,7 @@ void World::startBossWave(int wave, const WorldParams& p) {
     enemies_.clear();
     bolts_.clear();
     shots_.clear();
+    wells_.clear();
     coreSlideT_ = 0.f;
     size_ = wideArenaSize(cfg::run::actOfWave(wave));
     core_.pos = size_ * 0.5f;
@@ -602,6 +606,7 @@ void World::startChargerWave(int wave, const WorldParams& p) {
     enemies_.clear();
     bolts_.clear();
     shots_.clear();
+    wells_.clear();
     coreSlideT_ = 0.f;
 
     // Wider arena, core shoved to the far left.
@@ -644,6 +649,7 @@ void World::startFinalBossWave(const WorldParams& p) {
     enemies_.clear();
     bolts_.clear();
     shots_.clear();
+    wells_.clear();
     coreSlideT_ = 0.f;
 
     size_ = wideArenaSize(cfg::run::acts);
@@ -1169,7 +1175,7 @@ void World::ascensionTick(float dt, const WorldParams& p) {
         if (const float d = ballDamage(b, p); d > top) { top = d; best = &b; }
     }
     if (best && balls_.size() > 1) {   // never your only ball
-        best->hexT = cfg::asc::hexTime;
+        best->hexT = best->hexMax = cfg::asc::hexTime;
         best->vel = {0.f, 0.f};
         best->trail.clear();
     }
@@ -2549,7 +2555,7 @@ void World::updateEnemies(float dt, const WorldParams& p, FrameEvents& ev) {
         // drop orbiter and become ordinary core-seekers (handled below).
         // A boss's part stands where it was raised: pushes, pulls and swaps
         // are undone; it never walks and never reaches the core.
-        if (e.part) {
+        if (e.part || e.hatchT > 0.f) {   // (a boss's egg too, until it hatches: updateEggs)
             e.pos = e.home;
             e.vel = {0.f, 0.f};
             e.frozen = e.stagger = 0.f;
@@ -2819,15 +2825,22 @@ void World::updateShots(float dt, const WorldParams& p, FrameEvents& ev) {
         Shot& s = *it;
         // Bend toward the core, a little each frame: a spread fans out and
         // curves back in instead of flying off to a wall.
+        // One with rebounds left (a Bouncer, a Nova or Well ring) flies straight until they run out.
         const float want = std::atan2(core_.pos.y - s.pos.y, core_.pos.x - s.pos.x);
         const float have = std::atan2(s.vel.y, s.vel.x);
         float turn = std::remainder(want - have, 2.f * kPi);
-        const float step = cfg::boss::shotTurn * dt;
+        const float step = (s.bounces > 0 ? 0.f : s.turn) * dt;
         turn = std::clamp(turn, -step, step);
         const float c = std::cos(turn), sn = std::sin(turn);
         s.vel = {s.vel.x * c - s.vel.y * sn, s.vel.x * sn + s.vel.y * c};
         s.pos += s.vel * dt;
         s.life -= dt;
+        if (s.bounces > 0) {   // off the walls, like a ball
+            bool hit = false;
+            if ((s.pos.x < s.radius && s.vel.x < 0.f) || (s.pos.x > size_.x - s.radius && s.vel.x > 0.f)) { s.vel.x = -s.vel.x; hit = true; }
+            if ((s.pos.y < s.radius && s.vel.y < 0.f) || (s.pos.y > size_.y - s.radius && s.vel.y > 0.f)) { s.vel.y = -s.vel.y; hit = true; }
+            if (hit) --s.bounces;
+        }
         bool gone = s.life <= 0.f;
         for (const std::vector<Ball>* set : {&balls_, &ghosts_}) {
             for (const Ball& b : *set) {
@@ -2844,7 +2857,7 @@ void World::updateShots(float dt, const WorldParams& p, FrameEvents& ev) {
         if (!gone && length(core_.pos - s.pos) <= core_.radius + s.radius) {
             gone = true;
             if (!invuln_ && aegisChargesLeft_ > 0) --aegisChargesLeft_;
-            else coreLoses(cfg::boss::shotDamage, p, ev);
+            else coreLoses(s.damage, p, ev);
             core_.hitFlash = 1.f;
             ev.coreHit = true;
             lastCoreHitBy_ = kCoreHitByShot;
@@ -2904,9 +2917,14 @@ void World::enterBossStage(int stage, FrameEvents& ev) {
         case BossKind::Charger: raiseParts(B::chargerParts[stage - 1]); break;
         case BossKind::Hive:    raiseParts(B::hiveParts[stage - 1]); break;
         case BossKind::Orbital: raiseParts(B::orbitalParts[stage - 1]); boss_.launchT = B::orbitalLaunchEvery; break;
-        case BossKind::Warden:  boss_.flipT = B::wardenFlipMax; boss_.shotT = 2.f; break;
+        case BossKind::Warden:  boss_.flipT = B::wardenFlipMax; break;
         default: break;
     }
+    // A new phase opens with its new list, and a wave right behind the call.
+    boss_.moveIdx = 0;
+    boss_.warnT = 0.f;
+    boss_.moveT = std::min(boss_.moveT, B::moveAfterPhase);
+    packTimer_ = std::min(packTimer_, B::packAfterPhase);
     ev.bursts.push_back({boss_.pos, boss_.radius * 3.5f, theme::coreLow, nullptr});
 }
 
@@ -3081,10 +3099,6 @@ void World::updateBoss(float dt, const WorldParams& p, FrameEvents& ev) {
         updateHive(dt * pace * slow);
     } else if (boss_.kind == BossKind::Warden) {
         updateWarden(dt * pace, p);
-        if (boss_.stage >= 1 && (boss_.shotT -= dt * pace) <= 0.f) {   // a fan of orbs at the core
-            boss_.shotT = B::wardenShotEvery;
-            fireShots(boss_.pos, B::wardenShots[boss_.stage - 1], 0.9f);
-        }
     } else if (boss_.kind == BossKind::Dasher) {
         updateDasher(dt * pace, p, ev);
     } else {
@@ -3095,6 +3109,7 @@ void World::updateBoss(float dt, const WorldParams& p, FrameEvents& ev) {
             chargerShock(ev);
         }
     }
+    updateBossMoves(dt, p, ev);
 
     if (boss_.hp <= 0.f) {
         boss_.alive = false;
@@ -3423,18 +3438,11 @@ void World::updateWaveSpawner(float dt, FrameEvents& ev) {
         // The wave ends only once the boss is down and every enemy it left
         // behind is cleared.
         if (boss_.alive) {
-            // Packs of small enemies come with every boss: half wave, half boss.
+            // Waves of the act's enemies come with every boss: half wave, half boss.
             packTimer_ -= dt / (boss_.enraged ? cfg::boss::enrageAddMul : 1.f);
             if (packTimer_ <= 0.f) {
-                namespace B = cfg::boss;
-                packTimer_ = B::packEvery;
-                const int n = B::packBase + B::packPerAct * (cfg::run::actOfWave(wave_) - 1);
-                const int cap = B::maxAdds + (boss_.kind == BossKind::Orbital ? cfg::finalBoss::shieldCount : 0);
-                for (int i = 0; i < n && static_cast<int>(enemies_.size()) < cap; ++i) {
-                    spawnEnemy(rng_.range(0.f, 1.f) < B::packRunnerChance ? EnemyKind::Runner : EnemyKind::Grunt);
-                    Enemy& e = enemies_.back();
-                    e.maxHp = e.hp = e.maxHp * B::addHpMul;
-                }
+                packTimer_ = cfg::boss::packEvery;
+                bossWaveIn(ev);
             }
             spawnTimer_ -= dt;
             if (spawnTimer_ <= 0.f) {
@@ -3657,6 +3665,8 @@ FrameEvents World::step(float dt, const WorldParams& p) {
     updateEnemies(dt, p, ev);
     updateCasters(dt, p, ev);
     updateShots(dt, p, ev);
+    updateWells(dt, ev);
+    updateEggs(dt);
     updateCoreZap(dt, p, ev);   // "Living Core" creed
     sweepDeadEnemies(ev, p);
     updateBoss(dt, p, ev);

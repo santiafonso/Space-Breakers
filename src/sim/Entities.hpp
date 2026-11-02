@@ -195,6 +195,7 @@ struct Ball {
     bool held = false;
     int snaredBy = -1;       // a Snare's id while one holds it (it can't move or be grabbed)
     float hexT = 0.f;        // Ascension boss "Hex": s left frozen in place (can't move or be grabbed)
+    float hexMax = 0.f;      // ...out of this many (a boss's Frost freezes shorter)
     RoleMask roles = 0;      // its classes (see BallRole)
     RoleMask ascended = 0;   // ...and which of them are ascended
     RoleMask legend = 0;     // classes it wears the cosmetic of (all 4 items of the class)
@@ -321,6 +322,7 @@ struct Enemy {
     bool part = false;      // a boss's pillar / nest / anchor: stands at home, shields the boss while it lives
     sf::Vector2f home;      // ...where it stands (pushes are undone every frame)
     float partT = 0.f;      // ...to its next runner (nest) or shot (pillar, anchor)
+    float hatchT = 0.f;     // a boss's egg (Brood) while > 0: stands still and hatches runners at 0
     float castT = 0.f;      // Caster: s at range (its beam bites past cfg::enemy::casterCharge)
     float orbitPhase = 0.f; // its slot angle on the ring
     float blinkT = 0.f;     // Blinker: seconds to its next jump
@@ -364,7 +366,22 @@ struct Shot {
     sf::Vector2f vel;
     float radius = cfg::boss::shotRadius;
     float life = cfg::boss::shotLife;
+    float turn = cfg::boss::shotTurn;   // rad/s it bends toward the core (once it has no bounces left)
+    int bounces = 0;                    // walls it rebounds off first, flying straight
+    bool rogue = false;                 // the boss's own ball (Bouncer): bigger, faster, drawn as a ball
+    float damage = cfg::boss::shotDamage;   // core hp if it lands
 };
+
+// A boss's gravity well (move Well): pulls the player's balls toward it while
+// it lasts, then collapses into a ring of orbs.
+struct Well {
+    sf::Vector2f pos;
+    float life = 1.f, maxLife = 1.f;
+};
+
+// A boss's attacks, cast in turn from a list per boss and phase
+// (World::bossMoves) after a short telegraph.
+enum class BossMove { Volley, Nova, Bouncer, Brood, Frost, Well };
 
 // Rubble: enemies are pushed out of it and take chip damage. (Stone used to
 // drop it; unused for now.)
@@ -481,8 +498,14 @@ struct Boss {
     float flipT = 0.f;        // Warden, last phase: to the next turn of its shield's spin
     float spin = 1.f;         // Warden: which way the shield turns
     float homeDist = 0.f, fromDist = 0.f;   // Orbital: the spiral's start, and where its pull-back began
-    float shotT = 0.f;        // Warden: to its next fan of shots
     float launchT = 0.f;      // Orbital, last phase: to the next orbiter it lets loose at the core
+    float moveT = cfg::boss::moveFirst;   // to its next attack (cfg::boss::moveEvery)...
+    int moveIdx = 0;          // ...which one in its list...
+    float warnT = 0.f;        // ...telegraphed for this many more seconds before it fires
+    BossMove warnMove = BossMove::Volley;
+    sf::Vector2f warnAt;      // Well: where it will open
+    float frostR = 0.f;       // Frost / Well: its reach (the render's warning ring)
+    int waves = 0;            // the waves it has called in
     float ragePace = cfg::boss::enragePace;   // Ascension 5 raises it
     float pace() const { return enraged ? ragePace : 1.f; }
     // Something the auto-aim (and summons, bullets) should go for.
@@ -539,6 +562,8 @@ struct FrameEvents {
     bool bossExposed = false;             // the boss's last part fell: it can be hurt again
     bool bossSummon = false;              // the boss just called in a Brute
     bool bossShock = false;               // the Charger's shockwave went off
+    int bossWave = 0;                     // the boss called in its wave number n
+    bool bossFrost = false;               // a boss's Frost froze the balls near it
     bool launched = false;                // the fight-opening whirl just let the balls fly
     bool autoFlung = false;               // the "Clockwork" creed launched a ball
     int midasGold = 0;                    // extra gold from kills by Midas balls

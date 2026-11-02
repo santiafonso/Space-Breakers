@@ -105,6 +105,12 @@ void drawTabHint(App& app, sf::RenderWindow& w, sf::Vector2f topLeft);
 inline constexpr float kBallTallyStep = 34.f;   // one ball's chip in it
 sf::FloatRect ballTallyRect(App& app, int balls);
 sf::Vector2f ballTallyPos(App& app, int ball, int balls);   // ball's chip in that tally (its centre)
+// The run's balls as that tally, in the band under the frame on the map; returns
+// its right edge. The tooltip draws the hovered ball's class, if any (true).
+float drawBallTally(App& app, sf::RenderWindow& w, float alpha = 1.f);
+bool ballTallyTooltip(App& app, sf::RenderWindow& w, sf::Vector2f um);
+// Leaving a node's menu for the map: every ball flies down to its chip there.
+void flyBallsHome(App& app);
 
 // Combat. One or more balls bounce freely; you fling them into the enemies.
 // The fight holds still while the TAB peek is open.
@@ -223,6 +229,7 @@ private:
     int nodeAt(App& app, sf::Vector2f mouse, bool openOnly = true) const;
     float scrollMax(App& app) const;
     float scrollFor(App& app, int row) const;   // the scroll that puts `row` in view, a bit below centre
+    float cineZoom(App& app, sf::Vector2f& center) const;   // the constellation pulling the view out (1 = not)
     int hover_ = -1;          // open node under the pointer
     float scroll_ = 0.f;      // how far the map is scrolled up (px): 0 = row 1 at the bottom
     float scrollTarget_ = 0.f;

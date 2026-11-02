@@ -531,7 +531,11 @@ void App::syncWorldBalls() {
 
 void App::rememberClasses() {
     knownClasses_.clear();
-    for (const BallLoadout& L : data_.run.balls) knownClasses_.push_back({L.roleMask(), L.ascended(), L.element()});
+    for (BallLoadout& L : data_.run.balls) {
+        knownClasses_.push_back({L.roleMask(), L.ascended(), L.element()});
+        L.seenRoles |= L.roleMask();   // had once, announced once: losing and regaining it stays quiet
+        if (L.ascended() != ItemTag::None) L.seenAscended |= roleBit(tagRole(L.ascended()));
+    }
     int counts[kTraitCount];
     teamTraitCounts(data_.run.balls, counts, data_.run.mods.has(UpgradeKind::RelicWarBanner) ? cfg::relic::warBannerBalls : 0);   // "War banner"
     for (int t = 0; t < kTraitCount; ++t) knownTraits_[t] = traitTier(counts[t]);
@@ -550,8 +554,8 @@ void App::announceClassGains() {
         const KnownClasses was = i < knownClasses_.size() ? knownClasses_[i] : KnownClasses{};
         const RoleMask now = L.roleMask();
         const ItemTag asc = L.ascended();
-        const RoleMask gained = now & ~was.roles;
-        const bool ascends = asc != ItemTag::None && asc != was.ascended;
+        const RoleMask gained = now & ~L.seenRoles;   // only a class this ball never had
+        const bool ascends = asc != ItemTag::None && (L.seenAscended & roleBit(tagRole(asc))) == 0;
         // A new element: a flash of its colour, and rings off the ball when the fight runs.
         if (L.element() != Element::Plain && L.element() != was.element) {
             effects_.flash(elementColor(L.element()), 0.35f);
@@ -583,7 +587,7 @@ void App::announceClassGains() {
         std::string to;
         for (int k = 0; k < n; ++k) to += (k ? " + " : "") + upperCase(roleName(tagRole(order[k])));
         std::string from = names(was.roles & now);
-        if (from.empty()) {   // a ball's first class: its own cinematic, not a banner
+        if (L.seenRoles == 0) {   // a ball's first class ever: its own cinematic, not a banner
             ItemTag got = n > 0 ? order[0] : ItemTag::None;
             for (int k = 0; k < n; ++k)
                 if (gained & roleBit(tagRole(order[k]))) got = order[k];
@@ -592,6 +596,10 @@ void App::announceClassGains() {
             audio_.classGain(false);
             world_.pulseClass(static_cast<int>(i), false);
             continue;
+        } else if (from.empty()) {   // it had another class once, sold or moved off: a new one, as a banner
+            const Element el = L.element();
+            from = el == Element::Plain ? "BALL" : upperCase(elementName(el)) + " BALL";
+            caption += "  -  NEW CLASS";
         } else {
             caption += "  -  SECOND CLASS";
         }
@@ -803,7 +811,7 @@ bool App::resumeRun() {
     hitstop_ = 0.f;
     camKick_ = 0.f;
     replaceStack(ScreenId::Play);
-    openMap();
+    openMap(false);   // resumed: no menu was open, nothing to fly home
     return true;
 }
 
@@ -1407,9 +1415,10 @@ void App::applyUpgrade(int idx) {
 
 // ---------------------------------------------------------------- path map
 
-void App::openMap() {
+void App::openMap(bool flyHome) {
     revealAltarPath();   // one step from the boss with the streak earned: the hidden Altar
     push(ScreenId::Map);
+    if (flyHome) flyBallsHome(*this);   // out of the node's menu: the balls settle into their chips
     if (callingItem_ >= 0) {   // "Calling": what the first ball opened the run with
         const auto k = static_cast<UpgradeKind>(callingItem_);
         const std::string cls = itemTag(k) != ItemTag::None ? std::string("  (") + itemTagName(itemTag(k)) + ")" : "";
@@ -1506,14 +1515,14 @@ void App::travelTo(int node) {
             if (n.row < r.map.bossRow()) r.wave = wave;
             if (!openPactChoice()) {
                 effects_.addLabel("the altar is silent", mid, theme::textLo, 22, 1.2f);
-                openMap();
+                openMap(false);
             }
             break;
         case MapNodeType::Forge:
             r.wave = wave;
             if (!openForgePicker()) {
                 effects_.addLabel("nothing to forge yet", mid, theme::textLo, 22, 1.2f);
-                openMap();
+                openMap(false);
             }
             break;
     }
@@ -1538,7 +1547,7 @@ void App::openShrine() {
     if (eventDealOk(EventKind::Expand)) eventDeals_.push_back(EventKind::Expand);
     if (eventDeals_.empty()) {
         effects_.addLabel("the shrine is silent", mid, theme::textLo, 22, 1.2f);
-        openMap();
+        openMap(false);
         return;
     }
     push(ScreenId::Event);
@@ -2658,6 +2667,15 @@ void App::processEvents(const FrameEvents& ev) {
     }
     if (ev.bossSummon)
         effects_.addLabel("a Brute joins the fight", {size().x * 0.5f, size().y * 0.36f}, theme::ember, 22, 1.3f);
+    if (ev.bossWave > 0) {   // a wave called in with the boss
+        effects_.addLabel("WAVE " + std::to_string(ev.bossWave), {size().x * 0.5f, size().y * 0.22f}, theme::textLo, 22, 1.1f);
+        audio_.waveStart();
+    }
+    if (ev.bossFrost) {   // a boss froze the balls near it
+        effects_.flash(theme::elemIce, 0.3f);
+        audio_.coreThud();
+        camKick_ = std::max(camKick_, 6.f);
+    }
     data_.meta.stats.bestCombo =
         std::max(data_.meta.stats.bestCombo, static_cast<std::uint32_t>(world_.comboStreak()));
     runBestCombo_ = std::max(runBestCombo_, world_.comboStreak());
@@ -3270,6 +3288,65 @@ int App::runBalance(int waves) {
     return 0;
 }
 
+// SB_BOSSSIM=<trials> (dev): each act's boss against a squad of that act's
+// size (act+1 balls of class builds, items act+1 at level 1, fire), a player
+// pressing Q when it's ready, the real core. Prints how long the fight runs,
+// when each phase starts and what the core lost. SB_BOSSSIM_ONLY=<act>.
+int App::runBossSim(int trials) {
+    savePath_ = (std::filesystem::temp_directory_path() / "sb_bosssim_save.txt").string();   // never the real save
+    const char* only = std::getenv("SB_BOSSSIM_ONLY");
+    for (int act = 1; act <= cfg::run::acts; ++act) {
+        if (only && *only && std::atoi(only) != act) continue;
+        double tSum = 0, lostSum = 0, ph1 = 0, ph2 = 0;
+        int wins = 0, n1 = 0, n2 = 0;
+        for (int t = 0; t < trials; ++t) {
+            RunState& r = data_.run;
+            r = RunState{};
+            r.active = true;
+            for (int a = 0; a < 4; ++a) r.bosses[static_cast<std::size_t>(a)] = a;
+            r.coreMaxHp = r.coreHp = startCoreHp();
+            r.balls.clear();
+            for (int b = 0; b <= act; ++b) {
+                const Build& bd = kBuilds[static_cast<std::size_t>(2 * (b + t)) % std::size(kBuilds)];
+                BallLoadout L = buildBall(bd);
+                for (int i = std::min(4, act + 1); i < 4; ++i) L.gear[i] = -1;
+                L.ascendedFrom = static_cast<int>(ItemTag::None);
+                L.shrineUsed = false;
+                L.type = static_cast<int>(UpgradeKind::ElemFire); L.typeLvl = 1;
+                r.balls.push_back(L);
+            }
+            r.map.act = act;
+            r.wave = act * cfg::run::bossWave;
+            world_.startRun(params(), ballSpecs(), r.coreHp, r.coreMaxHp);
+            world_.startBossWave(r.wave, params());
+            float q = 0.f, time = 0.f, s1 = -1.f, s2 = -1.f;
+            bool alive = true;
+            for (; time < 300.f; time += cfg::loop::fixedDt) {
+                if ((q -= cfg::loop::fixedDt) <= 0.f) {
+                    q = cfg::player::markCooldown;
+                    world_.volley(lerpf(cfg::app::slingMinSpeed, cfg::app::slingMaxSpeed, cfg::app::quickThrowPower) *
+                                  cfg::player::volleySpeedMul * world_.arenaScale() * flingPower());
+                }
+                const FrameEvents ev = world_.step(cfg::loop::fixedDt, params());
+                if (ev.bossPhase == 1 && s1 < 0.f) s1 = time;
+                if (ev.bossPhase == 2 && s2 < 0.f) s2 = time;
+                if (ev.runOver || world_.core().hp <= 0.f) { alive = false; break; }
+                if (ev.waveCleared) break;
+            }
+            const float lost = 1.f - std::max(0.f, world_.core().hp) / world_.core().maxHp;
+            std::fprintf(stderr, "bosssim: act %d %-8s trial %d  %s %5.1f s  phases at %5.1f / %5.1f  core lost %3.0f%%\n",
+                         act, bossName(world_.boss().kind), t, alive ? "won " : "LOST", time, s1, s2, lost * 100.f);
+            tSum += time; lostSum += lost; wins += alive ? 1 : 0;
+            if (s1 >= 0.f) { ph1 += s1; ++n1; }
+            if (s2 >= 0.f) { ph2 += s2; ++n2; }
+        }
+        const double n = std::max(1, trials);
+        std::fprintf(stderr, "bosssim: act %d  avg %5.1f s (phases %5.1f / %5.1f)  core lost %3.0f%%  won %d/%d\n\n", act,
+                     tSum / n, ph1 / std::max(1, n1), ph2 / std::max(1, n2), lostSum / n * 100.0, wins, trials);
+    }
+    return 0;
+}
+
 // SB_TUTSIM=<trials> (dev): the tutorial's fights in order on a fresh save -
 // fight (1 ball), recruit (a 2nd ball), elite, Seeker on ball 1, then the
 // finale - with no repair between them and a player who presses Q whenever
@@ -3500,11 +3577,21 @@ int App::runShowcase(const std::string& dir) {
     for (int i = 0; i < static_cast<int>(r.map.nodes.size()); ++i)
         if (mapNodeOpen(i)) { travelTo(i); break; }
     world_.devSetInvuln(true);
-    world_.startWave(6, params(), false);
+    // SB_SHOWCASE_BOSS=<act>: that act's boss fight instead of the stream (its own waves).
+    const int bossAct = std::getenv("SB_SHOWCASE_BOSS") ? std::atoi(std::getenv("SB_SHOWCASE_BOSS")) : 0;
+    if (bossAct > 0) {
+        for (int a = 0; a < 4; ++a) r.bosses[static_cast<std::size_t>(a)] = a;
+        r.map.act = bossAct;
+        r.wave = bossAct * cfg::run::bossWave;
+        world_.startBossWave(r.wave, params());
+    } else {
+        world_.startWave(6, params(), false);
+    }
     // SB_SHOWCASE_ENEMY=<EnemyKind index>: a stream of that kind only.
     const int enemyOnly = std::getenv("SB_SHOWCASE_ENEMY") ? std::atoi(std::getenv("SB_SHOWCASE_ENEMY")) : -1;
     const bool lone = only && *only;
-    auto crowd = [this, enemyOnly, lone](int f) {   // a steady stream, so the arena is never empty or swamped
+    auto crowd = [this, enemyOnly, lone, bossAct](int f) {   // a steady stream, so the arena is never empty or swamped
+        if (bossAct > 0) return;
         if (enemyOnly >= 0) { world_.devSpawn(static_cast<EnemyKind>(enemyOnly), f % 2 == 0 ? 2 : 1); return; }
         world_.devSpawn(EnemyKind::Grunt, lone ? 2 : 5);
         if (lone) return;
@@ -3517,7 +3604,7 @@ int App::runShowcase(const std::string& dir) {
         if (i % 24 == 0) crowd(i / 24);
         update(1.f / 60.f);
     }
-    if (!lone && enemyOnly < 0) world_.devSetCombo(140.f);
+    if (!lone && enemyOnly < 0 && bossAct <= 0) world_.devSetCombo(140.f);
     // SB_SHOWCASE_CROWD=<n>: n times the stream (stress test with SB_PROFILE).
     const int crowdMul = std::getenv("SB_SHOWCASE_CROWD") ? std::max(1, std::atoi(std::getenv("SB_SHOWCASE_CROWD"))) : 1;
     classCines_.clear();   // a staged fight: no class cinematic over it
@@ -4583,6 +4670,7 @@ int App::run() {
     }
     if (const char* bal = std::getenv("SB_BALANCE"); bal && *bal) return runBalance(std::atoi(bal));
     if (const char* ts = std::getenv("SB_TUTSIM"); ts && *ts) return runTutorialSim(std::atoi(ts));
+    if (const char* bs = std::getenv("SB_BOSSSIM"); bs && *bs) return runBossSim(std::atoi(bs));
     sf::Clock clock;
     while (window_.isOpen()) {
         sf::Event e;

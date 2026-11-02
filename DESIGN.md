@@ -3985,3 +3985,103 @@ desde el centro. Las capturas 41 / 42 muestran cada motivo y las etapas.
 - **Descripción de clase** (hover de la pelota en el TAB y en la ficha): solo lo que hace
   ahora. Con 2 ítems, su descripción y "4 items: Mega Striker (2/4)"; con 4, su forma
   completa y lo que suma. Sin la lista de rasgos ni los dos pasos.
+
+### 2026-10-30: la pelota elegida aterriza en su ficha del mapa
+
+- Santi: "la pelota que se va abajo a la izquierda cuando termina el combate parece que va
+  a la nada; que aparezcan las pelotas chiquitas con un diseño minimalista de qué clase
+  son"; "al mejorar un ítem salta la animación, la idea es que solo ocurra cuando salís de
+  la interfaz de los nodos".
+- **Fichas en el mapa**: la franja de abajo del mapa muestra las pelotas como en la pelea
+  (en chico, con su color y sus marcas de clase), con [TAB] a la derecha; el hover dice su
+  clase y qué hace (`drawBallTally` / `ballTallyTooltip`, compartidos con la pelea). Antes
+  la pelota volaba hasta donde en la pelea está su ficha, pero el mapa no la dibujaba.
+- **Vuelan al salir del menú**: equipar ya no lanza la pelota (queda la animación del ítem
+  entrando a su slot). Al volver al mapa desde cualquier menú de un nodo (recompensa,
+  tienda, forja, evento, descanso…) todas las pelotas bajan desde donde estarían sus
+  paneles a su ficha, de izquierda a derecha, 0.05 s una de otra (`flyBallsHome`, desde
+  `App::openMap`; `flyBall(..., delay)`).
+- Santi: "una vez que sale la animación de que alguna pelota ascendió o tiene una clase, que
+  no aparezca de vuelta".
+- **Cada momento de clase, una sola vez por pelota**: la pelota guarda las clases que tuvo y
+  en las que ascendió (`BallLoadout::seenRoles` / `seenAscended`, en el save). Perder una
+  clase (vender, mover el ítem) y recuperarla no repite nada; la cinemática es solo para su
+  primera clase de todas; una clase distinta que nunca tuvo sale con el banner "NEW CLASS";
+  ascender en la misma clase no repite el banner (`App::announceClassGains`).
+- Santi: "lo de la constelación: una vez que unís todos los puntos hasta el jefe, que se
+  aleje la cámara y muestre el mapa con el camino que hiciste".
+- **La constelación se aleja**: cuando se enciende la estrella del jefe, a los 0.35 s la
+  vista del mapa se aleja (1 s) hasta que entra el acto entero, de la fila 1 al jefe, y se
+  queda ahí 1.4 s antes de la pelea. Las estrellas y las líneas mantienen su tamaño en
+  pantalla y el velo se aclara un poco para que se vea el mapa debajo del camino. Un clic
+  sigue saltándola. La flechita de scroll no se muestra durante la constelación
+  (`MapScreen::cineZoom`, `kCineFlare` / `kCineZoom` / `kCineView`).
+- Santi: "si un camino va siempre para arriba, que vaya tomando más color y más épico; cuando
+  se cruza, que se distinga; y que el camino sea más dinámico". Y: "que las líneas
+  punteadas que unen los caminos no sean todas iguales, meté pequeñas variaciones".
+- **Cruces** (camino recorrido en el mapa y constelación): un paso que cambia de carril va
+  plateado, con un rombito que gira despacio en la mitad (`wayCrossings`, `stepColor`,
+  `drawCrossMark`). Mismo grosor que el resto. (Hubo una "racha de subida" que engrosaba y
+  doraba los tramos rectos; Santi la sacó el mismo día: todas las líneas del mismo tamaño.)
+- **Camino vivo**: un cometa recorre el camino hecho de abajo hacia arriba una y otra vez
+  (0.25 s por paso), siguiendo la curva de cada conexión. En la constelación, cuando
+  se unen todas las estrellas, el cometa la recorre hasta el jefe (`drawWayComet`).
+- **Conexiones distintas**: cada conexión tiene su semilla (`linkSeed`). Se curva hacia un
+  lado (hasta 14 px si cambia de carril, 4 px si es recta: `linkBend`, la misma curva
+  recorrida, abierta o por delante, y la chispa del viaje la sigue). Las punteadas de
+  adelante varían el espacio entre puntos (8.5–12.5 px) y el tamaño de punto (por conexión y
+  por punto), y titilan despacio, cada una a su ritmo (`Curve::dotsVaried`).
+
+### 2026-10-30: jefes con ataques, oleadas y menos vida
+
+- Santi: "siento que los jefes tienen mucha vida y son medio aburridos; hacelos más
+  dinámicos: que disparen más, creen cosas, cambien las mecánicas de la pelea; que no sean
+  simplemente esponjas; que haya oleadas o usen mecánicas que tenemos en contra".
+- Medido antes con `SB_BOSSSIM` (nuevo, ver abajo): 72–104 s por jefe y el núcleo no perdía
+  casi nada (0–4%). Después: 50–66 s, y el jefe del acto 1 se lleva ~20% del núcleo.
+- **Menos vida**: `cfg::boss::hpMul` 0.6 → 0.36; Warden 110 → 95; Orbital 130 → 110; las
+  partes (pilares, nidos, anclas) 12 → 7; el repliegue entre fases 2.2 → 1.5 s.
+- **Ataques en rotación** (`sim/WorldBoss.cpp`): cada jefe tiene una lista por fase y la
+  recorre cada 5 s (más rápido enfurecido), con 0.8 s de aviso (un anillo que se cierra
+  sobre el jefe). Un aturdimiento corta el ataque que está cargando: pegarle en la espalda
+  al Warden o hacer chocar al Dasher interrumpe.
+  - *Volley*: abanico de orbes al núcleo (5, +1 por fase).
+  - *Nova*: anillo de orbes alrededor (10, +2 por fase); rebotan una vez en la pared y
+    después se curvan al núcleo.
+  - *Bouncer*: el jefe tira una pelota propia, grande y rápida, que rebota en 4 paredes y
+    después va al núcleo (8 de daño); una pelota tuya la rompe. Dos si está enfurecido.
+  - *Brood*: pone 3 huevos (4 enfurecido) que tiemblan y nacen en 3 runners a los 4.5 s si
+    no los rompés.
+  - *Frost*: congela las pelotas cerca del jefe 1.3 s (el Hex de la Ascensión: no se
+    mueven ni se agarran); el aviso muestra el alcance en hielo.
+  - *Well*: abre un pozo del otro lado del núcleo que tira de tus pelotas 3.5 s (un agujero
+    negro en contra) y al cerrarse suelta un anillo de 6 orbes.
+- Listas: Charger Bouncer → +Volley → Nova/Bouncer/Volley; Hive Brood/Volley → igual →
+  +Nova y Well; Warden Volley → Frost/Volley → Frost/Nova/Bouncer (reemplaza su abanico
+  fijo); Dasher Bouncer → Well/Bouncer → +Nova; Orbital Nova → Well/Nova →
+  Frost/Nova/Well/Bouncer.
+- **Oleadas**: en vez de paquetes de grunts/runners, cada 12 s entra una oleada de la mezcla
+  del acto (5 enemigos +2 por acto), toda desde un mismo lado, anunciada "WAVE n"; un cambio
+  de fase llama una enseguida. El goteo de enemigos sueltos va más lento (1.4 → 2.4 s).
+- Orbes un poco más rápidos (150 → 170). Las descripciones de los jefes cuentan sus
+  ataques nuevos.
+- Dev: `SB_BOSSSIM=<intentos>` (+ `SB_BOSSSIM_ONLY=<acto>`) pelea cada jefe con un equipo
+  del tamaño del acto y Q cuando está listo: duración, cuándo cambia de fase, núcleo perdido.
+  `SB_SHOWCASE_BOSS=<acto>` graba la pelea de ese jefe.
+
+### 2026-11-02: revisión antes de subir a itch (0.2.0-beta)
+
+- **Orbes del Nova y del pozo**: vuelan derecho hasta su rebote y recién ahí se curvan al
+  núcleo, como decía el diseño (antes solo el Bouncer esperaba el rebote; el resto se
+  curvaba desde el primer cuadro). `World::updateShots`: el giro es 0 mientras `bounces > 0`.
+  Con `SB_BOSSSIM=2` el núcleo pierde 0–8% por jefe (el Charger antes ~20%): ojo en el
+  playtest si el acto 1 quedó blando.
+- **Frost nunca congela todas las pelotas**: si no quedaría ninguna libre, la más lejana al
+  jefe se salva (la misma regla que el Hex de la Ascensión); también borra la estela.
+- **El pozo muere con su jefe**: con el jefe abajo, sus pozos se cierran sin soltar orbes
+  (`updateWells`).
+- **Oleadas del jefe**: se amontonan a lo largo del borde por el que entran, no en diagonal
+  hacia adentro del campo (`bossWaveIn`).
+- **Las pelotas vuelan a su ficha solo al cerrar un menú**: retomar una partida guardada o
+  un nodo vacío ("the altar is silent"…) ya no las hace volar (`App::openMap(flyHome)`).
+- Dev: `SB_BOSSSIM` promedia las fases solo con los intentos que llegaron a ellas.

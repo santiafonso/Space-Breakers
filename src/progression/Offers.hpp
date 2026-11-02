@@ -591,6 +591,8 @@ struct BallLoadout {
     bool freeMissile = false;                  // a Mage: already got its free Magic missile (App::grantMageMissiles)
     bool freePoison = false;                   // an ascended Alchemist: already got its free Poison (same place)
     float dragonXp[6] = {};                    // Tiamat's dragons (frost, drake, gold, ravager, wyrmling) and [5] her mount: how grown, kept all run
+    unsigned seenRoles = 0;                    // every class it has had (a RoleMask): its moment plays once (App::announceClassGains)
+    unsigned seenAscended = 0;                 // ...and every class it has ascended in
 
     // ---- any slot, addressed 0..kLoadoutSlots-1 (see kSlotType / kSlotAbility)
     int kindAt(int s) const {

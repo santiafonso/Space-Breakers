@@ -119,7 +119,7 @@ public:
     void applyUpgrade(int idx);   // Choice: take card idx (asks for a ball first when it needs one)
 
     // ---- path map ----
-    void openMap();
+    void openMap(bool flyHome = true);   // flyHome: the balls drop out of the menu just closed
     bool mapNodeOpen(int node) const;   // can you step onto this node now?
     void travelTo(int node);            // step onto it: fight, shop, forge, rest or a pick
     int gold() const { return data_.run.gold; }
@@ -361,6 +361,7 @@ private:
     int runSnapshots(const std::string& dir);
     int runShowcase(const std::string& dir);   // SB_SHOWCASE: frames of a busy fight for the itch GIF (dev)
     int runTutorialSim(int trials);   // SB_TUTSIM: the tutorial's fights back to back, how often the core holds (dev)
+    int runBossSim(int trials);   // SB_BOSSSIM: each act's boss against a squad its size: time, phases, core lost (dev)
     int runBalance(int waves);   // SB_BALANCE: each class at its best against its god (dev)
     void snapFrame(const std::string& file);
     std::string capturePath_;   // non-empty: render() saves this frame here

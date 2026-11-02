@@ -248,6 +248,7 @@ bool saveRun(const std::string& path, const RunState& r) {
             for (int i = kBaseItemSlots; i < kBallSlots; ++i) f << ' ' << L.gear[i] << ' ' << L.gearLvl[i];
             f << ' ' << L.ascendedFrom << ' ' << L.keptSize;
             for (float x : L.dragonXp) f << ' ' << x;   // (2026-10-07) Tiamat's dragons' growth
+            f << ' ' << L.seenRoles << ' ' << L.seenAscended;   // (2026-10-30) classes already announced
             f << '\n';
         };
         for (const BallLoadout& L : r.balls) {
@@ -359,6 +360,10 @@ bool loadRun(const std::string& path, RunState& out) {
                     if (float ks = 1.f; ls >> ks) L.keptSize = std::clamp(ks, 1.f, 4.f);
                     for (float& x : L.dragonXp)
                         if (float v = 0.f; ls >> v) x = std::max(0.f, v);
+                    if (unsigned sr = 0, sa = 0; ls >> sr >> sa) {
+                        L.seenRoles = sr;
+                        L.seenAscended = sa;
+                    }
                 }
                 if (key == "run.bench") r.bench.push_back(bn);
                 else r.balls.push_back(L);

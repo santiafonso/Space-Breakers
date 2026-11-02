@@ -32,9 +32,9 @@ public:
     // Bigger coins for a bigger combo.
     void addCoin(sf::Vector2f pos, sf::Vector2f target, float radius);
     int takeArrivedCoins();   // coins that reached their target since the last call
-    // A ball you just picked flies down to its chip in the bottom-left tally
-    // (UI units) on an arc, with a short tail, and rings it as it lands.
-    void flyBall(sf::Vector2f from, sf::Vector2f to, sf::Color color, float radius);
+    // A ball flies down to its chip in the bottom-left tally (UI units) on an
+    // arc, with a short tail, and rings it as it lands; `delay` s waiting at `from`.
+    void flyBall(sf::Vector2f from, sf::Vector2f to, sf::Color color, float radius, float delay = 0.f);
     void clear();
 
     void update(float dt);

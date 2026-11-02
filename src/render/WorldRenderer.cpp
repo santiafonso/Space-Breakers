@@ -292,6 +292,25 @@ void WorldRenderer::drawBoss(sf::RenderWindow& window, const Boss& b, sf::Vector
         }
     }
 
+    // Any boss winding up an attack: a ring closing onto it. Frost shows its
+    // reach (ice); a Well marks where it will open (a ring growing there).
+    if (b.warnT > 0.f) {
+        const float k = 1.f - clampf(b.warnT / cfg::boss::moveWarn, 0.f, 1.f);   // 0 -> 1
+        const float pulse = 0.5f + 0.5f * std::sin(t * 30.f);
+        if (b.warnMove == BossMove::Frost) {
+            draw::glow(window, b.pos, b.frostR, theme::elemIce, 0.08f * k);
+            draw::ring(window, b.pos, b.frostR, 2.f, withAlpha(theme::elemIce, 0.2f + 0.45f * k * pulse));
+            draw::ring(window, b.pos, b.radius + (b.frostR - b.radius) * (1.f - k), 3.f, withAlpha(theme::elemIce, 0.3f + 0.5f * k));
+        } else {
+            const sf::Color c = b.warnMove == BossMove::Well ? theme::pact : theme::coreLow;
+            draw::ring(window, b.pos, b.radius * (1.15f + 1.2f * (1.f - k)), 2.5f, withAlpha(c, 0.25f + 0.6f * k));
+            if (b.warnMove == BossMove::Well) {
+                draw::ring(window, b.warnAt, b.frostR * 0.25f * k, 2.f, withAlpha(c, 0.3f + 0.5f * k * pulse));
+                draw::disc(window, b.warnAt, 4.f + 4.f * k, withAlpha(c, 0.8f), withAlpha(c, 0.8f), {1.f, 1.f}, 12);
+            }
+        }
+    }
+
     // A heavy armoured body: dark plated, bright rim, a slow counter-turning
     // inner ring and a single glowing eye. The sides tell the bosses apart:
     // Charger / Orbital octagon, Hive hexagon, Warden square, Dasher triangle.
@@ -395,6 +414,20 @@ void WorldRenderer::drawEnemy(sf::RenderWindow& window, const Enemy& e, sf::Vect
     const float rimW = e.mark > 0.f ? 3.f : 2.f;
 
     if (e.hitFlash > 0.02f) draw::glow(window, e.pos, r * 1.7f, fill, 0.25f * e.hitFlash);
+    if (e.hatchT > 0.f) {   // a boss's egg: an upright oval that shivers harder as it nears hatching
+        const float t = clockSeconds();
+        const float k = 1.f - clampf(e.hatchT / cfg::boss::eggHatch, 0.f, 1.f);
+        const float shake = k * k * 2.5f * std::sin(t * (20.f + 30.f * k) + static_cast<float>(e.id));
+        const sf::Vector2f at = e.pos + sf::Vector2f{shake, 0.f};
+        draw::glow(window, at, r * 1.9f, theme::coreLow, 0.08f + 0.22f * k);
+        draw::disc(window, at, r, inner, outer, {0.82f, 1.f}, 24);
+        draw::ring(window, at, r * 0.96f, 2.f, withAlpha(lighten(theme::coreLow, 0.1f), 0.5f + 0.4f * k));
+        if (k > 0.45f)   // cracks
+            draw::line(window, at + sf::Vector2f{-r * 0.3f, -r * 0.5f}, at + sf::Vector2f{r * 0.1f, r * 0.1f}, 1.5f,
+                       withAlpha(lighten(theme::coreLow, 0.4f), (k - 0.45f) * 1.8f));
+        draw::ring(window, at, r * 1.35f, 2.f, withAlpha(theme::coreLow, 0.7f), -kPi * 0.5f, -kPi * 0.5f + 2.f * kPi * frac, 32);
+        return;
+    }
     if (e.part) {   // a boss's pillar: an upright diamond, its health as an arc around it
         const float t = clockSeconds();
         draw::glow(window, e.pos, r * 2.f, theme::coreLow, 0.12f + 0.06f * std::sin(t * 3.f + static_cast<float>(e.id)));
@@ -653,7 +686,27 @@ void WorldRenderer::draw(sf::RenderWindow& window, const World& world) const {
     }
     drawBoss(window, world.boss(), world.core().pos);
     for (const Enemy& e : world.enemies()) drawEnemy(window, e, world.core().pos);
+    for (const Well& w : world.wells()) {   // a boss's gravity well: a dark eye, rings drawn in
+        const float R = cfg::boss::wellRadius * world.arenaScale();
+        const float k = clampf(w.life / w.maxLife, 0.f, 1.f), t = clockSeconds();
+        draw::glow(window, w.pos, R * 0.45f, theme::pact, 0.18f);
+        draw::ring(window, w.pos, R, 1.5f, withAlpha(theme::pact, 0.15f));
+        for (int i = 0; i < 3; ++i) {
+            const float u = std::fmod(t * 0.9f + static_cast<float>(i) / 3.f, 1.f);
+            draw::ring(window, w.pos, R * (1.f - u), 1.5f, withAlpha(theme::pact, 0.35f * u));
+        }
+        draw::disc(window, w.pos, 18.f, withAlpha(darken(theme::pact, 0.7f), 0.95f), withAlpha(theme::bg, 0.95f), {1.f, 1.f}, 24);
+        draw::ring(window, w.pos, 20.f, 2.5f, withAlpha(lighten(theme::pact, 0.2f), 0.9f), -kPi * 0.5f, -kPi * 0.5f + 2.f * kPi * k, 32);
+    }
     for (const Shot& s : world.shots()) {   // boss orbs: a hot core in a glow, a short tail behind
+        if (s.rogue) {   // the boss's own ball: dark, a hot rim, a long tail
+            const sf::Vector2f dir = normalized(s.vel, {1.f, 0.f});
+            draw::line(window, s.pos - dir * s.radius * 4.f, s.pos, s.radius * 1.2f, withAlpha(theme::coreLow, 0.25f));
+            draw::glow(window, s.pos, s.radius * 2.4f, theme::coreLow, 0.4f);
+            draw::disc(window, s.pos, s.radius, withAlpha(darken(theme::coreLow, 0.55f), 0.97f), withAlpha(darken(theme::coreLow, 0.75f), 0.97f), {1.f, 1.f}, 24);
+            draw::ring(window, s.pos, s.radius, 2.5f, withAlpha(lighten(theme::coreLow, 0.3f), 0.95f));
+            continue;
+        }
         const sf::Vector2f back = s.pos - normalized(s.vel, {1.f, 0.f}) * s.radius * 2.2f;
         draw::line(window, back, s.pos, s.radius * 0.9f, withAlpha(theme::coreLow, 0.35f));
         draw::glow(window, s.pos, s.radius * 2.6f, theme::coreLow, 0.35f);
@@ -678,7 +731,7 @@ void WorldRenderer::draw(sf::RenderWindow& window, const World& world) const {
         }
         drawBall(window, b, world.effect(), world.scorching());
         if (b.hexT > 0.f) {   // Ascension boss "Hex": frozen - a violet ring burning down
-            const float r = b.radius + 6.f, f = clampf(b.hexT / cfg::asc::hexTime, 0.f, 1.f);
+            const float r = b.radius + 6.f, f = clampf(b.hexT / std::max(0.1f, b.hexMax), 0.f, 1.f);
             draw::glow(window, b.pos, r * 1.6f, theme::puSurge, 0.35f);
             draw::ring(window, b.pos, r, 2.5f, withAlpha(theme::puSurge, 0.9f), -kPi * 0.5f, -kPi * 0.5f + 2.f * kPi * f, 40);
         }

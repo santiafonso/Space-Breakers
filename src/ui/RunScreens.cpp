@@ -167,9 +167,10 @@ struct Curve {
     std::vector<sf::Vector2f> p;
     std::vector<float> cum;   // arc length at each point
     float len = 0.f;
-    Curve(sf::Vector2f a, sf::Vector2f b, float ra, float rb) {
+    // `bend`: a sideways bow (px), so no two links run quite the same.
+    Curve(sf::Vector2f a, sf::Vector2f b, float ra, float rb, float bend = 0.f) {
         const sf::Vector2f h{0.f, (b.y - a.y) * 0.5f};
-        const sf::Vector2f c1 = a + h, c2 = b - h;
+        const sf::Vector2f c1 = a + h + sf::Vector2f{bend, 0.f}, c2 = b - h + sf::Vector2f{bend, 0.f};
         constexpr int kN = 28;
         for (int i = 0; i <= kN; ++i) {
             const float t = static_cast<float>(i) / kN, u = 1.f - t;
@@ -207,11 +208,95 @@ struct Curve {
     void dots(sf::RenderWindow& w, float gap, float r, sf::Color c) const {
         for (float d = gap * 0.5f; d < len; d += gap) draw::disc(w, at(d), r, c, c, {1.f, 1.f}, 8);
     }
+    // Dots with a life of their own: each a little bigger or smaller than the
+    // next, twinkling slowly out of step (`seed` 0..1 picks the link's own).
+    void dotsVaried(sf::RenderWindow& w, float gap, float r, sf::Color c, float seed, float clock) const {
+        int i = 0;
+        for (float d = gap * (0.3f + 0.5f * seed); d < len; d += gap, ++i) {
+            const float h = std::fmod(std::sin(seed * 91.7f + static_cast<float>(i) * 12.9898f) * 43758.5453f, 1.f);
+            const float rnd = h < 0.f ? h + 1.f : h;
+            const float tw = 0.7f + 0.3f * std::sin(clock * (0.8f + 0.9f * seed) + static_cast<float>(i) * 1.3f + seed * 6.f);
+            const sf::Color ci = withAlpha(c, static_cast<float>(c.a) / 255.f * tw);
+            draw::disc(w, at(d), r * (0.7f + 0.6f * rnd), ci, ci, {1.f, 1.f}, 8);
+        }
+    }
     void dashes(sf::RenderWindow& w, float dash, float gap, float offset, float width, sf::Color c) const {
         const float per = dash + gap;
         for (float d = std::fmod(offset, per) - per; d < len; d += per) stroke(w, d, d + dash, width, c);
     }
 };
+
+// Each link's own look, stable for the map (0..1): how it bows, how its dots fall.
+float linkSeed(int act, int i, int j) {
+    const float h = std::fmod(std::sin(static_cast<float>(i * 127 + j * 311 + act * 53) * 12.9898f) * 43758.5453f, 1.f);
+    return h < 0.f ? h + 1.f : h;
+}
+// A link that changes lanes bows up to 14 px either way; a straight one barely
+// (a short upright line with a big bow reads as a bracket).
+float linkBend(const RunMap& map, int i, int j) {
+    const bool straight = map.nodes[static_cast<std::size_t>(i)].lane == map.nodes[static_cast<std::size_t>(j)].lane;
+    return (linkSeed(map.act, i, j) - 0.5f) * (straight ? 8.f : 28.f);
+}
+
+// The way walked through an act, bottom up: the visited stops in row order.
+std::vector<int> walkedWay(const std::vector<MapNode>& nodes) {
+    std::vector<int> way;
+    for (int i = 0; i < static_cast<int>(nodes.size()); ++i)
+        if (nodes[static_cast<std::size_t>(i)].visited) way.push_back(i);
+    std::stable_sort(way.begin(), way.end(), [&](int x, int y) {
+        return nodes[static_cast<std::size_t>(x)].row < nodes[static_cast<std::size_t>(y)].row;
+    });
+    return way;
+}
+
+// A way's crossings (2026-10-30): for each step k (way[k] -> way[k+1]), whether
+// it changed lanes (the last step up to the centred boss doesn't count).
+std::vector<bool> wayCrossings(const std::vector<MapNode>& nodes, const std::vector<int>& way) {
+    std::vector<bool> cross;
+    for (std::size_t k = 0; k + 1 < way.size(); ++k) {
+        const MapNode& a = nodes[static_cast<std::size_t>(way[k])];
+        const MapNode& b = nodes[static_cast<std::size_t>(way[k + 1])];
+        cross.push_back(a.lane != b.lane && b.type != MapNodeType::Boss);
+    }
+    return cross;
+}
+
+// A crossing reads apart from the climb: a quiet silver, with its mark.
+sf::Color stepColor(sf::Color walk, bool cross) { return cross ? lerpColor(theme::textLo, theme::textHi, 0.45f) : walk; }
+
+// A crossing's mark: a small diamond halfway along it, turning slowly.
+void drawCrossMark(sf::RenderWindow& w, sf::Vector2f p, float size, float spin, sf::Color c, float a) {
+    draw::polygon(w, p, size, 4, spin, withAlpha(theme::bg, 0.9f * a), withAlpha(c, a));
+    draw::polygonOutline(w, p, size + 2.f, 4, spin, 1.f, withAlpha(c, 0.6f * a));
+}
+
+// A comet that runs the whole way from the bottom up, again and again.
+// `pts`: the way's points; `cols`: per step; `curves` (one per step), when
+// given, are what it rides instead of straight lines.
+void drawWayComet(sf::RenderWindow& w, const std::vector<sf::Vector2f>& pts, const std::vector<sf::Color>& cols,
+                  float clock, float scale, float alpha, const std::vector<Curve>* curves = nullptr) {
+    const std::size_t n = cols.size();
+    if (n == 0 || pts.size() < n + 1 || clock < 0.f) return;
+    constexpr float kStep = 0.25f;   // each step this long...
+    constexpr float kRest = 0.6f;    // ...and a beat at the top before it starts over
+    const float t = std::fmod(clock, kStep * static_cast<float>(n) + kRest);
+    if (t >= kStep * static_cast<float>(n)) return;
+    const std::size_t k = std::min(n - 1, static_cast<std::size_t>(t / kStep));
+    const float u = t / kStep - static_cast<float>(k);
+    auto pos = [&](float uu) {
+        if (curves && k < curves->size()) return (*curves)[k].at((*curves)[k].len * uu);
+        return pts[k] + (pts[k + 1] - pts[k]) * uu;
+    };
+    const sf::Color c = lerpColor(cols[k], sf::Color::White, 0.4f);
+    for (int j = 4; j >= 1; --j) {   // the tail
+        const float uj = std::max(0.f, u - 0.07f * static_cast<float>(j));
+        draw::disc(w, pos(uj), (3.2f - 0.5f * static_cast<float>(j)) * scale,
+                   withAlpha(c, (0.5f - 0.1f * static_cast<float>(j)) * alpha),
+                   withAlpha(cols[k], (0.4f - 0.08f * static_cast<float>(j)) * alpha), {1.f, 1.f}, 10);
+    }
+    draw::glow(w, pos(u), 9.f * scale, cols[k], 0.4f * alpha);
+    draw::disc(w, pos(u), 3.4f * scale, withAlpha(sf::Color::White, alpha), withAlpha(c, alpha), {1.f, 1.f}, 12);
+}
 
 }  // namespace
 
@@ -227,6 +312,22 @@ namespace {
 float equipZoom(App& app) { return panelRowZoom(app.size(), app.runBallCount(), 0.f, 1.15f); }
 float equipRowY(App& app) { return app.size().y * 0.58f / equipZoom(app); }
 }  // namespace
+
+void flyBallsHome(App& app) {
+    // Every ball drops out of the menu - from where its panel sits - down to its
+    // chip in the map's bottom-left tally, left to right, a beat apart.
+    const float zoom = equipZoom(app);
+    const int n = app.runBallCount();
+    for (int b = 0; b < n; ++b) {
+        const sf::Vector2f c = panelCenter(app.size() / zoom, b, n, equipRowY(app));
+        const sf::Vector2f from = sf::Vector2f{c.x, c.y - kPanelH * 0.5f + kPanelHeadY} * zoom;
+        const BallLoadout& L = app.data().run.balls[static_cast<std::size_t>(b)];
+        ItemTag roles[3];
+        const sf::Color col = L.roles(roles) > 0 ? tagColor(roles[0])
+                              : L.element() != Element::Plain ? elementColor(L.element()) : theme::textHi;
+        app.effects().flyBall(from, ballTallyPos(app, b, n), col, 13.f * zoom, 0.05f * static_cast<float>(b));
+    }
+}
 
 void EquipScreen::targetAt(App& app, sf::Vector2f mouse, int& ball, int& slot) const {
     ball = slot = -1;
@@ -372,20 +473,6 @@ void EquipScreen::update(App& app, float dt, sf::Vector2f mouse) {
         if (landT_ < kLandTime) return;
         const int ball = landBall_, slot = landSlot_;
         landT_ = -1.f;
-        // The ball you chose heads down to its chip in the bottom-left tally.
-        const EquipSource src = app.equipSource();
-        if (src != EquipSource::Sell && src != EquipSource::Barter) {
-            const float zoom = equipZoom(app);
-            const int n = app.runBallCount();
-            const sf::Vector2f c = panelCenter(app.size() / zoom, ball, n, equipRowY(app));
-            const sf::Vector2f from = sf::Vector2f{c.x, c.y - kPanelH * 0.5f + kPanelHeadY} * zoom;
-            const sf::Vector2f to = ballTallyPos(app, ball, n);
-            const BallLoadout& L = app.data().run.balls[static_cast<std::size_t>(ball)];
-            ItemTag roles[3];
-            const sf::Color col = L.roles(roles) > 0 ? tagColor(roles[0])
-                                  : L.element() != Element::Plain ? elementColor(L.element()) : theme::textHi;
-            app.effects().flyBall(from, to, col, 13.f * zoom);
-        }
         app.confirmEquip(ball, slot);   // (this screen may be gone after this)
         return;
     }
@@ -617,8 +704,35 @@ constexpr float kRevealDraw = 1.3f;    // ...over this long, then the Altar ligh
 constexpr float kRevealPop = 0.6f;
 constexpr float kCineLead = 0.55f;     // the constellation: the map goes dark, then a star every...
 constexpr float kCineStep = 0.26f;     // ...this long along the path you walked...
-constexpr float kCineHold = 0.9f;      // ...and the boss's flare holds this long before its fight
+constexpr float kCineFlare = 0.35f;    // ...the boss's flare holds this long, then the view pulls out...
+constexpr float kCineZoom = 1.f;       // ...over this long, until the whole act and your way through it fit...
+constexpr float kCineView = 1.4f;      // ...and it holds there this long before the boss fight
 }  // namespace
+
+// The constellation's pull-out: how far the view is zoomed out (1 = not) and
+// the map point at the centre of the screen.
+float MapScreen::cineZoom(App& app, sf::Vector2f& center) const {
+    const sf::Vector2f s = app.size();
+    center = s * 0.5f;
+    if (cineT_ < 0.f || cinePath_.size() < 2) return 1.f;
+    const float start = kCineLead + kCineStep * static_cast<float>(cinePath_.size() - 1) + kCineFlare;
+    float k = clampf((cineT_ - start) / kCineZoom, 0.f, 1.f);
+    if (k <= 0.f) return 1.f;
+    k = k * k * (3.f - 2.f * k);
+    // The act's span: from row 1 at the bottom to the boss at the top.
+    float top = 1e9f, bottom = -1e9f;
+    for (int i = 0; i < static_cast<int>(app.data().run.map.nodes.size()); ++i) {
+        const float y = nodePos(app, i).y;
+        top = std::min(top, y);
+        bottom = std::max(bottom, y);
+    }
+    const float room = s.y - kMapTop - 110.f;   // under the pinned status line, clear of the bottom band
+    const float zFull = std::max(1.f, (bottom - top + 2.f * kBossR + 40.f) / room);
+    // Centred in the view under the status line.
+    const sf::Vector2f full{s.x * 0.5f, (top + bottom) * 0.5f - (kMapTop * 0.5f - 10.f) * zFull};
+    center = center + (full - center) * k;
+    return 1.f + (zFull - 1.f) * k;
+}
 
 float MapScreen::scrollMax(App& app) const {
     const sf::Vector2f s = app.size();
@@ -798,7 +912,7 @@ void MapScreen::update(App& app, float dt, sf::Vector2f mouse) {
         }
         const int at = std::clamp(static_cast<int>(prog) + 1, 0, n - 1);   // the view a stop ahead of the line
         if (prog >= 0.f) scrollTarget_ = scrollFor(app, app.data().run.map.nodes[static_cast<std::size_t>(cinePath_[static_cast<std::size_t>(at)])].row);
-        if (cineT_ >= kCineLead + kCineStep * static_cast<float>(n - 1) + kCineHold) {
+        if (cineT_ >= kCineLead + kCineStep * static_cast<float>(n - 1) + kCineFlare + kCineZoom + kCineView) {
             const int boss = cinePath_.back();
             cineT_ = -1.f;
             app.travelTo(boss);
@@ -843,9 +957,22 @@ void MapScreen::draw(App& app, sf::RenderWindow& w) {
         drawOrbitingPlanets(w, {s.x * 0.5f, s.y * 0.55f + scroll_ * 0.25f}, clock_, 0.9f, ba);
     }
 
+    // On to the boss, once the constellation is drawn: the view pulls out over
+    // the whole act (the map from here to the stars is drawn through it).
+    const sf::View uiView = w.getView();
+    sf::Vector2f zc;
+    const float zoom = cineZoom(app, zc);
+    if (zoom > 1.001f) {
+        sf::View v = uiView;
+        v.setSize(uiView.getSize() * zoom);
+        v.setCenter(zc);
+        w.setView(v);
+    }
+
     // Nodes fade out toward the top and bottom edges of the view rather than
-    // being cut off.
+    // being cut off (measured on screen, so a pulled-out view shows them all).
     auto edgeFade = [&](float y) {
+        y = s.y * 0.5f + (y - zc.y) / zoom;
         return clampf((y - kMapTop) / 70.f, 0.f, 1.f) * clampf((s.y - 8.f - y) / 50.f, 0.f, 1.f);
     };
 
@@ -862,6 +989,13 @@ void MapScreen::draw(App& app, sf::RenderWindow& w) {
     const sf::Color actCol = theme::actColor(r.map.act);
     const sf::Color walkCol = lerpColor(actCol, theme::textHi, 0.35f);
     const bool cine = cineT_ >= 0.f;
+    const std::vector<int> way = walkedWay(nodes);
+    const std::vector<bool> wayCross = wayCrossings(nodes, way);
+    auto stepCrosses = [&](int i, int j) {   // a walked step that changed lanes
+        for (std::size_t k = 0; k + 1 < way.size(); ++k)
+            if (way[k] == i && way[k + 1] == j) return static_cast<bool>(wayCross[k]);
+        return false;
+    };
     for (int i = 0; i < count; ++i) {
         const MapNode& a = nodes[static_cast<std::size_t>(i)];
         for (int j : a.next) {
@@ -874,7 +1008,8 @@ void MapScreen::draw(App& app, sf::RenderWindow& w) {
             if (fa <= 0.01f) continue;
             const float ra = a.type == MapNodeType::Boss ? kBossR : kNodeR * 1.25f;
             const float rb = b.type == MapNodeType::Boss ? kBossR : kNodeR * 1.25f;
-            const Curve cv(pa, pb, ra + 6.f, rb + 6.f);   // stop short: a line never runs through an icon
+            const float seed = linkSeed(r.map.act, i, j);
+            const Curve cv(pa, pb, ra + 6.f, rb + 6.f, linkBend(r.map, i, j));   // stop short: a line never runs through an icon
             if (cv.len < 2.f) continue;
             const bool toAltar = j == altarNode_, fromAltar = i == altarNode_;
             if (toAltar || fromAltar) {   // the hidden path: in the pact colour, drawn in on its reveal
@@ -896,11 +1031,15 @@ void MapScreen::draw(App& app, sf::RenderWindow& w) {
                 }
             } else if (open) {   // open: dashes flowing up toward the stop
                 cv.dashes(w, 9.f, 7.f, clock_ * 26.f, 2.f, withAlpha(theme::accent, (0.75f - 0.35f * glow) * fa));
-            } else if (walked) {   // walked: solid, in the act's colour
+            } else if (walked) {   // walked: solid, in the act's colour - a crossing in silver, marked
+                const bool cross = stepCrosses(i, j);
+                const sf::Color c = stepColor(walkCol, cross);
                 cv.stroke(w, 0.f, cv.len, 6.f, withAlpha(actCol, 0.12f * fa));
-                cv.stroke(w, 0.f, cv.len, 2.5f, withAlpha(walkCol, 0.8f * fa));
+                cv.stroke(w, 0.f, cv.len, 2.5f, withAlpha(c, 0.8f * fa));
+                if (cross) drawCrossMark(w, cv.at(cv.len * 0.5f), 4.f, clock_ * 0.8f, c, fa);
             } else {   // ahead: a faint dotted trail
-                cv.dots(w, 10.f, 1.6f, withAlpha(theme::textDim, 0.65f * fa));
+                cv.dotsVaried(w, 8.5f + 4.f * seed, 1.3f + 0.6f * linkSeed(r.map.act, j, i), withAlpha(theme::textDim, 0.7f * fa),
+                              seed, clock_);
             }
         }
     }
@@ -937,13 +1076,27 @@ void MapScreen::draw(App& app, sf::RenderWindow& w) {
         }
     }
 
+    // The way you walked keeps moving: a comet runs it from the bottom up.
+    if (!cine && way.size() >= 2) {
+        std::vector<sf::Vector2f> pts;
+        std::vector<sf::Color> cols;
+        std::vector<Curve> curves;   // the links' own curves, as drawn
+        for (int id : way) pts.push_back(nodePos(app, id));
+        for (bool cross : wayCross) cols.push_back(stepColor(walkCol, cross));
+        for (std::size_t k = 0; k + 1 < way.size(); ++k) {
+            const auto rad = [&](int id) { return nodes[static_cast<std::size_t>(id)].type == MapNodeType::Boss ? kBossR : kNodeR * 1.25f; };
+            curves.emplace_back(pts[k], pts[k + 1], rad(way[k]) + 6.f, rad(way[k + 1]) + 6.f, linkBend(r.map, way[k], way[k + 1]));
+        }
+        drawWayComet(w, pts, cols, clock_ * 0.55f, 1.f, 0.8f * clampf(it, 0.f, 1.f), &curves);
+    }
+
     // A trip: a spark runs along the link from where you stand to the chosen
     // node, which flares as it arrives.
     if (travelTo_ >= 0) {
         const float t = clampf(travelT_ / kTravelTime, 0.f, 1.f);
         const float e = t * t * (3.f - 2.f * t);
         const sf::Vector2f b = nodePos(app, travelTo_);
-        const Curve cv(travelFrom(app), b, 0.f, 0.f);
+        const Curve cv(travelFrom(app), b, 0.f, 0.f, r.mapNode >= 0 ? linkBend(r.map, r.mapNode, travelTo_) : 0.f);   // along the link's own bow
         const sf::Color c = nodeColor(nodes[static_cast<std::size_t>(travelTo_)].type);
         for (int k = 1; k <= 4; ++k) {   // a short fading tail
             const float te = std::max(0.f, e - 0.05f * static_cast<float>(k));
@@ -964,39 +1117,54 @@ void MapScreen::draw(App& app, sf::RenderWindow& w) {
         const int n = static_cast<int>(cinePath_.size());
         const float prog = (cineT_ - kCineLead) / kCineStep;   // stops lit so far (fractional)
         const float veil = clampf(cineT_ / 0.4f, 0.f, 1.f);
-        sf::RectangleShape dark({s.x, s.y});
-        dark.setFillColor(withAlpha(theme::bg, 0.6f * veil));
+        const float zw = zoom;   // pulled out, the stars and lines keep their size on screen
+        sf::RectangleShape dark(s * zoom);
+        dark.setPosition(zc - s * zoom * 0.5f);
+        // pulled out, the veil lifts a little: the whole map shows faintly under the way you took
+        dark.setFillColor(withAlpha(theme::bg, (0.6f - 0.25f * clampf(zoom - 1.f, 0.f, 1.f)) * veil));
         w.draw(dark);
         const sf::Color star = lerpColor(theme::textHi, actCol, 0.3f);
         std::vector<sf::Vector2f> P;
         for (int id : cinePath_) P.push_back(nodePos(app, id));
+        // A crossing in silver, with its mark halfway.
+        const std::vector<bool> ccross = wayCrossings(nodes, cinePath_);
+        std::vector<sf::Color> ccol;
+        for (bool cross : ccross) ccol.push_back(stepColor(star, cross));
         for (int k = 0; k + 1 < n; ++k) {   // the lines, drawing themselves from star to star
             const float sp = clampf(prog - static_cast<float>(k), 0.f, 1.f);
             if (sp <= 0.f) break;
             const float e = sp * sp * (3.f - 2.f * sp);
-            const sf::Vector2f end = P[static_cast<std::size_t>(k)] + (P[static_cast<std::size_t>(k + 1)] - P[static_cast<std::size_t>(k)]) * e;
-            draw::line(w, P[static_cast<std::size_t>(k)], end, 6.f, withAlpha(star, 0.1f));
-            draw::line(w, P[static_cast<std::size_t>(k)], end, 1.5f, withAlpha(star, 0.85f));
-            if (sp < 1.f) draw::disc(w, end, 3.5f, sf::Color::White, star, {1.f, 1.f}, 12);   // the tracer
+            const sf::Vector2f a = P[static_cast<std::size_t>(k)], b = P[static_cast<std::size_t>(k + 1)];
+            const sf::Vector2f end = a + (b - a) * e;
+            const sf::Color c = ccol[static_cast<std::size_t>(k)];
+            draw::line(w, a, end, 6.f * zw, withAlpha(c, 0.1f));
+            draw::line(w, a, end, 1.5f * zw, withAlpha(c, 0.85f));
+            if (ccross[static_cast<std::size_t>(k)] && sp >= 0.5f)
+                drawCrossMark(w, a + (b - a) * 0.5f, 4.f * zw, clock_ * 0.8f, c, clampf((sp - 0.5f) * 4.f, 0.f, 1.f));
+            if (sp < 1.f) draw::disc(w, end, 3.5f * zw, sf::Color::White, c, {1.f, 1.f}, 12);   // the tracer
         }
+        // All joined: a comet runs the way, from the start up to the crown.
+        drawWayComet(w, P, ccol, cineT_ - kCineLead - kCineStep * static_cast<float>(n - 1), zw, 1.f);
         for (int k = 0; k < n; ++k) {   // the stars, each popping in as the line reaches it
             const float age = (prog - static_cast<float>(k)) * kCineStep;
             if (age < 0.f) break;
             const bool bossStar = k == n - 1;
-            const float base = bossStar ? 9.f : 4.5f;
+            const float base = (bossStar ? 9.f : 4.5f) * zw;
             const float pop = clampf(age / 0.22f, 0.f, 1.f);
             const float tw = 0.75f + 0.25f * std::sin(clock_ * 5.f + static_cast<float>(k) * 1.7f);
             const sf::Vector2f p = P[static_cast<std::size_t>(k)];
             draw::glow(w, p, base * (bossStar ? 7.f : 5.f), bossStar ? actCol : star, 0.35f * tw * pop);
             draw::disc(w, p, base * (0.4f + 0.6f * pop), sf::Color::White, star, {1.f, 1.f}, 16);
             const float L = base * (2.2f + 1.4f * (1.f - pop)) * tw;   // a four-point sparkle
-            draw::line(w, p - sf::Vector2f{L, 0.f}, p + sf::Vector2f{L, 0.f}, 1.2f, withAlpha(sf::Color::White, 0.7f * pop));
-            draw::line(w, p - sf::Vector2f{0.f, L}, p + sf::Vector2f{0.f, L}, 1.2f, withAlpha(sf::Color::White, 0.7f * pop));
-            if (age < 0.45f) draw::ring(w, p, base * (1.f + 7.f * age / 0.45f), bossStar ? 2.5f : 1.5f,
+            draw::line(w, p - sf::Vector2f{L, 0.f}, p + sf::Vector2f{L, 0.f}, 1.2f * zw, withAlpha(sf::Color::White, 0.7f * pop));
+            draw::line(w, p - sf::Vector2f{0.f, L}, p + sf::Vector2f{0.f, L}, 1.2f * zw, withAlpha(sf::Color::White, 0.7f * pop));
+            if (age < 0.45f) draw::ring(w, p, base * (1.f + 7.f * age / 0.45f), (bossStar ? 2.5f : 1.5f) * zw,
                                         withAlpha(bossStar ? actCol : star, 1.f - age / 0.45f));
         }
+        w.setView(uiView);
         drawLabel(w, app.font(), "click to skip", 11, {s.x * 0.5f, s.y - 22.f}, withAlpha(theme::textDim, 0.6f * veil));
     }
+    w.setView(uiView);
 
     // Pinned header: a band over the scrolled map with the act and the run's
     // status line.
@@ -1024,16 +1192,17 @@ void MapScreen::draw(App& app, sf::RenderWindow& w) {
         drawLabel(w, app.font(), "iron core", 12, {ironX, kStatusY}, withAlpha(theme::core, 0.55f * ha), -1);
 
     // Scroll cue: a small caret at an edge while there's more map that way.
-    if (scroll_ < scrollMax(app) - 4.f)
+    if (cineT_ < 0.f && scroll_ < scrollMax(app) - 4.f)
         draw::polygon(w, {s.x * 0.5f, kMapTop + 16.f}, 6.f, 3, -kPi / 2.f, withAlpha(theme::textDim, 0.8f),
                       withAlpha(theme::textDim, 0.8f));
-    if (scroll_ > 4.f)
+    if (cineT_ < 0.f && scroll_ > 4.f)
         draw::polygon(w, {s.x * 0.5f, s.y - 16.f}, 6.f, 3, kPi / 2.f, withAlpha(theme::textDim, 0.8f),
                       withAlpha(theme::textDim, 0.8f));
 
-    // HUD stays off the map: TAB in the black band under the frame, the run's
-    // creeds at the right end of the status line (hover a chip for its rule).
-    drawTabHint(app, w, {theme::margin, s.y - cfg::app::arenaBand * 0.5f - keyCapSize(app.font(), "tab").y * 0.5f});
+    // HUD stays off the map: the balls and TAB in the black band under the frame,
+    // the run's creeds at the right end of the status line (hover a chip for its rule).
+    const float tallyEnd = drawBallTally(app, w);
+    drawTabHint(app, w, {tallyEnd + 12.f, s.y - cfg::app::arenaBand * 0.5f - keyCapSize(app.font(), "tab").y * 0.5f});
     bool creedHover = false;
     if (!r.creeds.empty() || !r.pacts.empty())
         creedHover = drawCreedStrip(app, w, {s.x - theme::margin - creedStripWidth(app), kStatusY - 11.f}, false,
@@ -1067,6 +1236,8 @@ void MapScreen::draw(App& app, sf::RenderWindow& w) {
                         std::to_string(app.luck()) + "): each point makes every chance " +
                         std::to_string(static_cast<int>(cfg::luck::chancePerPoint * 100.f + 0.5f)) +
                         "% likelier and cards a little rarer. From Lucky clover, Lucky star, Loaded Dice, Lucky charm (Jester).");
+    } else if (!creedHover) {
+        ballTallyTooltip(app, w, mouse_);
     }
 }
 

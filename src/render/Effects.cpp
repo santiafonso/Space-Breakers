@@ -124,13 +124,14 @@ void Effects::classBanner(const std::string& caption, const std::string& from, c
     banners_.push_back(b);
 }
 
-void Effects::flyBall(sf::Vector2f from, sf::Vector2f to, sf::Color color, float radius) {
-    if (flyers_.size() >= 6) return;
+void Effects::flyBall(sf::Vector2f from, sf::Vector2f to, sf::Color color, float radius, float delay) {
+    if (flyers_.size() >= 12) return;
     Flyer f;
     f.from = from;
     f.to = to;
     f.color = color;
     f.radius = radius;
+    f.age = -delay;
     flyers_.push_back(f);
 }
 

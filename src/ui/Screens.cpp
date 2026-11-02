@@ -1916,13 +1916,8 @@ void PlayScreen::draw(App& app, sf::RenderWindow& w) {
                         "the core sends out a shockwave: every enemy near it is shoved away and staggered for a "
                         "moment (soaked ones fly further). Recharges in 10 s.",
                         theme::core);
-        } else if (tally.contains(um)) {   // the ball under the pointer: what it is
-            const int i = std::clamp(static_cast<int>((um.x - tally.left) / kBallTallyStep), 0,
-                                     static_cast<int>(app.data().run.balls.size()) - 1);
-            std::string tt, td;
-            if (i >= 0 && loadoutTooltip(app.data().run.balls[static_cast<std::size_t>(i)], kPanelPartBall, tt, td))
-                drawTooltip(w, app.font(), um, s, "Ball " + std::to_string(i + 1) + ":  " + tt,
-                            td + "\n\nTAB: its items, type, abilities and modifiers.");
+        } else {
+            ballTallyTooltip(app, w, um);   // the ball under the pointer: what it is
         }
     }
 
@@ -2005,6 +2000,30 @@ sf::FloatRect ballTallyRect(App& app, int balls) {
 sf::Vector2f ballTallyPos(App& app, int ball, int balls) {
     const sf::FloatRect t = ballTallyRect(app, balls);
     return {t.left + 19.f + kBallTallyStep * static_cast<float>(ball), t.top + t.height * 0.5f};
+}
+
+// Off the fight, on the map, the same tally sits in the band under the frame, so
+// a ball picked after a fight lands on its own chip instead of in the void.
+float drawBallTally(App& app, sf::RenderWindow& w, float alpha) {
+    const auto& loadouts = app.data().run.balls;
+    const int n = static_cast<int>(loadouts.size());
+    for (int i = 0; i < n; ++i)
+        drawLoadoutBall(w, loadouts[static_cast<std::size_t>(i)], ballTallyPos(app, i, n), 8.f, alpha);
+    const sf::FloatRect t = ballTallyRect(app, n);
+    return t.left + t.width;
+}
+
+bool ballTallyTooltip(App& app, sf::RenderWindow& w, sf::Vector2f um) {
+    const auto& loadouts = app.data().run.balls;
+    const sf::FloatRect tally = ballTallyRect(app, static_cast<int>(loadouts.size()));
+    if (loadouts.empty() || !tally.contains(um)) return false;
+    const int i = std::clamp(static_cast<int>((um.x - tally.left) / kBallTallyStep), 0,
+                             static_cast<int>(loadouts.size()) - 1);
+    std::string tt, td;
+    if (!loadoutTooltip(loadouts[static_cast<std::size_t>(i)], kPanelPartBall, tt, td)) return false;
+    drawTooltip(w, app.font(), um, app.size(), "Ball " + std::to_string(i + 1) + ":  " + tt,
+                td + "\n\nTAB: its items, type, abilities and modifiers.");
+    return true;
 }
 
 void drawTabHint(App& app, sf::RenderWindow& w, sf::Vector2f topLeft) {

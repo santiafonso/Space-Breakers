@@ -137,11 +137,11 @@ const char* bossName(BossKind k) {
 
 const char* bossDesc(BossKind k) {
     switch (k) {
-        case BossKind::Charger: return "walks dead straight at the core - every hit pushes it back; break its pillars to hurt it again";
-        case BossKind::Hive:    return "bursts fans of runners at the core; later it hides behind nests - break them";
-        case BossKind::Warden:  return "its shield turns and blocks balls; later only its glowing back really hurts it";
-        case BossKind::Dasher:  return "dashes across the map; later it is armoured - make it slam a wall, then hit it";
-        case BossKind::Orbital: return "spirals in behind a ring of shields; anchors keep it safe - the last boss";
+        case BossKind::Charger: return "walks at the core and throws balls of its own; every hit pushes it back - break its pillars";
+        case BossKind::Hive:    return "lays eggs that hatch runners - break them; later it hides behind nests";
+        case BossKind::Warden:  return "its shield blocks balls and it freezes the ones near it; hit its glowing back to stop it";
+        case BossKind::Dasher:  return "dashes across the map and opens wells that pull your balls; make it slam a wall, then hit it";
+        case BossKind::Orbital: return "spirals in behind a ring of shields, firing rings of orbs - the last boss";
     }
     return "";
 }
