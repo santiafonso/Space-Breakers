@@ -3572,6 +3572,11 @@ int App::runShowcase(const std::string& dir) {
     if (const char* nb = std::getenv("SB_SHOWCASE_BALLS"); nb && *nb && !r.balls.empty())
         for (std::size_t i = r.balls.size(), want = static_cast<std::size_t>(std::atoi(nb)); i < want; ++i)
             r.balls.push_back(r.balls[i % 5 < r.balls.size() ? i % 5 : 0]);
+    // SB_SHOWCASE_PACT=<PactId index>: the fight under that pact (gift and price).
+    if (const char* pc = std::getenv("SB_SHOWCASE_PACT"); pc && *pc) {
+        const int id = std::atoi(pc);
+        if (id >= 0 && id < kPactCount) r.pacts.push_back(id);
+    }
     rememberClasses();
     syncWorldBalls();
     for (int i = 0; i < static_cast<int>(r.map.nodes.size()); ++i)
