@@ -1,22 +1,19 @@
-MIT License
+Space Breakers
+Copyright (c) 2026 Santiago Afonso. All rights reserved.
 
-Copyright (c) 2026 Santiago Afonso
+This software, its source code, and its original assets (art, design, text)
+are proprietary. No license is granted to copy, modify, merge, publish,
+distribute, sublicense, or sell copies of it, in whole or in part, without
+prior written permission from the copyright holder.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+You may download and play builds that the copyright holder publishes (for
+example on itch.io) for your own personal use.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+Versions released before 2026-11-02 were published under the MIT License;
+copies of those versions obtained before that date remain under it. This
+notice applies to every later version.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-
+Third-party material keeps its own license:
+- Lato font: SIL Open Font License (assets/fonts/LICENSE-Lato.txt)
+- Music: CC0 / CC-BY, credited in assets/music/CREDITS.txt
+- SFML: zlib/png license
