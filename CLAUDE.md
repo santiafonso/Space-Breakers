@@ -63,6 +63,9 @@ anota en §11 con fecha, en el mismo estilo (qué cambió, por qué, función/ar
 - Textos del juego en inglés (todavía no hay localización; la base del español está pausada
   en la rama `worktree-agent-af94b0df16c9019aa` — no mergear).
 - Remotos: `origin` (santiafonso) y `axo` (Git-Axo, colaborador). Push solo si se pide.
+- Licencia: todos los derechos reservados desde 2026-11-02 (antes MIT), para que nadie más
+  pueda vender el juego. Assets de terceros solo CC0/CC-BY/OFL, con crédito en
+  `assets/music/CREDITS.txt` y en la página de itch.
 
 ## Cómo trabajar con agentes acá
 
